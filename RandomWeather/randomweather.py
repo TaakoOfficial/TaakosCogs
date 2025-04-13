@@ -12,8 +12,6 @@ class WeatherCog(commands.Cog):
     # Edited by Taako
     def __init__(self, bot):
         self._bot = bot  # Store the bot instance
-        self._current_weather = self._generate_weather()  # Generate initial weather
-        self._refresh_task = None  # Task for automatic weather refresh
 
         # Persistent storage using Config
         self.config = Config.get_conf(self, identifier=1234567890, force_registration=True)  # Edited by Taako
@@ -28,6 +26,11 @@ class WeatherCog(commands.Cog):
             "embed_color": 0xFF0000,  # Default embed color (red)
         }
         self.config.register_guild(**default_guild)
+
+        # Generate initial weather using the default time zone
+        default_time_zone = default_guild["time_zone"]  # Edited by Taako
+        self._current_weather = self._generate_weather(default_time_zone)  # Pass default time zone
+        self._refresh_task = None  # Task for automatic weather refresh
 
     def _get_current_season(self, time_zone):
         """Determine the current season based on the time zone and date."""  # Edited by Taako
