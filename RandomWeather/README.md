@@ -11,6 +11,7 @@ Welcome to **RandomWeather**, a Discord bot cog that generates random daily weat
   - Set a specific channel for weather updates.
   - Tag a role for weather notifications.
   - Toggle role tagging on or off.
+  - Automatically refresh weather updates at user-defined intervals.
 - **Interactive Commands**: Use text commands to interact with the bot.
 
 ---
@@ -36,13 +37,15 @@ Welcome to **RandomWeather**, a Discord bot cog that generates random daily weat
 
 ### Text Commands
 
-| Command                    | Description                                  |
-| -------------------------- | -------------------------------------------- |
-| `[p]rweather`              | View the current weather.                    |
-| `[p]rweather refresh`      | Refresh the weather for the day.             |
-| `[p]rweather role <id>`    | Set a role to be tagged for weather updates. |
-| `[p]rweather toggle`       | Toggle tagging the role in weather updates.  |
-| `[p]rweather channel <id>` | Set the channel for weather updates.         |
+| Command                             | Description                                                               |
+| ----------------------------------- | ------------------------------------------------------------------------- |
+| `[p]rweather`                       | View the current weather.                                                 |
+| `[p]rweather refresh`               | Refresh the weather for the day.                                          |
+| `[p]rweather role <id>`             | Set a role to be tagged for weather updates.                              |
+| `[p]rweather toggle`                | Toggle tagging the role in weather updates.                               |
+| `[p]rweather channel <id>`          | Set the channel for weather updates.                                      |
+| `[p]rweather load`                  | Manually load the current weather.                                        |
+| `[p]rweather setrefresh <interval>` | Set how often the weather should refresh (e.g., `10s`, `5m`, `1h`, `1d`). |
 
 ---
 
@@ -51,6 +54,7 @@ Welcome to **RandomWeather**, a Discord bot cog that generates random daily weat
 - **Set Weather Role**: Use `[p]rweather role <role_id>` to specify a role for tagging.
 - **Set Weather Channel**: Use `[p]rweather channel <channel_id>` to define where updates are sent.
 - **Toggle Role Tagging**: Use `[p]rweather toggle` to enable or disable role mentions.
+- **Set Refresh Interval**: Use `[p]rweather setrefresh <interval>` to define how often the weather should refresh automatically.
 
 ---
 
