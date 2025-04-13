@@ -17,6 +17,7 @@ class RPCalander(commands.Cog):
             "time_zone": "America/Chicago",  # Default time zone  # Edited by Taako
             "embed_color": 0x0000FF,  # Default embed color (blue)  # Edited by Taako
             "show_footer": True,  # Whether to show the footer in the main embed  # Edited by Taako
+            "embed_title": "📅 RP Calendar Update",  # Default embed title  # Edited by Taako
         }
         self.config.register_guild(**default_guild)
         self._daily_update_loop.start()  # Start the daily update loop
@@ -33,6 +34,7 @@ class RPCalander(commands.Cog):
             current_date = guild_settings["current_date"]
             time_zone = guild_settings["time_zone"] or "America/Chicago"  # Edited by Taako
             embed_color = guild_settings["embed_color"] or 0x0000FF  # Default to blue  # Edited by Taako
+            embed_title = guild_settings["embed_title"] or "📅 RP Calendar Update"  # Edited by Taako
             show_footer = guild_settings["show_footer"]  # Edited by Taako
             if not current_date:
                 continue
@@ -41,16 +43,15 @@ class RPCalander(commands.Cog):
             tz = pytz.timezone(time_zone)  # Edited by Taako
             current_date_obj = datetime.strptime(current_date, "%m-%d-%Y").astimezone(tz)  # Edited by Taako
             next_date_obj = current_date_obj + timedelta(days=1)
-            next_date_str = next_date_obj.strftime("%m-%d-%Y")  # Edited by Taako
-            day_of_week = next_date_obj.strftime("%A")
+            next_date_str = next_date_obj.strftime("%A %m-%d-%Y")  # Edited by Taako
 
             # Update the stored current date
-            await self.config.guild_from_id(guild_id).current_date.set(next_date_str)
+            await self.config.guild_from_id(guild_id).current_date.set(next_date_obj.strftime("%m-%d-%Y"))  # Edited by Taako
 
             # Create and send the embed
             embed = discord.Embed(
-                title="📅 RP Calendar Update",
-                description=f"Today's date: **{next_date_str} ({day_of_week})**",
+                title=embed_title,  # Use the configured embed title  # Edited by Taako
+                description=f"Today's date: **{next_date_str}**",
                 color=discord.Color(embed_color)  # Use the configured embed color  # Edited by Taako
             )
             if show_footer:  # Add footer if enabled  # Edited by Taako
@@ -59,14 +60,11 @@ class RPCalander(commands.Cog):
             if channel:
                 await channel.send(embed=embed)
 
-    @rpcalander.command(name="togglefooter")
-    async def toggle_footer(self, ctx):
-        """Toggle the footer on or off for the main embed."""  # Edited by Taako
-        show_footer = await self.config.guild(ctx.guild).show_footer()
-        new_state = not show_footer
-        await self.config.guild(ctx.guild).show_footer.set(new_state)
-        status = "enabled" if new_state else "disabled"
-        await ctx.send(f"The footer has been {status} for the main embed.")  # Edited by Taako
+    @rpcalander.command(name="settitle")
+    async def set_title(self, ctx, *, title: str):
+        """Set a custom title for the main embed."""  # Edited by Taako
+        await self.config.guild(ctx.guild).embed_title.set(title)
+        await ctx.send(f"Embed title set to: {title}")  # Edited by Taako
 
     @rpcalander.command(name="info")
     async def info(self, ctx):
@@ -78,6 +76,7 @@ class RPCalander(commands.Cog):
         channel = f"<#{channel_id}>" if channel_id else "Not set"
         time_zone = guild_settings["time_zone"] or "America/Chicago"  # Edited by Taako
         embed_color = discord.Color(guild_settings["embed_color"])  # Edited by Taako
+        embed_title = guild_settings["embed_title"] or "📅 RP Calendar Update"  # Edited by Taako
 
         embed = discord.Embed(
             title="📅 RP Calendar Settings",
@@ -88,5 +87,6 @@ class RPCalander(commands.Cog):
         embed.add_field(name="Update Channel", value=channel, inline=False)
         embed.add_field(name="Time Zone", value=time_zone, inline=False)
         embed.add_field(name="Embed Color", value=str(embed_color), inline=False)  # Edited by Taako
+        embed.add_field(name="Embed Title", value=embed_title, inline=False)  # Edited by Taako
         embed.set_footer(text="RP Calendar by Taako", icon_url="https://cdn-icons-png.flaticon.com/512/869/869869.png")  # Always show footer in info embed  # Edited by Taako
         await ctx.send(embed=embed)
