@@ -334,6 +334,32 @@ class WeatherCog(commands.Cog):
         time_zone = guild_settings["time_zone"]
         current_season = self._get_current_season(time_zone)  # Get the current season
 
+        # Calculate time until the next refresh
+        now = datetime.now(pytz.timezone(time_zone))
+        refresh_interval = guild_settings["refresh_interval"]
+        refresh_time = guild_settings["refresh_time"]
+        if refresh_interval:
+            last_refresh = guild_settings.get("last_refresh", 0)
+            next_refresh = datetime.fromtimestamp(last_refresh, pytz.timezone(time_zone)) + timedelta(seconds=refresh_interval)
+        elif refresh_time:
+            target_time = datetime.strptime(refresh_time, "%H%M").replace(
+                tzinfo=pytz.timezone(time_zone)
+            )
+            if now > target_time:
+                target_time += timedelta(days=1)
+            next_refresh = target_time
+        else:
+            next_refresh = None
+
+        if next_refresh:
+            time_until_refresh = next_refresh - now
+            days, seconds = divmod(time_until_refresh.total_seconds(), 86400)
+            hours, remainder = divmod(seconds, 3600)
+            minutes, seconds = divmod(remainder, 60)
+            time_until_refresh_str = f"{int(days):02} {int(hours):02}:{int(minutes):02}:{int(seconds):02}"
+        else:
+            time_until_refresh_str = "Not scheduled"
+
         embed = discord.Embed(
             title="🌦️ RandomWeather Settings",
             color=embed_color  # Use the configured embed color
@@ -345,6 +371,11 @@ class WeatherCog(commands.Cog):
                 if guild_settings["refresh_interval"]
                 else f"**Time**: {guild_settings['refresh_time']} (military time)"
             ),
+            inline=False,
+        )
+        embed.add_field(
+            name="⏳ Time Until Next Refresh",
+            value=time_until_refresh_str,  # Show time until the next refresh
             inline=False,
         )
         embed.add_field(
