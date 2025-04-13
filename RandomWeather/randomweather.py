@@ -1,6 +1,7 @@
 import random
 import discord  # Edited by Taako
 from redbot.core import commands
+import asyncio  # Edited by Taako
 
 class WeatherCog(commands.Cog):
     """A cog for generating random daily weather."""
@@ -12,6 +13,8 @@ class WeatherCog(commands.Cog):
         self._role_id = None  # Role ID for tagging
         self._channel_id = None  # Channel ID for sending updates
         self._tag_role = False  # Whether to tag the role
+        self._refresh_task = None  # Task for automatic weather refresh
+        self._refresh_interval = None  # Refresh interval in seconds
 
     def _generate_weather(self):
         """Generate realistic random weather."""
@@ -81,6 +84,17 @@ class WeatherCog(commands.Cog):
         embed.set_footer(text="RandomWeather by Taako", icon_url="https://i.imgur.com/3ZQZ3cQ.png")
         return embed
 
+    async def _refresh_weather_task(self):
+        """Background task to refresh weather at the set interval."""
+        # Edited by Taako
+        while self._refresh_interval and self._channel_id:
+            await asyncio.sleep(self._refresh_interval)
+            channel = self._bot.get_channel(self._channel_id)
+            if channel:
+                embed = self._create_weather_embed(self._current_weather)
+                role_mention = f"<@&{self._role_id}>" if self._role_id and self._tag_role else ""
+                await channel.send(content=role_mention, embed=embed)
+
     @commands.group(name="rweather", invoke_without_command=True)
     async def rweather(self, ctx):
         """Main rweather command."""
@@ -134,6 +148,43 @@ class WeatherCog(commands.Cog):
             await ctx.send(f"Weather updates will now be sent to: {channel.mention}")
         else:
             await ctx.send("Invalid channel ID. Please provide a valid channel ID.")
+
+    @rweather.command(name="load")
+    async def load_weather(self, ctx):
+        """Manually load the current weather."""
+        # Edited by Taako
+        embed = self._create_weather_embed(self._current_weather)
+        role_mention = f"<@&{self._role_id}>" if self._role_id and self._tag_role else ""
+        if self._channel_id:
+            channel = self._bot.get_channel(self._channel_id)
+            if channel:
+                await channel.send(content=role_mention, embed=embed)
+                await ctx.send(f"Weather update sent to {channel.mention}.")
+            else:
+                await ctx.send("The set channel is invalid. Please set a valid channel.")
+        else:
+            await ctx.send(embed=embed)
+
+    @rweather.command(name="setrefresh")
+    async def set_refresh(self, ctx, interval: str):
+        """Set how often the weather should refresh in the set channel."""
+        # Edited by Taako
+        time_units = {"s": 1, "m": 60, "h": 3600, "d": 86400}
+        try:
+            unit = interval[-1]
+            value = int(interval[:-1])
+            if unit not in time_units:
+                raise ValueError("Invalid time unit.")
+            self._refresh_interval = value * time_units[unit]
+            if self._refresh_task:
+                self._refresh_task.cancel()
+            if self._refresh_interval > 0:
+                self._refresh_task = self._bot.loop.create_task(self._refresh_weather_task())
+                await ctx.send(f"Weather will now refresh every {interval}.")
+            else:
+                await ctx.send("Invalid interval. Please provide a positive value.")
+        except (ValueError, IndexError):
+            await ctx.send("Invalid format. Use a number followed by s (seconds), m (minutes), h (hours), or d (days).")
 
 def setup(bot):
     # Edited by Taako
