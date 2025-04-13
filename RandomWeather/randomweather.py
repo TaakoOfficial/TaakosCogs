@@ -21,7 +21,7 @@ class WeatherCog(commands.Cog):
             "channel_id": None,
             "tag_role": False,
             "refresh_interval": None,
-            "refresh_time": None,
+            "refresh_time": "0000",  # Default to military time 00:00 (midnight)
             "time_zone": "America/Chicago",  # Default to Central Time (America/Chicago)
         }
         self.config.register_guild(**default_guild)
@@ -303,6 +303,51 @@ class WeatherCog(commands.Cog):
             await self.config.guild(ctx.guild).refresh_interval.set(3600)  # Default to 1 hour
         new_mode = "specific time of day" if current_mode == "time interval" else "time interval"
         await ctx.send(f"Weather updates will now use {new_mode}.")
+
+    @rweather.command(name="info")
+    async def info(self, ctx):
+        """View the current settings for weather updates."""
+        # Edited by Taako
+        guild_settings = await self.config.guild(ctx.guild).all()
+        embed = discord.Embed(
+            title="🌦️ RandomWeather Settings",
+            color=discord.Color.blue()  # Set embed color to blue
+        )
+        embed.add_field(
+            name="📅 Refresh Mode",
+            value=(
+                f"**Interval**: {guild_settings['refresh_interval']} seconds"
+                if guild_settings["refresh_interval"]
+                else f"**Time**: {guild_settings['refresh_time']} (military time)"
+            ),
+            inline=False,
+        )
+        embed.add_field(
+            name="🌍 Time Zone",
+            value=guild_settings["time_zone"],
+            inline=False,
+        )
+        embed.add_field(
+            name="📢 Channel",
+            value=(
+                f"<#{guild_settings['channel_id']}>" if guild_settings["channel_id"] else "Not set"
+            ),
+            inline=False,
+        )
+        embed.add_field(
+            name="👥 Role Tagging",
+            value=(
+                f"<@&{guild_settings['role_id']}>" if guild_settings["role_id"] else "Not set"
+            ),
+            inline=True,
+        )
+        embed.add_field(
+            name="🔔 Tag Role",
+            value="Enabled" if guild_settings["tag_role"] else "Disabled",
+            inline=True,
+        )
+        embed.set_footer(text="RandomWeather by Taako")
+        await ctx.send(embed=embed)
 
 def setup(bot):
     # Edited by Taako
