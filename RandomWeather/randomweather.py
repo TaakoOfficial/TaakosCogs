@@ -167,12 +167,15 @@ class WeatherCog(commands.Cog):
     async def cog_load(self):
         """Register slash commands when the cog is loaded."""
         # Edited by Taako
-        self._bot.tree.add_command(self.slash_weather)
-        self._bot.tree.add_command(self.slash_refresh)
-        self._bot.tree.add_command(self.slash_role)
-        self._bot.tree.add_command(self.slash_toggle)
-        self._bot.tree.add_command(self.slash_channel)
-        await self._bot.tree.sync()
+        try:
+            self._bot.tree.add_command(self.slash_weather)
+            self._bot.tree.add_command(self.slash_refresh)
+            self._bot.tree.add_command(self.slash_role)
+            self._bot.tree.add_command(self.slash_toggle)
+            self._bot.tree.add_command(self.slash_channel)
+            await self._bot.tree.sync()
+        except app_commands.CommandAlreadyRegistered:
+            pass  # Ignore if the commands are already registered
 
     async def cog_unload(self):
         """Unregister slash commands when the cog is unloaded."""
