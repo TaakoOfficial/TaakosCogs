@@ -6,13 +6,6 @@ from datetime import datetime, timedelta  # Edited by Taako
 import pytz  # Edited by Taako
 from redbot.core.utils.chat_formatting import humanize_list  # Edited by Taako
 
-try:
-    from .dashboard_integration import register_dashboard_settings  # Edited by Taako
-    AAA3A_AVAILABLE = True
-except ImportError:
-    register_dashboard_settings = None  # Edited by Taako
-    AAA3A_AVAILABLE = False  # Edited by Taako
-
 class WeatherCog(commands.Cog):
     """A cog for generating random daily weather."""  # Edited by Taako
 
@@ -34,14 +27,6 @@ class WeatherCog(commands.Cog):
             "show_footer": True,  # Whether to show the footer in embeds
         }
         self.config.register_guild(**default_guild)
-
-        # Register settings for the AAA3A Dashboard Cog if available
-        if AAA3A_AVAILABLE:
-            try:
-                register_dashboard_settings(self)
-                bot.logger.info("Dashboard settings registered successfully for RandomWeather.")  # Debug log
-            except Exception as e:
-                bot.logger.error(f"Failed to register dashboard settings for RandomWeather: {e}")  # Debug log
 
     def _generate_weather(self):
         """Generate realistic random weather."""

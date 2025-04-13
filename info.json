@@ -5,7 +5,7 @@
   "description": "A collection of high-quality cogs for Red-DiscordBot, including RandomWeather.",
   "install_msg": "Thank you for adding Taako's Cogs! Use `[p]repo list` to see available cogs.",
   "short": "High-quality cogs for Red-DiscordBot.",
-  "tags": ["cogs", "utility", "weather", "dashboard"],
+  "tags": ["cogs", "utility", "weather"],
   "hidden": false,
   "disabled": false,
   "type": "REPO"
