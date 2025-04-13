@@ -1,4 +1,23 @@
-from AAA3A_utils import CogManager  # Edited by Taako
+import subprocess  # Edited by Taako
+import sys  # Edited by Taako
+
+def ensure_aaa3a_utils_installed():
+    """Ensure the AAA3A_utils library is installed."""
+    # Edited by Taako
+    try:
+        from AAA3A_utils import CogManager  # Try importing CogManager
+        return CogManager
+    except ImportError:
+        # Attempt to install AAA3A_utils dynamically
+        subprocess.check_call([
+            sys.executable, "-m", "pip", "install",
+            "git+https://github.com/AAA3A-AAA3A/AAA3A-cogs.git#subdirectory=AAA3A_utils"
+        ])
+        from AAA3A_utils import CogManager  # Retry import after installation
+        return CogManager
+
+# Ensure AAA3A_utils is installed and import CogManager
+CogManager = ensure_aaa3a_utils_installed()  # Edited by Taako
 
 def register_dashboard_settings(cog):
     """Register settings for the AAA3A Dashboard Cog."""
