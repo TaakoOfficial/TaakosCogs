@@ -104,7 +104,7 @@ class WeatherCog(commands.Cog):
         }
         return icons.get(condition, "https://cdn-icons-png.flaticon.com/512/869/869869.png")  # Default icon
 
-    def _create_weather_embed(self, weather_data, guild_id=None):
+    def _create_weather_embed(self, weather_data):
         """Create a Discord embed for the weather data."""
         # Edited by Taako
         icon_url = self._get_weather_icon(weather_data["conditions"])
@@ -120,9 +120,9 @@ class WeatherCog(commands.Cog):
         embed.add_field(name="👀 Visibility", value=weather_data["visibility"], inline=True)
         embed.set_thumbnail(url=icon_url)  # Add a weather-specific icon
 
-        # Add footer unless the guild ID matches the specified one
-        if guild_id != 1277804371878346814:
-            embed.set_footer(text="RandomWeather by Taako", icon_url="https://i.imgur.com/3ZQZ3cQ.png")
+        # Add footer if enabled
+        if weather_data.get("show_footer", True):  # Default to True if not set
+            embed.set_footer(text="RandomWeather by Taako", icon_url="https://cdn-icons-png.flaticon.com/512/869/869869.png")
         
         return embed
 
@@ -157,7 +157,7 @@ class WeatherCog(commands.Cog):
             channel = self._bot.get_channel(channel_id)
             if channel:
                 self._current_weather = self._generate_weather()  # Generate new weather data
-                embed = self._create_weather_embed(self._current_weather, guild_id=guild_id)
+                embed = self._create_weather_embed(self._current_weather)
                 role_mention = f"<@&{role_id}>" if role_id and tag_role else ""
                 await channel.send(content=role_mention, embed=embed)
 
@@ -299,6 +299,16 @@ class WeatherCog(commands.Cog):
         )
         embed.set_footer(text="RandomWeather by Taako")
         await ctx.send(embed=embed)
+
+    @rweather.command(name="togglefooter")
+    async def toggle_footer(self, ctx):
+        """Toggle the footer on or off for the weather embed."""
+        # Edited by Taako
+        show_footer = await self.config.guild(ctx.guild).get_raw("show_footer", default=True)
+        new_state = not show_footer
+        await self.config.guild(ctx.guild).set_raw("show_footer", value=new_state)
+        status = "enabled" if new_state else "disabled"
+        await ctx.send(f"The footer has been {status} for the weather embed.")
 
 def setup(bot):
     # Edited by Taako
