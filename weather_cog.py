@@ -1,0 +1,130 @@
+import random
+import discord  # Edited by Taako
+from redbot.core import commands
+
+class WeatherCog(commands.Cog):
+    """A cog for generating random daily weather."""
+    
+    # Edited by Taako
+    def __init__(self, bot):
+        self._bot = bot  # Store the bot instance
+        self._current_weather = self._generate_weather()  # Generate initial weather
+        self._role_id = None  # Role ID for tagging
+        self._channel_id = None  # Channel ID for sending updates
+        self._tag_role = False  # Whether to tag the role
+
+    def _generate_weather(self):
+        """Generate realistic random weather."""
+        # Edited by Taako
+        temperature = random.randint(30, 100)  # Temperature in °F
+        feels_like = temperature + random.randint(-3, 3)  # Feels like temperature
+        conditions = random.choice(["Clear sky", "Partly cloudy", "Overcast", "Rainy", "Stormy", "Snowy"])
+        wind_speed = round(random.uniform(0.5, 20.0), 1)  # Wind speed in mph
+        wind_direction = random.choice(["N", "NE", "E", "SE", "S", "SW", "W", "NW"])
+        pressure = random.randint(980, 1050)  # Pressure in hPa
+        humidity = random.randint(20, 100)  # Humidity in %
+        dew_point = round(temperature - ((100 - humidity) / 5), 1)  # Dew point in °F
+
+        # Adjust visibility based on conditions
+        if conditions == "Clear sky":
+            visibility = round(random.uniform(8.0, 10.0), 1)  # High visibility
+        elif conditions in ["Partly cloudy", "Overcast"]:
+            visibility = round(random.uniform(5.0, 8.0), 1)  # Moderate visibility
+        elif conditions in ["Rainy", "Stormy"]:
+            visibility = round(random.uniform(1.0, 5.0), 1)  # Low visibility
+        elif conditions == "Snowy":
+            visibility = round(random.uniform(0.5, 3.0), 1)  # Very low visibility
+        else:
+            visibility = round(random.uniform(1.0, 10.0), 1)  # Default fallback
+
+        return {
+            "temperature": f"{temperature}°F",
+            "feels_like": f"{feels_like}°F",
+            "conditions": conditions,
+            "wind": f"{wind_speed} mph {wind_direction}",
+            "pressure": f"{pressure} hPa",
+            "humidity": f"{humidity}%",
+            "dew_point": f"{dew_point}°F",
+            "visibility": f"{visibility} km",
+        }
+
+    def _create_weather_embed(self, weather_data):
+        """Create a Discord embed for the weather data."""
+        # Edited by Taako
+        embed = discord.Embed(title="Today's Weather", color=discord.Color.blue())
+        embed.add_field(name="Temperature", value=weather_data["temperature"], inline=True)
+        embed.add_field(name="Feels Like", value=weather_data["feels_like"], inline=True)
+        embed.add_field(name="Conditions", value=weather_data["conditions"], inline=False)
+        embed.add_field(name="Wind", value=weather_data["wind"], inline=True)
+        embed.add_field(name="Pressure", value=weather_data["pressure"], inline=True)
+        embed.add_field(name="Humidity", value=weather_data["humidity"], inline=True)
+        embed.add_field(name="Dew Point", value=weather_data["dew_point"], inline=True)
+        embed.add_field(name="Visibility", value=weather_data["visibility"], inline=True)
+        return embed
+
+    @commands.command()
+    async def set_weather_role(self, ctx, role_id: int):
+        """Set the role to be tagged for weather updates."""
+        # Edited by Taako
+        role = ctx.guild.get_role(role_id)
+        if role:
+            self._role_id = role_id
+            await ctx.send(f"Weather updates will now tag the role: {role.name}")
+        else:
+            await ctx.send("Invalid role ID. Please provide a valid role ID.")
+
+    @commands.command()
+    async def toggle_role_tagging(self, ctx):
+        """Toggle whether the role should be tagged in weather updates."""
+        # Edited by Taako
+        self._tag_role = not self._tag_role
+        status = "enabled" if self._tag_role else "disabled"
+        await ctx.send(f"Role tagging has been {status}.")
+
+    @commands.command()
+    async def set_weather_channel(self, ctx, channel_id: int):
+        """Set the channel for weather updates."""
+        # Edited by Taako
+        channel = self._bot.get_channel(channel_id)
+        if channel:
+            self._channel_id = channel_id
+            await ctx.send(f"Weather updates will now be sent to: {channel.mention}")
+        else:
+            await ctx.send("Invalid channel ID. Please provide a valid channel ID.")
+
+    @commands.command()
+    async def weather(self, ctx):
+        """Get the current weather."""
+        # Edited by Taako
+        embed = self._create_weather_embed(self._current_weather)
+        role_mention = f"<@&{self._role_id}>" if self._role_id and self._tag_role else ""
+        if self._channel_id:
+            channel = self._bot.get_channel(self._channel_id)
+            if channel:
+                await channel.send(content=role_mention, embed=embed)
+                await ctx.send(f"Weather update sent to {channel.mention}.")
+            else:
+                await ctx.send("The set channel is invalid. Please set a valid channel.")
+        else:
+            await ctx.send(embed=embed)
+
+    @commands.command()
+    async def refresh_weather(self, ctx):
+        """Refresh the weather for the day."""
+        # Edited by Taako
+        self._current_weather = self._generate_weather()
+        embed = self._create_weather_embed(self._current_weather)
+        role_mention = f"<@&{self._role_id}>" if self._role_id and self._tag_role else ""
+        if self._channel_id:
+            channel = self._bot.get_channel(self._channel_id)
+            if channel:
+                await channel.send(content=role_mention, embed=embed)
+                await ctx.send(f"Weather update sent to {channel.mention}.")
+            else:
+                await ctx.send("The set channel is invalid. Please set a valid channel.")
+        else:
+            await ctx.send(embed=embed)
+
+def setup(bot):
+    # Edited by Taako
+    bot.add_cog(WeatherCog(bot))
