@@ -4,6 +4,8 @@ from redbot.core import commands, Config  # Edited by Taako
 import asyncio  # Edited by Taako
 from datetime import datetime, timedelta  # Edited by Taako
 import pytz  # Edited by Taako
+from redbot.core.utils.chat_formatting import humanize_list  # Edited by Taako
+from AAA3A_utils import CogManager  # Edited by Taako
 
 class WeatherCog(commands.Cog):
     """A cog for generating random daily weather."""  # Edited by Taako
@@ -23,8 +25,23 @@ class WeatherCog(commands.Cog):
             "refresh_interval": None,  # Refresh interval in seconds
             "refresh_time": "0000",  # Default to military time 00:00 (midnight)
             "time_zone": "America/Chicago",  # Default to Central Time (America/Chicago)
+            "show_footer": True,  # Whether to show the footer in embeds
         }
         self.config.register_guild(**default_guild)
+
+        # Register settings for the AAA3A Dashboard Cog
+        CogManager.register_cog_settings(
+            cog=self,
+            settings={
+                "role_id": {"type": "role", "description": "Role to tag for weather updates."},
+                "channel_id": {"type": "channel", "description": "Channel for weather updates."},
+                "tag_role": {"type": "bool", "description": "Whether to tag the role in updates."},
+                "refresh_interval": {"type": "int", "description": "Refresh interval in seconds."},
+                "refresh_time": {"type": "str", "description": "Refresh time in military format (e.g., 1830)."},
+                "time_zone": {"type": "str", "description": "Time zone for weather updates."},
+                "show_footer": {"type": "bool", "description": "Whether to show the footer in embeds."},
+            },
+        )
 
     def _generate_weather(self):
         """Generate realistic random weather."""
@@ -251,7 +268,7 @@ class WeatherCog(commands.Cog):
         # Edited by Taako
         if not time_zone:
             await ctx.send(
-                "Please provide a valid time zone (e.g., `UTC`, `America/New_York`).\n"
+                "Please provide a valid time zone using the correct syntax (e.g., `UTC`, `America/New_York`).\n"
                 "You can view the full list of time zones here: https://en.wikipedia.org/wiki/List_of_tz_database_time_zones"
             )
             return
@@ -261,7 +278,7 @@ class WeatherCog(commands.Cog):
             await ctx.send(f"Time zone set to {time_zone}.")
         else:
             await ctx.send(
-                "Invalid time zone. Please provide a valid time zone (e.g., `UTC`, `America/New_York`).\n"
+                "Invalid time zone. Please provide a valid time zone using the correct syntax (e.g., `UTC`, `America/New_York`).\n"
                 "You can view the full list of time zones here: https://en.wikipedia.org/wiki/List_of_tz_database_time_zones"
             )
 
