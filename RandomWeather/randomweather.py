@@ -5,6 +5,7 @@ import asyncio  # Edited by Taako
 from datetime import datetime, timedelta  # Edited by Taako
 import pytz  # Edited by Taako
 from redbot.core.utils.chat_formatting import humanize_list  # Edited by Taako
+from discord.ext import tasks  # Edited by Taako
 
 class WeatherCog(commands.Cog):
     """A cog for generating random daily weather."""  # Edited by Taako
@@ -12,8 +13,6 @@ class WeatherCog(commands.Cog):
     # Edited by Taako
     def __init__(self, bot):
         self._bot = bot  # Store the bot instance
-
-        # Persistent storage using Config
         self.config = Config.get_conf(self, identifier=1234567890, force_registration=True)  # Edited by Taako
         default_guild = {
             "role_id": None,  # Role ID for tagging
@@ -30,7 +29,11 @@ class WeatherCog(commands.Cog):
         # Generate initial weather using the default time zone
         default_time_zone = default_guild["time_zone"]  # Edited by Taako
         self._current_weather = self._generate_weather(default_time_zone)  # Pass default time zone
-        self._refresh_task = None  # Task for automatic weather refresh
+        self._refresh_weather_loop.start()  # Start the task loop on cog initialization
+
+    def cog_unload(self):
+        """Clean up tasks when the cog is unloaded."""  # Edited by Taako
+        self._refresh_weather_loop.cancel()  # Cancel the task loop
 
     def _get_current_season(self, time_zone):
         """Determine the current season based on the time zone and date."""  # Edited by Taako
@@ -159,40 +162,47 @@ class WeatherCog(commands.Cog):
         
         return embed
 
-    async def _refresh_weather_task(self, guild_id):
-        """Background task to refresh weather at the set interval or specific time."""
-        # Edited by Taako
-        while True:
-            guild_settings = await self.config.guild_from_id(guild_id).all()
+    @tasks.loop(seconds=60)  # Check every minute for updates
+    async def _refresh_weather_loop(self):
+        """Task loop to refresh weather at the set interval or specific time."""  # Edited by Taako
+        all_guilds = await self.config.all_guilds()
+        for guild_id, guild_settings in all_guilds.items():
+            channel_id = guild_settings["channel_id"]
+            if not channel_id:
+                continue
+
+            time_zone = guild_settings["time_zone"]
             refresh_interval = guild_settings["refresh_interval"]
             refresh_time = guild_settings["refresh_time"]
-            time_zone = guild_settings["time_zone"]
-            channel_id = guild_settings["channel_id"]
-            role_id = guild_settings["role_id"]
-            tag_role = guild_settings["tag_role"]
 
-            if not channel_id:
-                break
-
+            now = datetime.now(pytz.timezone(time_zone))
             if refresh_interval:
-                await asyncio.sleep(refresh_interval)
+                last_refresh = guild_settings.get("last_refresh", 0)
+                if (now.timestamp() - last_refresh) < refresh_interval:
+                    continue
+                await self.config.guild_from_id(guild_id).last_refresh.set(now.timestamp())
             elif refresh_time:
-                now = datetime.now(pytz.timezone(time_zone))
                 target_time = datetime.strptime(refresh_time, "%H%M").replace(
                     tzinfo=pytz.timezone(time_zone)
                 )
-                if now > target_time:
-                    target_time += timedelta(days=1)
-                await asyncio.sleep((target_time - now).total_seconds())
-            else:
-                break
+                if now < target_time or (now - target_time).total_seconds() > 60:
+                    continue
 
             channel = self._bot.get_channel(channel_id)
             if channel:
-                self._current_weather = self._generate_weather(time_zone)  # Generate new weather data
+                self._current_weather = self._generate_weather(time_zone)
                 embed = self._create_weather_embed(self._current_weather)
-                role_mention = f"<@&{role_id}>" if role_id and tag_role else ""
+                role_mention = (
+                    f"<@&{guild_settings['role_id']}>"
+                    if guild_settings["role_id"] and guild_settings["tag_role"]
+                    else ""
+                )
                 await channel.send(content=role_mention, embed=embed)
+
+    @_refresh_weather_loop.before_loop
+    async def before_refresh_weather_loop(self):
+        """Wait until the bot is ready before starting the loop."""  # Edited by Taako
+        await self._bot.wait_until_ready()
 
     @commands.group(name="rweather", invoke_without_command=True)
     async def rweather(self, ctx):
@@ -275,9 +285,8 @@ class WeatherCog(commands.Cog):
                 await ctx.send("Invalid format. Use a valid military time (e.g., 1830).")
 
         # Restart the refresh task
-        if self._refresh_task:
-            self._refresh_task.cancel()
-        self._refresh_task = self._bot.loop.create_task(self._refresh_weather_task(ctx.guild.id))
+        if not self._refresh_weather_loop.is_running():
+            self._refresh_weather_loop.start()  # Restart the task loop if not running
 
     @rweather.command(name="settimezone")
     async def set_timezone(self, ctx, time_zone: str = None):
@@ -379,7 +388,3 @@ class WeatherCog(commands.Cog):
         )
         embed.set_footer(text="RandomWeather by Taako")
         await ctx.send(embed=embed)
-
-def setup(bot):
-    # Edited by Taako
-    bot.add_cog(WeatherCog(bot))
