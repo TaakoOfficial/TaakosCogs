@@ -22,7 +22,7 @@ class WeatherCog(commands.Cog):
             "tag_role": False,
             "refresh_interval": None,
             "refresh_time": None,
-            "time_zone": "UTC",
+            "time_zone": "America/Chicago",  # Default to Central Time (America/Chicago)
         }
         self.config.register_guild(**default_guild)
 
@@ -271,6 +271,15 @@ class WeatherCog(commands.Cog):
             await ctx.send(f"Time zone set to {time_zone}.")
         else:
             await ctx.send("Invalid time zone. Please provide a valid time zone (e.g., `UTC`, `America/New_York`).")
+
+    @rweather.command(name="listtimezones")
+    async def list_timezones(self, ctx):
+        """List all available time zones."""
+        # Edited by Taako
+        timezones = ", ".join(pytz.all_timezones[:50])  # Show the first 50 time zones for brevity
+        await ctx.send(
+            f"Here are some available time zones:\n{timezones}\n\nFor the full list, visit: https://en.wikipedia.org/wiki/List_of_tz_database_time_zones"
+        )
 
 def setup(bot):
     # Edited by Taako

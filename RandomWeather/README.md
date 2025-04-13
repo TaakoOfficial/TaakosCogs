@@ -4,35 +4,6 @@ Welcome to **RandomWeather**, a Discord bot cog that generates random daily weat
 
 ---
 
-## ✨ Features
-
-- **Realistic Weather Generation**: Get temperature, feels-like temperature, conditions, wind, pressure, humidity, dew point, and visibility (in miles).
-- **Customizable Updates**:
-  - Set a specific channel for weather updates.
-  - Tag a role for weather notifications.
-  - Toggle role tagging on or off.
-  - Automatically refresh weather updates at user-defined intervals.
-- **Interactive Commands**: Use text commands to interact with the bot.
-
----
-
-## 🛠️ Installation
-
-1. Add the repository to your Red-DiscordBot instance:
-   ```
-   [p]repo add TaakosCogs https://github.com/TaakoOfficial/TaakosCogs
-   ```
-2. Install the cog using the following command:
-   ```
-   [p]cog install TaakosCogs RandomWeather
-   ```
-3. Load the cog:
-   ```
-   [p]load RandomWeather
-   ```
-
----
-
 ## 📚 Commands
 
 ### Text Commands
@@ -46,6 +17,8 @@ Welcome to **RandomWeather**, a Discord bot cog that generates random daily weat
 | `[p]rweather channel <id>`          | Set the channel for weather updates.                                      |
 | `[p]rweather load`                  | Manually load the current weather.                                        |
 | `[p]rweather setrefresh <interval>` | Set how often the weather should refresh (e.g., `10s`, `5m`, `1h`, `1d`). |
+| `[p]rweather settimezone <zone>`    | Set the time zone for weather updates (e.g., `UTC`, `America/New_York`).  |
+| `[p]rweather listtimezones`         | List available time zones or provide a link to the full list.             |
 
 ---
 
@@ -55,43 +28,14 @@ Welcome to **RandomWeather**, a Discord bot cog that generates random daily weat
 - **Set Weather Channel**: Use `[p]rweather channel <channel_id>` to define where updates are sent.
 - **Toggle Role Tagging**: Use `[p]rweather toggle` to enable or disable role mentions.
 - **Set Refresh Interval**: Use `[p]rweather setrefresh <interval>` to define how often the weather should refresh automatically.
-
----
-
-## 🌟 Example Output
-
-Here's an example of what the weather update looks like:
-
-```
-🌤️ Today's Weather:
-- Temperature: 75°F
-- Feels Like: 77°F
-- Conditions: Partly Cloudy
-- Wind: 5 mph NE
-- Pressure: 1015 hPa
-- Humidity: 60%
-- Dew Point: 60°F
-- Visibility: 5.5 miles
-```
-
----
-
-## 🧑‍💻 Author
-
-Created with ❤️ by [**Taako**](https://github.com/TaakoOfficial).
-
----
-
-## 📜 License
-
-This project is licensed under the MIT License. See the `LICENSE` file for details.
+- **Set Time Zone**: Use `[p]rweather settimezone <zone>` to set the time zone for weather updates.
+- **List Time Zones**: Use `[p]rweather listtimezones` to view available time zones or get a link to the full list.
 
 ---
 
 ## 🔗 Additional Resources
 
-- Learn more about [Red-DiscordBot](https://github.com/Cog-Creators/Red-DiscordBot/tree/V3/develop).
-- Explore this cog's repository: [TaakosCogs](https://github.com/TaakoOfficial/TaakosCogs).
+- View the full list of time zones: [Wikipedia Time Zones](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones).
 
 ---
 

@@ -12,47 +12,43 @@ Welcome to **Taako's Cogs**, a collection of high-quality cogs for [Red-DiscordB
 - **Features**:
   - Realistic weather generation (temperature, conditions, wind, etc.).
   - Customizable updates with role tagging and channel configuration.
-  - Automatic weather refresh with user-defined intervals.
+  - Automatic weather refresh with user-defined intervals or specific times.
   - Supports text commands for interaction.
-- **Installation**:
-  ```
-  [p]repo add TaakosCogs https://github.com/TaakoOfficial/TaakosCogs
-  [p]cog install RandomWeather
-  [p]load RandomWeather
-  ```
+  - Time zone support with a list of available time zones.
 
 ---
 
-## 🛠️ Installation Instructions
+## 📚 Commands
 
-1. Add the repository to your Red-DiscordBot instance:
-   ```
-   [p]repo add TaakosCogs https://github.com/TaakoOfficial/TaakosCogs
-   ```
-2. Install the cog using the following command:
-   ```
-   [p]cog install TaakosCogs RandomWeather
-   ```
-3. Load the cog:
-   ```
-   [p]load RandomWeather
-   ```
+### Text Commands
 
----
-
-## 🤝 Contributing
-
-Contributions are welcome! If you'd like to contribute:
-
-1. Fork the repository.
-2. Create a new branch for your feature or bug fix.
-3. Submit a pull request with a detailed description of your changes.
+| Command                             | Description                                                               |
+| ----------------------------------- | ------------------------------------------------------------------------- |
+| `[p]rweather`                       | View the current weather.                                                 |
+| `[p]rweather refresh`               | Refresh the weather for the day.                                          |
+| `[p]rweather role <id>`             | Set a role to be tagged for weather updates.                              |
+| `[p]rweather toggle`                | Toggle tagging the role in weather updates.                               |
+| `[p]rweather channel <id>`          | Set the channel for weather updates.                                      |
+| `[p]rweather load`                  | Manually load the current weather.                                        |
+| `[p]rweather setrefresh <interval>` | Set how often the weather should refresh (e.g., `10s`, `5m`, `1h`, `1d`). |
+| `[p]rweather settimezone <zone>`    | Set the time zone for weather updates (e.g., `UTC`, `America/New_York`).  |
+| `[p]rweather listtimezones`         | List available time zones or provide a link to the full list.             |
 
 ---
 
-## 💖 Support
+## 🌟 Example Output
 
-If you enjoy using these cogs and would like to support their development, consider sponsoring me on GitHub or contributing to the project. Your support helps me dedicate more time to creating and maintaining these cogs.
+Here's an example of what the weather update looks like:
+
+```
+🌤️ Today's Weather:
+- Temperature: 75°F
+- Feels Like: 77°F
+- Conditions: Partly Cloudy
+- Wind: 5 mph NE
+- Humidity: 60%
+- Visibility: 5.5 miles
+```
 
 ---
 
@@ -60,7 +56,6 @@ If you enjoy using these cogs and would like to support their development, consi
 
 - Learn more about [Red-DiscordBot](https://github.com/Cog-Creators/Red-DiscordBot/tree/V3/develop).
 - Explore the cogs in this repository: [TaakosCogs](https://github.com/TaakoOfficial/TaakosCogs).
+- View the full list of time zones: [Wikipedia Time Zones](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones).
 
 ---
-
-Enjoy using Taako's Cogs to enhance your Discord bot! 🌟
