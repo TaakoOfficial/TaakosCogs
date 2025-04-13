@@ -133,9 +133,8 @@ class WeatherCog(commands.Cog):
         return icons.get(condition, "https://cdn-icons-png.flaticon.com/512/869/869869.png")  # Default icon
 
     def _create_weather_embed(self, weather_data):
-        """Create a Discord embed for the weather data."""
-        # Edited by Taako
-        guild_settings = self.config.guild_from_id(weather_data.get("guild_id"))
+        """Create a Discord embed for the weather data."""  # Edited by Taako
+        guild_settings = weather_data.get("guild_settings")  # Pass guild settings directly
         embed_color = guild_settings.get("embed_color", 0xFF0000)  # Default to red
         icon_url = self._get_weather_icon(weather_data["conditions"])
         embed = discord.Embed(
@@ -151,7 +150,7 @@ class WeatherCog(commands.Cog):
         embed.set_thumbnail(url=icon_url)  # Add a weather-specific icon
 
         # Add footer if enabled
-        if weather_data.get("show_footer", True):  # Default to True if not set
+        if guild_settings.get("show_footer", True):  # Default to True if not set
             embed.set_footer(text="RandomWeather by Taako", icon_url="https://cdn-icons-png.flaticon.com/512/869/869869.png")
         
         return embed
@@ -200,11 +199,11 @@ class WeatherCog(commands.Cog):
 
     @rweather.command()
     async def refresh(self, ctx):
-        """Refresh the weather for the day."""
-        # Edited by Taako
+        """Refresh the weather for the day."""  # Edited by Taako
         guild_settings = await self.config.guild(ctx.guild).all()
         time_zone = guild_settings["time_zone"]
         self._current_weather = self._generate_weather(time_zone)
+        self._current_weather["guild_settings"] = guild_settings  # Pass guild settings to embed
         embed = self._create_weather_embed(self._current_weather)
         role_mention = f"<@&{guild_settings['role_id']}>" if guild_settings["role_id"] and guild_settings["tag_role"] else ""
         channel_id = guild_settings["channel_id"]
