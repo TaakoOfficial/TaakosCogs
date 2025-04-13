@@ -81,22 +81,12 @@ class WeatherCog(commands.Cog):
         embed.set_footer(text="RandomWeather by Taako", icon_url="https://i.imgur.com/3ZQZ3cQ.png")
         return embed
 
-    @commands.group(name="rweather")
+    @commands.group(name="rweather", invoke_without_command=True)
     async def rweather(self, ctx):
         """Main rweather command."""
         # Edited by Taako
         if ctx.invoked_subcommand is None:
-            embed = self._create_weather_embed(self._current_weather)
-            role_mention = f"<@&{self._role_id}>" if self._role_id and self._tag_role else ""
-            if self._channel_id:
-                channel = self._bot.get_channel(self._channel_id)
-                if channel:
-                    await channel.send(content=role_mention, embed=embed)
-                    await ctx.send(f"Weather update sent to {channel.mention}.")
-                else:
-                    await ctx.send("The set channel is invalid. Please set a valid channel.")
-            else:
-                await ctx.send(embed=embed)
+            await ctx.send_help(ctx.command)  # Show the help menu if no subcommand is provided
 
     @rweather.command()
     async def refresh(self, ctx):
