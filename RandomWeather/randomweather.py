@@ -17,10 +17,10 @@ class WeatherCog(commands.Cog):
         # Persistent storage using Config
         self.config = Config.get_conf(self, identifier=1234567890, force_registration=True)  # Edited by Taako
         default_guild = {
-            "role_id": None,
-            "channel_id": None,
-            "tag_role": False,
-            "refresh_interval": None,
+            "role_id": None,  # Role ID for tagging
+            "channel_id": None,  # Channel ID for updates
+            "tag_role": False,  # Whether to tag the role
+            "refresh_interval": None,  # Refresh interval in seconds
             "refresh_time": "0000",  # Default to military time 00:00 (midnight)
             "time_zone": "America/Chicago",  # Default to Central Time (America/Chicago)
         }
@@ -188,15 +188,11 @@ class WeatherCog(commands.Cog):
             await ctx.send(embed=embed)
 
     @rweather.command()
-    async def role(self, ctx, role_id: int):
+    async def role(self, ctx, role: discord.Role):
         """Set the role to be tagged for weather updates."""
         # Edited by Taako
-        role = ctx.guild.get_role(role_id)
-        if role:
-            await self.config.guild(ctx.guild).role_id.set(role_id)
-            await ctx.send(f"Weather updates will now tag the role: {role.name}")
-        else:
-            await ctx.send("Invalid role ID. Please provide a valid role ID.")
+        await self.config.guild(ctx.guild).role_id.set(role.id)
+        await ctx.send(f"Weather updates will now tag the role: {role.name}")
 
     @rweather.command()
     async def toggle(self, ctx):
@@ -211,29 +207,8 @@ class WeatherCog(commands.Cog):
     async def channel(self, ctx, channel: discord.TextChannel):
         """Set the channel for weather updates."""
         # Edited by Taako
-        if channel:
-            await self.config.guild(ctx.guild).channel_id.set(channel.id)
-            await ctx.send(f"Weather updates will now be sent to: {channel.mention}")
-        else:
-            await ctx.send("Invalid channel. Please mention a valid text channel.")
-
-    @rweather.command(name="load")
-    async def load_weather(self, ctx):
-        """Manually load the current weather."""
-        # Edited by Taako
-        guild_settings = await self.config.guild(ctx.guild).all()
-        embed = self._create_weather_embed(self._current_weather, guild_id=ctx.guild.id)
-        role_mention = f"<@&{guild_settings['role_id']}>" if guild_settings["role_id"] and guild_settings["tag_role"] else ""
-        channel_id = guild_settings["channel_id"]
-        if channel_id:
-            channel = self._bot.get_channel(channel_id)
-            if channel:
-                await channel.send(content=role_mention, embed=embed)
-                await ctx.send(f"Weather update sent to {channel.mention}.")
-            else:
-                await ctx.send("The set channel is invalid. Please set a valid channel.")
-        else:
-            await ctx.send(embed=embed)
+        await self.config.guild(ctx.guild).channel_id.set(channel.id)
+        await ctx.send(f"Weather updates will now be sent to: {channel.mention}")
 
     @rweather.command(name="setrefresh")
     async def set_refresh(self, ctx, value: str):
@@ -279,30 +254,6 @@ class WeatherCog(commands.Cog):
             await ctx.send(f"Time zone set to {time_zone}.")
         else:
             await ctx.send("Invalid time zone. Please provide a valid time zone (e.g., `UTC`, `America/New_York`).")
-
-    @rweather.command(name="listtimezones")
-    async def list_timezones(self, ctx):
-        """List all available time zones."""
-        # Edited by Taako
-        timezones = ", ".join(pytz.all_timezones[:50])  # Show the first 50 time zones for brevity
-        await ctx.send(
-            f"Here are some available time zones:\n{timezones}\n\nFor the full list, visit: https://en.wikipedia.org/wiki/List_of_tz_database_time_zones"
-        )
-
-    @rweather.command(name="togglemode")
-    async def toggle_mode(self, ctx):
-        """Toggle between using a time interval or a specific time of day for weather updates."""
-        # Edited by Taako
-        guild_settings = await self.config.guild(ctx.guild).all()
-        current_mode = "time interval" if guild_settings["refresh_interval"] else "specific time of day"
-        if guild_settings["refresh_interval"]:
-            await self.config.guild(ctx.guild).refresh_interval.set(None)
-            await self.config.guild(ctx.guild).refresh_time.set("1200")  # Default to 12:00 PM
-        else:
-            await self.config.guild(ctx.guild).refresh_time.set(None)
-            await self.config.guild(ctx.guild).refresh_interval.set(3600)  # Default to 1 hour
-        new_mode = "specific time of day" if current_mode == "time interval" else "time interval"
-        await ctx.send(f"Weather updates will now use {new_mode}.")
 
     @rweather.command(name="info")
     async def info(self, ctx):
