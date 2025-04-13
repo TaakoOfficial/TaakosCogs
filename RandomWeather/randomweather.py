@@ -64,7 +64,7 @@ class WeatherCog(commands.Cog):
         }
         return icons.get(condition, "https://cdn-icons-png.flaticon.com/512/869/869869.png")  # Default icon
 
-    def _create_weather_embed(self, weather_data):
+    def _create_weather_embed(self, weather_data, guild_id=None):
         """Create a Discord embed for the weather data."""
         # Edited by Taako
         icon_url = self._get_weather_icon(weather_data["conditions"])
@@ -79,7 +79,11 @@ class WeatherCog(commands.Cog):
         embed.add_field(name="💧 Humidity", value=weather_data["humidity"], inline=True)
         embed.add_field(name="👀 Visibility", value=weather_data["visibility"], inline=True)
         embed.set_thumbnail(url=icon_url)  # Add a weather-specific icon
-        embed.set_footer(text="RandomWeather by Taako", icon_url="https://i.imgur.com/3ZQZ3cQ.png")
+
+        # Add footer unless the guild ID matches the specified one
+        if guild_id != 1277804371878346814:
+            embed.set_footer(text="RandomWeather by Taako", icon_url="https://i.imgur.com/3ZQZ3cQ.png")
+        
         return embed
 
     async def _refresh_weather_task(self):
@@ -105,7 +109,7 @@ class WeatherCog(commands.Cog):
         """Refresh the weather for the day."""
         # Edited by Taako
         self._current_weather = self._generate_weather()
-        embed = self._create_weather_embed(self._current_weather)
+        embed = self._create_weather_embed(self._current_weather, guild_id=ctx.guild.id)
         role_mention = f"<@&{self._role_id}>" if self._role_id and self._tag_role else ""
         if self._channel_id:
             channel = self._bot.get_channel(self._channel_id)
@@ -151,7 +155,7 @@ class WeatherCog(commands.Cog):
     async def load_weather(self, ctx):
         """Manually load the current weather."""
         # Edited by Taako
-        embed = self._create_weather_embed(self._current_weather)
+        embed = self._create_weather_embed(self._current_weather, guild_id=ctx.guild.id)
         role_mention = f"<@&{self._role_id}>" if self._role_id and self._tag_role else ""
         if self._channel_id:
             channel = self._bot.get_channel(self._channel_id)
