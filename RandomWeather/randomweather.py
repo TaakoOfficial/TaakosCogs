@@ -156,6 +156,7 @@ class WeatherCog(commands.Cog):
 
             channel = self._bot.get_channel(channel_id)
             if channel:
+                self._current_weather = self._generate_weather()  # Generate new weather data
                 embed = self._create_weather_embed(self._current_weather, guild_id=guild_id)
                 role_mention = f"<@&{role_id}>" if role_id and tag_role else ""
                 await channel.send(content=role_mention, embed=embed)
@@ -280,6 +281,21 @@ class WeatherCog(commands.Cog):
         await ctx.send(
             f"Here are some available time zones:\n{timezones}\n\nFor the full list, visit: https://en.wikipedia.org/wiki/List_of_tz_database_time_zones"
         )
+
+    @rweather.command(name="togglemode")
+    async def toggle_mode(self, ctx):
+        """Toggle between using a time interval or a specific time of day for weather updates."""
+        # Edited by Taako
+        guild_settings = await self.config.guild(ctx.guild).all()
+        current_mode = "time interval" if guild_settings["refresh_interval"] else "specific time of day"
+        if guild_settings["refresh_interval"]:
+            await self.config.guild(ctx.guild).refresh_interval.set(None)
+            await self.config.guild(ctx.guild).refresh_time.set("1200")  # Default to 12:00 PM
+        else:
+            await self.config.guild(ctx.guild).refresh_time.set(None)
+            await self.config.guild(ctx.guild).refresh_interval.set(3600)  # Default to 1 hour
+        new_mode = "specific time of day" if current_mode == "time interval" else "time interval"
+        await ctx.send(f"Weather updates will now use {new_mode}.")
 
 def setup(bot):
     # Edited by Taako

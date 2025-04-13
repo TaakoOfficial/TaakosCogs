@@ -19,17 +19,13 @@ Welcome to **RandomWeather**, a Discord bot cog that generates random daily weat
 | `[p]rweather setrefresh <interval>` | Set how often the weather should refresh (e.g., `10s`, `5m`, `1h`, `1d`). |
 | `[p]rweather settimezone <zone>`    | Set the time zone for weather updates (e.g., `UTC`, `America/New_York`).  |
 | `[p]rweather listtimezones`         | List available time zones or provide a link to the full list.             |
+| `[p]rweather togglemode`            | Toggle between using a time interval or a specific time of day.           |
 
 ---
 
 ## ⚙️ Configuration
 
-- **Set Weather Role**: Use `[p]rweather role <role_id>` to specify a role for tagging.
-- **Set Weather Channel**: Use `[p]rweather channel <channel_id>` to define where updates are sent.
-- **Toggle Role Tagging**: Use `[p]rweather toggle` to enable or disable role mentions.
-- **Set Refresh Interval**: Use `[p]rweather setrefresh <interval>` to define how often the weather should refresh automatically.
-- **Set Time Zone**: Use `[p]rweather settimezone <zone>` to set the time zone for weather updates.
-- **List Time Zones**: Use `[p]rweather listtimezones` to view available time zones or get a link to the full list.
+- **Toggle Update Mode**: Use `[p]rweather togglemode` to switch between time intervals and specific times of day for updates.
 
 ---
 

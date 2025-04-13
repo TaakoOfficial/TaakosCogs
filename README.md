@@ -4,20 +4,6 @@ Welcome to **Taako's Cogs**, a collection of high-quality cogs for [Red-DiscordB
 
 ---
 
-## 📦 Available Cogs
-
-### 1. 🌦️ RandomWeather
-
-- **Description**: A cog for generating random daily weather updates.
-- **Features**:
-  - Realistic weather generation (temperature, conditions, wind, etc.).
-  - Customizable updates with role tagging and channel configuration.
-  - Automatic weather refresh with user-defined intervals or specific times.
-  - Supports text commands for interaction.
-  - Time zone support with a list of available time zones.
-
----
-
 ## 📚 Commands
 
 ### Text Commands
@@ -33,29 +19,10 @@ Welcome to **Taako's Cogs**, a collection of high-quality cogs for [Red-DiscordB
 | `[p]rweather setrefresh <interval>` | Set how often the weather should refresh (e.g., `10s`, `5m`, `1h`, `1d`). |
 | `[p]rweather settimezone <zone>`    | Set the time zone for weather updates (e.g., `UTC`, `America/New_York`).  |
 | `[p]rweather listtimezones`         | List available time zones or provide a link to the full list.             |
+| `[p]rweather togglemode`            | Toggle between using a time interval or a specific time of day.           |
 
 ---
 
-## 🌟 Example Output
+## ⚙️ Configuration
 
-Here's an example of what the weather update looks like:
-
-```
-🌤️ Today's Weather:
-- Temperature: 75°F
-- Feels Like: 77°F
-- Conditions: Partly Cloudy
-- Wind: 5 mph NE
-- Humidity: 60%
-- Visibility: 5.5 miles
-```
-
----
-
-## 🔗 Additional Resources
-
-- Learn more about [Red-DiscordBot](https://github.com/Cog-Creators/Red-DiscordBot/tree/V3/develop).
-- Explore the cogs in this repository: [TaakosCogs](https://github.com/TaakoOfficial/TaakosCogs).
-- View the full list of time zones: [Wikipedia Time Zones](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones).
-
----
+- **Toggle Update Mode**: Use `[p]rweather togglemode` to switch between time intervals and specific times of day for updates.
