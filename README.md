@@ -11,6 +11,7 @@ Welcome to **Taako's Cogs**, a collection of high-quality cogs for [Red-DiscordB
 - **Description**: A cog for generating random daily weather updates.
 - **Features**:
   - Realistic weather generation (temperature, conditions, wind, etc.).
+  - Seasonal weather generation based on the user's time zone and current date.
   - Customizable updates with role tagging and channel configuration.
   - Automatic weather refresh with user-defined intervals or specific times.
   - Supports text commands for interaction.
@@ -32,8 +33,9 @@ Welcome to **Taako's Cogs**, a collection of high-quality cogs for [Red-DiscordB
 | `[p]rweather load`                  | Manually load the current weather.                                        |
 | `[p]rweather setrefresh <interval>` | Set how often the weather should refresh (e.g., `10s`, `5m`, `1h`, `1d`). |
 | `[p]rweather settimezone <zone>`    | Set the time zone for weather updates (e.g., `UTC`, `America/New_York`).  |
-| `[p]rweather listtimezones`         | List available time zones or provide a link to the full list.             |
-| `[p]rweather togglemode`            | Toggle between using a time interval or a specific time of day.           |
+| `[p]rweather setcolor <color>`      | Set the embed color for weather updates.                                  |
+| `[p]rweather togglefooter`          | Toggle the footer on or off for the weather embed.                        |
+| `[p]rweather info`                  | View the current settings for weather updates.                            |
 
 ---
 

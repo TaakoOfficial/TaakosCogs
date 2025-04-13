@@ -18,14 +18,18 @@ Welcome to **RandomWeather**, a Discord bot cog that generates random daily weat
 | `[p]rweather load`                  | Manually load the current weather.                                        |
 | `[p]rweather setrefresh <interval>` | Set how often the weather should refresh (e.g., `10s`, `5m`, `1h`, `1d`). |
 | `[p]rweather settimezone <zone>`    | Set the time zone for weather updates (e.g., `UTC`, `America/New_York`).  |
-| `[p]rweather listtimezones`         | List available time zones or provide a link to the full list.             |
-| `[p]rweather togglemode`            | Toggle between using a time interval or a specific time of day.           |
+| `[p]rweather setcolor <color>`      | Set the embed color for weather updates.                                  |
+| `[p]rweather togglefooter`          | Toggle the footer on or off for the weather embed.                        |
+| `[p]rweather info`                  | View the current settings for weather updates.                            |
 
 ---
 
-## ⚙️ Configuration
+## ⚙️ Features
 
-- **Toggle Update Mode**: Use `[p]rweather togglemode` to switch between time intervals and specific times of day for updates.
+- **Seasonal Weather Generation**: Weather updates respect the current season based on the user's time zone and date.
+- **Customizable Embed Color**: Set the embed color for weather updates.
+- **Footer Toggle**: Enable or disable the footer in weather embeds.
+- **Time Zone Support**: Configure the time zone for accurate weather updates.
 
 ---
 

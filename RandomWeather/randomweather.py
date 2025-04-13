@@ -25,24 +25,44 @@ class WeatherCog(commands.Cog):
             "refresh_time": "0000",  # Default to military time 00:00 (midnight)
             "time_zone": "America/Chicago",  # Default to Central Time (America/Chicago)
             "show_footer": True,  # Whether to show the footer in embeds
+            "embed_color": 0xFF0000,  # Default embed color (red)
         }
         self.config.register_guild(**default_guild)
 
-    def _generate_weather(self):
-        """Generate realistic random weather."""
-        # Edited by Taako
-        conditions = random.choice(["Clear sky", "Partly cloudy", "Overcast", "Rainy", "Stormy", "Snowy"])
+    def _get_current_season(self, time_zone):
+        """Determine the current season based on the time zone and date."""  # Edited by Taako
+        now = datetime.now(pytz.timezone(time_zone))
+        month = now.month
+        day = now.day
 
-        # Define temperature ranges based on conditions
-        if conditions in ["Clear sky", "Partly cloudy"]:
-            temperature = random.randint(70, 100)  # Warmer weather
-        elif conditions in ["Overcast", "Rainy"]:
-            temperature = random.randint(50, 80)  # Cooler weather
-        elif conditions == "Stormy":
-            temperature = random.randint(60, 85)  # Moderate temperature
-        elif conditions == "Snowy":
+        if (month == 12 and day >= 21) or (1 <= month <= 2) or (month == 3 and day < 20):
+            return "Winter"
+        elif (month == 3 and day >= 20) or (4 <= month <= 5) or (month == 6 and day < 21):
+            return "Spring"
+        elif (month == 6 and day >= 21) or (7 <= month <= 8) or (month == 9 and day < 22):
+            return "Summer"
+        elif (month == 9 and day >= 22) or (10 <= month <= 11) or (month == 12 and day < 21):
+            return "Autumn"
+        return "Unknown"
+
+    def _generate_weather(self, time_zone):
+        """Generate realistic random weather based on the current season."""  # Edited by Taako
+        season = self._get_current_season(time_zone)
+
+        if season == "Winter":
+            conditions = random.choice(["Snowy", "Overcast", "Clear sky"])
             temperature = random.randint(20, 40)  # Cold weather
+        elif season == "Spring":
+            conditions = random.choice(["Rainy", "Partly cloudy", "Clear sky"])
+            temperature = random.randint(50, 70)  # Mild weather
+        elif season == "Summer":
+            conditions = random.choice(["Clear sky", "Partly cloudy", "Stormy"])
+            temperature = random.randint(70, 100)  # Warm to hot weather
+        elif season == "Autumn":
+            conditions = random.choice(["Overcast", "Rainy", "Partly cloudy"])
+            temperature = random.randint(40, 60)  # Cool weather
         else:
+            conditions = random.choice(["Clear sky", "Partly cloudy", "Overcast", "Rainy", "Stormy", "Snowy"])
             temperature = random.randint(30, 100)  # Default fallback
 
         # Feels like temperature with a slight variation
@@ -109,10 +129,12 @@ class WeatherCog(commands.Cog):
     def _create_weather_embed(self, weather_data):
         """Create a Discord embed for the weather data."""
         # Edited by Taako
+        guild_settings = self.config.guild_from_id(weather_data.get("guild_id"))
+        embed_color = guild_settings.get("embed_color", 0xFF0000)  # Default to red
         icon_url = self._get_weather_icon(weather_data["conditions"])
         embed = discord.Embed(
-            title="🌤️ Today's Weather", 
-            color=discord.Color.red()  # Set embed color to red
+            title="🌤️ Today's Weather",
+            color=discord.Color(embed_color)  # Use the configured embed color
         )
         embed.add_field(name="🌡️ Temperature", value=weather_data["temperature"], inline=True)
         embed.add_field(name="🌡️ Feels Like", value=weather_data["feels_like"], inline=True)
@@ -158,7 +180,7 @@ class WeatherCog(commands.Cog):
 
             channel = self._bot.get_channel(channel_id)
             if channel:
-                self._current_weather = self._generate_weather()  # Generate new weather data
+                self._current_weather = self._generate_weather(time_zone)  # Generate new weather data
                 embed = self._create_weather_embed(self._current_weather)
                 role_mention = f"<@&{role_id}>" if role_id and tag_role else ""
                 await channel.send(content=role_mention, embed=embed)
@@ -174,9 +196,10 @@ class WeatherCog(commands.Cog):
     async def refresh(self, ctx):
         """Refresh the weather for the day."""
         # Edited by Taako
-        self._current_weather = self._generate_weather()
         guild_settings = await self.config.guild(ctx.guild).all()
-        embed = self._create_weather_embed(self._current_weather)  # Removed guild_id argument
+        time_zone = guild_settings["time_zone"]
+        self._current_weather = self._generate_weather(time_zone)
+        embed = self._create_weather_embed(self._current_weather)
         role_mention = f"<@&{guild_settings['role_id']}>" if guild_settings["role_id"] and guild_settings["tag_role"] else ""
         channel_id = guild_settings["channel_id"]
         if channel_id:
@@ -267,15 +290,33 @@ class WeatherCog(commands.Cog):
                 "You can view the full list of time zones here: https://en.wikipedia.org/wiki/List_of_tz_database_time_zones"
             )
 
+    @rweather.command(name="setcolor")
+    async def set_color(self, ctx, color: discord.Color):
+        """Set the embed color for weather updates."""
+        # Edited by Taako
+        await self.config.guild(ctx.guild).embed_color.set(color.value)
+        await ctx.send(f"Embed color set to {color}.")
+
+    @rweather.command(name="togglefooter")
+    async def toggle_footer(self, ctx):
+        """Toggle the footer on or off for the weather embed."""
+        # Edited by Taako
+        show_footer = await self.config.guild(ctx.guild).show_footer()
+        new_state = not show_footer
+        await self.config.guild(ctx.guild).show_footer.set(new_state)
+        status = "enabled" if new_state else "disabled"
+        await ctx.send(f"The footer has been {status} for the weather embed.")
+
     @rweather.command(name="info")
     async def info(self, ctx):
         """View the current settings for weather updates."""
         # Edited by Taako
         guild_settings = await self.config.guild(ctx.guild).all()
-        show_footer = await self.config.guild(ctx.guild).get_raw("show_footer", default=True)
+        embed_color = discord.Color(guild_settings["embed_color"])
+        show_footer = guild_settings["show_footer"]
         embed = discord.Embed(
             title="🌦️ RandomWeather Settings",
-            color=discord.Color.blue()  # Set embed color to blue
+            color=embed_color  # Use the configured embed color
         )
         embed.add_field(
             name="📅 Refresh Mode",
@@ -311,22 +352,17 @@ class WeatherCog(commands.Cog):
             inline=True,
         )
         embed.add_field(
+            name="🎨 Embed Color",
+            value=str(embed_color),
+            inline=False,
+        )
+        embed.add_field(
             name="📄 Footer",
             value="Enabled" if show_footer else "Disabled",
             inline=False,
         )
         embed.set_footer(text="RandomWeather by Taako")
         await ctx.send(embed=embed)
-
-    @rweather.command(name="togglefooter")
-    async def toggle_footer(self, ctx):
-        """Toggle the footer on or off for the weather embed."""
-        # Edited by Taako
-        show_footer = await self.config.guild(ctx.guild).get_raw("show_footer", default=True)
-        new_state = not show_footer
-        await self.config.guild(ctx.guild).set_raw("show_footer", value=new_state)
-        status = "enabled" if new_state else "disabled"
-        await ctx.send(f"The footer has been {status} for the weather embed.")
 
 def setup(bot):
     # Edited by Taako
