@@ -49,31 +49,32 @@ class WeatherCog(commands.Cog):
         return "Unknown"
 
     def _generate_weather(self, time_zone):
-        """Generate realistic random weather based on the current season."""  # Edited by Taako
+        """Generate realistic random weather based on the current season and Iowa's average temperatures."""  # Edited by Taako
         season = self._get_current_season(time_zone)
 
+        # Adjust temperature ranges based on Iowa's seasonal averages
         if season == "Winter":
             conditions = random.choice(["Snowy", "Overcast", "Clear sky"])
-            temperature = random.randint(20, 40)  # Cold weather
+            temperature = random.randint(10, 35)  # Iowa winter: 10–35°F
         elif season == "Spring":
             conditions = random.choice(["Rainy", "Partly cloudy", "Clear sky"])
-            temperature = random.randint(50, 70)  # Mild weather
+            temperature = random.randint(40, 65)  # Iowa spring: 40–65°F
         elif season == "Summer":
             conditions = random.choice(["Clear sky", "Partly cloudy", "Stormy"])
-            temperature = random.randint(70, 100)  # Warm to hot weather
+            temperature = random.randint(70, 90)  # Iowa summer: 70–90°F
         elif season == "Autumn":
             conditions = random.choice(["Overcast", "Rainy", "Partly cloudy"])
-            temperature = random.randint(40, 60)  # Cool weather
+            temperature = random.randint(45, 65)  # Iowa autumn: 45–65°F
         else:
             conditions = random.choice(["Clear sky", "Partly cloudy", "Overcast", "Rainy", "Stormy", "Snowy"])
-            temperature = random.randint(30, 100)  # Default fallback
+            temperature = random.randint(10, 90)  # Default fallback
 
         # Adjust temperature and humidity for stormy conditions
         if conditions == "Stormy":
-            temperature -= random.randint(5, 15)  # Storms cool down the temperature
+            temperature -= random.randint(5, 10)  # Storms cool down the temperature
             humidity = random.randint(80, 100)  # High humidity during storms
         else:
-            humidity = random.randint(20, 60)  # Low to moderate humidity
+            humidity = random.randint(30, 70)  # Moderate humidity for other conditions
 
         # Wind speed and direction
         if conditions == "Stormy":
@@ -137,6 +138,8 @@ class WeatherCog(commands.Cog):
         guild_settings = weather_data.get("guild_settings")  # Pass guild settings directly
         embed_color = guild_settings.get("embed_color", 0xFF0000)  # Default to red
         icon_url = self._get_weather_icon(weather_data["conditions"])
+        current_season = self._get_current_season(guild_settings["time_zone"])  # Get the current season
+
         embed = discord.Embed(
             title="🌤️ Today's Weather",
             color=discord.Color(embed_color)  # Use the configured embed color
@@ -147,6 +150,7 @@ class WeatherCog(commands.Cog):
         embed.add_field(name="💨 Wind", value=weather_data["wind"], inline=True)
         embed.add_field(name="💧 Humidity", value=weather_data["humidity"], inline=True)
         embed.add_field(name="👀 Visibility", value=weather_data["visibility"], inline=True)
+        embed.add_field(name="🍂 Current Season", value=current_season, inline=False)  # Add current season
         embed.set_thumbnail(url=icon_url)  # Add a weather-specific icon
 
         # Add footer if enabled
@@ -314,11 +318,13 @@ class WeatherCog(commands.Cog):
 
     @rweather.command(name="info")
     async def info(self, ctx):
-        """View the current settings for weather updates."""
-        # Edited by Taako
+        """View the current settings for weather updates."""  # Edited by Taako
         guild_settings = await self.config.guild(ctx.guild).all()
         embed_color = discord.Color(guild_settings["embed_color"])
         show_footer = guild_settings["show_footer"]
+        time_zone = guild_settings["time_zone"]
+        current_season = self._get_current_season(time_zone)  # Get the current season
+
         embed = discord.Embed(
             title="🌦️ RandomWeather Settings",
             color=embed_color  # Use the configured embed color
@@ -364,6 +370,11 @@ class WeatherCog(commands.Cog):
         embed.add_field(
             name="📄 Footer",
             value="Enabled" if show_footer else "Disabled",
+            inline=False,
+        )
+        embed.add_field(
+            name="🍂 Current Season",
+            value=current_season,  # Display the current season
             inline=False,
         )
         embed.set_footer(text="RandomWeather by Taako")
