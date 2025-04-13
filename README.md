@@ -6,7 +6,7 @@ Welcome to **WeatherCog**, a Discord bot cog that generates random daily weather
 
 ## ✨ Features
 
-- **Realistic Weather Generation**: Get temperature, feels-like temperature, conditions, wind, pressure, humidity, dew point, and visibility.
+- **Realistic Weather Generation**: Get temperature, feels-like temperature, conditions, wind, pressure, humidity, dew point, and visibility (in miles).
 - **Customizable Updates**:
   - Set a specific channel for weather updates.
   - Tag a role for weather notifications.
@@ -34,21 +34,21 @@ Welcome to **WeatherCog**, a Discord bot cog that generates random daily weather
 
 ## 📚 Commands
 
-| Command                  | Description                                  |
-| ------------------------ | -------------------------------------------- |
-| `[p]weather`             | View the current weather.                    |
-| `[p]refresh_weather`     | Refresh the weather for the day.             |
-| `[p]set_weather_role`    | Set a role to be tagged for weather updates. |
-| `[p]toggle_role_tagging` | Toggle tagging the role in weather updates.  |
-| `[p]set_weather_channel` | Set the channel for weather updates.         |
+| Command                  | Description                                      |
+| ------------------------ | ------------------------------------------------ |
+| `[p]weather`             | View the current weather.                        |
+| `[p]weather refresh`     | Refresh the weather for the day.                 |
+| `[p]weather role <id>`   | Set a role to be tagged for weather updates.      |
+| `[p]weather toggle`      | Toggle tagging the role in weather updates.      |
+| `[p]weather channel <id>`| Set the channel for weather updates.             |
 
 ---
 
 ## ⚙️ Configuration
 
-- **Set Weather Role**: Use `[p]set_weather_role <role_id>` to specify a role for tagging.
-- **Set Weather Channel**: Use `[p]set_weather_channel <channel_id>` to define where updates are sent.
-- **Toggle Role Tagging**: Use `[p]toggle_role_tagging` to enable or disable role mentions.
+- **Set Weather Role**: Use `[p]weather role <role_id>` to specify a role for tagging.
+- **Set Weather Channel**: Use `[p]weather channel <channel_id>` to define where updates are sent.
+- **Toggle Role Tagging**: Use `[p]weather toggle` to enable or disable role mentions.
 
 ---
 
@@ -65,7 +65,7 @@ Here's an example of what the weather update looks like:
 - Pressure: 1015 hPa
 - Humidity: 60%
 - Dew Point: 60°F
-- Visibility: 8.5 km
+- Visibility: 5.5 miles
 ```
 
 ---

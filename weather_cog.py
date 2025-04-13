@@ -27,15 +27,15 @@ class WeatherCog(commands.Cog):
 
         # Adjust visibility based on conditions
         if conditions == "Clear sky":
-            visibility = round(random.uniform(8.0, 10.0), 1)  # High visibility
+            visibility = round(random.uniform(5.0, 6.2), 1)  # High visibility in miles
         elif conditions in ["Partly cloudy", "Overcast"]:
-            visibility = round(random.uniform(5.0, 8.0), 1)  # Moderate visibility
+            visibility = round(random.uniform(3.1, 5.0), 1)  # Moderate visibility in miles
         elif conditions in ["Rainy", "Stormy"]:
-            visibility = round(random.uniform(1.0, 5.0), 1)  # Low visibility
+            visibility = round(random.uniform(0.6, 3.1), 1)  # Low visibility in miles
         elif conditions == "Snowy":
-            visibility = round(random.uniform(0.5, 3.0), 1)  # Very low visibility
+            visibility = round(random.uniform(0.3, 1.9), 1)  # Very low visibility in miles
         else:
-            visibility = round(random.uniform(1.0, 10.0), 1)  # Default fallback
+            visibility = round(random.uniform(0.6, 6.2), 1)  # Default fallback in miles
 
         return {
             "temperature": f"{temperature}°F",
@@ -45,71 +45,28 @@ class WeatherCog(commands.Cog):
             "pressure": f"{pressure} hPa",
             "humidity": f"{humidity}%",
             "dew_point": f"{dew_point}°F",
-            "visibility": f"{visibility} km",
+            "visibility": f"{visibility} miles",  # Updated to miles
         }
 
-    def _create_weather_embed(self, weather_data):
-        """Create a Discord embed for the weather data."""
-        # Edited by Taako
-        embed = discord.Embed(title="Today's Weather", color=discord.Color.blue())
-        embed.add_field(name="Temperature", value=weather_data["temperature"], inline=True)
-        embed.add_field(name="Feels Like", value=weather_data["feels_like"], inline=True)
-        embed.add_field(name="Conditions", value=weather_data["conditions"], inline=False)
-        embed.add_field(name="Wind", value=weather_data["wind"], inline=True)
-        embed.add_field(name="Pressure", value=weather_data["pressure"], inline=True)
-        embed.add_field(name="Humidity", value=weather_data["humidity"], inline=True)
-        embed.add_field(name="Dew Point", value=weather_data["dew_point"], inline=True)
-        embed.add_field(name="Visibility", value=weather_data["visibility"], inline=True)
-        return embed
-
-    @commands.command()
-    async def set_weather_role(self, ctx, role_id: int):
-        """Set the role to be tagged for weather updates."""
-        # Edited by Taako
-        role = ctx.guild.get_role(role_id)
-        if role:
-            self._role_id = role_id
-            await ctx.send(f"Weather updates will now tag the role: {role.name}")
-        else:
-            await ctx.send("Invalid role ID. Please provide a valid role ID.")
-
-    @commands.command()
-    async def toggle_role_tagging(self, ctx):
-        """Toggle whether the role should be tagged in weather updates."""
-        # Edited by Taako
-        self._tag_role = not self._tag_role
-        status = "enabled" if self._tag_role else "disabled"
-        await ctx.send(f"Role tagging has been {status}.")
-
-    @commands.command()
-    async def set_weather_channel(self, ctx, channel_id: int):
-        """Set the channel for weather updates."""
-        # Edited by Taako
-        channel = self._bot.get_channel(channel_id)
-        if channel:
-            self._channel_id = channel_id
-            await ctx.send(f"Weather updates will now be sent to: {channel.mention}")
-        else:
-            await ctx.send("Invalid channel ID. Please provide a valid channel ID.")
-
-    @commands.command()
+    @commands.group()
     async def weather(self, ctx):
-        """Get the current weather."""
+        """Main weather command."""
         # Edited by Taako
-        embed = self._create_weather_embed(self._current_weather)
-        role_mention = f"<@&{self._role_id}>" if self._role_id and self._tag_role else ""
-        if self._channel_id:
-            channel = self._bot.get_channel(self._channel_id)
-            if channel:
-                await channel.send(content=role_mention, embed=embed)
-                await ctx.send(f"Weather update sent to {channel.mention}.")
+        if ctx.invoked_subcommand is None:
+            embed = self._create_weather_embed(self._current_weather)
+            role_mention = f"<@&{self._role_id}>" if self._role_id and self._tag_role else ""
+            if self._channel_id:
+                channel = self._bot.get_channel(self._channel_id)
+                if channel:
+                    await channel.send(content=role_mention, embed=embed)
+                    await ctx.send(f"Weather update sent to {channel.mention}.")
+                else:
+                    await ctx.send("The set channel is invalid. Please set a valid channel.")
             else:
-                await ctx.send("The set channel is invalid. Please set a valid channel.")
-        else:
-            await ctx.send(embed=embed)
+                await ctx.send(embed=embed)
 
-    @commands.command()
-    async def refresh_weather(self, ctx):
+    @weather.command()
+    async def refresh(self, ctx):
         """Refresh the weather for the day."""
         # Edited by Taako
         self._current_weather = self._generate_weather()
@@ -124,6 +81,50 @@ class WeatherCog(commands.Cog):
                 await ctx.send("The set channel is invalid. Please set a valid channel.")
         else:
             await ctx.send(embed=embed)
+
+    @weather.command()
+    async def role(self, ctx, role_id: int):
+        """Set the role to be tagged for weather updates."""
+        # Edited by Taako
+        role = ctx.guild.get_role(role_id)
+        if role:
+            self._role_id = role_id
+            await ctx.send(f"Weather updates will now tag the role: {role.name}")
+        else:
+            await ctx.send("Invalid role ID. Please provide a valid role ID.")
+
+    @weather.command()
+    async def toggle(self, ctx):
+        """Toggle whether the role should be tagged in weather updates."""
+        # Edited by Taako
+        self._tag_role = not self._tag_role
+        status = "enabled" if self._tag_role else "disabled"
+        await ctx.send(f"Role tagging has been {status}.")
+
+    @weather.command()
+    async def channel(self, ctx, channel_id: int):
+        """Set the channel for weather updates."""
+        # Edited by Taako
+        channel = self._bot.get_channel(channel_id)
+        if channel:
+            self._channel_id = channel_id
+            await ctx.send(f"Weather updates will now be sent to: {channel.mention}")
+        else:
+            await ctx.send("Invalid channel ID. Please provide a valid channel ID.")
+
+    def _create_weather_embed(self, weather_data):
+        """Create a Discord embed for the weather data."""
+        # Edited by Taako
+        embed = discord.Embed(title="Today's Weather", color=discord.Color.blue())
+        embed.add_field(name="Temperature", value=weather_data["temperature"], inline=True)
+        embed.add_field(name="Feels Like", value=weather_data["feels_like"], inline=True)
+        embed.add_field(name="Conditions", value=weather_data["conditions"], inline=False)
+        embed.add_field(name="Wind", value=weather_data["wind"], inline=True)
+        embed.add_field(name="Pressure", value=weather_data["pressure"], inline=True)
+        embed.add_field(name="Humidity", value=weather_data["humidity"], inline=True)
+        embed.add_field(name="Dew Point", value=weather_data["dew_point"], inline=True)
+        embed.add_field(name="Visibility", value=weather_data["visibility"], inline=True)
+        return embed
 
 def setup(bot):
     # Edited by Taako
