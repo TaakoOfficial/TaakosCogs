@@ -1,17 +1,16 @@
 {
-    "$schema": "https://raw.githubusercontent.com/Cog-Creators/Red-DiscordBot/V3/develop/schema/red_cog.schema.json",
-    "name": "WeatherCog",
-    "short": "Random weather generator.",
-    "description": "A cog for generating random daily weather updates.",
-    "end_user_data_statement": "This cog does not store any end user data.",
-    "install_msg": "Thank you for installing the WeatherCog! Use `[p]help WeatherCog` for commands.",
-    "author": ["Taako"],  
-    "required_cogs": {},
-    "requirements": [],
-    "tags": ["weather", "random", "utility"],
-    "min_bot_version": "3.5.0",
-    "hidden": false,
-    "disabled": false,
-    "type": "COG"
-  }
-  
+  "$schema": "https://raw.githubusercontent.com/Cog-Creators/Red-DiscordBot/V3/develop/schema/red_cog.schema.json",
+  "name": "RandomWeather",
+  "short": "Random weather generator.",
+  "description": "A cog for generating random daily weather updates.",
+  "end_user_data_statement": "This cog does not store any end user data.",
+  "install_msg": "Thank you for installing the RandomWeather cog! Use `[p]help RandomWeather` for commands.",
+  "author": ["Taako"],
+  "required_cogs": {},
+  "requirements": [],
+  "tags": ["weather", "random", "utility"],
+  "min_bot_version": "3.5.0",
+  "hidden": false,
+  "disabled": false,
+  "type": "COG"
+}

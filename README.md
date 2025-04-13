@@ -1,104 +1,65 @@
-# 🌦️ WeatherCog
+# 🛠️ Taako's Cogs
 
-Welcome to **WeatherCog**, a Discord bot cog that generates random daily weather updates! Whether you're running a roleplay server or just want some fun weather updates, this cog has you covered.
-
----
-
-## ✨ Features
-
-- **Realistic Weather Generation**: Get temperature, feels-like temperature, conditions, wind, pressure, humidity, dew point, and visibility (in miles).
-- **Customizable Updates**:
-  - Set a specific channel for weather updates.
-  - Tag a role for weather notifications.
-  - Toggle role tagging on or off.
-- **Interactive Commands**: Use text commands or slash commands to interact with the bot.
+Welcome to **Taako's Cogs**, a collection of high-quality cogs for [Red-DiscordBot](https://github.com/Cog-Creators/Red-DiscordBot/tree/V3/develop). These cogs are designed to enhance your Discord bot with unique and useful features.
 
 ---
 
-## 🛠️ Installation
+## 📦 Available Cogs
 
-1. Add the repository to your Red-DiscordBot instance:
+### 1. 🌦️ WeatherCog
+
+- **Description**: A cog for generating random daily weather updates.
+- **Features**:
+  - Realistic weather generation (temperature, conditions, wind, etc.).
+  - Customizable updates with role tagging and channel configuration.
+  - Supports both text commands and slash commands.
+- **Installation**:
+  ```
+  [p]repo add TaakosCogs https://github.com/TaakoOfficial/TaakosCogs
+  [p]cog install WeatherCog
+  [p]load WeatherCog
+  ```
+
+---
+
+## 🛠️ Installation Instructions
+
+1. Add this repository to your Red-DiscordBot instance:
    ```
-   [p]repo add randomweather https://github.com/TaakoOfficial/randomweather
+   [p]repo add TaakosCogs https://github.com/TaakoOfficial/TaakosCogs
    ```
-2. Install the cog using the following command:
+2. Install any cog from the repository using:
    ```
-   [p]cog install WeatherCog
+   [p]cog install <cog_name>
    ```
 3. Load the cog:
    ```
-   [p]load WeatherCog
+   [p]load <cog_name>
    ```
 
 ---
 
-## 📚 Commands
+## 🤝 Contributing
 
-### Text Commands
+Contributions are welcome! If you'd like to contribute:
 
-| Command                  | Description                                      |
-| ------------------------ | ------------------------------------------------ |
-| `[p]weather`             | View the current weather.                        |
-| `[p]weather refresh`     | Refresh the weather for the day.                 |
-| `[p]weather role <id>`   | Set a role to be tagged for weather updates.      |
-| `[p]weather toggle`      | Toggle tagging the role in weather updates.      |
-| `[p]weather channel <id>`| Set the channel for weather updates.             |
-
-### Slash Commands
-
-| Command       | Description                                      |
-| ------------- | ------------------------------------------------ |
-| `/weather`    | View the current weather.                        |
-| `/refresh`    | Refresh the weather for the day.                 |
-| `/role`       | Set a role to be tagged for weather updates.      |
-| `/toggle`     | Toggle tagging the role in weather updates.      |
-| `/channel`    | Set the channel for weather updates.             |
+1. Fork the repository.
+2. Create a new branch for your feature or bug fix.
+3. Submit a pull request with a detailed description of your changes.
 
 ---
 
-## ⚙️ Configuration
+## 💖 Support
 
-- **Set Weather Role**: Use `[p]weather role <role_id>` or `/role` to specify a role for tagging.
-- **Set Weather Channel**: Use `[p]weather channel <channel_id>` or `/channel` to define where updates are sent.
-- **Toggle Role Tagging**: Use `[p]weather toggle` or `/toggle` to enable or disable role mentions.
-
----
-
-## 🌟 Example Output
-
-Here's an example of what the weather update looks like:
-
-```
-🌤️ Today's Weather:
-- Temperature: 75°F
-- Feels Like: 77°F
-- Conditions: Partly Cloudy
-- Wind: 5 mph NE
-- Pressure: 1015 hPa
-- Humidity: 60%
-- Dew Point: 60°F
-- Visibility: 5.5 miles
-```
-
----
-
-## 🧑‍💻 Author
-
-Created with ❤️ by [**Taako**](https://github.com/TaakoOfficial).
-
----
-
-## 📜 License
-
-This project is licensed under the MIT License. See the `LICENSE` file for details.
+If you enjoy using these cogs and would like to support their development, consider sponsoring me on GitHub or contributing to the project. Your support helps me dedicate more time to creating and maintaining these cogs.
 
 ---
 
 ## 🔗 Additional Resources
 
 - Learn more about [Red-DiscordBot](https://github.com/Cog-Creators/Red-DiscordBot/tree/V3/develop).
-- Explore this cog's repository: [randomweather](https://github.com/TaakoOfficial/randomweather).
+- Explore the cogs in this repository: [TaakosCogs](https://github.com/TaakoOfficial/TaakosCogs).
 
 ---
 
-Enjoy your daily dose of random weather! 🌈
+Enjoy using Taako's Cogs to enhance your Discord bot! 🌟
