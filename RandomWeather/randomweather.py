@@ -208,15 +208,14 @@ class WeatherCog(commands.Cog):
         await ctx.send(f"Role tagging has been {status}.")
 
     @rweather.command()
-    async def channel(self, ctx, channel_id: int):
+    async def channel(self, ctx, channel: discord.TextChannel):
         """Set the channel for weather updates."""
         # Edited by Taako
-        channel = self._bot.get_channel(channel_id)
         if channel:
-            await self.config.guild(ctx.guild).channel_id.set(channel_id)
+            await self.config.guild(ctx.guild).channel_id.set(channel.id)
             await ctx.send(f"Weather updates will now be sent to: {channel.mention}")
         else:
-            await ctx.send("Invalid channel ID. Please provide a valid channel ID.")
+            await ctx.send("Invalid channel. Please mention a valid text channel.")
 
     @rweather.command(name="load")
     async def load_weather(self, ctx):
