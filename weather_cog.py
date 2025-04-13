@@ -1,6 +1,7 @@
 import random
 import discord  # Edited by Taako
 from redbot.core import commands
+from discord import app_commands  # Edited by Taako
 
 class WeatherCog(commands.Cog):
     """A cog for generating random daily weather."""
@@ -47,6 +48,20 @@ class WeatherCog(commands.Cog):
             "dew_point": f"{dew_point}°F",
             "visibility": f"{visibility} miles",  # Updated to miles
         }
+
+    def _create_weather_embed(self, weather_data):
+        """Create a Discord embed for the weather data."""
+        # Edited by Taako
+        embed = discord.Embed(title="Today's Weather", color=discord.Color.blue())
+        embed.add_field(name="Temperature", value=weather_data["temperature"], inline=True)
+        embed.add_field(name="Feels Like", value=weather_data["feels_like"], inline=True)
+        embed.add_field(name="Conditions", value=weather_data["conditions"], inline=False)
+        embed.add_field(name="Wind", value=weather_data["wind"], inline=True)
+        embed.add_field(name="Pressure", value=weather_data["pressure"], inline=True)
+        embed.add_field(name="Humidity", value=weather_data["humidity"], inline=True)
+        embed.add_field(name="Dew Point", value=weather_data["dew_point"], inline=True)
+        embed.add_field(name="Visibility", value=weather_data["visibility"], inline=True)
+        return embed
 
     @commands.group()
     async def weather(self, ctx):
@@ -112,19 +127,64 @@ class WeatherCog(commands.Cog):
         else:
             await ctx.send("Invalid channel ID. Please provide a valid channel ID.")
 
-    def _create_weather_embed(self, weather_data):
-        """Create a Discord embed for the weather data."""
+    @app_commands.command(name="weather")
+    async def slash_weather(self, interaction: discord.Interaction):
+        """Slash command to view the current weather."""
         # Edited by Taako
-        embed = discord.Embed(title="Today's Weather", color=discord.Color.blue())
-        embed.add_field(name="Temperature", value=weather_data["temperature"], inline=True)
-        embed.add_field(name="Feels Like", value=weather_data["feels_like"], inline=True)
-        embed.add_field(name="Conditions", value=weather_data["conditions"], inline=False)
-        embed.add_field(name="Wind", value=weather_data["wind"], inline=True)
-        embed.add_field(name="Pressure", value=weather_data["pressure"], inline=True)
-        embed.add_field(name="Humidity", value=weather_data["humidity"], inline=True)
-        embed.add_field(name="Dew Point", value=weather_data["dew_point"], inline=True)
-        embed.add_field(name="Visibility", value=weather_data["visibility"], inline=True)
-        return embed
+        embed = self._create_weather_embed(self._current_weather)
+        await interaction.response.send_message(embed=embed)
+
+    @app_commands.command(name="refresh_weather")
+    async def slash_refresh_weather(self, interaction: discord.Interaction):
+        """Slash command to refresh the weather."""
+        # Edited by Taako
+        self._current_weather = self._generate_weather()
+        embed = self._create_weather_embed(self._current_weather)
+        await interaction.response.send_message("Weather refreshed!", embed=embed)
+
+    @app_commands.command(name="set_weather_role")
+    async def slash_set_weather_role(self, interaction: discord.Interaction, role: discord.Role):
+        """Slash command to set the role for weather updates."""
+        # Edited by Taako
+        self._role_id = role.id
+        await interaction.response.send_message(f"Weather updates will now tag the role: {role.name}")
+
+    @app_commands.command(name="toggle_role_tagging")
+    async def slash_toggle_role_tagging(self, interaction: discord.Interaction):
+        """Slash command to toggle role tagging."""
+        # Edited by Taako
+        self._tag_role = not self._tag_role
+        status = "enabled" if self._tag_role else "disabled"
+        await interaction.response.send_message(f"Role tagging has been {status}.")
+
+    @app_commands.command(name="set_weather_channel")
+    async def slash_set_weather_channel(self, interaction: discord.Interaction, channel: discord.TextChannel):
+        """Slash command to set the channel for weather updates."""
+        # Edited by Taako
+        self._channel_id = channel.id
+        await interaction.response.send_message(f"Weather updates will now be sent to: {channel.mention}")
+
+    async def cog_load(self):
+        """Register slash commands when the cog is loaded."""
+        # Edited by Taako
+        guild = discord.Object(id=YOUR_GUILD_ID)  # Replace with your guild ID for testing
+        self._bot.tree.add_command(self.slash_weather, guild=guild)
+        self._bot.tree.add_command(self.slash_refresh_weather, guild=guild)
+        self._bot.tree.add_command(self.slash_set_weather_role, guild=guild)
+        self._bot.tree.add_command(self.slash_toggle_role_tagging, guild=guild)
+        self._bot.tree.add_command(self.slash_set_weather_channel, guild=guild)
+        await self._bot.tree.sync(guild=guild)
+
+    async def cog_unload(self):
+        """Unregister slash commands when the cog is unloaded."""
+        # Edited by Taako
+        guild = discord.Object(id=YOUR_GUILD_ID)  # Replace with your guild ID for testing
+        self._bot.tree.remove_command("weather", guild=guild)
+        self._bot.tree.remove_command("refresh_weather", guild=guild)
+        self._bot.tree.remove_command("set_weather_role", guild=guild)
+        self._bot.tree.remove_command("toggle_role_tagging", guild=guild)
+        self._bot.tree.remove_command("set_weather_channel", guild=guild)
+        await self._bot.tree.sync(guild=guild)
 
 def setup(bot):
     # Edited by Taako
