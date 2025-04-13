@@ -236,31 +236,39 @@ class WeatherCog(commands.Cog):
             await ctx.send(embed=embed)
 
     @rweather.command(name="setrefresh")
-    async def set_refresh(self, ctx, interval_or_time: str):
+    async def set_refresh(self, ctx, value: str):
         """Set how often the weather should refresh or specify a time (e.g., `10m` or `1830`)."""
         # Edited by Taako
-        time_units = {"s": 1, "m": 60, "h": 3600, "d": 86400}
-        try:
-            if interval_or_time.isdigit() and len(interval_or_time) == 4:
-                # Specific time in military format (e.g., 1830)
-                await self.config.guild(ctx.guild).refresh_time.set(interval_or_time)
-                await self.config.guild(ctx.guild).refresh_interval.set(None)
-                await ctx.send(f"Weather will now refresh daily at {interval_or_time} (military time).")
-            else:
-                # Time interval (e.g., 10m, 1h)
-                unit = interval_or_time[-1]
-                value = int(interval_or_time[:-1])
+        guild_settings = await self.config.guild(ctx.guild).all()
+        is_time_interval = guild_settings["refresh_interval"] is not None
+
+        if is_time_interval:
+            # Handle time interval (e.g., 10m, 1h)
+            time_units = {"s": 1, "m": 60, "h": 3600, "d": 86400}
+            try:
+                unit = value[-1]
+                interval = int(value[:-1])
                 if unit not in time_units:
                     raise ValueError("Invalid time unit.")
-                refresh_interval = value * time_units[unit]
+                refresh_interval = interval * time_units[unit]
                 await self.config.guild(ctx.guild).refresh_interval.set(refresh_interval)
                 await self.config.guild(ctx.guild).refresh_time.set(None)
-                await ctx.send(f"Weather will now refresh every {interval_or_time}.")
-            if self._refresh_task:
-                self._refresh_task.cancel()
-            self._refresh_task = self._bot.loop.create_task(self._refresh_weather_task(ctx.guild.id))
-        except (ValueError, IndexError):
-            await ctx.send("Invalid format. Use a number followed by s (seconds), m (minutes), h (hours), or d (days), or specify a time in military format (e.g., 1830).")
+                await ctx.send(f"Weather will now refresh every {value}.")
+            except (ValueError, IndexError):
+                await ctx.send("Invalid format. Use a number followed by s (seconds), m (minutes), h (hours), or d (days).")
+        else:
+            # Handle specific time in military format (e.g., 1830)
+            if value.isdigit() and len(value) == 4:
+                await self.config.guild(ctx.guild).refresh_time.set(value)
+                await self.config.guild(ctx.guild).refresh_interval.set(None)
+                await ctx.send(f"Weather will now refresh daily at {value} (military time).")
+            else:
+                await ctx.send("Invalid format. Use a valid military time (e.g., 1830).")
+
+        # Restart the refresh task
+        if self._refresh_task:
+            self._refresh_task.cancel()
+        self._refresh_task = self._bot.loop.create_task(self._refresh_weather_task(ctx.guild.id))
 
     @rweather.command(name="settimezone")
     async def set_timezone(self, ctx, time_zone: str):
