@@ -23,11 +23,11 @@ Welcome to **RandomWeather**, a Discord bot cog that generates random daily weat
    ```
 2. Install the cog using the following command:
    ```
-   [p]cog install RandomWeather
+   [p]cog install TaakosCogs randomweather
    ```
 3. Load the cog:
    ```
-   [p]load RandomWeather
+   [p]load randomweather
    ```
 
 ---
