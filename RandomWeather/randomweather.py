@@ -1,20 +1,30 @@
 import random
 import discord  # Edited by Taako
-from redbot.core import commands
+from redbot.core import commands, Config  # Edited by Taako
 import asyncio  # Edited by Taako
+from datetime import datetime, timedelta  # Edited by Taako
+import pytz  # Edited by Taako
 
 class WeatherCog(commands.Cog):
-    """A cog for generating random daily weather."""
-    
+    """A cog for generating random daily weather."""  # Edited by Taako
+
     # Edited by Taako
     def __init__(self, bot):
         self._bot = bot  # Store the bot instance
         self._current_weather = self._generate_weather()  # Generate initial weather
-        self._role_id = None  # Role ID for tagging
-        self._channel_id = None  # Channel ID for sending updates
-        self._tag_role = False  # Whether to tag the role
         self._refresh_task = None  # Task for automatic weather refresh
-        self._refresh_interval = None  # Refresh interval in seconds
+
+        # Persistent storage using Config
+        self.config = Config.get_conf(self, identifier=1234567890, force_registration=True)  # Edited by Taako
+        default_guild = {
+            "role_id": None,
+            "channel_id": None,
+            "tag_role": False,
+            "refresh_interval": None,
+            "refresh_time": None,
+            "time_zone": "UTC",
+        }
+        self.config.register_guild(**default_guild)
 
     def _generate_weather(self):
         """Generate realistic random weather."""
@@ -116,15 +126,38 @@ class WeatherCog(commands.Cog):
         
         return embed
 
-    async def _refresh_weather_task(self):
-        """Background task to refresh weather at the set interval."""
+    async def _refresh_weather_task(self, guild_id):
+        """Background task to refresh weather at the set interval or specific time."""
         # Edited by Taako
-        while self._refresh_interval and self._channel_id:
-            await asyncio.sleep(self._refresh_interval)
-            channel = self._bot.get_channel(self._channel_id)
+        while True:
+            guild_settings = await self.config.guild_from_id(guild_id).all()
+            refresh_interval = guild_settings["refresh_interval"]
+            refresh_time = guild_settings["refresh_time"]
+            time_zone = guild_settings["time_zone"]
+            channel_id = guild_settings["channel_id"]
+            role_id = guild_settings["role_id"]
+            tag_role = guild_settings["tag_role"]
+
+            if not channel_id:
+                break
+
+            if refresh_interval:
+                await asyncio.sleep(refresh_interval)
+            elif refresh_time:
+                now = datetime.now(pytz.timezone(time_zone))
+                target_time = datetime.strptime(refresh_time, "%H%M").replace(
+                    tzinfo=pytz.timezone(time_zone)
+                )
+                if now > target_time:
+                    target_time += timedelta(days=1)
+                await asyncio.sleep((target_time - now).total_seconds())
+            else:
+                break
+
+            channel = self._bot.get_channel(channel_id)
             if channel:
-                embed = self._create_weather_embed(self._current_weather)
-                role_mention = f"<@&{self._role_id}>" if self._role_id and self._tag_role else ""
+                embed = self._create_weather_embed(self._current_weather, guild_id=guild_id)
+                role_mention = f"<@&{role_id}>" if role_id and tag_role else ""
                 await channel.send(content=role_mention, embed=embed)
 
     @commands.group(name="rweather", invoke_without_command=True)
@@ -139,10 +172,12 @@ class WeatherCog(commands.Cog):
         """Refresh the weather for the day."""
         # Edited by Taako
         self._current_weather = self._generate_weather()
+        guild_settings = await self.config.guild(ctx.guild).all()
         embed = self._create_weather_embed(self._current_weather, guild_id=ctx.guild.id)
-        role_mention = f"<@&{self._role_id}>" if self._role_id and self._tag_role else ""
-        if self._channel_id:
-            channel = self._bot.get_channel(self._channel_id)
+        role_mention = f"<@&{guild_settings['role_id']}>" if guild_settings["role_id"] and guild_settings["tag_role"] else ""
+        channel_id = guild_settings["channel_id"]
+        if channel_id:
+            channel = self._bot.get_channel(channel_id)
             if channel:
                 await channel.send(content=role_mention, embed=embed)
                 await ctx.send(f"Weather update sent to {channel.mention}.")
@@ -157,7 +192,7 @@ class WeatherCog(commands.Cog):
         # Edited by Taako
         role = ctx.guild.get_role(role_id)
         if role:
-            self._role_id = role_id
+            await self.config.guild(ctx.guild).role_id.set(role_id)
             await ctx.send(f"Weather updates will now tag the role: {role.name}")
         else:
             await ctx.send("Invalid role ID. Please provide a valid role ID.")
@@ -166,8 +201,9 @@ class WeatherCog(commands.Cog):
     async def toggle(self, ctx):
         """Toggle whether the role should be tagged in weather updates."""
         # Edited by Taako
-        self._tag_role = not self._tag_role
-        status = "enabled" if self._tag_role else "disabled"
+        tag_role = await self.config.guild(ctx.guild).tag_role()
+        await self.config.guild(ctx.guild).tag_role.set(not tag_role)
+        status = "enabled" if not tag_role else "disabled"
         await ctx.send(f"Role tagging has been {status}.")
 
     @rweather.command()
@@ -176,7 +212,7 @@ class WeatherCog(commands.Cog):
         # Edited by Taako
         channel = self._bot.get_channel(channel_id)
         if channel:
-            self._channel_id = channel_id
+            await self.config.guild(ctx.guild).channel_id.set(channel_id)
             await ctx.send(f"Weather updates will now be sent to: {channel.mention}")
         else:
             await ctx.send("Invalid channel ID. Please provide a valid channel ID.")
@@ -185,10 +221,12 @@ class WeatherCog(commands.Cog):
     async def load_weather(self, ctx):
         """Manually load the current weather."""
         # Edited by Taako
+        guild_settings = await self.config.guild(ctx.guild).all()
         embed = self._create_weather_embed(self._current_weather, guild_id=ctx.guild.id)
-        role_mention = f"<@&{self._role_id}>" if self._role_id and self._tag_role else ""
-        if self._channel_id:
-            channel = self._bot.get_channel(self._channel_id)
+        role_mention = f"<@&{guild_settings['role_id']}>" if guild_settings["role_id"] and guild_settings["tag_role"] else ""
+        channel_id = guild_settings["channel_id"]
+        if channel_id:
+            channel = self._bot.get_channel(channel_id)
             if channel:
                 await channel.send(content=role_mention, embed=embed)
                 await ctx.send(f"Weather update sent to {channel.mention}.")
@@ -198,25 +236,41 @@ class WeatherCog(commands.Cog):
             await ctx.send(embed=embed)
 
     @rweather.command(name="setrefresh")
-    async def set_refresh(self, ctx, interval: str):
-        """Set how often the weather should refresh in the set channel."""
+    async def set_refresh(self, ctx, interval_or_time: str):
+        """Set how often the weather should refresh or specify a time (e.g., `10m` or `1830`)."""
         # Edited by Taako
         time_units = {"s": 1, "m": 60, "h": 3600, "d": 86400}
         try:
-            unit = interval[-1]
-            value = int(interval[:-1])
-            if unit not in time_units:
-                raise ValueError("Invalid time unit.")
-            self._refresh_interval = value * time_units[unit]
+            if interval_or_time.isdigit() and len(interval_or_time) == 4:
+                # Specific time in military format (e.g., 1830)
+                await self.config.guild(ctx.guild).refresh_time.set(interval_or_time)
+                await self.config.guild(ctx.guild).refresh_interval.set(None)
+                await ctx.send(f"Weather will now refresh daily at {interval_or_time} (military time).")
+            else:
+                # Time interval (e.g., 10m, 1h)
+                unit = interval_or_time[-1]
+                value = int(interval_or_time[:-1])
+                if unit not in time_units:
+                    raise ValueError("Invalid time unit.")
+                refresh_interval = value * time_units[unit]
+                await self.config.guild(ctx.guild).refresh_interval.set(refresh_interval)
+                await self.config.guild(ctx.guild).refresh_time.set(None)
+                await ctx.send(f"Weather will now refresh every {interval_or_time}.")
             if self._refresh_task:
                 self._refresh_task.cancel()
-            if self._refresh_interval > 0:
-                self._refresh_task = self._bot.loop.create_task(self._refresh_weather_task())
-                await ctx.send(f"Weather will now refresh every {interval}.")
-            else:
-                await ctx.send("Invalid interval. Please provide a positive value.")
+            self._refresh_task = self._bot.loop.create_task(self._refresh_weather_task(ctx.guild.id))
         except (ValueError, IndexError):
-            await ctx.send("Invalid format. Use a number followed by s (seconds), m (minutes), h (hours), or d (days).")
+            await ctx.send("Invalid format. Use a number followed by s (seconds), m (minutes), h (hours), or d (days), or specify a time in military format (e.g., 1830).")
+
+    @rweather.command(name="settimezone")
+    async def set_timezone(self, ctx, time_zone: str):
+        """Set the time zone for weather updates (e.g., `UTC`, `America/New_York`)."""
+        # Edited by Taako
+        if time_zone in pytz.all_timezones:
+            await self.config.guild(ctx.guild).time_zone.set(time_zone)
+            await ctx.send(f"Time zone set to {time_zone}.")
+        else:
+            await ctx.send("Invalid time zone. Please provide a valid time zone (e.g., `UTC`, `America/New_York`).")
 
 def setup(bot):
     # Edited by Taako
