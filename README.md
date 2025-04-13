@@ -24,17 +24,17 @@ Welcome to **Taako's Cogs**, a collection of high-quality cogs for [Red-DiscordB
 
 ## 🛠️ Installation Instructions
 
-1. Add this repository to your Red-DiscordBot instance:
+1. Add the repository to your Red-DiscordBot instance:
    ```
    [p]repo add TaakosCogs https://github.com/TaakoOfficial/TaakosCogs
    ```
-2. Install any cog from the repository using:
+2. Install the cog using the following command:
    ```
-   [p]cog install <cog_name>
+   [p]cog install TaakosCogs randomweather
    ```
 3. Load the cog:
    ```
-   [p]load <cog_name>
+   [p]load randomweather
    ```
 
 ---
