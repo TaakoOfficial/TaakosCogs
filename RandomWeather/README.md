@@ -11,7 +11,7 @@ Welcome to **RandomWeather**, a Discord bot cog that generates random daily weat
   - Set a specific channel for weather updates.
   - Tag a role for weather notifications.
   - Toggle role tagging on or off.
-- **Interactive Commands**: Use text commands or slash commands to interact with the bot.
+- **Interactive Commands**: Use text commands to interact with the bot.
 
 ---
 
@@ -36,31 +36,21 @@ Welcome to **RandomWeather**, a Discord bot cog that generates random daily weat
 
 ### Text Commands
 
-| Command                   | Description                                  |
-| ------------------------- | -------------------------------------------- |
-| `[p]rweather`             | View the current weather.                    |
-| `[p]rweather refresh`     | Refresh the weather for the day.             |
-| `[p]rweather role <id>`   | Set a role to be tagged for weather updates. |
-| `[p]rweather toggle`      | Toggle tagging the role in weather updates.  |
-| `[p]rweather channel <id>`| Set the channel for weather updates.         |
-
-### Slash Commands
-
-| Command          | Description                                  |
-| ----------------- | -------------------------------------------- |
-| `/rweather view`  | View the current weather.                    |
-| `/rweather refresh`| Refresh the weather for the day.            |
-| `/rweather role`  | Set a role to be tagged for weather updates. |
-| `/rweather toggle`| Toggle tagging the role in weather updates.  |
-| `/rweather channel`| Set the channel for weather updates.        |
+| Command                    | Description                                  |
+| -------------------------- | -------------------------------------------- |
+| `[p]rweather`              | View the current weather.                    |
+| `[p]rweather refresh`      | Refresh the weather for the day.             |
+| `[p]rweather role <id>`    | Set a role to be tagged for weather updates. |
+| `[p]rweather toggle`       | Toggle tagging the role in weather updates.  |
+| `[p]rweather channel <id>` | Set the channel for weather updates.         |
 
 ---
 
 ## ⚙️ Configuration
 
-- **Set Weather Role**: Use `[p]rweather role <role_id>` or `/rweather role` to specify a role for tagging.
-- **Set Weather Channel**: Use `[p]rweather channel <channel_id>` or `/rweather channel` to define where updates are sent.
-- **Toggle Role Tagging**: Use `[p]rweather toggle` or `/rweather toggle` to enable or disable role mentions.
+- **Set Weather Role**: Use `[p]rweather role <role_id>` to specify a role for tagging.
+- **Set Weather Channel**: Use `[p]rweather channel <channel_id>` to define where updates are sent.
+- **Toggle Role Tagging**: Use `[p]rweather toggle` to enable or disable role mentions.
 
 ---
 

@@ -1,7 +1,6 @@
 import random
 import discord  # Edited by Taako
 from redbot.core import commands
-from discord import app_commands  # Edited by Taako
 
 class WeatherCog(commands.Cog):
     """A cog for generating random daily weather."""
@@ -13,12 +12,6 @@ class WeatherCog(commands.Cog):
         self._role_id = None  # Role ID for tagging
         self._channel_id = None  # Channel ID for sending updates
         self._tag_role = False  # Whether to tag the role
-
-        # Create a slash command group for rweather
-        self.rweather_group = app_commands.Group(
-            name="rweather",
-            description="Commands for random weather updates",
-        )
 
     def _generate_weather(self):
         """Generate realistic random weather."""
@@ -132,60 +125,6 @@ class WeatherCog(commands.Cog):
             await ctx.send(f"Weather updates will now be sent to: {channel.mention}")
         else:
             await ctx.send("Invalid channel ID. Please provide a valid channel ID.")
-
-    @app_commands.command(name="view")
-    async def slash_view(self, interaction: discord.Interaction):
-        """Slash command to view the current weather."""
-        # Edited by Taako
-        embed = self._create_weather_embed(self._current_weather)
-        await interaction.response.send_message(embed=embed)
-
-    @app_commands.command(name="refresh")
-    async def slash_refresh(self, interaction: discord.Interaction):
-        """Slash command to refresh the weather."""
-        # Edited by Taako
-        self._current_weather = self._generate_weather()
-        embed = self._create_weather_embed(self._current_weather)
-        await interaction.response.send_message("Weather refreshed!", embed=embed)
-
-    @app_commands.command(name="role")
-    async def slash_role(self, interaction: discord.Interaction, role: discord.Role):
-        """Slash command to set the role for weather updates."""
-        # Edited by Taako
-        self._role_id = role.id
-        await interaction.response.send_message(f"Weather updates will now tag the role: {role.name}")
-
-    @app_commands.command(name="toggle")
-    async def slash_toggle(self, interaction: discord.Interaction):
-        """Slash command to toggle role tagging."""
-        # Edited by Taako
-        self._tag_role = not self._tag_role
-        status = "enabled" if self._tag_role else "disabled"
-        await interaction.response.send_message(f"Role tagging has been {status}.")
-
-    @app_commands.command(name="channel")
-    async def slash_channel(self, interaction: discord.Interaction, channel: discord.TextChannel):
-        """Slash command to set the channel for weather updates."""
-        # Edited by Taako
-        self._channel_id = channel.id
-        await interaction.response.send_message(f"Weather updates will now be sent to: {channel.mention}")
-
-    async def cog_load(self):
-        """Register slash commands when the cog is loaded."""
-        # Edited by Taako
-        self.rweather_group.add_command(self.slash_view)
-        self.rweather_group.add_command(self.slash_refresh)
-        self.rweather_group.add_command(self.slash_role)
-        self.rweather_group.add_command(self.slash_toggle)
-        self.rweather_group.add_command(self.slash_channel)
-        self._bot.tree.add_command(self.rweather_group)
-        await self._bot.tree.sync()
-
-    async def cog_unload(self):
-        """Unregister slash commands when the cog is unloaded."""
-        # Edited by Taako
-        self._bot.tree.remove_command("rweather")
-        await self._bot.tree.sync()
 
 def setup(bot):
     # Edited by Taako

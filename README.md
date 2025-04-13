@@ -12,7 +12,7 @@ Welcome to **Taako's Cogs**, a collection of high-quality cogs for [Red-DiscordB
 - **Features**:
   - Realistic weather generation (temperature, conditions, wind, etc.).
   - Customizable updates with role tagging and channel configuration.
-  - Supports both text commands and slash commands.
+  - Supports text commands for interaction.
 - **Installation**:
   ```
   [p]repo add TaakosCogs https://github.com/TaakoOfficial/TaakosCogs
