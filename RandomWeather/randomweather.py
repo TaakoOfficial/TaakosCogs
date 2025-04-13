@@ -5,7 +5,13 @@ import asyncio  # Edited by Taako
 from datetime import datetime, timedelta  # Edited by Taako
 import pytz  # Edited by Taako
 from redbot.core.utils.chat_formatting import humanize_list  # Edited by Taako
-from AAA3A_utils import CogManager  # Edited by Taako
+
+try:
+    from .dashboard_integration import register_dashboard_settings  # Edited by Taako
+    AAA3A_AVAILABLE = True
+except ImportError:
+    register_dashboard_settings = None  # Edited by Taako
+    AAA3A_AVAILABLE = False  # Edited by Taako
 
 class WeatherCog(commands.Cog):
     """A cog for generating random daily weather."""  # Edited by Taako
@@ -29,19 +35,9 @@ class WeatherCog(commands.Cog):
         }
         self.config.register_guild(**default_guild)
 
-        # Register settings for the AAA3A Dashboard Cog
-        CogManager.register_cog_settings(
-            cog=self,
-            settings={
-                "role_id": {"type": "role", "description": "Role to tag for weather updates."},
-                "channel_id": {"type": "channel", "description": "Channel for weather updates."},
-                "tag_role": {"type": "bool", "description": "Whether to tag the role in updates."},
-                "refresh_interval": {"type": "int", "description": "Refresh interval in seconds."},
-                "refresh_time": {"type": "str", "description": "Refresh time in military format (e.g., 1830)."},
-                "time_zone": {"type": "str", "description": "Time zone for weather updates."},
-                "show_footer": {"type": "bool", "description": "Whether to show the footer in embeds."},
-            },
-        )
+        # Register settings for the AAA3A Dashboard Cog if available
+        if AAA3A_AVAILABLE:
+            register_dashboard_settings(self)
 
     def _generate_weather(self):
         """Generate realistic random weather."""
