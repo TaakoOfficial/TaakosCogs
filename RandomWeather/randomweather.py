@@ -359,7 +359,16 @@ class WeatherCog(commands.Cog):
             days, seconds = divmod(time_until_refresh.total_seconds(), 86400)
             hours, remainder = divmod(seconds, 3600)
             minutes, seconds = divmod(remainder, 60)
-            time_until_refresh_str = f"{int(days):02} {int(hours):02}:{int(minutes):02}:{int(seconds):02}"
+
+            # Build the time string, excluding `00` for days and hours, but keeping `00m`
+            time_components = []
+            if days > 0:
+                time_components.append(f"{int(days)}d")
+            if hours > 0:
+                time_components.append(f"{int(hours)}h")
+            time_components.append(f"{int(minutes):02}m")  # Always include minutes
+            time_components.append(f"{int(seconds):02}s")  # Always include seconds
+            time_until_refresh_str = " ".join(time_components)
         else:
             time_until_refresh_str = "Not scheduled"
 
