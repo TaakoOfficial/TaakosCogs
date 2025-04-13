@@ -246,20 +246,31 @@ class WeatherCog(commands.Cog):
         self._refresh_task = self._bot.loop.create_task(self._refresh_weather_task(ctx.guild.id))
 
     @rweather.command(name="settimezone")
-    async def set_timezone(self, ctx, time_zone: str):
+    async def set_timezone(self, ctx, time_zone: str = None):
         """Set the time zone for weather updates (e.g., `UTC`, `America/New_York`)."""
         # Edited by Taako
+        if not time_zone:
+            await ctx.send(
+                "Please provide a valid time zone (e.g., `UTC`, `America/New_York`).\n"
+                "You can view the full list of time zones here: https://en.wikipedia.org/wiki/List_of_tz_database_time_zones"
+            )
+            return
+
         if time_zone in pytz.all_timezones:
             await self.config.guild(ctx.guild).time_zone.set(time_zone)
             await ctx.send(f"Time zone set to {time_zone}.")
         else:
-            await ctx.send("Invalid time zone. Please provide a valid time zone (e.g., `UTC`, `America/New_York`).")
+            await ctx.send(
+                "Invalid time zone. Please provide a valid time zone (e.g., `UTC`, `America/New_York`).\n"
+                "You can view the full list of time zones here: https://en.wikipedia.org/wiki/List_of_tz_database_time_zones"
+            )
 
     @rweather.command(name="info")
     async def info(self, ctx):
         """View the current settings for weather updates."""
         # Edited by Taako
         guild_settings = await self.config.guild(ctx.guild).all()
+        show_footer = await self.config.guild(ctx.guild).get_raw("show_footer", default=True)
         embed = discord.Embed(
             title="🌦️ RandomWeather Settings",
             color=discord.Color.blue()  # Set embed color to blue
@@ -296,6 +307,11 @@ class WeatherCog(commands.Cog):
                 f"<@&{guild_settings['role_id']}>" if guild_settings["role_id"] else "Not set"
             ),
             inline=True,
+        )
+        embed.add_field(
+            name="📄 Footer",
+            value="Enabled" if show_footer else "Disabled",
+            inline=False,
         )
         embed.set_footer(text="RandomWeather by Taako")
         await ctx.send(embed=embed)
