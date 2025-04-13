@@ -51,15 +51,20 @@ class WeatherCog(commands.Cog):
     def _create_weather_embed(self, weather_data):
         """Create a Discord embed for the weather data."""
         # Edited by Taako
-        embed = discord.Embed(title="Today's Weather", color=discord.Color.blue())
-        embed.add_field(name="Temperature", value=weather_data["temperature"], inline=True)
-        embed.add_field(name="Feels Like", value=weather_data["feels_like"], inline=True)
-        embed.add_field(name="Conditions", value=weather_data["conditions"], inline=False)
-        embed.add_field(name="Wind", value=weather_data["wind"], inline=True)
-        embed.add_field(name="Pressure", value=weather_data["pressure"], inline=True)
-        embed.add_field(name="Humidity", value=weather_data["humidity"], inline=True)
-        embed.add_field(name="Dew Point", value=weather_data["dew_point"], inline=True)
-        embed.add_field(name="Visibility", value=weather_data["visibility"], inline=True)
+        embed = discord.Embed(
+            title="🌤️ Today's Weather", 
+            color=discord.Color.red()  # Set embed color to red
+        )
+        embed.add_field(name="🌡️ Temperature", value=weather_data["temperature"], inline=True)
+        embed.add_field(name="🌡️ Feels Like", value=weather_data["feels_like"], inline=True)
+        embed.add_field(name="🌥️ Conditions", value=weather_data["conditions"], inline=False)
+        embed.add_field(name="💨 Wind", value=weather_data["wind"], inline=True)
+        embed.add_field(name="🌡️ Pressure", value=weather_data["pressure"], inline=True)
+        embed.add_field(name="💧 Humidity", value=weather_data["humidity"], inline=True)
+        embed.add_field(name="🌡️ Dew Point", value=weather_data["dew_point"], inline=True)
+        embed.add_field(name="👀 Visibility", value=weather_data["visibility"], inline=True)
+        embed.set_thumbnail(url="https://i.imgur.com/3ZQZ3cQ.png")  # Add a weather icon
+        embed.set_footer(text="RandomWeather by Taako", icon_url="https://i.imgur.com/3ZQZ3cQ.png")
         return embed
 
     @commands.group(name="rweather")
