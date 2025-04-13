@@ -65,8 +65,12 @@ class WeatherCog(commands.Cog):
             conditions = random.choice(["Clear sky", "Partly cloudy", "Overcast", "Rainy", "Stormy", "Snowy"])
             temperature = random.randint(30, 100)  # Default fallback
 
-        # Feels like temperature with a slight variation
-        feels_like = temperature + random.randint(-3, 3)
+        # Adjust temperature and humidity for stormy conditions
+        if conditions == "Stormy":
+            temperature -= random.randint(5, 15)  # Storms cool down the temperature
+            humidity = random.randint(80, 100)  # High humidity during storms
+        else:
+            humidity = random.randint(20, 60)  # Low to moderate humidity
 
         # Wind speed and direction
         if conditions == "Stormy":
@@ -77,6 +81,11 @@ class WeatherCog(commands.Cog):
             wind_speed = round(random.uniform(0.5, 10.0), 1)  # Light winds
         wind_direction = random.choice(["N", "NE", "E", "SE", "S", "SW", "W", "NW"])
 
+        # Adjust "feels like" temperature based on wind speed
+        feels_like = temperature + random.randint(-3, 3)
+        if wind_speed > 20.0:  # Strong winds make it feel cooler
+            feels_like -= random.randint(2, 5)
+
         # Pressure
         if conditions == "Stormy":
             pressure = random.randint(950, 1000)  # Low pressure
@@ -84,12 +93,6 @@ class WeatherCog(commands.Cog):
             pressure = random.randint(1000, 1020)  # Moderate pressure
         else:
             pressure = random.randint(1020, 1050)  # High pressure
-
-        # Humidity
-        if conditions in ["Rainy", "Stormy", "Snowy"]:
-            humidity = random.randint(70, 100)  # High humidity
-        else:
-            humidity = random.randint(20, 60)  # Low to moderate humidity
 
         # Visibility
         if conditions == "Clear sky":
