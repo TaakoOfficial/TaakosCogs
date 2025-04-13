@@ -11,7 +11,7 @@ def ensure_aaa3a_utils_installed():
         # Attempt to install AAA3A_utils dynamically
         subprocess.check_call([
             sys.executable, "-m", "pip", "install",
-            "git+https://github.com/AAA3A-AAA3A/AAA3A-cogs.git#subdirectory=AAA3A_utils"
+            "git+https://github.com/AAA3A-AAA3A/AAA3A_utils.git"  # Correct pip command
         ])
         from AAA3A_utils import CogManager  # Retry import after installation
         return CogManager
