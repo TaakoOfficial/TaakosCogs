@@ -176,7 +176,7 @@ class WeatherCog(commands.Cog):
         # Edited by Taako
         self._current_weather = self._generate_weather()
         guild_settings = await self.config.guild(ctx.guild).all()
-        embed = self._create_weather_embed(self._current_weather, guild_id=ctx.guild.id)
+        embed = self._create_weather_embed(self._current_weather)  # Removed guild_id argument
         role_mention = f"<@&{guild_settings['role_id']}>" if guild_settings["role_id"] and guild_settings["tag_role"] else ""
         channel_id = guild_settings["channel_id"]
         if channel_id:
