@@ -19,26 +19,57 @@ class WeatherCog(commands.Cog):
     def _generate_weather(self):
         """Generate realistic random weather."""
         # Edited by Taako
-        temperature = random.randint(30, 100)  # Temperature in °F
-        feels_like = temperature + random.randint(-3, 3)  # Feels like temperature
         conditions = random.choice(["Clear sky", "Partly cloudy", "Overcast", "Rainy", "Stormy", "Snowy"])
-        wind_speed = round(random.uniform(0.5, 20.0), 1)  # Wind speed in mph
-        wind_direction = random.choice(["N", "NE", "E", "SE", "S", "SW", "W", "NW"])
-        pressure = random.randint(980, 1050)  # Pressure in hPa
-        humidity = random.randint(20, 100)  # Humidity in %
-        dew_point = round(temperature - ((100 - humidity) / 5), 1)  # Dew point in °F
 
-        # Adjust visibility based on conditions
-        if conditions == "Clear sky":
-            visibility = round(random.uniform(5.0, 6.2), 1)  # High visibility in miles
-        elif conditions in ["Partly cloudy", "Overcast"]:
-            visibility = round(random.uniform(3.1, 5.0), 1)  # Moderate visibility in miles
-        elif conditions in ["Rainy", "Stormy"]:
-            visibility = round(random.uniform(0.6, 3.1), 1)  # Low visibility in miles
+        # Define temperature ranges based on conditions
+        if conditions in ["Clear sky", "Partly cloudy"]:
+            temperature = random.randint(70, 100)  # Warmer weather
+        elif conditions in ["Overcast", "Rainy"]:
+            temperature = random.randint(50, 80)  # Cooler weather
+        elif conditions == "Stormy":
+            temperature = random.randint(60, 85)  # Moderate temperature
         elif conditions == "Snowy":
-            visibility = round(random.uniform(0.3, 1.9), 1)  # Very low visibility in miles
+            temperature = random.randint(20, 40)  # Cold weather
         else:
-            visibility = round(random.uniform(0.6, 6.2), 1)  # Default fallback in miles
+            temperature = random.randint(30, 100)  # Default fallback
+
+        # Feels like temperature with a slight variation
+        feels_like = temperature + random.randint(-3, 3)
+
+        # Wind speed and direction
+        if conditions == "Stormy":
+            wind_speed = round(random.uniform(15.0, 40.0), 1)  # Strong winds
+        elif conditions in ["Rainy", "Snowy"]:
+            wind_speed = round(random.uniform(5.0, 20.0), 1)  # Moderate winds
+        else:
+            wind_speed = round(random.uniform(0.5, 10.0), 1)  # Light winds
+        wind_direction = random.choice(["N", "NE", "E", "SE", "S", "SW", "W", "NW"])
+
+        # Pressure
+        if conditions == "Stormy":
+            pressure = random.randint(950, 1000)  # Low pressure
+        elif conditions in ["Rainy", "Snowy"]:
+            pressure = random.randint(1000, 1020)  # Moderate pressure
+        else:
+            pressure = random.randint(1020, 1050)  # High pressure
+
+        # Humidity
+        if conditions in ["Rainy", "Stormy", "Snowy"]:
+            humidity = random.randint(70, 100)  # High humidity
+        else:
+            humidity = random.randint(20, 60)  # Low to moderate humidity
+
+        # Visibility
+        if conditions == "Clear sky":
+            visibility = round(random.uniform(5.0, 6.2), 1)  # High visibility
+        elif conditions in ["Partly cloudy", "Overcast"]:
+            visibility = round(random.uniform(3.0, 5.0), 1)  # Moderate visibility
+        elif conditions in ["Rainy", "Stormy"]:
+            visibility = round(random.uniform(0.5, 3.0), 1)  # Low visibility
+        elif conditions == "Snowy":
+            visibility = round(random.uniform(0.2, 1.5), 1)  # Very low visibility
+        else:
+            visibility = round(random.uniform(0.5, 6.2), 1)  # Default fallback
 
         return {
             "temperature": f"{temperature}°F",
@@ -47,7 +78,6 @@ class WeatherCog(commands.Cog):
             "wind": f"{wind_speed} mph {wind_direction}",
             "pressure": f"{pressure} hPa",
             "humidity": f"{humidity}%",
-            "dew_point": f"{dew_point}°F",
             "visibility": f"{visibility} miles",  # Updated to miles
         }
 
