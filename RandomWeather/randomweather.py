@@ -286,15 +286,15 @@ class WeatherCog(commands.Cog):
             inline=False,
         )
         embed.add_field(
-            name="👥 Role Tagging",
-            value=(
-                f"<@&{guild_settings['role_id']}>" if guild_settings["role_id"] else "Not set"
-            ),
+            name="🔔 Role Tagging",
+            value="Enabled" if guild_settings["tag_role"] else "Disabled",
             inline=True,
         )
         embed.add_field(
-            name="🔔 Tag Role",
-            value="Enabled" if guild_settings["tag_role"] else "Disabled",
+            name="👥 Tag Role",
+            value=(
+                f"<@&{guild_settings['role_id']}>" if guild_settings["role_id"] else "Not set"
+            ),
             inline=True,
         )
         embed.set_footer(text="RandomWeather by Taako")
