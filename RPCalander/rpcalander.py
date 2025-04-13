@@ -11,10 +11,12 @@ class RPCalander(commands.Cog):
         self._bot = bot  # Edited by Taako
         self.config = Config.get_conf(self, identifier=9876543210, force_registration=True)  # Edited by Taako
         default_guild = {
-            "start_date": None,  # Starting date (YYYY-MM-DD)
+            "start_date": None,  # Starting date (MM-DD-YYYY)  # Edited by Taako
             "channel_id": None,  # Channel ID for updates
             "current_date": None,  # Current date in the calendar
             "time_zone": "America/Chicago",  # Default time zone  # Edited by Taako
+            "embed_color": 0x0000FF,  # Default embed color (blue)  # Edited by Taako
+            "show_footer": True,  # Whether to show the footer in the main embed  # Edited by Taako
         }
         self.config.register_guild(**default_guild)
         self._daily_update_loop.start()  # Start the daily update loop
@@ -30,40 +32,41 @@ class RPCalander(commands.Cog):
 
             current_date = guild_settings["current_date"]
             time_zone = guild_settings["time_zone"] or "America/Chicago"  # Edited by Taako
+            embed_color = guild_settings["embed_color"] or 0x0000FF  # Default to blue  # Edited by Taako
+            show_footer = guild_settings["show_footer"]  # Edited by Taako
             if not current_date:
                 continue
 
             # Increment the current date
             tz = pytz.timezone(time_zone)  # Edited by Taako
-            current_date_obj = datetime.strptime(current_date, "%Y-%m-%d").astimezone(tz)  # Edited by Taako
+            current_date_obj = datetime.strptime(current_date, "%m-%d-%Y").astimezone(tz)  # Edited by Taako
             next_date_obj = current_date_obj + timedelta(days=1)
-            next_date_str = next_date_obj.strftime("%Y-%m-%d")
+            next_date_str = next_date_obj.strftime("%m-%d-%Y")  # Edited by Taako
             day_of_week = next_date_obj.strftime("%A")
 
             # Update the stored current date
             await self.config.guild_from_id(guild_id).current_date.set(next_date_str)
 
-            # Send the update to the channel
+            # Create and send the embed
+            embed = discord.Embed(
+                title="📅 RP Calendar Update",
+                description=f"Today's date: **{next_date_str} ({day_of_week})**",
+                color=discord.Color(embed_color)  # Use the configured embed color  # Edited by Taako
+            )
+            if show_footer:  # Add footer if enabled  # Edited by Taako
+                embed.set_footer(text="RP Calendar by Taako", icon_url="https://cdn-icons-png.flaticon.com/512/869/869869.png")
             channel = self._bot.get_channel(channel_id)
             if channel:
-                await channel.send(f"📅 **RP Calendar Update**\nToday's date: {next_date_str} ({day_of_week})")
+                await channel.send(embed=embed)
 
-    @_daily_update_loop.before_loop
-    async def before_daily_update_loop(self):
-        """Wait until the bot is ready and align to midnight in the guild's time zone."""  # Edited by Taako
-        await self._bot.wait_until_ready()
-        now = datetime.now(pytz.timezone("America/Chicago"))  # Default to America/Chicago  # Edited by Taako
-        next_midnight = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
-        await discord.utils.sleep_until(next_midnight)
-
-    @rpcalander.command(name="settimezone")
-    async def set_timezone(self, ctx, time_zone: str):
-        """Set the time zone for the RP calendar."""  # Edited by Taako
-        if time_zone not in pytz.all_timezones:
-            await ctx.send("Invalid time zone. Please provide a valid time zone (e.g., `America/New_York`).")
-            return
-        await self.config.guild(ctx.guild).time_zone.set(time_zone)
-        await ctx.send(f"Time zone set to {time_zone}.")
+    @rpcalander.command(name="togglefooter")
+    async def toggle_footer(self, ctx):
+        """Toggle the footer on or off for the main embed."""  # Edited by Taako
+        show_footer = await self.config.guild(ctx.guild).show_footer()
+        new_state = not show_footer
+        await self.config.guild(ctx.guild).show_footer.set(new_state)
+        status = "enabled" if new_state else "disabled"
+        await ctx.send(f"The footer has been {status} for the main embed.")  # Edited by Taako
 
     @rpcalander.command(name="info")
     async def info(self, ctx):
@@ -74,13 +77,16 @@ class RPCalander(commands.Cog):
         channel_id = guild_settings["channel_id"]
         channel = f"<#{channel_id}>" if channel_id else "Not set"
         time_zone = guild_settings["time_zone"] or "America/Chicago"  # Edited by Taako
+        embed_color = discord.Color(guild_settings["embed_color"])  # Edited by Taako
 
         embed = discord.Embed(
             title="📅 RP Calendar Settings",
-            color=discord.Color.blue()
+            color=embed_color  # Use the configured embed color  # Edited by Taako
         )
         embed.add_field(name="Start Date", value=start_date, inline=False)
         embed.add_field(name="Current Date", value=current_date, inline=False)
         embed.add_field(name="Update Channel", value=channel, inline=False)
-        embed.add_field(name="Time Zone", value=time_zone, inline=False)  # Edited by Taako
+        embed.add_field(name="Time Zone", value=time_zone, inline=False)
+        embed.add_field(name="Embed Color", value=str(embed_color), inline=False)  # Edited by Taako
+        embed.set_footer(text="RP Calendar by Taako", icon_url="https://cdn-icons-png.flaticon.com/512/869/869869.png")  # Always show footer in info embed  # Edited by Taako
         await ctx.send(embed=embed)
