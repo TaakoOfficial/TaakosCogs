@@ -134,31 +134,31 @@ class WeatherCog(commands.Cog):
         embed = self._create_weather_embed(self._current_weather)
         await interaction.response.send_message(embed=embed)
 
-    @app_commands.command(name="refresh_weather")
-    async def slash_refresh_weather(self, interaction: discord.Interaction):
+    @app_commands.command(name="refresh")
+    async def slash_refresh(self, interaction: discord.Interaction):
         """Slash command to refresh the weather."""
         # Edited by Taako
         self._current_weather = self._generate_weather()
         embed = self._create_weather_embed(self._current_weather)
         await interaction.response.send_message("Weather refreshed!", embed=embed)
 
-    @app_commands.command(name="set_weather_role")
-    async def slash_set_weather_role(self, interaction: discord.Interaction, role: discord.Role):
+    @app_commands.command(name="role")
+    async def slash_role(self, interaction: discord.Interaction, role: discord.Role):
         """Slash command to set the role for weather updates."""
         # Edited by Taako
         self._role_id = role.id
         await interaction.response.send_message(f"Weather updates will now tag the role: {role.name}")
 
-    @app_commands.command(name="toggle_role_tagging")
-    async def slash_toggle_role_tagging(self, interaction: discord.Interaction):
+    @app_commands.command(name="toggle")
+    async def slash_toggle(self, interaction: discord.Interaction):
         """Slash command to toggle role tagging."""
         # Edited by Taako
         self._tag_role = not self._tag_role
         status = "enabled" if self._tag_role else "disabled"
         await interaction.response.send_message(f"Role tagging has been {status}.")
 
-    @app_commands.command(name="set_weather_channel")
-    async def slash_set_weather_channel(self, interaction: discord.Interaction, channel: discord.TextChannel):
+    @app_commands.command(name="channel")
+    async def slash_channel(self, interaction: discord.Interaction, channel: discord.TextChannel):
         """Slash command to set the channel for weather updates."""
         # Edited by Taako
         self._channel_id = channel.id
@@ -169,10 +169,10 @@ class WeatherCog(commands.Cog):
         # Edited by Taako
         guild = discord.Object(id=YOUR_GUILD_ID)  # Replace with your guild ID for testing
         self._bot.tree.add_command(self.slash_weather, guild=guild)
-        self._bot.tree.add_command(self.slash_refresh_weather, guild=guild)
-        self._bot.tree.add_command(self.slash_set_weather_role, guild=guild)
-        self._bot.tree.add_command(self.slash_toggle_role_tagging, guild=guild)
-        self._bot.tree.add_command(self.slash_set_weather_channel, guild=guild)
+        self._bot.tree.add_command(self.slash_refresh, guild=guild)
+        self._bot.tree.add_command(self.slash_role, guild=guild)
+        self._bot.tree.add_command(self.slash_toggle, guild=guild)
+        self._bot.tree.add_command(self.slash_channel, guild=guild)
         await self._bot.tree.sync(guild=guild)
 
     async def cog_unload(self):
@@ -180,10 +180,10 @@ class WeatherCog(commands.Cog):
         # Edited by Taako
         guild = discord.Object(id=YOUR_GUILD_ID)  # Replace with your guild ID for testing
         self._bot.tree.remove_command("weather", guild=guild)
-        self._bot.tree.remove_command("refresh_weather", guild=guild)
-        self._bot.tree.remove_command("set_weather_role", guild=guild)
-        self._bot.tree.remove_command("toggle_role_tagging", guild=guild)
-        self._bot.tree.remove_command("set_weather_channel", guild=guild)
+        self._bot.tree.remove_command("refresh", guild=guild)
+        self._bot.tree.remove_command("role", guild=guild)
+        self._bot.tree.remove_command("toggle", guild=guild)
+        self._bot.tree.remove_command("channel", guild=guild)
         await self._bot.tree.sync(guild=guild)
 
 def setup(bot):
