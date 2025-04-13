@@ -48,9 +48,23 @@ class WeatherCog(commands.Cog):
             "visibility": f"{visibility} miles",  # Updated to miles
         }
 
+    def _get_weather_icon(self, condition):
+        """Get an icon URL based on the weather condition."""
+        # Edited by Taako
+        icons = {
+            "Clear sky": "https://cdn-icons-png.flaticon.com/512/869/869869.png",
+            "Partly cloudy": "https://cdn-icons-png.flaticon.com/512/1163/1163624.png",
+            "Overcast": "https://cdn-icons-png.flaticon.com/512/414/414825.png",
+            "Rainy": "https://cdn-icons-png.flaticon.com/512/1163/1163626.png",
+            "Stormy": "https://cdn-icons-png.flaticon.com/512/1146/1146869.png",
+            "Snowy": "https://cdn-icons-png.flaticon.com/512/642/642102.png",
+        }
+        return icons.get(condition, "https://cdn-icons-png.flaticon.com/512/869/869869.png")  # Default icon
+
     def _create_weather_embed(self, weather_data):
         """Create a Discord embed for the weather data."""
         # Edited by Taako
+        icon_url = self._get_weather_icon(weather_data["conditions"])
         embed = discord.Embed(
             title="🌤️ Today's Weather", 
             color=discord.Color.red()  # Set embed color to red
@@ -63,7 +77,7 @@ class WeatherCog(commands.Cog):
         embed.add_field(name="💧 Humidity", value=weather_data["humidity"], inline=True)
         embed.add_field(name="🌡️ Dew Point", value=weather_data["dew_point"], inline=True)
         embed.add_field(name="👀 Visibility", value=weather_data["visibility"], inline=True)
-        embed.set_thumbnail(url="https://i.imgur.com/3ZQZ3cQ.png")  # Add a weather icon
+        embed.set_thumbnail(url=icon_url)  # Add a weather-specific icon
         embed.set_footer(text="RandomWeather by Taako", icon_url="https://i.imgur.com/3ZQZ3cQ.png")
         return embed
 
