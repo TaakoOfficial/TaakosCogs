@@ -335,7 +335,7 @@ class WeatherCog(commands.Cog):
         current_season = self._get_current_season(time_zone)  # Get the current season
 
         # Calculate time until the next refresh
-        now = datetime.now(pytz.timezone(time_zone))
+        now = datetime.now(pytz.timezone(time_zone))  # Current time in the guild's time zone
         refresh_interval = guild_settings["refresh_interval"]
         refresh_time = guild_settings["refresh_time"]
         if refresh_interval:
@@ -343,10 +343,13 @@ class WeatherCog(commands.Cog):
             next_refresh = datetime.fromtimestamp(last_refresh, pytz.timezone(time_zone)) + timedelta(seconds=refresh_interval)
         elif refresh_time:
             target_time = datetime.strptime(refresh_time, "%H%M").replace(
-                tzinfo=pytz.timezone(time_zone)
+                tzinfo=pytz.timezone(time_zone),
+                year=now.year,
+                month=now.month,
+                day=now.day,
             )
-            if now > target_time:
-                target_time += timedelta(days=1)
+            if now >= target_time:  # If the target time has already passed today
+                target_time += timedelta(days=1)  # Move to the next day
             next_refresh = target_time
         else:
             next_refresh = None
