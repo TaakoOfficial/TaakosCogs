@@ -14,6 +14,12 @@ class WeatherCog(commands.Cog):
         self._channel_id = None  # Channel ID for sending updates
         self._tag_role = False  # Whether to tag the role
 
+        # Create a slash command group for rweather
+        self.rweather_group = app_commands.Group(
+            name="rweather",
+            description="Commands for random weather updates",
+        )
+
     def _generate_weather(self):
         """Generate realistic random weather."""
         # Edited by Taako
@@ -63,9 +69,9 @@ class WeatherCog(commands.Cog):
         embed.add_field(name="Visibility", value=weather_data["visibility"], inline=True)
         return embed
 
-    @commands.group()
-    async def weather(self, ctx):
-        """Main weather command."""
+    @commands.group(name="rweather")
+    async def rweather(self, ctx):
+        """Main rweather command."""
         # Edited by Taako
         if ctx.invoked_subcommand is None:
             embed = self._create_weather_embed(self._current_weather)
@@ -80,7 +86,7 @@ class WeatherCog(commands.Cog):
             else:
                 await ctx.send(embed=embed)
 
-    @weather.command()
+    @rweather.command()
     async def refresh(self, ctx):
         """Refresh the weather for the day."""
         # Edited by Taako
@@ -97,7 +103,7 @@ class WeatherCog(commands.Cog):
         else:
             await ctx.send(embed=embed)
 
-    @weather.command()
+    @rweather.command()
     async def role(self, ctx, role_id: int):
         """Set the role to be tagged for weather updates."""
         # Edited by Taako
@@ -108,7 +114,7 @@ class WeatherCog(commands.Cog):
         else:
             await ctx.send("Invalid role ID. Please provide a valid role ID.")
 
-    @weather.command()
+    @rweather.command()
     async def toggle(self, ctx):
         """Toggle whether the role should be tagged in weather updates."""
         # Edited by Taako
@@ -116,7 +122,7 @@ class WeatherCog(commands.Cog):
         status = "enabled" if self._tag_role else "disabled"
         await ctx.send(f"Role tagging has been {status}.")
 
-    @weather.command()
+    @rweather.command()
     async def channel(self, ctx, channel_id: int):
         """Set the channel for weather updates."""
         # Edited by Taako
@@ -127,8 +133,8 @@ class WeatherCog(commands.Cog):
         else:
             await ctx.send("Invalid channel ID. Please provide a valid channel ID.")
 
-    @app_commands.command(name="weather")
-    async def slash_weather(self, interaction: discord.Interaction):
+    @app_commands.command(name="view")
+    async def slash_view(self, interaction: discord.Interaction):
         """Slash command to view the current weather."""
         # Edited by Taako
         embed = self._create_weather_embed(self._current_weather)
@@ -167,24 +173,18 @@ class WeatherCog(commands.Cog):
     async def cog_load(self):
         """Register slash commands when the cog is loaded."""
         # Edited by Taako
-        try:
-            self._bot.tree.add_command(self.slash_weather)
-            self._bot.tree.add_command(self.slash_refresh)
-            self._bot.tree.add_command(self.slash_role)
-            self._bot.tree.add_command(self.slash_toggle)
-            self._bot.tree.add_command(self.slash_channel)
-            await self._bot.tree.sync()
-        except app_commands.CommandAlreadyRegistered:
-            pass  # Ignore if the commands are already registered
+        self.rweather_group.add_command(self.slash_view)
+        self.rweather_group.add_command(self.slash_refresh)
+        self.rweather_group.add_command(self.slash_role)
+        self.rweather_group.add_command(self.slash_toggle)
+        self.rweather_group.add_command(self.slash_channel)
+        self._bot.tree.add_command(self.rweather_group)
+        await self._bot.tree.sync()
 
     async def cog_unload(self):
         """Unregister slash commands when the cog is unloaded."""
         # Edited by Taako
-        self._bot.tree.remove_command("weather")
-        self._bot.tree.remove_command("refresh")
-        self._bot.tree.remove_command("role")
-        self._bot.tree.remove_command("toggle")
-        self._bot.tree.remove_command("channel")
+        self._bot.tree.remove_command("rweather")
         await self._bot.tree.sync()
 
 def setup(bot):

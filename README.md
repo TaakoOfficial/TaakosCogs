@@ -6,7 +6,7 @@ Welcome to **Taako's Cogs**, a collection of high-quality cogs for [Red-DiscordB
 
 ## 📦 Available Cogs
 
-### 1. 🌦️ WeatherCog
+### 1. 🌦️ RandomWeather
 
 - **Description**: A cog for generating random daily weather updates.
 - **Features**:
@@ -16,8 +16,8 @@ Welcome to **Taako's Cogs**, a collection of high-quality cogs for [Red-DiscordB
 - **Installation**:
   ```
   [p]repo add TaakosCogs https://github.com/TaakoOfficial/TaakosCogs
-  [p]cog install WeatherCog
-  [p]load WeatherCog
+  [p]cog install RandomWeather
+  [p]load RandomWeather
   ```
 
 ---
@@ -30,11 +30,11 @@ Welcome to **Taako's Cogs**, a collection of high-quality cogs for [Red-DiscordB
    ```
 2. Install the cog using the following command:
    ```
-   [p]cog install TaakosCogs randomweather
+   [p]cog install TaakosCogs RandomWeather
    ```
 3. Load the cog:
    ```
-   [p]load randomweather
+   [p]load RandomWeather
    ```
 
 ---
