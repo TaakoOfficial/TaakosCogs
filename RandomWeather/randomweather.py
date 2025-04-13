@@ -167,24 +167,22 @@ class WeatherCog(commands.Cog):
     async def cog_load(self):
         """Register slash commands when the cog is loaded."""
         # Edited by Taako
-        guild = discord.Object(id=YOUR_GUILD_ID)  # Replace with your guild ID for testing
-        self._bot.tree.add_command(self.slash_weather, guild=guild)
-        self._bot.tree.add_command(self.slash_refresh, guild=guild)
-        self._bot.tree.add_command(self.slash_role, guild=guild)
-        self._bot.tree.add_command(self.slash_toggle, guild=guild)
-        self._bot.tree.add_command(self.slash_channel, guild=guild)
-        await self._bot.tree.sync(guild=guild)
+        self._bot.tree.add_command(self.slash_weather)
+        self._bot.tree.add_command(self.slash_refresh)
+        self._bot.tree.add_command(self.slash_role)
+        self._bot.tree.add_command(self.slash_toggle)
+        self._bot.tree.add_command(self.slash_channel)
+        await self._bot.tree.sync()
 
     async def cog_unload(self):
         """Unregister slash commands when the cog is unloaded."""
         # Edited by Taako
-        guild = discord.Object(id=YOUR_GUILD_ID)  # Replace with your guild ID for testing
-        self._bot.tree.remove_command("weather", guild=guild)
-        self._bot.tree.remove_command("refresh", guild=guild)
-        self._bot.tree.remove_command("role", guild=guild)
-        self._bot.tree.remove_command("toggle", guild=guild)
-        self._bot.tree.remove_command("channel", guild=guild)
-        await self._bot.tree.sync(guild=guild)
+        self._bot.tree.remove_command("weather")
+        self._bot.tree.remove_command("refresh")
+        self._bot.tree.remove_command("role")
+        self._bot.tree.remove_command("toggle")
+        self._bot.tree.remove_command("channel")
+        await self._bot.tree.sync()
 
 def setup(bot):
     # Edited by Taako
