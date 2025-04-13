@@ -37,7 +37,11 @@ class WeatherCog(commands.Cog):
 
         # Register settings for the AAA3A Dashboard Cog if available
         if AAA3A_AVAILABLE:
-            register_dashboard_settings(self)
+            try:
+                register_dashboard_settings(self)
+                bot.logger.info("Dashboard settings registered successfully for RandomWeather.")  # Debug log
+            except Exception as e:
+                bot.logger.error(f"Failed to register dashboard settings for RandomWeather: {e}")  # Debug log
 
     def _generate_weather(self):
         """Generate realistic random weather."""
