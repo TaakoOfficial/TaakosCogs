@@ -3,6 +3,7 @@ from redbot.core import commands, Config  # Edited by Taako
 from datetime import datetime, timedelta  # Edited by Taako
 import pytz  # Edited by Taako
 from discord.ext import tasks  # Edited by Taako
+from .timing_utils import get_next_post_time, has_already_posted_today, save_last_posted  # Edited by Taako
 
 class RPCalander(commands.Cog):
     """A cog for managing an RP calendar with daily updates."""  # Edited by Taako
@@ -30,30 +31,24 @@ class RPCalander(commands.Cog):
         # Check for missed dates without sending an embed  # Edited by Taako
         all_guilds = await self._config.all_guilds()  # Edited by Taako
         for guild_id, guild_settings in all_guilds.items():
-            current_date = guild_settings["current_date"]  # Edited by Taako
-            last_posted = guild_settings.get("last_posted")  # Edited by Taako
             time_zone = guild_settings["time_zone"] or "America/Chicago"  # Edited by Taako
-            tz = pytz.timezone(time_zone)  # Edited by Taako
+            last_posted = guild_settings.get("last_posted")  # Edited by Taako
 
-            if last_posted:
-                last_posted_date = datetime.strptime(last_posted, "%m-%d-%Y").astimezone(tz)  # Edited by Taako
-                today_date = datetime.now(tz).replace(hour=0, minute=0, second=0, microsecond=0)  # Edited by Taako
+            # Skip posting if already posted today  # Edited by Taako
+            if has_already_posted_today(last_posted, time_zone):
+                continue  # Edited by Taako
 
-                # Skip posting if the last post was today  # Edited by Taako
-                if last_posted_date >= today_date:
-                    continue
+            # Update the current date if necessary  # Edited by Taako
+            current_date = guild_settings["current_date"]  # Edited by Taako
+            if current_date:
+                tz = pytz.timezone(time_zone)  # Edited by Taako
+                current_date_obj = datetime.strptime(current_date, "%m-%d-%Y").astimezone(tz)  # Edited by Taako
+                today_date_obj = datetime.now(tz).replace(hour=0, minute=0, second=0, microsecond=0)  # Edited by Taako
 
-            if not current_date:
-                continue
-
-            current_date_obj = datetime.strptime(current_date, "%m-%d-%Y").astimezone(tz)  # Edited by Taako
-            today_date_obj = datetime.now(tz).replace(hour=0, minute=0, second=0, microsecond=0)  # Edited by Taako
-
-            # If the bot was offline for multiple days, update the date  # Edited by Taako
-            if today_date_obj > current_date_obj:
-                days_missed = (today_date_obj - current_date_obj).days  # Edited by Taako
-                new_date_obj = current_date_obj + timedelta(days=days_missed)  # Edited by Taako
-                await self._config.guild_from_id(guild_id).current_date.set(new_date_obj.strftime("%m-%d-%Y"))  # Edited by Taako
+                if today_date_obj > current_date_obj:
+                    days_missed = (today_date_obj - current_date_obj).days  # Edited by Taako
+                    new_date_obj = current_date_obj + timedelta(days=days_missed)  # Edited by Taako
+                    await self._config.guild_from_id(guild_id).current_date.set(new_date_obj.strftime("%m-%d-%Y"))  # Edited by Taako
 
     @tasks.loop(hours=24)
     async def _daily_update_loop(self):
