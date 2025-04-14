@@ -1,5 +1,5 @@
 import pytz
-from datetime import datetime
+from datetime import datetime, timedelta  # Ensure timedelta is imported
 
 def get_system_time_and_timezone():
     """Get the current system time and timezone."""
@@ -27,7 +27,7 @@ def calculate_next_refresh_time(
     now = datetime.now(tz)
 
     if refresh_interval:
-        next_post_time = datetime.fromtimestamp(last_refresh) + timedelta(seconds=refresh_interval)
+        next_post_time = datetime.fromtimestamp(last_refresh, tz) + timedelta(seconds=refresh_interval)
     elif refresh_time:
         target_time = datetime.strptime(refresh_time, "%H%M").replace(
             tzinfo=tz, year=now.year, month=now.month, day=now.day
@@ -36,7 +36,7 @@ def calculate_next_refresh_time(
             target_time += timedelta(days=1)
         next_post_time = target_time
     else:
-        next_post_time = now.replace(hour=0, minute=0, second=0) + timedelta(days=1)
+        next_post_time = now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
 
     return next_post_time
 
