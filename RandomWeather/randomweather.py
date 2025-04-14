@@ -6,7 +6,7 @@ from datetime import datetime, timedelta  # Edited by Taako
 import pytz  # Edited by Taako
 from redbot.core.utils.chat_formatting import humanize_list  # Edited by Taako
 from discord.ext import tasks  # Edited by Taako
-from ..RPCalander.file_utils import read_last_posted, write_last_posted  # Edited by Taako
+from RPCalander.file_utils import read_last_posted, write_last_posted  # Edited by Taako
 
 class WeatherCog(commands.Cog):
     """A cog for generating random daily weather."""  # Edited by Taako
