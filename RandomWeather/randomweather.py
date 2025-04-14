@@ -162,8 +162,9 @@ class WeatherCog(commands.Cog):
         
         return embed
 
+    # Define the _refresh_weather_loop before using its decorator  # Edited by Taako
     @tasks.loop(minutes=1)  # Check every minute to ensure timely posting  # Edited by Taako
-    async def _weather_update_loop(self):
+    async def _refresh_weather_loop(self):
         """Task loop to post daily weather updates."""  # Edited by Taako
         all_guilds = await self._config.all_guilds()  # Edited by Taako
         for guild_id, guild_settings in all_guilds.items():
@@ -215,7 +216,7 @@ class WeatherCog(commands.Cog):
     @_refresh_weather_loop.before_loop
     async def before_refresh_weather_loop(self):
         """Wait until the bot is ready before starting the loop."""  # Edited by Taako
-        await self._bot.wait_until_ready()
+        await self._bot.wait_until_ready()  # Edited by Taako
 
     @commands.group(name="rweather", invoke_without_command=True)
     async def rweather(self, ctx):
