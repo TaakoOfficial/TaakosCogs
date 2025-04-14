@@ -23,11 +23,11 @@ class RPCalander(commands.Cog):
         self._daily_update_loop.start()  # Start daily updates  # Edited by Taako
 
     async def cog_load(self):
-        """Restart the daily update loop and check for missed dates when the cog is loaded."""  # Edited by Taako
+        """Restart the daily update loop without triggering an immediate embed."""  # Edited by Taako
         if not self._daily_update_loop.is_running():
-            self._daily_update_loop.start()  # Restart the loop if not running  # Edited by Taako
+            self._daily_update_loop.start()  # Start the loop without sending an embed  # Edited by Taako
 
-        # Check for missed dates
+        # Check for missed dates without sending an embed
         all_guilds = await self._config.all_guilds()
         for guild_id, guild_settings in all_guilds.items():
             current_date = guild_settings["current_date"]
@@ -130,7 +130,8 @@ class RPCalander(commands.Cog):
         # Calculate time until the next post
         next_post_time = self._daily_update_loop.next_iteration  # Edited by Taako
         if next_post_time:
-            time_until_next_post = next_post_time - datetime.now()  # Edited by Taako
+            now = datetime.now(next_post_time.tzinfo)  # Make 'now' timezone-aware using the same timezone as 'next_post_time'  # Edited by Taako
+            time_until_next_post = next_post_time - now  # Edited by Taako
             embed.add_field(name="Time Until Next Post", value=str(time_until_next_post), inline=False)  # Edited by Taako
 
         # Add the update channel field after the time until next post field
