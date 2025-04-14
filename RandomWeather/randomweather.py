@@ -163,23 +163,27 @@ class WeatherCog(commands.Cog):
         last_refresh = guild_settings.get("last_refresh", 0)
 
         # Calculate time until next refresh
-        next_post_time = calculate_next_refresh_time(
-            last_refresh, refresh_interval, refresh_time, time_zone
-        )
         now = datetime.now(pytz.timezone(time_zone))
-        time_until_next_refresh = (next_post_time - now).total_seconds()
-        if time_until_next_refresh:
-            days, remainder = divmod(time_until_next_refresh, 86400)
-            hours, remainder = divmod(remainder, 3600)
-            minutes, seconds = divmod(remainder, 60)
-            time_until_next_refresh_str = (
-                (f"{int(days)}d " if days else "") +
-                (f"{int(hours)}h " if hours else "") +
-                (f"{int(minutes)}m " if minutes else "") +
-                (f"{int(seconds)}s" if seconds else "")
-            ).strip()
-        else:
-            time_until_next_refresh_str = "❌ Not set"
+        try:
+            next_post_time = calculate_next_refresh_time(
+                last_refresh, refresh_interval, refresh_time, time_zone
+            )
+            time_until_next_refresh = (next_post_time - now).total_seconds()
+            if time_until_next_refresh > 0:
+                days, remainder = divmod(time_until_next_refresh, 86400)
+                hours, remainder = divmod(remainder, 3600)
+                minutes, seconds = divmod(remainder, 60)
+                time_until_next_refresh_str = (
+                    (f"{int(days)}d " if days else "") +
+                    (f"{int(hours)}h " if hours else "") +
+                    (f"{int(minutes)}m " if minutes else "") +
+                    (f"{int(seconds)}s" if seconds else "")
+                ).strip()
+            else:
+                time_until_next_refresh_str = "❌ Not set"
+        except Exception as e:
+            logging.error(f"Error calculating next refresh time: {e}")
+            time_until_next_refresh_str = "❌ Error"
 
         # Determine current season
         month = now.month
@@ -203,15 +207,15 @@ class WeatherCog(commands.Cog):
             title=_("🌦️ RandomWeather Settings"),
             color=embed_color
         )
-        embed.add_field(name=_("🔄 Refresh Mode"), value="⏱️ Interval: {} seconds".format(refresh_interval) if refresh_interval else "🕒 Military Time: {}".format(refresh_time) if refresh_time else "❌ Not set", inline=False)
-        embed.add_field(name=_("⏳ Time Until Next Refresh"), value=time_until_next_refresh_str, inline=False)
-        embed.add_field(name=_("🌍 Time Zone"), value=time_zone, inline=False)
-        embed.add_field(name=_("🕰️ Current Time"), value=current_time, inline=False)  # Added current time
-        embed.add_field(name=_("📢 Channel"), value=channel.mention if channel else "❌ Not set", inline=False)
-        embed.add_field(name=_("🏷️ Role Tagging"), value="✅ Enabled" if guild_settings.get("tag_role") else "❌ Disabled", inline=False)
-        embed.add_field(name=_("🔖 Tag Role"), value=role.name if role else "❌ Not set", inline=False)
-        embed.add_field(name=_("🎨 Embed Color"), value=str(embed_color), inline=False)
-        embed.add_field(name=_("📜 Footer"), value="✅ Enabled" if guild_settings.get("show_footer") else "❌ Disabled", inline=False)
-        embed.add_field(name=_("🌱 Current Season"), value=current_season, inline=False)
+        embed.add_field(name=_("🔄 Refresh Mode:"), value="⏱️ Interval: {} seconds".format(refresh_interval) if refresh_interval else "🕒 Military Time: {}".format(refresh_time) if refresh_time else "❌ Not set", inline=True)  # Edited by Taako
+        embed.add_field(name=_("⏳ Time Until Next Refresh:"), value=time_until_next_refresh_str, inline=True)  # Edited by Taako
+        embed.add_field(name=_("🌍 Time Zone:"), value=time_zone, inline=True)  # Edited by Taako
+        embed.add_field(name=_("🕰️ Current Time:"), value=current_time, inline=True)  # Edited by Taako
+        embed.add_field(name=_("📢 Channel:"), value=channel.mention if channel else "❌ Not set", inline=True)  # Edited by Taako
+        embed.add_field(name=_("🏷️ Role Tagging:"), value="✅ Enabled" if guild_settings.get("tag_role") else "❌ Disabled", inline=True)  # Edited by Taako
+        embed.add_field(name=_("🔖 Tag Role:"), value=role.name if role else "❌ Not set", inline=True)  # Edited by Taako
+        embed.add_field(name=_("🎨 Embed Color:"), value=str(embed_color), inline=True)  # Edited by Taako
+        embed.add_field(name=_("📜 Footer:"), value="✅ Enabled" if guild_settings.get("show_footer") else "❌ Disabled", inline=True)  # Edited by Taako
+        embed.add_field(name=_("🌱 Current Season:"), value=current_season, inline=True)  # Edited by Taako
 
         await ctx.send(embed=embed)
