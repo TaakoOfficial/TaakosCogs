@@ -6,6 +6,7 @@ from datetime import datetime, timedelta  # Edited by Taako
 import pytz  # Edited by Taako
 from redbot.core.utils.chat_formatting import humanize_list  # Edited by Taako
 from discord.ext import tasks  # Edited by Taako
+from ..RPCalander.file_utils import read_last_posted, write_last_posted  # Edited by Taako
 
 class WeatherCog(commands.Cog):
     """A cog for generating random daily weather."""  # Edited by Taako
@@ -23,6 +24,7 @@ class WeatherCog(commands.Cog):
             "time_zone": "America/Chicago",  # Default to Central Time (America/Chicago)
             "show_footer": True,  # Whether to show the footer in embeds
             "embed_color": 0xFF0000,  # Default embed color (red)
+            "last_refresh": 0,  # Timestamp of the last refresh (default: 0)  # Edited by Taako
         }
         self.config.register_guild(**default_guild)
 

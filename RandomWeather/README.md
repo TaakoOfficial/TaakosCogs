@@ -59,6 +59,22 @@ To install the **RandomWeather** cog:
 
 ---
 
+## 🛠️ Dependencies
+
+This cog requires the following Python library to be installed:
+
+- `pytz`: Used for timezone handling.
+
+To install it, run the following command:
+
+```
+pip install pytz
+```
+
+Make sure this library is installed in the same environment where your bot is running.
+
+---
+
 ## 🔗 Additional Resources
 
 - Learn more about [Red-DiscordBot](https://github.com/Cog-Creators/Red-DiscordBot/tree/V3/develop).
