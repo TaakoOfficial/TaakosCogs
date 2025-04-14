@@ -22,9 +22,8 @@ class RPCalander(commands.Cog):
         self.config.register_guild(**default_guild)
         self._daily_update_loop.start()  # Start the daily update loop
 
-        # Register the command group and alias
+        # Register the command group
         bot.add_command(self.rpcalander_group)  # Register the main command group  # Edited by Taako
-        bot.add_command(commands.Command(self.rpcalander_group.callback, name="rpca"))  # Add alias  # Edited by Taako
 
     async def cog_load(self):
         """Restart the daily update loop and check for missed dates when the cog is loaded."""  # Edited by Taako
@@ -128,4 +127,3 @@ class RPCalander(commands.Cog):
         """Clean up tasks and unregister commands when the cog is unloaded."""  # Edited by Taako
         self._daily_update_loop.cancel()  # Stop the daily update loop  # Edited by Taako
         self._bot.remove_command("rpcalander")  # Remove the main command group  # Edited by Taako
-        self._bot.remove_command("rpca")  # Remove the alias  # Edited by Taako
