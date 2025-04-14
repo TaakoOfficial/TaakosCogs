@@ -4,7 +4,7 @@ from datetime import datetime, timedelta  # Edited by Taako
 import pytz  # Edited by Taako
 from discord.ext import tasks  # Edited by Taako
 
-class RPCalander(commands.Cog):
+class rpcalander(commands.Cog):
     """A cog for managing an RP calendar with daily updates."""  # Edited by Taako
 
     def __init__(self, bot):

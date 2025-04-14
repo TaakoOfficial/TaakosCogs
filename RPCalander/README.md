@@ -1,6 +1,6 @@
-# 📅 RPCalander
+# 📅 rpcalander
 
-Welcome to **RPCalander**, a Discord bot cog that manages an RP calendar with daily updates! This cog is perfect for roleplay servers that want to keep track of in-game days and events.
+Welcome to **rpcalander**, a Discord bot cog that manages an RP calendar with daily updates! This cog is perfect for roleplay servers that want to keep track of in-game days and events.
 
 ---
 
@@ -44,7 +44,7 @@ Today's date: **Sunday 10-01-2023**
 
 ## 🛠️ Installation
 
-To install the **RPCalander** cog:
+To install the **rpcalander** cog:
 
 1. Add Taako's repository to your bot:
 
@@ -52,10 +52,10 @@ To install the **RPCalander** cog:
    [p]repo add TaakoCogs https://github.com/TaakoOfficial/TaakosCogs
    ```
 
-2. Install the RPCalander cog:
+2. Install the rpcalander cog:
 
    ```
-   [p]cog install TaakoCogs RPCalander
+   [p]cog install TaakoCogs rpcalander
    ```
 
 3. Load the cog:

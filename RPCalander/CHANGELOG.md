@@ -1,4 +1,4 @@
-# 📅 RPCalander Changelog
+# 📅 rpcalander Changelog
 
 ## v1.1.0
 
@@ -27,7 +27,7 @@
 
 ### Added
 
-- Initial release of the `RPCalander` cog.
+- Initial release of the `rpcalander` cog.
 - Features include:
   - Daily calendar updates with the current date and day of the week.
   - Customizable start date and time zone.

@@ -1,9 +1,9 @@
 {
   "$schema": "https://raw.githubusercontent.com/Cog-Creators/Red-DiscordBot/V3/develop/schema/red_cog.schema.json",
-  "name": "RPCalander",
+  "name": "rpcalander",
   "author": ["Taako"],
   "description": "A cog for managing an RP calendar with daily updates.",
-  "install_msg": "Thank you for installing the RPCalander cog! Use `[p]rpcalander` for commands.",
+  "install_msg": "Thank you for installing the rpcalander cog! Use `[p]rpcalander` for commands.",
   "short": "RP calendar with daily updates.",
   "tags": ["calendar", "rp", "utility"],
   "min_bot_version": "3.5.0",

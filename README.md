@@ -17,7 +17,7 @@ Welcome to **Taako's Cogs**, a collection of high-quality cogs for [Red-DiscordB
   - Supports text commands for interaction.
   - Time zone support with a list of available time zones.
 
-### 2. 📅 RPCalander
+### 2. 📅 rpcalander
 
 - **Description**: A cog for managing an RP calendar with daily updates.
 - **Features**:
@@ -45,7 +45,7 @@ Welcome to **Taako's Cogs**, a collection of high-quality cogs for [Red-DiscordB
 | `[p]rweather togglefooter`          | Toggle the footer on or off for the weather embed.                        |
 | `[p]rweather info`                  | View the current settings for weather updates.                            |
 
-### RPCalander Commands
+### rpcalander Commands
 
 | Command                                       | Description                                                         |
 | --------------------------------------------- | ------------------------------------------------------------------- |
@@ -71,7 +71,7 @@ Welcome to **Taako's Cogs**, a collection of high-quality cogs for [Red-DiscordB
 - Visibility: 5.5 miles
 ```
 
-### RPCalander Example
+### rpcalander Example
 
 ```
 📅 **RP Calendar Update**
