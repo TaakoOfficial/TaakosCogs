@@ -126,11 +126,20 @@ class RPCalander(commands.Cog):
         )
         embed.add_field(name="Start Date", value=start_date, inline=False)
         embed.add_field(name="Current Date", value=current_date, inline=False)
+
+        # Calculate time until the next post
+        next_post_time = self._daily_update_loop.next_iteration  # Edited by Taako
+        if next_post_time:
+            time_until_next_post = next_post_time - datetime.now()  # Edited by Taako
+            embed.add_field(name="Time Until Next Post", value=str(time_until_next_post), inline=False)  # Edited by Taako
+
+        # Add the update channel field after the time until next post field
         embed.add_field(name="Update Channel", value=channel, inline=False)
         embed.add_field(name="Time Zone", value=time_zone, inline=False)
         embed.add_field(name="Embed Color", value=str(embed_color), inline=False)  # Edited by Taako
         embed.add_field(name="Embed Title", value=embed_title, inline=False)  # Edited by Taako
         embed.set_footer(text="RP Calendar by Taako", icon_url="https://cdn-icons-png.flaticon.com/512/869/869869.png")  # Always show footer in info embed  # Edited by Taako
+
         await ctx.send(embed=embed)
 
     @rpca.command(name="setstart")
