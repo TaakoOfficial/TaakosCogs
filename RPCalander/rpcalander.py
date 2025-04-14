@@ -294,31 +294,42 @@ class RPCalander(commands.Cog):
         if not current_date:
             await ctx.send("No current date set for the calendar.")
             return
+        
         time_zone = guild_settings.get("time_zone") or "America/Chicago"
         embed_color = guild_settings.get("embed_color") or 0x0000FF
         embed_title = guild_settings.get("embed_title") or "📅 RP Calendar Update"
         show_footer = guild_settings.get("show_footer", True)
+        
         tz = pytz.timezone(time_zone)
         now = datetime.now(tz)
+        
         try:
-            current_date_obj = datetime.strptime(current_date, "%m-%d-%Y").astimezone(tz)
-        except Exception:
-            current_date_obj = now
-        new_date_str = current_date_obj.strftime("%A %m-%d-%Y")
-        embed = discord.Embed(
-            title=embed_title,
-            description=f"Today's date: **{new_date_str}**",
-            color=discord.Color(embed_color)
-        )
-        if show_footer:
-            embed.set_footer(text="RP Calendar by Taako", icon_url="https://cdn-icons-png.flaticon.com/512/869/869869.png")
-        channel = self._bot.get_channel(channel_id)
-        if channel:
-            try:
-                await channel.send(embed=embed)
-                await ctx.send("Calendar update posted.")
-            except Exception as e:
-                logging.error(f"Error in force post: {e}")
-                await ctx.send(f"Failed to post calendar update: {e}")
-        else:
-            await ctx.send("Configured channel not found.")
+            # Get the year from stored current_date
+            current_year = datetime.strptime(current_date, "%m-%d-%Y").year
+            # Create a new date using today's month/day but the stored year
+            current_date_obj = now.replace(year=current_year)
+            # Update the stored current_date
+            new_date_str = current_date_obj.strftime("%A %m-%d-%Y")
+            await self._config.guild(ctx.guild).current_date.set(current_date_obj.strftime("%m-%d-%Y"))
+            
+            embed = discord.Embed(
+                title=embed_title,
+                description=f"Today's date: **{new_date_str}**",
+                color=discord.Color(embed_color)
+            )
+            if show_footer:
+                embed.set_footer(text="RP Calendar by Taako", icon_url="https://cdn-icons-png.flaticon.com/512/869/869869.png")
+            
+            channel = self._bot.get_channel(channel_id)
+            if channel:
+                try:
+                    await channel.send(embed=embed)
+                    await ctx.send("Calendar update posted.")
+                except Exception as e:
+                    logging.error(f"Error in force post: {e}")
+                    await ctx.send(f"Failed to post calendar update: {e}")
+            else:
+                await ctx.send("Configured channel not found.")
+        except Exception as e:
+            logging.error(f"Error in force post date calculation: {e}")
+            await ctx.send(f"Failed to calculate current date: {e}")
