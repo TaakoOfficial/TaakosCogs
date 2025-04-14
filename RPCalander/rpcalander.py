@@ -62,7 +62,7 @@ class RPCalander(commands.Cog):
                     new_date_obj = current_date_obj + timedelta(days=days_missed)  # Edited by Taako
                     await self._config.guild_from_id(guild_id).current_date.set(new_date_obj.strftime("%m-%d-%Y"))  # Edited by Taako
 
-    @tasks.loop(hours=24)
+    @tasks.loop(minutes=1)  # Check every minute to ensure timely posting  # Edited by Taako
     async def _daily_update_loop(self):
         """Task loop to post daily calendar updates."""  # Edited by Taako
         all_guilds = await self._config.all_guilds()
@@ -79,27 +79,35 @@ class RPCalander(commands.Cog):
             if not current_date:
                 continue
 
-            # Increment the current date
+            # Calculate the next post time (00:00 in the configured timezone)  # Edited by Taako
             tz = pytz.timezone(time_zone)  # Edited by Taako
-            current_date_obj = datetime.strptime(current_date, "%m-%d-%Y").astimezone(tz)  # Edited by Taako
-            next_date_obj = current_date_obj + timedelta(days=1)
-            next_date_str = next_date_obj.strftime("%A %m-%d-%Y")  # Edited by Taako
+            now = datetime.now(tz)  # Edited by Taako
+            next_post_time = now.replace(hour=0, minute=0, second=0, microsecond=0)  # Edited by Taako
+            if now >= next_post_time:
+                next_post_time += timedelta(days=1)  # Move to the next day if past 00:00  # Edited by Taako
 
-            # Update the stored current date
-            await self._config.guild_from_id(guild_id).current_date.set(next_date_obj.strftime("%m-%d-%Y"))  # Edited by Taako
+            # Check if it's time to post  # Edited by Taako
+            if now >= next_post_time - timedelta(minutes=1):  # Allow a 1-minute margin  # Edited by Taako
+                # Increment the current date  # Edited by Taako
+                current_date_obj = datetime.strptime(current_date, "%m-%d-%Y").astimezone(tz)  # Edited by Taako
+                next_date_obj = current_date_obj + timedelta(days=1)
+                next_date_str = next_date_obj.strftime("%A %m-%d-%Y")  # Edited by Taako
 
-            # Create and send the embed
-            embed = discord.Embed(
-                title=embed_title,  # Use the configured embed title  # Edited by Taako
-                description=f"Today's date: **{next_date_str}**",
-                color=discord.Color(embed_color)  # Use the configured embed color  # Edited by Taako
-            )
-            if show_footer:  # Add footer if enabled  # Edited by Taako
-                embed.set_footer(text="RP Calendar by Taako", icon_url="https://cdn-icons-png.flaticon.com/512/869/869869.png")
-            channel = self._bot.get_channel(channel_id)
-            if channel:
-                await channel.send(embed=embed)
-                write_last_posted()  # Log the last posted time after sending the embed  # Edited by Taako
+                # Update the stored current date  # Edited by Taako
+                await self._config.guild_from_id(guild_id).current_date.set(next_date_obj.strftime("%m-%d-%Y"))  # Edited by Taako
+
+                # Create and send the embed  # Edited by Taako
+                embed = discord.Embed(
+                    title=embed_title,  # Use the configured embed title  # Edited by Taako
+                    description=f"Today's date: **{next_date_str}**",
+                    color=discord.Color(embed_color)  # Use the configured embed color  # Edited by Taako
+                )
+                if show_footer:  # Add footer if enabled  # Edited by Taako
+                    embed.set_footer(text="RP Calendar by Taako", icon_url="https://cdn-icons-png.flaticon.com/512/869/869869.png")
+                channel = self._bot.get_channel(channel_id)
+                if channel:
+                    await channel.send(embed=embed)
+                    write_last_posted()  # Log the last posted time after sending the embed  # Edited by Taako
 
     @commands.group(name="rpca")
     @commands.admin_or_permissions(administrator=True)  # Add permission check  # Edited by Taako

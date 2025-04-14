@@ -162,42 +162,33 @@ class WeatherCog(commands.Cog):
         
         return embed
 
-    @tasks.loop(seconds=60)  # Check every minute for updates
-    async def _refresh_weather_loop(self):
-        """Task loop to refresh weather at the set interval or specific time."""  # Edited by Taako
-        all_guilds = await self.config.all_guilds()
+    @tasks.loop(minutes=1)  # Check every minute to ensure timely posting  # Edited by Taako
+    async def _weather_update_loop(self):
+        """Task loop to post daily weather updates."""  # Edited by Taako
+        all_guilds = await self._config.all_guilds()  # Edited by Taako
         for guild_id, guild_settings in all_guilds.items():
-            channel_id = guild_settings["channel_id"]
+            channel_id = guild_settings["channel_id"]  # Edited by Taako
             if not channel_id:
-                continue
+                continue  # Edited by Taako
 
-            time_zone = guild_settings["time_zone"]
-            refresh_interval = guild_settings["refresh_interval"]
-            refresh_time = guild_settings["refresh_time"]
+            time_zone = guild_settings["time_zone"] or "UTC"  # Default to UTC if not set  # Edited by Taako
+            tz = pytz.timezone(time_zone)  # Edited by Taako
+            now = datetime.now(tz)  # Get the current time in the timezone  # Edited by Taako
+            next_post_time = now.replace(hour=0, minute=0, second=0) + timedelta(days=1)  # Set to 00:00 of the next day  # Edited by Taako
 
-            now = datetime.now(pytz.timezone(time_zone))
-            if refresh_interval:
-                last_refresh = guild_settings.get("last_refresh", 0)
-                if (now.timestamp() - last_refresh) < refresh_interval:
-                    continue
-                await self.config.guild_from_id(guild_id).last_refresh.set(now.timestamp())
-            elif refresh_time:
-                target_time = datetime.strptime(refresh_time, "%H%M").replace(
-                    tzinfo=pytz.timezone(time_zone)
+            # Check if it's time to post  # Edited by Taako
+            if now >= next_post_time - timedelta(minutes=1):  # Allow a 1-minute margin  # Edited by Taako
+                # Generate and send the weather update  # Edited by Taako
+                weather_data = self._generate_weather_data()  # Edited by Taako
+                embed = discord.Embed(
+                    title="🌦️ Today's Weather",  # Edited by Taako
+                    description=weather_data,
+                    color=discord.Color.blue()  # Default color  # Edited by Taako
                 )
-                if now < target_time or (now - target_time).total_seconds() > 60:
-                    continue
-
-            channel = self._bot.get_channel(channel_id)
-            if channel:
-                self._current_weather = self._generate_weather(time_zone)
-                embed = self._create_weather_embed(self._current_weather)
-                role_mention = (
-                    f"<@&{guild_settings['role_id']}>"
-                    if guild_settings["role_id"] and guild_settings["tag_role"]
-                    else ""
-                )
-                await channel.send(content=role_mention, embed=embed)
+                channel = self._bot.get_channel(channel_id)  # Edited by Taako
+                if channel:
+                    await channel.send(embed=embed)  # Edited by Taako
+                    write_last_posted()  # Log the last posted time after sending the embed  # Edited by Taako
 
     @_refresh_weather_loop.before_loop
     async def before_refresh_weather_loop(self):
