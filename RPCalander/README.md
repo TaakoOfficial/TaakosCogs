@@ -49,13 +49,13 @@ To install the **rpcalander** cog:
 1. Add Taako's repository to your bot:
 
    ```
-   [p]repo add TaakoCogs https://github.com/TaakoOfficial/TaakosCogs
+   [p]repo add TaakosCogs https://github.com/TaakoOfficial/TaakosCogs
    ```
 
 2. Install the rpcalander cog:
 
    ```
-   [p]cog install TaakoCogs rpcalander
+   [p]cog install TaakosCogs rpcalander
    ```
 
 3. Load the cog:
