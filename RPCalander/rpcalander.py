@@ -96,70 +96,76 @@ class RPCalander(commands.Cog):
         await ctx.send(f"Embed title set to: {title}")  # Edited by Taako
 
     @rpca.command(name="info")
-    async def info(self, ctx):
-        """View the current settings for the RP calendar."""  # Edited by Taako
+    async def info(self, ctx: commands.Context) -> None:
+        """View the current settings for the RP calendar."""
         guild_settings = await self._config.guild(ctx.guild).all()
         start_date = guild_settings["start_date"] or "Not set"
         current_date = guild_settings["current_date"] or "Not set"
         channel_id = guild_settings["channel_id"]
         channel = f"<#{channel_id}>" if channel_id else "Not set"
-        time_zone = guild_settings["time_zone"] or "America/Chicago"  # Edited by Taako
-        embed_color = discord.Color(guild_settings["embed_color"])  # Edited by Taako
-        embed_title = guild_settings["embed_title"] or "📅 RP Calendar Update"  # Edited by Taako
+        time_zone = guild_settings["time_zone"] or "America/Chicago"
+        embed_color = discord.Color(guild_settings["embed_color"])
+        embed_title = guild_settings["embed_title"] or "📅 RP Calendar Update"
+
+        tz = pytz.timezone(time_zone)
+        now = datetime.now(tz)
+        # Calculate tomorrow's date in the same format
+        try:
+            if current_date != "Not set":
+                current_date_obj = datetime.strptime(current_date, "%m-%d-%Y").astimezone(tz)
+                tomorrow_obj = current_date_obj + timedelta(days=1)
+                tomorrow_str = tomorrow_obj.strftime("%A %m-%d-%Y")
+            else:
+                tomorrow_str = "Not set"
+        except Exception:
+            tomorrow_str = "Error"
 
         embed = discord.Embed(
             title="📅 RP Calendar Settings",
-            color=embed_color  # Use the configured embed color  # Edited by Taako
+            color=embed_color
         )
         embed.add_field(name="Start Date", value=start_date, inline=False)
         embed.add_field(name="Current Date", value=current_date, inline=False)
+        embed.add_field(name="Tomorrow's Date", value=tomorrow_str, inline=False)
 
-        # Calculate the next post time explicitly for 00:00 in the configured timezone
-        tz = pytz.timezone(time_zone)  # Edited by Taako
-        now = datetime.now(tz)  # Get the current time in the configured timezone  # Edited by Taako
-        next_post_time = now.replace(hour=0, minute=0, second=0) + timedelta(days=1)  # Set to 00:00 of the next day  # Edited by Taako
-
-        # Calculate the time until the next post
-        time_until_next_post = next_post_time - now  # Edited by Taako
-        days, seconds = divmod(time_until_next_post.total_seconds(), 86400)  # Edited by Taako
-        hours, remainder = divmod(seconds, 3600)  # Edited by Taako
-        minutes, seconds = divmod(remainder, 60)  # Edited by Taako
-
-        # Build the time string, excluding `00` for days and hours, but keeping `00m`  # Edited by Taako
-        time_components = []  # Edited by Taako
+        next_post_time = now.replace(hour=0, minute=0, second=0) + timedelta(days=1)
+        time_until_next_post = next_post_time - now
+        days, seconds = divmod(time_until_next_post.total_seconds(), 86400)
+        hours, remainder = divmod(seconds, 3600)
+        minutes, seconds = divmod(remainder, 60)
+        time_components = []
         if days > 0:
-            time_components.append(f"{int(days)}d")  # Edited by Taako
+            time_components.append(f"{int(days)}d")
         if hours > 0:
-            time_components.append(f"{int(hours)}h")  # Edited by Taako
-        time_components.append(f"{int(minutes):02}m")  # Always include minutes  # Edited by Taako
-        time_components.append(f"{int(seconds):02}s")  # Always include seconds  # Edited by Taako
-        time_until_next_post_str = " ".join(time_components)  # Edited by Taako
-
-        if not time_components:  # Edited by Taako
-            time_until_next_post_str = "Not scheduled"  # Edited by Taako
-
-        embed.add_field(name="Time Until Next Post", value=time_until_next_post_str, inline=False)  # Edited by Taako
-
-        # Add the update channel field after the time until next post field
+            time_components.append(f"{int(hours)}h")
+        time_components.append(f"{int(minutes):02}m")
+        time_components.append(f"{int(seconds):02}s")
+        time_until_next_post_str = " ".join(time_components)
+        if not time_components:
+            time_until_next_post_str = "Not scheduled"
+        embed.add_field(name="Time Until Next Post", value=time_until_next_post_str, inline=False)
         embed.add_field(name="Update Channel", value=channel, inline=False)
         embed.add_field(name="Time Zone", value=time_zone, inline=False)
-        embed.add_field(name="Embed Color", value=str(embed_color), inline=False)  # Edited by Taako
-        embed.add_field(name="Embed Title", value=embed_title, inline=False)  # Edited by Taako
-        embed.set_footer(text="RP Calendar by Taako", icon_url="https://cdn-icons-png.flaticon.com/512/869/869869.png")  # Always show footer in info embed  # Edited by Taako
-
+        embed.add_field(name="Embed Color", value=str(embed_color), inline=False)
+        embed.add_field(name="Embed Title", value=embed_title, inline=False)
+        embed.set_footer(text="RP Calendar by Taako", icon_url="https://cdn-icons-png.flaticon.com/512/869/869869.png")
         await ctx.send(embed=embed)
 
     @rpca.command(name="setstart")
-    async def set_start_date(self, ctx, month: int, day: int, year: int):
-        """Set the starting date for the RP calendar."""  # Edited by Taako
+    async def set_start_date(self, ctx: commands.Context, year: int) -> None:
+        """Set the starting date for the RP calendar using the current month and day, and a custom year."""
+        guild_settings = await self._config.guild(ctx.guild).all()
+        time_zone = guild_settings.get("time_zone") or "America/Chicago"
+        tz = pytz.timezone(time_zone)
+        now = datetime.now(tz)
         try:
-            date = datetime(year, month, day)
+            date = datetime(year, now.month, now.day)
             date_str = date.strftime("%m-%d-%Y")
             await self._config.guild(ctx.guild).start_date.set(date_str)
             await self._config.guild(ctx.guild).current_date.set(date_str)
-            await ctx.send(f"Calendar start date set to: {date_str}")  # Edited by Taako
+            await ctx.send(f"Calendar start date set to: {date_str}")
         except ValueError:
-            await ctx.send("Invalid date format. Please use: month day year")  # Edited by Taako
+            await ctx.send("Invalid year provided. Please provide a valid year (e.g., 2025).")  # Edited by Taako
 
     @rpca.command(name="setchannel")
     async def set_channel(self, ctx, channel: discord.TextChannel):
