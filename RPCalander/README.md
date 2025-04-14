@@ -8,16 +8,16 @@ Welcome to **RPCalander**, a Discord bot cog that manages an RP calendar with da
 
 ### Text Commands
 
-| Command                                       | Description                                                         |
-| --------------------------------------------- | ------------------------------------------------------------------- |
-| `[p]rpcalander`                               | View the main command group for the RP calendar.                    |
-| `[p]rpcalander setstart <month> <day> <year>` | Set the starting date for the RP calendar.                          |
-| `[p]rpcalander setchannel <channel>`          | Set the channel for daily calendar updates.                         |
-| `[p]rpcalander settimezone <timezone>`        | Set the time zone for the RP calendar (default: `America/Chicago`). |
-| `[p]rpcalander setcolor <color>`              | Set the embed color for calendar updates.                           |
-| `[p]rpcalander settitle <title>`              | Set a custom title for the main embed.                              |
-| `[p]rpcalander togglefooter`                  | Toggle the footer on or off for the main embed.                     |
-| `[p]rpcalander info`                          | View the current settings for the RP calendar.                      |
+| Command                                 | Description                                                         |
+| --------------------------------------- | ------------------------------------------------------------------- |
+| `[p]rpca`                               | View the main command group for the RP calendar.                    |
+| `[p]rpca setstart <month> <day> <year>` | Set the starting date for the RP calendar.                          |
+| `[p]rpca setchannel <channel>`          | Set the channel for daily calendar updates.                         |
+| `[p]rpca settimezone <timezone>`        | Set the time zone for the RP calendar (default: `America/Chicago`). |
+| `[p]rpca setcolor <color>`              | Set the embed color for calendar updates.                           |
+| `[p]rpca settitle <title>`              | Set a custom title for the main embed.                              |
+| `[p]rpca togglefooter`                  | Toggle the footer on or off for the main embed.                     |
+| `[p]rpca info`                          | View the current settings for the RP calendar.                      |
 
 ---
 
