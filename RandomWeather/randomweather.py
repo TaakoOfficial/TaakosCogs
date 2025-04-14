@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from .weather_utils import generate_weather, create_weather_embed
 import logging
 from redbot.core.i18n import Translator  # Edited by Taako
+from discord.ext import tasks  # Edited by Taako
 
 _ = Translator("RandomWeather", __file__)  # Edited by Taako
 
