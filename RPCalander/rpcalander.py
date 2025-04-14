@@ -22,6 +22,29 @@ class RPCalander(commands.Cog):
         self.config.register_guild(**default_guild)
         self._daily_update_loop.start()  # Start the daily update loop
 
+    async def cog_load(self):
+        """Restart the daily update loop and check for missed dates when the cog is loaded."""  # Edited by Taako
+        if not self._daily_update_loop.is_running():
+            self._daily_update_loop.start()  # Restart the loop if not running  # Edited by Taako
+
+        # Check for missed dates
+        all_guilds = await self.config.all_guilds()
+        for guild_id, guild_settings in all_guilds.items():
+            current_date = guild_settings["current_date"]
+            if not current_date:
+                continue
+
+            time_zone = guild_settings["time_zone"] or "America/Chicago"  # Edited by Taako
+            tz = pytz.timezone(time_zone)  # Edited by Taako
+            current_date_obj = datetime.strptime(current_date, "%m-%d-%Y").astimezone(tz)  # Edited by Taako
+            today_date_obj = datetime.now(tz).replace(hour=0, minute=0, second=0, microsecond=0)  # Edited by Taako
+
+            # If the bot was offline for multiple days, update the date
+            if today_date_obj > current_date_obj:
+                days_missed = (today_date_obj - current_date_obj).days
+                new_date_obj = current_date_obj + timedelta(days=days_missed)
+                await self.config.guild_from_id(guild_id).current_date.set(new_date_obj.strftime("%m-%d-%Y"))  # Edited by Taako
+
     @tasks.loop(hours=24)
     async def _daily_update_loop(self):
         """Task loop to post daily calendar updates."""  # Edited by Taako
