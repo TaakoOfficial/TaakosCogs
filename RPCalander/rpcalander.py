@@ -83,8 +83,8 @@ class RPCalander(commands.Cog):
             if channel:
                 await channel.send(embed=embed)
 
-    @commands.admin_or_permissions(administrator=True)  # Add permission check  # Edited by Taako
     @commands.group(name="rpca")
+    @commands.admin_or_permissions(administrator=True)  # Add permission check  # Edited by Taako
     async def rpca(self, ctx):
         """Calendar management commands. Requires administrator permissions."""  # Edited by Taako
         if ctx.invoked_subcommand is None:
