@@ -109,15 +109,16 @@ class RPCalander(commands.Cog):
 
         tz = pytz.timezone(time_zone)
         now = datetime.now(tz)
-        # Calculate tomorrow's date in the same format
+        # Calculate tomorrow's date based on the system's current date
         try:
+            tomorrow_obj = now + timedelta(days=1)
             if current_date != "Not set":
-                current_date_obj = datetime.strptime(current_date, "%m-%d-%Y").astimezone(tz)
-                tomorrow_obj = current_date_obj + timedelta(days=1)
-                tomorrow_str = tomorrow_obj.strftime("%A %m-%d-%Y")
-            else:
-                tomorrow_str = "Not set"
-        except Exception:
+                current_date_obj = datetime.strptime(current_date, "%m-%d-%Y")
+                # Keep the year from the current_date but use tomorrow's month and day
+                tomorrow_obj = tomorrow_obj.replace(year=current_date_obj.year)
+            tomorrow_str = tomorrow_obj.strftime("%A %m-%d-%Y")
+        except Exception as e:
+            logging.error(f"Error calculating tomorrow's date: {e}")
             tomorrow_str = "Error"
 
         embed = discord.Embed(
