@@ -98,18 +98,22 @@ class RPCalander(commands.Cog):
             # Next post time is the next midnight after last_posted
             next_post_time = last_posted_dt.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
             if now >= next_post_time:
-                # Increment the current date
+                # Calculate how many days have passed since current_date
                 try:
                     current_date_obj = datetime.strptime(current_date, "%m-%d-%Y").astimezone(tz)
                 except Exception:
                     current_date_obj = now
-                next_date_obj = current_date_obj + timedelta(days=1)
-                next_date_str = next_date_obj.strftime("%A %m-%d-%Y")
-                await self._config.guild_from_id(guild_id).current_date.set(next_date_obj.strftime("%m-%d-%Y"))
+                today_date_obj = now.replace(hour=0, minute=0, second=0, microsecond=0)
+                days_missed = (today_date_obj - current_date_obj).days
+                if days_missed < 1:
+                    days_missed = 1
+                new_date_obj = current_date_obj + timedelta(days=days_missed)
+                new_date_str = new_date_obj.strftime("%A %m-%d-%Y")
+                await self._config.guild_from_id(guild_id).current_date.set(new_date_obj.strftime("%m-%d-%Y"))
                 await self._config.guild_from_id(guild_id).last_posted.set(now.isoformat())
                 embed = discord.Embed(
                     title=embed_title,
-                    description=f"Today's date: **{next_date_str}**",
+                    description=f"Today's date: **{new_date_str}**",
                     color=discord.Color(embed_color)
                 )
                 if show_footer:
