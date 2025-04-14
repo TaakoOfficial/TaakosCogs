@@ -272,11 +272,7 @@ class WeatherCog(commands.Cog):
         """Set how often the weather should refresh or specify a time (e.g., `10m` or `1830`)."""  # Edited by Taako
         time_units = {"s": 1, "m": 60, "h": 3600, "d": 86400}  # Edited by Taako
 
-        if value.isdigit() and len(value) == 4:  # Handle specific time in military format (e.g., 1830)  # Edited by Taako
-            await self.config.guild(ctx.guild).refresh_time.set(value)  # Edited by Taako
-            await self.config.guild(ctx.guild).refresh_interval.set(None)  # Edited by Taako
-            await ctx.send(f"Weather will now refresh daily at {value} (military time).")  # Edited by Taako
-        else:  # Handle interval-based input (e.g., 10m, 1h)  # Edited by Taako
+        if value[-1] in time_units:  # Handle interval-based input (e.g., 10m, 1h)  # Edited by Taako
             try:
                 unit = value[-1]  # Edited by Taako
                 interval = int(value[:-1])  # Edited by Taako
@@ -288,6 +284,12 @@ class WeatherCog(commands.Cog):
                 await ctx.send(f"Weather will now refresh every {value}.")  # Edited by Taako
             except (ValueError, IndexError):  # Edited by Taako
                 await ctx.send("Invalid format. Use a number followed by s (seconds), m (minutes), h (hours), or d (days).")  # Edited by Taako
+        elif value.isdigit() and len(value) == 4:  # Handle specific time in military format (e.g., 1830)  # Edited by Taako
+            await self.config.guild(ctx.guild).refresh_time.set(value)  # Edited by Taako
+            await self.config.guild(ctx.guild).refresh_interval.set(None)  # Edited by Taako
+            await ctx.send(f"Weather will now refresh daily at {value} (military time).")  # Edited by Taako
+        else:
+            await ctx.send("Invalid format. Use a valid military time (e.g., 1830) or an interval (e.g., 10m, 1h).")  # Edited by Taako
 
         # Restart the refresh task  # Edited by Taako
         if not self._refresh_weather_loop.is_running():
