@@ -42,6 +42,32 @@ Today's date: **Sunday 10-01-2023**
 
 ---
 
+## 🛠️ Installation
+
+To install the **RPCalander** cog:
+
+1. Add Taako's repository to your bot:
+
+   ```
+   [p]repo add TaakoCogs https://github.com/TaakoOfficial/TaakosCogs
+   ```
+
+2. Install the RPCalander cog:
+
+   ```
+   [p]cog install TaakoCogs RPCalander
+   ```
+
+3. Load the cog:
+
+   ```
+   [p]load rpcalander
+   ```
+
+4. Use `[p]rpca` to start configuring the RP calendar.
+
+---
+
 ## 🔗 Additional Resources
 
 - Learn more about [Red-DiscordBot](https://github.com/Cog-Creators/Red-DiscordBot/tree/V3/develop).
