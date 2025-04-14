@@ -402,6 +402,10 @@ class WeatherCog(commands.Cog):
                 await self.config.guild(ctx.guild).refresh_interval.set(refresh_interval)  # Edited by Taako
                 await self.config.guild(ctx.guild).refresh_time.set(None)  # Edited by Taako
                 await ctx.send(f"Weather will now refresh every {value}.")  # Edited by Taako
+                # Update the next refresh time to match the new interval  # Edited by Taako
+                now = datetime.now()  # Edited by Taako
+                next_refresh = now + timedelta(seconds=refresh_interval)  # Edited by Taako
+                await self.config.guild(ctx.guild).last_refresh.set(next_refresh.timestamp())  # Edited by Taako
             except (ValueError, IndexError):  # Edited by Taako
                 await ctx.send("Invalid format. Use a number followed by s (seconds), m (minutes), h (hours), or d (days).")  # Edited by Taako
         else:
