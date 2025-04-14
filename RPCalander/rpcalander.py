@@ -3,7 +3,7 @@ from redbot.core import commands, Config  # Edited by Taako
 from datetime import datetime, timedelta  # Edited by Taako
 import pytz  # Edited by Taako
 from discord.ext import tasks  # Edited by Taako
-from .timing_utils import get_next_post_time, has_already_posted_today, save_last_posted  # Edited by Taako
+from .timing_utils import get_next_post_time, has_already_posted_today  # Edited by Taako
 from .file_utils import read_last_posted, write_last_posted  # Edited by Taako
 import logging  # Edited by Taako
 
