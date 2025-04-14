@@ -55,13 +55,13 @@ To install the **rpcalander** cog:
 2. Install the rpcalander cog:
 
    ```
-   [p]cog install TaakosCogs rpcalander
+   [p]cog install TaakosCogs RPCalander
    ```
 
 3. Load the cog:
 
    ```
-   [p]load rpcalander
+   [p]load RPCalander
    ```
 
 4. Use `[p]rpca` to start configuring the RP calendar.
