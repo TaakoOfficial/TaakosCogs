@@ -19,18 +19,17 @@ class RPCalander(commands.Cog):
             "show_footer": True,  # Show footer in embeds  # Edited by Taako
             "embed_title": "📅 RP Calendar Update"  # Default title  # Edited by Taako
         }
-        self._config.register_guild(**self._default_guild)
-        self._daily_update_loop.start()  # Start daily updates  # Edited by Taako
+        self._config.register_guild(**self._default_guild)  # Edited by Taako
 
     async def cog_load(self):
-        """Restart the daily update loop without triggering an immediate embed."""  # Edited by Taako
+        """Start the daily update loop without triggering an immediate post."""  # Edited by Taako
         if not self._daily_update_loop.is_running():
             self._daily_update_loop.start()  # Start the loop without sending an embed  # Edited by Taako
 
-        # Check for missed dates without sending an embed
-        all_guilds = await self._config.all_guilds()
+        # Check for missed dates without sending an embed  # Edited by Taako
+        all_guilds = await self._config.all_guilds()  # Edited by Taako
         for guild_id, guild_settings in all_guilds.items():
-            current_date = guild_settings["current_date"]
+            current_date = guild_settings["current_date"]  # Edited by Taako
             if not current_date:
                 continue
 
@@ -39,10 +38,10 @@ class RPCalander(commands.Cog):
             current_date_obj = datetime.strptime(current_date, "%m-%d-%Y").astimezone(tz)  # Edited by Taako
             today_date_obj = datetime.now(tz).replace(hour=0, minute=0, second=0, microsecond=0)  # Edited by Taako
 
-            # If the bot was offline for multiple days, update the date
+            # If the bot was offline for multiple days, update the date  # Edited by Taako
             if today_date_obj > current_date_obj:
-                days_missed = (today_date_obj - current_date_obj).days
-                new_date_obj = current_date_obj + timedelta(days=days_missed)
+                days_missed = (today_date_obj - current_date_obj).days  # Edited by Taako
+                new_date_obj = current_date_obj + timedelta(days=days_missed)  # Edited by Taako
                 await self._config.guild_from_id(guild_id).current_date.set(new_date_obj.strftime("%m-%d-%Y"))  # Edited by Taako
 
     @tasks.loop(hours=24)
@@ -132,7 +131,23 @@ class RPCalander(commands.Cog):
         if next_post_time:
             now = datetime.now(next_post_time.tzinfo)  # Make 'now' timezone-aware using the same timezone as 'next_post_time'  # Edited by Taako
             time_until_next_post = next_post_time - now  # Edited by Taako
-            embed.add_field(name="Time Until Next Post", value=str(time_until_next_post), inline=False)  # Edited by Taako
+            days, seconds = divmod(time_until_next_post.total_seconds(), 86400)  # Edited by Taako
+            hours, remainder = divmod(seconds, 3600)  # Edited by Taako
+            minutes, seconds = divmod(remainder, 60)  # Edited by Taako
+
+            # Build the time string, excluding `00` for days and hours, but keeping `00m`  # Edited by Taako
+            time_components = []  # Edited by Taako
+            if days > 0:
+                time_components.append(f"{int(days)}d")  # Edited by Taako
+            if hours > 0:
+                time_components.append(f"{int(hours)}h")  # Edited by Taako
+            time_components.append(f"{int(minutes):02}m")  # Always include minutes  # Edited by Taako
+            time_components.append(f"{int(seconds):02}s")  # Always include seconds  # Edited by Taako
+            time_until_next_post_str = " ".join(time_components)  # Edited by Taako
+        else:
+            time_until_next_post_str = "Not scheduled"  # Edited by Taako
+
+        embed.add_field(name="Time Until Next Post", value=time_until_next_post_str, inline=False)  # Edited by Taako
 
         # Add the update channel field after the time until next post field
         embed.add_field(name="Update Channel", value=channel, inline=False)
