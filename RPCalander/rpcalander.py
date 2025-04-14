@@ -60,6 +60,12 @@ class RPCalander(commands.Cog):
             if channel:
                 await channel.send(embed=embed)
 
+    @commands.group(name="rpcalander", aliases=["rpca"], invoke_without_command=True)
+    async def rpcalander(self, ctx):
+        """Main command group for the RP Calendar cog."""  # Edited by Taako
+        if ctx.invoked_subcommand is None:
+            await ctx.send_help(ctx.command)  # Show help if no subcommand is invoked
+
     @rpcalander.command(name="settitle")
     async def set_title(self, ctx, *, title: str):
         """Set a custom title for the main embed."""  # Edited by Taako
