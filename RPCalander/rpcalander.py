@@ -99,6 +99,7 @@ class RPCalander(commands.Cog):
             channel = self._bot.get_channel(channel_id)
             if channel:
                 await channel.send(embed=embed)
+                write_last_posted()  # Log the last posted time after sending the embed  # Edited by Taako
 
     @commands.group(name="rpca")
     @commands.admin_or_permissions(administrator=True)  # Add permission check  # Edited by Taako
