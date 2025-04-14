@@ -1,4 +1,5 @@
-from .rpcalander import rpcalander  # Edited by Taako
+from .rpcalander import RPCalander  # Edited by Taako
 
 async def setup(bot):
-    await bot.add_cog(rpcalander(bot))  # Edited by Taako
+    cog = RPCalander(bot)  # Create instance first  # Edited by Taako
+    await bot.add_cog(cog)  # Add the cog instance  # Edited by Taako
