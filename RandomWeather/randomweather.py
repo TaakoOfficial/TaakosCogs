@@ -188,7 +188,7 @@ class WeatherCog(commands.Cog):
                     last_posted_dt = datetime.fromisoformat(last_posted).astimezone(tz)  # Edited by Taako
                     next_post_time = last_posted_dt + timedelta(seconds=refresh_interval)  # Edited by Taako
                 else:
-                    next_post_time = now  # Default to now if no last_posted exists  # Edited by Taako
+                    next_post_time = now + timedelta(seconds=refresh_interval)  # Default to now + interval if no last_posted exists  # Edited by Taako
             elif refresh_time:
                 # Calculate the next post time based on the specific time  # Edited by Taako
                 target_time = datetime.strptime(refresh_time, "%H%M").replace(
@@ -201,8 +201,13 @@ class WeatherCog(commands.Cog):
                 # Default to 00:00 daily if no interval or time is set  # Edited by Taako
                 next_post_time = now.replace(hour=0, minute=0, second=0) + timedelta(days=1)  # Edited by Taako
 
+            # Debug logging to track loop behavior  # Edited by Taako
+            print(f"[DEBUG] Current time: {now}")  # Edited by Taako
+            print(f"[DEBUG] Next post time: {next_post_time}")  # Edited by Taako
+
             # Check if it's time to post  # Edited by Taako
-            if now >= next_post_time - timedelta(minutes=1):  # Allow a 1-minute margin  # Edited by Taako
+            if now >= next_post_time:  # Edited by Taako
+                print("[DEBUG] It's time to post the weather update.")  # Edited by Taako
                 # Generate and send the weather update  # Edited by Taako
                 weather_data = self._generate_weather_data()  # Edited by Taako
                 embed = discord.Embed(
@@ -212,8 +217,17 @@ class WeatherCog(commands.Cog):
                 )
                 channel = self._bot.get_channel(channel_id)  # Edited by Taako
                 if channel:
+                    print(f"[DEBUG] Sending weather update to channel: {channel.name}")  # Edited by Taako
                     await channel.send(embed=embed)  # Edited by Taako
                     write_last_posted()  # Log the last posted time after sending the embed  # Edited by Taako
+                else:
+                    print("[DEBUG] Channel not found or invalid.")  # Edited by Taako
+
+                # Update the next post time after posting  # Edited by Taako
+                if refresh_interval:
+                    next_post_time = now + timedelta(seconds=refresh_interval)  # Edited by Taako
+                elif refresh_time:
+                    next_post_time = target_time + timedelta(days=1)  # Move to the next day for time-based refresh  # Edited by Taako
 
     @_refresh_weather_loop.before_loop
     async def before_refresh_weather_loop(self):
