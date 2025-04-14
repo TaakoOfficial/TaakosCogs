@@ -384,3 +384,25 @@ class WeatherCog(commands.Cog):
         )  # Edited by Taako
         embed.set_footer(text="RandomWeather by Taako")  # Edited by Taako
         await ctx.send(embed=embed)  # Edited by Taako
+
+    @rweather.command(name="setrefresh")
+    async def set_refresh(self, ctx, value: str):
+        """Set how often the weather should refresh or specify a time (e.g., `10m` or `1830`)."""  # Edited by Taako
+        time_units = {"s": 1, "m": 60, "h": 3600, "d": 86400}  # Edited by Taako
+
+        if value.isdigit() and len(value) == 4:  # Handle specific time in military format (e.g., 1830)  # Edited by Taako
+            await self.config.guild(ctx.guild).refresh_time.set(value)  # Edited by Taako
+            await self.config.guild(ctx.guild).refresh_interval.set(None)  # Edited by Taako
+            await ctx.send(f"Weather will now refresh daily at {value} (military time).")  # Edited by Taako
+        elif value[-1] in time_units:  # Handle interval-based input (e.g., 10m, 1h)  # Edited by Taako
+            try:
+                unit = value[-1]  # Edited by Taako
+                interval = int(value[:-1])  # Edited by Taako
+                refresh_interval = interval * time_units[unit]  # Edited by Taako
+                await self.config.guild(ctx.guild).refresh_interval.set(refresh_interval)  # Edited by Taako
+                await self.config.guild(ctx.guild).refresh_time.set(None)  # Edited by Taako
+                await ctx.send(f"Weather will now refresh every {value}.")  # Edited by Taako
+            except (ValueError, IndexError):  # Edited by Taako
+                await ctx.send("Invalid format. Use a number followed by s (seconds), m (minutes), h (hours), or d (days).")  # Edited by Taako
+        else:
+            await ctx.send("Invalid format. Use a valid military time (e.g., 1830) or an interval (e.g., 10m, 1h).")  # Edited by Taako
