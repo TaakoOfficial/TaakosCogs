@@ -87,3 +87,11 @@ Today's date: 2023-10-01 (Sunday)
 - View the full list of time zones: [Wikipedia Time Zones](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones).
 
 ---
+
+### Data Storage Transparency
+
+Some cogs in this repository, such as **RPCalander**, save data locally to ensure proper functionality. For example:
+
+- **`post_tracker.json`**: Used by the RPCalander cog to store the timestamp of the last post, ensuring no duplicate posts occur in a single day.
+
+All data is stored locally and is not shared with any external services.

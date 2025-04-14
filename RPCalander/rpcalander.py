@@ -4,6 +4,7 @@ from datetime import datetime, timedelta  # Edited by Taako
 import pytz  # Edited by Taako
 from discord.ext import tasks  # Edited by Taako
 from .timing_utils import get_next_post_time, has_already_posted_today, save_last_posted  # Edited by Taako
+from .file_utils import read_last_posted, write_last_posted  # Edited by Taako
 
 class RPCalander(commands.Cog):
     """A cog for managing an RP calendar with daily updates."""  # Edited by Taako
@@ -25,16 +26,17 @@ class RPCalander(commands.Cog):
 
     async def cog_load(self):
         """Start the daily update loop without triggering an immediate post."""  # Edited by Taako
-        all_guilds = await self._config.all_guilds()  # Edited by Taako
-        for guild_id, guild_settings in all_guilds.items():
-            time_zone = guild_settings["time_zone"] or "America/Chicago"  # Edited by Taako
-            last_posted = guild_settings.get("last_posted")  # Edited by Taako
+        last_posted = read_last_posted()  # Read the last posted timestamp from the file  # Edited by Taako
 
-            # Skip starting the loop if already posted today  # Edited by Taako
-            if has_already_posted_today(last_posted, time_zone):
-                continue  # Edited by Taako
+        # Skip starting the loop if already posted today  # Edited by Taako
+        if last_posted:
+            tz = pytz.timezone("America/Chicago")  # Default timezone  # Edited by Taako
+            last_posted_dt = datetime.fromisoformat(last_posted).astimezone(tz)  # Edited by Taako
+            today = datetime.now(tz).replace(hour=0, minute=0, second=0)  # Start of today  # Edited by Taako
 
-        # Ensure the loop starts only after all checks are complete  # Edited by Taako
+            if last_posted_dt >= today:
+                return  # Skip starting the loop if already posted today  # Edited by Taako
+
         if not self._daily_update_loop.is_running():
             self._daily_update_loop.start()  # Edited by Taako
 

@@ -74,3 +74,11 @@ To install the **rpcalander** cog:
 - View the full list of time zones: [Wikipedia Time Zones](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones).
 
 ---
+
+## 🗂️ Data Storage
+
+This cog saves the following data to your system:
+
+- **`post_tracker.json`**: Stores the timestamp of the last post to ensure the bot does not post multiple times in a single day. This file is located in the cog's directory.
+
+All data is stored locally and is not shared with any external services.
