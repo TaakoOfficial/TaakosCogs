@@ -17,7 +17,28 @@ class WeatherCog(commands.Cog):
     __author__ = ["Taako"]
     __version__ = "2.0.0"
 
+    @tasks.loop(minutes=1)
+    async def weather_update_loop(self):
+        """Task loop to post daily weather updates."""
+        try:
+            all_guilds = await self.config.all_guilds()
+            for guild_id, guild_settings in all_guilds.items():
+                try:
+                    channel_id = guild_settings.get("channel_id")
+                    if channel_id:
+                        await self._post_weather_update(guild_id, guild_settings)
+                except Exception as e:
+                    logging.error(f"Error in weather update for guild {guild_id}: {e}")
+        except Exception as e:
+            logging.error(f"Error in weather update loop: {e}")
+
+    @weather_update_loop.before_loop
+    async def before_weather_loop(self):
+        """Wait for bot to be ready before starting the loop."""
+        await self.bot.wait_until_ready()
+
     def __init__(self, bot: commands.Bot):
+        """Initialize the weather cog."""
         self.bot = bot
         self.config = Config.get_conf(self, identifier=1234567890, force_registration=True)
         default_guild = {
@@ -31,11 +52,12 @@ class WeatherCog(commands.Cog):
             "last_refresh": 0,
         }
         self.config.register_guild(**default_guild)
-        self._refresh_weather_loop.start()
+        self.weather_update_loop.start()
 
     async def cog_unload(self):
         """Clean up tasks when the cog is unloaded."""
-        self._refresh_weather_loop.cancel()
+        if self.weather_update_loop.is_running():
+            self.weather_update_loop.cancel()
 
     @commands.group(name="rweather", invoke_without_command=True)
     @commands.admin_or_permissions(administrator=True)
@@ -192,3 +214,44 @@ class WeatherCog(commands.Cog):
         except Exception as e:
             logging.error(f"Error in force post: {e}")
             await ctx.send(f"Failed to post weather update: {e}")
+
+    async def _post_weather_update(self, guild_id: int, guild_settings: dict) -> None:
+        """Post a weather update for a guild.
+        
+        Parameters
+        ----------
+        guild_id: int
+            The ID of the guild to post the update for
+        guild_settings: dict
+            The guild's settings dictionary
+        """
+        try:
+            channel = self.bot.get_channel(guild_settings.get("channel_id"))
+            if not channel:
+                return
+
+            # Get system timezone and prepare settings
+            _, system_time_zone = get_system_time_and_timezone()
+            update_settings = guild_settings.copy()
+            update_settings["time_zone"] = system_time_zone
+            
+            # Generate weather and create embed
+            data = generate_weather(time_zone=system_time_zone)
+            embed = create_weather_embed(data, update_settings)
+
+            # Add role mention if enabled
+            content = None
+            if guild_settings.get("tag_role"):
+                role_id = guild_settings.get("role_id")
+                if role_id:
+                    content = f"<@&{role_id}>"
+
+            # Send the update
+            await channel.send(content=content, embed=embed)
+            
+            # Update last refresh time
+            now = datetime.now().timestamp()
+            await self.config.guild(self.bot.get_guild(guild_id)).last_refresh.set(now)
+
+        except Exception as e:
+            logging.error(f"Error posting weather update for guild {guild_id}: {e}")
