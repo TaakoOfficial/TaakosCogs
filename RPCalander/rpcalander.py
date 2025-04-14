@@ -69,72 +69,12 @@ class RPCalander(commands.Cog):
                     new_date_obj = current_date_obj + timedelta(days=days_missed)  # Edited by Taako
                     await self._config.guild_from_id(guild_id).current_date.set(new_date_obj.strftime("%m-%d-%Y"))  # Edited by Taako
 
-    @tasks.loop(minutes=1)
-    async def _daily_update_loop(self):
-        """Task loop to post daily calendar updates at the correct time for each guild."""
-        all_guilds = await self._config.all_guilds()
-        for guild_id, guild_settings in all_guilds.items():
-            channel_id = guild_settings["channel_id"]
-            if not channel_id:
-                continue
-            current_date = guild_settings["current_date"]
-            time_zone = guild_settings["time_zone"] or "America/Chicago"
-            embed_color = guild_settings["embed_color"] or 0x0000FF
-            embed_title = guild_settings["embed_title"] or "📅 RP Calendar Update"
-            show_footer = guild_settings["show_footer"]
-            last_posted = guild_settings.get("last_posted")
-            if not current_date:
-                continue
-            tz = pytz.timezone(time_zone)
-            now = datetime.now(tz)
-            # Calculate the next post time (00:00 in the configured timezone)
-            if last_posted:
-                try:
-                    last_posted_dt = datetime.fromisoformat(last_posted).astimezone(tz)
-                except Exception:
-                    last_posted_dt = now - timedelta(days=1)
-            else:
-                last_posted_dt = now - timedelta(days=1)
-            # Next post time is the next midnight after last_posted
-            next_post_time = last_posted_dt.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
-            if now >= next_post_time:
-                # Calculate how many days have passed since current_date
-                try:
-                    current_date_obj = datetime.strptime(current_date, "%m-%d-%Y").astimezone(tz)
-                except Exception:
-                    current_date_obj = now
-                today_date_obj = now.replace(hour=0, minute=0, second=0, microsecond=0)
-                days_missed = (today_date_obj - current_date_obj).days
-                if days_missed < 1:
-                    days_missed = 1
-                new_date_obj = current_date_obj + timedelta(days=days_missed)
-                new_date_str = new_date_obj.strftime("%A %m-%d-%Y")
-                await self._config.guild_from_id(guild_id).current_date.set(new_date_obj.strftime("%m-%d-%Y"))
-                await self._config.guild_from_id(guild_id).last_posted.set(now.isoformat())
-                embed = discord.Embed(
-                    title=embed_title,
-                    description=f"Today's date: **{new_date_str}**",
-                    color=discord.Color(embed_color)
-                )
-                if show_footer:
-                    embed.set_footer(text="RP Calendar by Taako", icon_url="https://cdn-icons-png.flaticon.com/512/869/869869.png")
-                channel = self._bot.get_channel(channel_id)
-                if channel:
-                    await channel.send(embed=embed)
-
-    @_daily_update_loop.error
-    async def _daily_update_loop_error(self, error):
-        """Handle errors in the daily update loop and restart it if necessary."""  # Edited by Taako
-        logging.error(f"Error in daily update loop: {error}")  # Edited by Taako
-        if not self._daily_update_loop.is_running():
-            logging.debug("Restarting daily update loop after error.")  # Edited by Taako
-            self._daily_update_loop.start()  # Edited by Taako
-
-    @commands.group(name="rpca")
-    @commands.admin_or_permissions(administrator=True)  # Add permission check  # Edited by Taako
-    async def rpca(self, ctx):
-        """Calendar management commands. Requires administrator permissions."""  # Edited by Taako
-        if ctx.invoked_subcommand is None:
+    @commands.group(name="rpca", invoke_without_command=True)
+    @commands.admin_or_permissions(administrator=True)
+    async def rpca(self, ctx: commands.Context):
+        """Calendar management commands. Requires administrator permissions."""
+        # Only send help if not a subcommand and not already invoked
+        if ctx.invoked_subcommand is None and ctx.command is not None:
             await ctx.send_help(ctx.command)
 
     @rpca.error
@@ -262,40 +202,72 @@ class RPCalander(commands.Cog):
         """Parse a date string into a datetime object."""  # Edited by Taako
         return datetime.strptime(date_str, "%m-%d-%Y").replace(tzinfo=tz)  # Edited by Taako
 
-    @rpca.command(name="refresh")
-    async def refresh(self, ctx):
-        """Manually trigger a calendar update."""  # Edited by Taako
-        guild_settings = await self._config.guild(ctx.guild).all()
-        
-        if not guild_settings["current_date"]:
-            await ctx.send("Calendar not initialized. Use `[p]rpca setstart` first.")  # Edited by Taako
-            return
+    def _is_same_month_day(self, date1: datetime, date2: datetime) -> bool:
+        """Check if two dates have the same month and day."""
+        return date1.month == date2.month and date1.day == date2.day
 
-        channel_id = guild_settings["channel_id"]
-        if not channel_id:
-            await ctx.send("Update channel not set. Use `[p]rpca setchannel` first.")  # Edited by Taako
-            return
+    @tasks.loop(minutes=1)
+    async def _daily_update_loop(self):
+        """Task loop to post daily calendar updates at the correct time for each guild."""
+        all_guilds = await self._config.all_guilds()
+        for guild_id, guild_settings in all_guilds.items():
+            channel_id = guild_settings["channel_id"]
+            if not channel_id:
+                continue
+            current_date = guild_settings["current_date"]
+            time_zone = guild_settings["time_zone"] or "America/Chicago"
+            embed_color = guild_settings["embed_color"] or 0x0000FF
+            embed_title = guild_settings["embed_title"] or "📅 RP Calendar Update"
+            show_footer = guild_settings["show_footer"]
+            last_posted = guild_settings.get("last_posted")
+            if not current_date:
+                continue
+            tz = pytz.timezone(time_zone)
+            now = datetime.now(tz)
+            # Calculate the next post time (00:00 in the configured timezone)
+            if last_posted:
+                try:
+                    last_posted_dt = datetime.fromisoformat(last_posted).astimezone(tz)
+                except Exception:
+                    last_posted_dt = now - timedelta(days=1)
+            else:
+                last_posted_dt = now - timedelta(days=1)
+            next_post_time = last_posted_dt.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
+            if now >= next_post_time:
+                try:
+                    current_date_obj = datetime.strptime(current_date, "%m-%d-%Y").astimezone(tz)
+                except Exception:
+                    current_date_obj = now
+                today_date_obj = now.replace(hour=0, minute=0, second=0, microsecond=0)
+                # Only increment if month and day are not the same
+                if not self._is_same_month_day(current_date_obj, today_date_obj):
+                    days_missed = (today_date_obj - current_date_obj).days
+                    if days_missed < 1:
+                        days_missed = 1
+                    new_date_obj = current_date_obj + timedelta(days=days_missed)
+                else:
+                    new_date_obj = current_date_obj
+                new_date_str = new_date_obj.strftime("%A %m-%d-%Y")
+                await self._config.guild_from_id(guild_id).current_date.set(new_date_obj.strftime("%m-%d-%Y"))
+                await self._config.guild_from_id(guild_id).last_posted.set(now.isoformat())
+                embed = discord.Embed(
+                    title=embed_title,
+                    description=f"Today's date: **{new_date_str}**",
+                    color=discord.Color(embed_color)
+                )
+                if show_footer:
+                    embed.set_footer(text="RP Calendar by Taako", icon_url="https://cdn-icons-png.flaticon.com/512/869/869869.png")
+                channel = self._bot.get_channel(channel_id)
+                if channel:
+                    await channel.send(embed=embed)
 
-        channel = self._bot.get_channel(channel_id)
-        if not channel:
-            await ctx.send("Invalid channel. Please set a valid channel.")  # Edited by Taako
-            return
-
-        # Create and send the embed using current date
-        tz = pytz.timezone(guild_settings["time_zone"])
-        current_date = self._parse_date(guild_settings["current_date"], tz)
-        
-        embed = discord.Embed(
-            title=guild_settings["embed_title"],
-            description=f"Today's date: **{self._format_date(current_date)}**",
-            color=discord.Color(guild_settings["embed_color"])
-        )
-        
-        if guild_settings["show_footer"]:
-            embed.set_footer(text="RP Calendar by Taako", icon_url="https://cdn-icons-png.flaticon.com/512/869/869869.png")
-        
-        await channel.send(embed=embed)
-        await ctx.send(f"Calendar update sent to {channel.mention}")  # Edited by Taako
+    @_daily_update_loop.error
+    async def _daily_update_loop_error(self, error):
+        """Handle errors in the daily update loop and restart it if necessary."""  # Edited by Taako
+        logging.error(f"Error in daily update loop: {error}")  # Edited by Taako
+        if not self._daily_update_loop.is_running():
+            logging.debug("Restarting daily update loop after error.")  # Edited by Taako
+            self._daily_update_loop.start()  # Edited by Taako
 
     def cog_unload(self):
         """Clean up tasks and unregister commands when the cog is unloaded."""  # Edited by Taako
