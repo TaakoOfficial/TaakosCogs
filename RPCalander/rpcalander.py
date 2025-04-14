@@ -69,52 +69,54 @@ class RPCalander(commands.Cog):
                     new_date_obj = current_date_obj + timedelta(days=days_missed)  # Edited by Taako
                     await self._config.guild_from_id(guild_id).current_date.set(new_date_obj.strftime("%m-%d-%Y"))  # Edited by Taako
 
-    @tasks.loop(minutes=1)  # Check every minute to ensure timely posting  # Edited by Taako
+    @tasks.loop(minutes=1)
     async def _daily_update_loop(self):
-        """Task loop to post daily calendar updates."""  # Edited by Taako
+        """Task loop to post daily calendar updates at the correct time for each guild."""
         all_guilds = await self._config.all_guilds()
         for guild_id, guild_settings in all_guilds.items():
             channel_id = guild_settings["channel_id"]
             if not channel_id:
                 continue
-
             current_date = guild_settings["current_date"]
-            time_zone = guild_settings["time_zone"] or "America/Chicago"  # Edited by Taako
-            embed_color = guild_settings["embed_color"] or 0x0000FF  # Default to blue  # Edited by Taako
-            embed_title = guild_settings["embed_title"] or "📅 RP Calendar Update"  # Edited by Taako
-            show_footer = guild_settings["show_footer"]  # Edited by Taako
+            time_zone = guild_settings["time_zone"] or "America/Chicago"
+            embed_color = guild_settings["embed_color"] or 0x0000FF
+            embed_title = guild_settings["embed_title"] or "📅 RP Calendar Update"
+            show_footer = guild_settings["show_footer"]
+            last_posted = guild_settings.get("last_posted")
             if not current_date:
                 continue
-
-            # Calculate the next post time (00:00 in the configured timezone)  # Edited by Taako
-            tz = pytz.timezone(time_zone)  # Edited by Taako
-            now = datetime.now(tz)  # Edited by Taako
-            next_post_time = now.replace(hour=0, minute=0, second=0, microsecond=0)  # Edited by Taako
+            tz = pytz.timezone(time_zone)
+            now = datetime.now(tz)
+            # Calculate the next post time (00:00 in the configured timezone)
+            if last_posted:
+                try:
+                    last_posted_dt = datetime.fromisoformat(last_posted).astimezone(tz)
+                except Exception:
+                    last_posted_dt = now - timedelta(days=1)
+            else:
+                last_posted_dt = now - timedelta(days=1)
+            # Next post time is the next midnight after last_posted
+            next_post_time = last_posted_dt.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
             if now >= next_post_time:
-                next_post_time += timedelta(days=1)  # Move to the next day if past 00:00  # Edited by Taako
-
-            # Check if it's time to post  # Edited by Taako
-            if now >= next_post_time - timedelta(minutes=1):  # Allow a 1-minute margin  # Edited by Taako
-                # Increment the current date  # Edited by Taako
-                current_date_obj = datetime.strptime(current_date, "%m-%d-%Y").astimezone(tz)  # Edited by Taako
+                # Increment the current date
+                try:
+                    current_date_obj = datetime.strptime(current_date, "%m-%d-%Y").astimezone(tz)
+                except Exception:
+                    current_date_obj = now
                 next_date_obj = current_date_obj + timedelta(days=1)
-                next_date_str = next_date_obj.strftime("%A %m-%d-%Y")  # Edited by Taako
-
-                # Update the stored current date  # Edited by Taako
-                await self._config.guild_from_id(guild_id).current_date.set(next_date_obj.strftime("%m-%d-%Y"))  # Edited by Taako
-
-                # Create and send the embed  # Edited by Taako
+                next_date_str = next_date_obj.strftime("%A %m-%d-%Y")
+                await self._config.guild_from_id(guild_id).current_date.set(next_date_obj.strftime("%m-%d-%Y"))
+                await self._config.guild_from_id(guild_id).last_posted.set(now.isoformat())
                 embed = discord.Embed(
-                    title=embed_title,  # Use the configured embed title  # Edited by Taako
+                    title=embed_title,
                     description=f"Today's date: **{next_date_str}**",
-                    color=discord.Color(embed_color)  # Use the configured embed color  # Edited by Taako
+                    color=discord.Color(embed_color)
                 )
-                if show_footer:  # Add footer if enabled  # Edited by Taako
+                if show_footer:
                     embed.set_footer(text="RP Calendar by Taako", icon_url="https://cdn-icons-png.flaticon.com/512/869/869869.png")
                 channel = self._bot.get_channel(channel_id)
                 if channel:
                     await channel.send(embed=embed)
-                    write_last_posted()  # Log the last posted time after sending the embed  # Edited by Taako
 
     @_daily_update_loop.error
     async def _daily_update_loop_error(self, error):
