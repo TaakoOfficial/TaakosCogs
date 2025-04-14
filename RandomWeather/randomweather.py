@@ -18,14 +18,26 @@ class WeatherCog(commands.Cog):
     __version__ = "2.0.0"
 
     @tasks.loop(minutes=1)
-    async def weather_update_loop(self):
-        """Task loop to post daily weather updates."""
+    async def weather_update_loop(self) -> None:
+        """Task loop to post daily weather updates at the correct time or interval."""
         try:
             all_guilds = await self.config.all_guilds()
             for guild_id, guild_settings in all_guilds.items():
                 try:
                     channel_id = guild_settings.get("channel_id")
-                    if channel_id:
+                    if not channel_id:
+                        continue
+                    last_refresh = guild_settings.get("last_refresh", 0)
+                    refresh_interval = guild_settings.get("refresh_interval")
+                    refresh_time = guild_settings.get("refresh_time")
+                    # Use system timezone
+                    _, system_time_zone = get_system_time_and_timezone()
+                    next_post_time = calculate_next_refresh_time(
+                        last_refresh, refresh_interval, refresh_time, system_time_zone
+                    )
+                    now = datetime.now().timestamp()
+                    # Only post if it's time
+                    if next_post_time is not None and now >= next_post_time.timestamp():
                         await self._post_weather_update(guild_id, guild_settings)
                 except Exception as e:
                     logging.error(f"Error in weather update for guild {guild_id}: {e}")
