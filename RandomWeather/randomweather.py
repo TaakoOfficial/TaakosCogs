@@ -174,7 +174,29 @@ class WeatherCog(commands.Cog):
             time_zone = guild_settings["time_zone"] or "UTC"  # Default to UTC if not set  # Edited by Taako
             tz = pytz.timezone(time_zone)  # Edited by Taako
             now = datetime.now(tz)  # Get the current time in the timezone  # Edited by Taako
-            next_post_time = now.replace(hour=0, minute=0, second=0) + timedelta(days=1)  # Set to 00:00 of the next day  # Edited by Taako
+
+            refresh_interval = guild_settings.get("refresh_interval")  # Edited by Taako
+            refresh_time = guild_settings.get("refresh_time")  # Edited by Taako
+
+            if refresh_interval:
+                # Calculate the next post time based on the interval  # Edited by Taako
+                last_posted = read_last_posted()  # Edited by Taako
+                if last_posted:
+                    last_posted_dt = datetime.fromisoformat(last_posted).astimezone(tz)  # Edited by Taako
+                    next_post_time = last_posted_dt + timedelta(seconds=refresh_interval)  # Edited by Taako
+                else:
+                    next_post_time = now  # Default to now if no last_posted exists  # Edited by Taako
+            elif refresh_time:
+                # Calculate the next post time based on the specific time  # Edited by Taako
+                target_time = datetime.strptime(refresh_time, "%H%M").replace(
+                    tzinfo=tz, year=now.year, month=now.month, day=now.day
+                )  # Edited by Taako
+                if now >= target_time:  # If the target time has already passed today  # Edited by Taako
+                    target_time += timedelta(days=1)  # Move to the next day  # Edited by Taako
+                next_post_time = target_time  # Edited by Taako
+            else:
+                # Default to 00:00 daily if no interval or time is set  # Edited by Taako
+                next_post_time = now.replace(hour=0, minute=0, second=0) + timedelta(days=1)  # Edited by Taako
 
             # Check if it's time to post  # Edited by Taako
             if now >= next_post_time - timedelta(minutes=1):  # Allow a 1-minute margin  # Edited by Taako
