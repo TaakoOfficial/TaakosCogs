@@ -29,13 +29,18 @@ def calculate_next_refresh_time(
     if refresh_interval:
         next_post_time = datetime.fromtimestamp(last_refresh, tz) + timedelta(seconds=refresh_interval)
     elif refresh_time:
+        # Parse the refresh time and set it for today
         target_time = datetime.strptime(refresh_time, "%H%M").replace(
             tzinfo=tz, year=now.year, month=now.month, day=now.day
         )
-        if now >= target_time:
+
+        # If the target time has already passed today, set it for tomorrow
+        if now > target_time:
             target_time += timedelta(days=1)
+
         next_post_time = target_time
     else:
+        # Default to midnight of the next day if no refresh time or interval is set
         next_post_time = now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
 
     return next_post_time
