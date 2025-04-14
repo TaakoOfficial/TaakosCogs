@@ -224,217 +224,162 @@ class WeatherCog(commands.Cog):
         if ctx.invoked_subcommand is None:
             await ctx.send_help(ctx.command)  # Show the help menu if no subcommand is provided
 
-    @rweather.command()
-    async def refresh(self, ctx):
-        """Refresh the weather for the day."""  # Edited by Taako
-        guild_settings = await self.config.guild(ctx.guild).all()
-        time_zone = guild_settings["time_zone"]
-        self._current_weather = self._generate_weather(time_zone)
-        self._current_weather["guild_settings"] = guild_settings  # Pass guild settings to embed
-        embed = self._create_weather_embed(self._current_weather)
-        role_mention = f"<@&{guild_settings['role_id']}>" if guild_settings["role_id"] and guild_settings["tag_role"] else ""
-        channel_id = guild_settings["channel_id"]
-        if channel_id:
-            channel = self._bot.get_channel(channel_id)
-            if channel:
-                await channel.send(content=role_mention, embed=embed)
-                await ctx.send(f"Weather update sent to {channel.mention}.")
-            else:
-                await ctx.send("The set channel is invalid. Please set a valid channel.")
-        else:
-            await ctx.send(embed=embed)
+    @rweather.command(name="setchannel")
+    async def set_channel(self, ctx, channel: discord.TextChannel):
+        """Set the channel for weather updates."""  # Edited by Taako
+        await self.config.guild(ctx.guild).channel_id.set(channel.id)  # Edited by Taako
+        await ctx.send(f"Weather updates will now be sent to: {channel.mention}")  # Edited by Taako
 
-    @rweather.command()
-    async def role(self, ctx, role: discord.Role):
-        """Set the role to be tagged for weather updates."""
-        # Edited by Taako
-        await self.config.guild(ctx.guild).role_id.set(role.id)
-        await ctx.send(f"Weather updates will now tag the role: {role.name}")
+    @rweather.command(name="force")
+    async def force(self, ctx):
+        """Force a weather update for the day."""  # Edited by Taako
+        guild_settings = await self.config.guild(ctx.guild).all()  # Edited by Taako
+        time_zone = guild_settings["time_zone"]  # Edited by Taako
+        self._current_weather = self._generate_weather(time_zone)  # Edited by Taako
+        self._current_weather["guild_settings"] = guild_settings  # Edited by Taako
+        embed = self._create_weather_embed(self._current_weather)  # Edited by Taako
+        role_mention = f"<@&{guild_settings['role_id']}>" if guild_settings["role_id"] and guild_settings["tag_role"] else ""  # Edited by Taako
+        channel_id = guild_settings["channel_id"]  # Edited by Taako
+        if channel_id:  # Edited by Taako
+            channel = self._bot.get_channel(channel_id)  # Edited by Taako
+            if channel:  # Edited by Taako
+                await channel.send(content=role_mention, embed=embed)  # Edited by Taako
+                await ctx.send(f"Weather update sent to {channel.mention}.")  # Edited by Taako
+            else:  # Edited by Taako
+                await ctx.send("The set channel is invalid. Please set a valid channel.")  # Edited by Taako
+        else:  # Edited by Taako
+            await ctx.send(embed=embed)  # Edited by Taako
 
-    @rweather.command()
-    async def toggle(self, ctx):
-        """Toggle whether the role should be tagged in weather updates."""
-        # Edited by Taako
-        tag_role = await self.config.guild(ctx.guild).tag_role()
-        await self.config.guild(ctx.guild).tag_role.set(not tag_role)
-        status = "enabled" if not tag_role else "disabled"
-        await ctx.send(f"Role tagging has been {status}.")
+    @rweather.command(name="setrole")
+    async def set_role(self, ctx, role: discord.Role):
+        """Set the role to be tagged for weather updates."""  # Edited by Taako
+        await self.config.guild(ctx.guild).role_id.set(role.id)  # Edited by Taako
+        await ctx.send(f"Weather updates will now tag the role: {role.name}")  # Edited by Taako
 
-    @rweather.command()
-    async def channel(self, ctx, channel: discord.TextChannel):
-        """Set the channel for weather updates."""
-        # Edited by Taako
-        await self.config.guild(ctx.guild).channel_id.set(channel.id)
-        await ctx.send(f"Weather updates will now be sent to: {channel.mention}")
+    @rweather.command(name="toggle_role")
+    async def toggle_role(self, ctx):
+        """Toggle whether the role should be tagged in weather updates."""  # Edited by Taako
+        tag_role = await self.config.guild(ctx.guild).tag_role()  # Edited by Taako
+        await self.config.guild(ctx.guild).tag_role.set(not tag_role)  # Edited by Taako
+        status = "enabled" if not tag_role else "disabled"  # Edited by Taako
+        await ctx.send(f"Role tagging has been {status}.")  # Edited by Taako
 
-    @rweather.command(name="setrefresh")
-    async def set_refresh(self, ctx, value: str):
-        """Set how often the weather should refresh or specify a time (e.g., `10m` or `1830`)."""  # Edited by Taako
-        time_units = {"s": 1, "m": 60, "h": 3600, "d": 86400}  # Edited by Taako
-
-        if value[-1] in time_units:  # Handle interval-based input (e.g., 10m, 1h)  # Edited by Taako
-            try:
-                unit = value[-1]  # Edited by Taako
-                interval = int(value[:-1])  # Edited by Taako
-                if unit not in time_units:  # Edited by Taako
-                    raise ValueError("Invalid time unit.")  # Edited by Taako
-                refresh_interval = interval * time_units[unit]  # Edited by Taako
-                await self.config.guild(ctx.guild).refresh_interval.set(refresh_interval)  # Edited by Taako
-                await self.config.guild(ctx.guild).refresh_time.set(None)  # Edited by Taako
-                await ctx.send(f"Weather will now refresh every {value}.")  # Edited by Taako
-            except (ValueError, IndexError):  # Edited by Taako
-                await ctx.send("Invalid format. Use a number followed by s (seconds), m (minutes), h (hours), or d (days).")  # Edited by Taako
-        elif value.isdigit() and len(value) == 4:  # Handle specific time in military format (e.g., 1830)  # Edited by Taako
-            await self.config.guild(ctx.guild).refresh_time.set(value)  # Edited by Taako
+    @rweather.command(name="toggle_refresh_mode")
+    async def toggle_refresh_mode(self, ctx):
+        """Toggle between interval-based and military time refresh modes."""  # Edited by Taako
+        guild_settings = await self.config.guild(ctx.guild).all()  # Edited by Taako
+        if guild_settings["refresh_interval"]:  # Edited by Taako
             await self.config.guild(ctx.guild).refresh_interval.set(None)  # Edited by Taako
-            await ctx.send(f"Weather will now refresh daily at {value} (military time).")  # Edited by Taako
-        else:
-            await ctx.send("Invalid format. Use a valid military time (e.g., 1830) or an interval (e.g., 10m, 1h).")  # Edited by Taako
-
-        # Restart the refresh task  # Edited by Taako
-        if not self._refresh_weather_loop.is_running():
-            self._refresh_weather_loop.start()  # Edited by Taako
-
-    @rweather.command(name="settimezone")
-    async def set_timezone(self, ctx, time_zone: str = None):
-        """Set the time zone for weather updates (e.g., `UTC`, `America/New_York`)."""
-        # Edited by Taako
-        if not time_zone:
-            await ctx.send(
-                "Please provide a valid time zone using the correct syntax (e.g., `UTC`, `America/New_York`).\n"
-                "You can view the full list of time zones here: https://en.wikipedia.org/wiki/List_of_tz_database_time_zones"
-            )
-            return
-
-        if time_zone in pytz.all_timezones:
-            await self.config.guild(ctx.guild).time_zone.set(time_zone)
-            await ctx.send(f"Time zone set to {time_zone}.")
-        else:
-            await ctx.send(
-                "Invalid time zone. Please provide a valid time zone using the correct syntax (e.g., `UTC`, `America/New_York`).\n"
-                "You can view the full list of time zones here: https://en.wikipedia.org/wiki/List_of_tz_database_time_zones"
-            )
-
-    @rweather.command(name="setcolor")
-    async def set_color(self, ctx, color: discord.Color):
-        """Set the embed color for weather updates."""
-        # Edited by Taako
-        await self.config.guild(ctx.guild).embed_color.set(color.value)
-        await ctx.send(f"Embed color set to {color}.")
-
-    @rweather.command(name="togglefooter")
-    async def toggle_footer(self, ctx):
-        """Toggle the footer on or off for the weather embed."""
-        # Edited by Taako
-        show_footer = await self.config.guild(ctx.guild).show_footer()
-        new_state = not show_footer
-        await self.config.guild(ctx.guild).show_footer.set(new_state)
-        status = "enabled" if new_state else "disabled"
-        await ctx.send(f"The footer has been {status} for the weather embed.")
+            await self.config.guild(ctx.guild).refresh_time.set("0000")  # Default to midnight  # Edited by Taako
+            await ctx.send("Switched to military time refresh mode (default: 00:00).")  # Edited by Taako
+        else:  # Edited by Taako
+            await self.config.guild(ctx.guild).refresh_time.set(None)  # Edited by Taako
+            await self.config.guild(ctx.guild).refresh_interval.set(3600)  # Default to 1 hour  # Edited by Taako
+            await ctx.send("Switched to interval-based refresh mode (default: 1 hour).")  # Edited by Taako
 
     @rweather.command(name="info")
     async def info(self, ctx):
         """View the current settings for weather updates."""  # Edited by Taako
-        guild_settings = await self.config.guild(ctx.guild).all()
-        embed_color = discord.Color(guild_settings["embed_color"])
-        show_footer = guild_settings["show_footer"]
-        time_zone = guild_settings["time_zone"]
-        current_season = self._get_current_season(time_zone)  # Get the current season
+        guild_settings = await self.config.guild(ctx.guild).all()  # Edited by Taako
+        embed_color = discord.Color(guild_settings["embed_color"])  # Edited by Taako
+        show_footer = guild_settings["show_footer"]  # Edited by Taako
+        time_zone = guild_settings["time_zone"]  # Edited by Taako
+        current_season = self._get_current_season(time_zone)  # Edited by Taako
 
-        # Calculate time until the next refresh
-        now = datetime.now(pytz.timezone(time_zone))  # Current time in the guild's time zone
-        refresh_interval = guild_settings["refresh_interval"]
-        refresh_time = guild_settings["refresh_time"]
-        if refresh_interval:
-            last_refresh = guild_settings.get("last_refresh", 0)
-            next_refresh = datetime.fromtimestamp(last_refresh, pytz.timezone(time_zone)) + timedelta(seconds=refresh_interval)
-        elif refresh_time:
-            target_time = datetime.strptime(refresh_time, "%H%M").replace(
-                tzinfo=pytz.timezone(time_zone),
-                year=now.year,
-                month=now.month,
-                day=now.day,
-            )
-            if now >= target_time:  # If the target time has already passed today
-                target_time += timedelta(days=1)  # Move to the next day
-            next_refresh = target_time
-        else:
-            next_refresh = None
+        # Calculate time until the next refresh  # Edited by Taako
+        now = datetime.now(pytz.timezone(time_zone))  # Current time in the guild's time zone  # Edited by Taako
+        refresh_interval = guild_settings["refresh_interval"]  # Edited by Taako
+        refresh_time = guild_settings["refresh_time"]  # Edited by Taako
+        if refresh_interval:  # Edited by Taako
+            last_refresh = guild_settings.get("last_refresh", 0)  # Edited by Taako
+            next_refresh = datetime.fromtimestamp(last_refresh, pytz.timezone(time_zone)) + timedelta(seconds=refresh_interval)  # Edited by Taako
+        elif refresh_time:  # Edited by Taako
+            target_time = datetime.strptime(refresh_time, "%H%M").replace(  # Edited by Taako
+                tzinfo=pytz.timezone(time_zone),  # Edited by Taako
+                year=now.year,  # Edited by Taako
+                month=now.month,  # Edited by Taako
+                day=now.day,  # Edited by Taako
+            )  # Edited by Taako
+            if now >= target_time:  # If the target time has already passed today  # Edited by Taako
+                target_time += timedelta(days=1)  # Move to the next day  # Edited by Taako
+            next_refresh = target_time  # Edited by Taako
+        else:  # Edited by Taako
+            next_refresh = None  # Edited by Taako
 
-        if next_refresh:
-            time_until_refresh = next_refresh - now
-            days, seconds = divmod(time_until_refresh.total_seconds(), 86400)
-            hours, remainder = divmod(seconds, 3600)
-            minutes, seconds = divmod(remainder, 60)
+        if next_refresh:  # Edited by Taako
+            time_until_refresh = next_refresh - now  # Edited by Taako
+            days, seconds = divmod(time_until_refresh.total_seconds(), 86400)  # Edited by Taako
+            hours, remainder = divmod(seconds, 3600)  # Edited by Taako
+            minutes, seconds = divmod(remainder, 60)  # Edited by Taako
 
-            # Build the time string, excluding `00` for days and hours, but keeping `00m`
-            time_components = []
-            if days > 0:
-                time_components.append(f"{int(days)}d")
-            if hours > 0:
-                time_components.append(f"{int(hours)}h")
-            time_components.append(f"{int(minutes):02}m")  # Always include minutes
-            time_components.append(f"{int(seconds):02}s")  # Always include seconds
-            time_until_refresh_str = " ".join(time_components)
-        else:
-            time_until_refresh_str = "Not scheduled"
+            # Build the time string, excluding `00` for days and hours, but keeping `00m`  # Edited by Taako
+            time_components = []  # Edited by Taako
+            if days > 0:  # Edited by Taako
+                time_components.append(f"{int(days)}d")  # Edited by Taako
+            if hours > 0:  # Edited by Taako
+                time_components.append(f"{int(hours)}h")  # Edited by Taako
+            time_components.append(f"{int(minutes):02}m")  # Always include minutes  # Edited by Taako
+            time_components.append(f"{int(seconds):02}s")  # Always include seconds  # Edited by Taako
+            time_until_refresh_str = " ".join(time_components)  # Edited by Taako
+        else:  # Edited by Taako
+            time_until_refresh_str = "Not scheduled"  # Edited by Taako
 
         embed = discord.Embed(
-            title="🌦️ RandomWeather Settings",
-            color=embed_color  # Use the configured embed color
-        )
+            title="🌦️ RandomWeather Settings",  # Edited by Taako
+            color=embed_color  # Use the configured embed color  # Edited by Taako
+        )  # Edited by Taako
         embed.add_field(
-            name="📅 Refresh Mode",
+            name="📅 Refresh Mode",  # Edited by Taako
             value=(
-                f"**Interval**: {guild_settings['refresh_interval']} seconds"
-                if guild_settings["refresh_interval"]
-                else f"**Time**: {guild_settings['refresh_time']} (military time)"
-            ),
-            inline=False,
-        )
+                f"**Interval**: {guild_settings['refresh_interval']} seconds"  # Edited by Taako
+                if guild_settings["refresh_interval"]  # Edited by Taako
+                else f"**Time**: {guild_settings['refresh_time']} (military time)"  # Edited by Taako
+            ),  # Edited by Taako
+            inline=False,  # Edited by Taako
+        )  # Edited by Taako
         embed.add_field(
-            name="⏳ Time Until Next Refresh",
-            value=time_until_refresh_str,  # Show time until the next refresh
-            inline=False,
-        )
+            name="⏳ Time Until Next Refresh",  # Edited by Taako
+            value=time_until_refresh_str,  # Show time until the next refresh  # Edited by Taako
+            inline=False,  # Edited by Taako
+        )  # Edited by Taako
         embed.add_field(
-            name="🌍 Time Zone",
-            value=guild_settings["time_zone"],
-            inline=False,
-        )
+            name="🌍 Time Zone",  # Edited by Taako
+            value=guild_settings["time_zone"],  # Edited by Taako
+            inline=False,  # Edited by Taako
+        )  # Edited by Taako
         embed.add_field(
-            name="📢 Channel",
+            name="📢 Channel",  # Edited by Taako
             value=(
-                f"<#{guild_settings['channel_id']}>" if guild_settings["channel_id"] else "Not set"
-            ),
-            inline=False,
-        )
+                f"<#{guild_settings['channel_id']}>" if guild_settings["channel_id"] else "Not set"  # Edited by Taako
+            ),  # Edited by Taako
+            inline=False,  # Edited by Taako
+        )  # Edited by Taako
         embed.add_field(
-            name="🔔 Role Tagging",
-            value="Enabled" if guild_settings["tag_role"] else "Disabled",
-            inline=True,
-        )
+            name="🔔 Role Tagging",  # Edited by Taako
+            value="Enabled" if guild_settings["tag_role"] else "Disabled",  # Edited by Taako
+            inline=True,  # Edited by Taako
+        )  # Edited by Taako
         embed.add_field(
-            name="👥 Tag Role",
+            name="👥 Tag Role",  # Edited by Taako
             value=(
-                f"<@&{guild_settings['role_id']}>" if guild_settings["role_id"] else "Not set"
-            ),
-            inline=True,
-        )
+                f"<@&{guild_settings['role_id']}>" if guild_settings["role_id"] else "Not set"  # Edited by Taako
+            ),  # Edited by Taako
+            inline=True,  # Edited by Taako
+        )  # Edited by Taako
         embed.add_field(
-            name="🎨 Embed Color",
-            value=str(embed_color),
-            inline=False,
-        )
+            name="🎨 Embed Color",  # Edited by Taako
+            value=str(embed_color),  # Edited by Taako
+            inline=False,  # Edited by Taako
+        )  # Edited by Taako
         embed.add_field(
-            name="📄 Footer",
-            value="Enabled" if show_footer else "Disabled",
-            inline=False,
-        )
+            name="📄 Footer",  # Edited by Taako
+            value="Enabled" if show_footer else "Disabled",  # Edited by Taako
+            inline=False,  # Edited by Taako
+        )  # Edited by Taako
         embed.add_field(
-            name="🍂 Current Season",
-            value=current_season,  # Display the current season
-            inline=False,
-        )
-        embed.set_footer(text="RandomWeather by Taako")
-        await ctx.send(embed=embed)
+            name="🍂 Current Season",  # Edited by Taako
+            value=current_season,  # Display the current season  # Edited by Taako
+            inline=False,  # Edited by Taako
+        )  # Edited by Taako
+        embed.set_footer(text="RandomWeather by Taako")  # Edited by Taako
+        await ctx.send(embed=embed)  # Edited by Taako
