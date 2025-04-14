@@ -31,11 +31,21 @@ class RPCalander(commands.Cog):
         all_guilds = await self._config.all_guilds()  # Edited by Taako
         for guild_id, guild_settings in all_guilds.items():
             current_date = guild_settings["current_date"]  # Edited by Taako
+            last_posted = guild_settings.get("last_posted")  # Edited by Taako
+            time_zone = guild_settings["time_zone"] or "America/Chicago"  # Edited by Taako
+            tz = pytz.timezone(time_zone)  # Edited by Taako
+
+            if last_posted:
+                last_posted_date = datetime.strptime(last_posted, "%m-%d-%Y").astimezone(tz)  # Edited by Taako
+                today_date = datetime.now(tz).replace(hour=0, minute=0, second=0, microsecond=0)  # Edited by Taako
+
+                # Skip posting if the last post was today  # Edited by Taako
+                if last_posted_date >= today_date:
+                    continue
+
             if not current_date:
                 continue
 
-            time_zone = guild_settings["time_zone"] or "America/Chicago"  # Edited by Taako
-            tz = pytz.timezone(time_zone)  # Edited by Taako
             current_date_obj = datetime.strptime(current_date, "%m-%d-%Y").astimezone(tz)  # Edited by Taako
             today_date_obj = datetime.now(tz).replace(hour=0, minute=0, second=0, microsecond=0)  # Edited by Taako
 
