@@ -148,6 +148,7 @@ class WeatherCog(commands.Cog):
         """Remove the set_time_zone command as the bot will now use the system's timezone."""
         await ctx.send("Setting the timezone is no longer supported. The bot will use the system's timezone.")
 
+    @rweather.command(name="info")
     async def info(self, ctx: commands.Context):
         """View the current settings for weather updates."""
         guild_settings = await self.config.guild(ctx.guild).all()

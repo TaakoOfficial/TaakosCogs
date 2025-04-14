@@ -24,7 +24,7 @@ def calculate_next_refresh_time(
 ):
     """Calculate the next refresh time based on the configuration."""
     tz = pytz.timezone(time_zone)
-    now = datetime.now(tz)
+    now = datetime.now(tz)  # Ensure `now` is timezone-aware
 
     if refresh_interval:
         # Ensure the datetime from timestamp is timezone-aware
