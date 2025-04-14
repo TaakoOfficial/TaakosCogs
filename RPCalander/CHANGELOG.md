@@ -1,5 +1,11 @@
 # 📅 rpcalander Changelog
 
+## v1.2.0
+
+### Added
+
+- Added `[p]rpca force` command to immediately post a calendar update to the configured channel.
+
 ## v1.1.0
 
 ### Added

@@ -221,3 +221,19 @@ class WeatherCog(commands.Cog):
         embed.add_field(name=_("🌱 Current Season:"), value=current_season, inline=True)  # Edited by Taako
 
         await ctx.send(embed=embed)  # Edited by Taako
+
+    @rweather.command(name="force")
+    @commands.admin_or_permissions(administrator=True)
+    async def force_post(self, ctx: commands.Context) -> None:
+        """Force post a weather update to the configured channel immediately."""
+        guild_settings = await self.config.guild(ctx.guild).all()
+        channel_id = guild_settings.get("channel_id")
+        if not channel_id:
+            await ctx.send("No channel configured for weather updates.")
+            return
+        try:
+            await self._post_weather_update(ctx.guild.id, guild_settings)
+            await ctx.send("Weather update posted.")
+        except Exception as e:
+            logging.error(f"Error in force post: {e}")
+            await ctx.send(f"Failed to post weather update: {e}")

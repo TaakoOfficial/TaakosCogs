@@ -273,3 +273,45 @@ class RPCalander(commands.Cog):
         """Clean up tasks and unregister commands when the cog is unloaded."""  # Edited by Taako
         logging.debug("Unloading cog and stopping daily update loop.")  # Edited by Taako
         self._daily_update_loop.cancel()  # Stop the daily update loop  # Edited by Taako
+
+    @rpca.command(name="force")
+    @commands.admin_or_permissions(administrator=True)
+    async def force_post(self, ctx: commands.Context) -> None:
+        """Force post a calendar update to the configured channel immediately."""
+        guild_settings = await self._config.guild(ctx.guild).all()
+        channel_id = guild_settings.get("channel_id")
+        if not channel_id:
+            await ctx.send("No channel configured for calendar updates.")
+            return
+        current_date = guild_settings.get("current_date")
+        if not current_date:
+            await ctx.send("No current date set for the calendar.")
+            return
+        time_zone = guild_settings.get("time_zone") or "America/Chicago"
+        embed_color = guild_settings.get("embed_color") or 0x0000FF
+        embed_title = guild_settings.get("embed_title") or "📅 RP Calendar Update"
+        show_footer = guild_settings.get("show_footer", True)
+        tz = pytz.timezone(time_zone)
+        now = datetime.now(tz)
+        try:
+            current_date_obj = datetime.strptime(current_date, "%m-%d-%Y").astimezone(tz)
+        except Exception:
+            current_date_obj = now
+        new_date_str = current_date_obj.strftime("%A %m-%d-%Y")
+        embed = discord.Embed(
+            title=embed_title,
+            description=f"Today's date: **{new_date_str}**",
+            color=discord.Color(embed_color)
+        )
+        if show_footer:
+            embed.set_footer(text="RP Calendar by Taako", icon_url="https://cdn-icons-png.flaticon.com/512/869/869869.png")
+        channel = self._bot.get_channel(channel_id)
+        if channel:
+            try:
+                await channel.send(embed=embed)
+                await ctx.send("Calendar update posted.")
+            except Exception as e:
+                logging.error(f"Error in force post: {e}")
+                await ctx.send(f"Failed to post calendar update: {e}")
+        else:
+            await ctx.send("Configured channel not found.")

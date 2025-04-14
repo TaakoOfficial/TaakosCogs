@@ -1,5 +1,11 @@
 # 🌦️ RandomWeather Changelog
 
+## v1.2.0
+
+### Added
+
+- Added `[p]rweather force` command to immediately post a weather update to the configured channel.
+
 ## v1.1.0
 
 ### Added
