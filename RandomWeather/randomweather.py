@@ -145,28 +145,22 @@ class WeatherCog(commands.Cog):
 
     @rweather.command(name="set_time_zone")
     async def set_time_zone(self, ctx: commands.Context, time_zone: str):
-        """Set the time zone for weather updates dynamically."""
-        if time_zone in pytz.all_timezones:
-            await self.config.guild(ctx.guild).time_zone.set(time_zone)
-            await ctx.send(f"Time zone updated to: {time_zone}")
-        else:
-            await ctx.send("Invalid time zone. Please provide a valid time zone.")
+        """Remove the set_time_zone command as the bot will now use the system's timezone."""
+        await ctx.send("Setting the timezone is no longer supported. The bot will use the system's timezone.")
 
-    @rweather.command(name="info")
     async def info(self, ctx: commands.Context):
         """View the current settings for weather updates."""
         guild_settings = await self.config.guild(ctx.guild).all()
         embed_color = discord.Color(guild_settings.get("embed_color", 0xFF0000))
-        time_zone = validate_timezone(guild_settings.get("time_zone", "UTC"))
         refresh_interval = guild_settings.get("refresh_interval")
         refresh_time = guild_settings.get("refresh_time")
         last_refresh = guild_settings.get("last_refresh", 0)
 
-        # Calculate time until next refresh
-        now = datetime.now(pytz.timezone(time_zone))
+        # Use the system's timezone for all time-related calculations
+        now, system_time_zone = get_system_time_and_timezone()
         try:
             next_post_time = calculate_next_refresh_time(
-                last_refresh, refresh_interval, refresh_time, time_zone
+                last_refresh, refresh_interval, refresh_time, system_time_zone
             )
             time_until_next_refresh = (next_post_time - now).total_seconds()
             if time_until_next_refresh > 0:
@@ -200,22 +194,21 @@ class WeatherCog(commands.Cog):
         channel = self.bot.get_channel(guild_settings.get("channel_id")) if guild_settings.get("channel_id") else None
         role = ctx.guild.get_role(guild_settings.get("role_id")) if guild_settings.get("role_id") else None
 
-        # Get the current time in the configured timezone
+        # Get the current time in the system's timezone
         current_time = now.strftime('%Y-%m-%d %H:%M:%S')
 
         embed = discord.Embed(
             title=_("🌦️ RandomWeather Settings"),
             color=embed_color
         )
-        embed.add_field(name=_("🔄 Refresh Mode:"), value="⏱️ Interval: {} seconds".format(refresh_interval) if refresh_interval else "🕒 Military Time: {}".format(refresh_time) if refresh_time else "❌ Not set", inline=True)  # Edited by Taako
-        embed.add_field(name=_("⏳ Time Until Next Refresh:"), value=time_until_next_refresh_str, inline=True)  # Edited by Taako
-        embed.add_field(name=_("🌍 Time Zone:"), value=time_zone, inline=True)  # Edited by Taako
-        embed.add_field(name=_("🕰️ Current Time:"), value=current_time, inline=True)  # Edited by Taako
-        embed.add_field(name=_("📢 Channel:"), value=channel.mention if channel else "❌ Not set", inline=True)  # Edited by Taako
-        embed.add_field(name=_("🏷️ Role Tagging:"), value="✅ Enabled" if guild_settings.get("tag_role") else "❌ Disabled", inline=True)  # Edited by Taako
-        embed.add_field(name=_("🔖 Tag Role:"), value=role.name if role else "❌ Not set", inline=True)  # Edited by Taako
-        embed.add_field(name=_("🎨 Embed Color:"), value=str(embed_color), inline=True)  # Edited by Taako
-        embed.add_field(name=_("📜 Footer:"), value="✅ Enabled" if guild_settings.get("show_footer") else "❌ Disabled", inline=True)  # Edited by Taako
-        embed.add_field(name=_("🌱 Current Season:"), value=current_season, inline=True)  # Edited by Taako
+        embed.add_field(name=_("🔄 Refresh Mode:"), value="⏱️ Interval: {} seconds".format(refresh_interval) if refresh_interval else "🕒 Military Time: {}".format(refresh_time) if refresh_time else "❌ Not set", inline=True)
+        embed.add_field(name=_("⏳ Time Until Next Refresh:"), value=time_until_next_refresh_str, inline=True)
+        embed.add_field(name=_("🕰️ Current Time:"), value=current_time, inline=True)
+        embed.add_field(name=_("📢 Channel:"), value=channel.mention if channel else "❌ Not set", inline=True)
+        embed.add_field(name=_("🏷️ Role Tagging:"), value="✅ Enabled" if guild_settings.get("tag_role") else "❌ Disabled", inline=True)
+        embed.add_field(name=_("🔖 Tag Role:"), value=role.name if role else "❌ Not set", inline=True)
+        embed.add_field(name=_("🎨 Embed Color:"), value=str(embed_color), inline=True)
+        embed.add_field(name=_("📜 Footer:"), value="✅ Enabled" if guild_settings.get("show_footer") else "❌ Disabled", inline=True)
+        embed.add_field(name=_("🌱 Current Season:"), value=current_season, inline=True)
 
         await ctx.send(embed=embed)
