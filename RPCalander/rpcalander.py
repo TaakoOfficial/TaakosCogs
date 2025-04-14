@@ -22,9 +22,6 @@ class RPCalander(commands.Cog):
         self.config.register_guild(**default_guild)
         self._daily_update_loop.start()  # Start the daily update loop
 
-        # Register the command group
-        bot.add_command(self.rpcalander_group)  # Register the main command group  # Edited by Taako
-
     async def cog_load(self):
         """Restart the daily update loop and check for missed dates when the cog is loaded."""  # Edited by Taako
         if not self._daily_update_loop.is_running():
@@ -87,18 +84,18 @@ class RPCalander(commands.Cog):
                 await channel.send(embed=embed)
 
     @commands.group(name="rpcalander", invoke_without_command=True)
-    async def rpcalander_group(self, ctx):
+    async def rpcalander(self, ctx):
         """Main command group for the RP Calendar cog."""  # Edited by Taako
         if ctx.invoked_subcommand is None:
             await ctx.send_help(ctx.command)  # Show help if no subcommand is invoked
 
-    @rpcalander_group.command(name="settitle")
+    @rpcalander.command(name="settitle")
     async def set_title(self, ctx, *, title: str):
         """Set a custom title for the main embed."""  # Edited by Taako
         await self.config.guild(ctx.guild).embed_title.set(title)
         await ctx.send(f"Embed title set to: {title}")  # Edited by Taako
 
-    @rpcalander_group.command(name="info")
+    @rpcalander.command(name="info")
     async def info(self, ctx):
         """View the current settings for the RP calendar."""  # Edited by Taako
         guild_settings = await self.config.guild(ctx.guild).all()
@@ -126,4 +123,3 @@ class RPCalander(commands.Cog):
     def cog_unload(self):
         """Clean up tasks and unregister commands when the cog is unloaded."""  # Edited by Taako
         self._daily_update_loop.cancel()  # Stop the daily update loop  # Edited by Taako
-        self._bot.remove_command("rpcalander")  # Remove the main command group  # Edited by Taako
