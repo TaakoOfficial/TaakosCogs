@@ -168,7 +168,7 @@ class WeatherCog(commands.Cog):
     @tasks.loop(minutes=1)  # Check every minute to ensure timely posting  # Edited by Taako
     async def _refresh_weather_loop(self):
         """Task loop to post daily weather updates."""  # Edited by Taako
-        all_guilds = await self._config.all_guilds()  # Edited by Taako
+        all_guilds = await self.config.all_guilds()  # Edited by Taako
         for guild_id, guild_settings in all_guilds.items():
             channel_id = guild_settings["channel_id"]  # Edited by Taako
             if not channel_id:
