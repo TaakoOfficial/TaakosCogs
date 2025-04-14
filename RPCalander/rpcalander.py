@@ -17,7 +17,8 @@ class RPCalander(commands.Cog):
             "time_zone": "America/Chicago",  # Default timezone  # Edited by Taako
             "embed_color": 0x0000FF,  # Default color (blue)  # Edited by Taako
             "show_footer": True,  # Show footer in embeds  # Edited by Taako
-            "embed_title": "📅 RP Calendar Update"  # Default title  # Edited by Taako
+            "embed_title": "📅 RP Calendar Update",  # Default title  # Edited by Taako
+            "last_posted": None  # Store the last posted time  # Edited by Taako
         }
         self._config.register_guild(**self._default_guild)  # Edited by Taako
 
