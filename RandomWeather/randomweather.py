@@ -310,6 +310,8 @@ class WeatherCog(commands.Cog):
         if refresh_interval:  # Edited by Taako
             last_refresh = guild_settings.get("last_refresh", 0)  # Edited by Taako
             next_refresh = datetime.fromtimestamp(last_refresh, pytz.timezone(time_zone)) + timedelta(seconds=refresh_interval)  # Edited by Taako
+            if next_refresh < now:  # If the next refresh time is in the past  # Edited by Taako
+                next_refresh = now + timedelta(seconds=refresh_interval)  # Recalculate to the next valid interval  # Edited by Taako
         elif refresh_time:  # Edited by Taako
             target_time = datetime.strptime(refresh_time, "%H%M").replace(  # Edited by Taako
                 tzinfo=pytz.timezone(time_zone),  # Edited by Taako
