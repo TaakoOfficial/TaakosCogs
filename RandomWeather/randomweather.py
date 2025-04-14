@@ -63,20 +63,6 @@ class WeatherCog(commands.Cog):
             logging.debug("Starting weather update loop.")  # Edited by Taako
             self._refresh_weather_loop.start()  # Edited by Taako
 
-    @_refresh_weather_loop.error
-    async def _refresh_weather_loop_error(self, error):
-        """Handle errors in the weather update loop and restart it if necessary."""  # Edited by Taako
-        logging.error(f"Error in weather update loop: {error}")  # Edited by Taako
-        if not self._refresh_weather_loop.is_running():
-            logging.debug("Restarting weather update loop after error.")  # Edited by Taako
-            self._refresh_weather_loop.start()  # Edited by Taako
-
-    @_refresh_weather_loop.before_loop
-    async def before_refresh_weather_loop(self):
-        """Wait until the bot is ready before starting the loop."""  # Edited by Taako
-        logging.debug("Waiting for bot to be ready before starting loop.")  # Edited by Taako
-        await self._bot.wait_until_ready()  # Edited by Taako
-
     def cog_unload(self):
         """Clean up tasks when the cog is unloaded."""  # Edited by Taako
         logging.debug("Unloading cog and stopping weather update loop.")  # Edited by Taako
@@ -209,7 +195,7 @@ class WeatherCog(commands.Cog):
         
         return embed
 
-    # Define the _refresh_weather_loop before using its decorator  # Edited by Taako
+    # Define the _refresh_weather_loop before using its decorators  # Edited by Taako
     @tasks.loop(minutes=1)  # Check every minute to ensure timely posting  # Edited by Taako
     async def _refresh_weather_loop(self):
         """Task loop to post daily weather updates."""  # Edited by Taako
