@@ -7,7 +7,6 @@ import pytz  # Edited by Taako
 from redbot.core.utils.chat_formatting import humanize_list  # Edited by Taako
 from discord.ext import tasks  # Edited by Taako
 from .file_utils import read_last_posted, write_last_posted  # Edited by Taako
-from apscheduler.schedulers.asyncio import AsyncIOScheduler  # Edited by Taako
 import logging  # Edited by Taako
 
 # Configure logging for debugging  # Edited by Taako
@@ -18,28 +17,25 @@ class WeatherCog(commands.Cog):
 
     # Edited by Taako
     def __init__(self, bot):
-        self._bot = bot  # Store the bot instance
+        self._bot = bot  # Store the bot instance  # Edited by Taako
         self.config = Config.get_conf(self, identifier=1234567890, force_registration=True)  # Edited by Taako
         default_guild = {
-            "role_id": None,  # Role ID for tagging
-            "channel_id": None,  # Channel ID for updates
-            "tag_role": False,  # Whether to tag the role
-            "refresh_interval": None,  # Refresh interval in seconds
-            "refresh_time": "0000",  # Default to military time 00:00 (midnight)
-            "time_zone": "America/Chicago",  # Default to Central Time (America/Chicago)
-            "show_footer": True,  # Whether to show the footer in embeds
-            "embed_color": 0xFF0000,  # Default embed color (red)
+            "role_id": None,  # Role ID for tagging  # Edited by Taako
+            "channel_id": None,  # Channel ID for updates  # Edited by Taako
+            "tag_role": False,  # Whether to tag the role  # Edited by Taako
+            "refresh_interval": None,  # Refresh interval in seconds  # Edited by Taako
+            "refresh_time": "0000",  # Default to military time 00:00 (midnight)  # Edited by Taako
+            "time_zone": "America/Chicago",  # Default to Central Time (America/Chicago)  # Edited by Taako
+            "show_footer": True,  # Whether to show the footer in embeds  # Edited by Taako
+            "embed_color": 0xFF0000,  # Default embed color (red)  # Edited by Taako
             "last_refresh": 0,  # Timestamp of the last refresh (default: 0)  # Edited by Taako
-        }
-        self.config.register_guild(**default_guild)
+        }  # Edited by Taako
+        self.config.register_guild(**default_guild)  # Edited by Taako
 
-        # Generate initial weather using the default time zone
+        # Generate initial weather using the default time zone  # Edited by Taako
         default_time_zone = default_guild["time_zone"]  # Edited by Taako
-        self._current_weather = self._generate_weather(default_time_zone)  # Pass default time zone
-        self._refresh_weather_loop.start()  # Start the task loop on cog initialization
-        self.scheduler = AsyncIOScheduler()  # Initialize APScheduler  # Edited by Taako
-        self.scheduler.add_job(self._post_weather_update, 'cron', hour=0, minute=0)  # Default to daily at midnight  # Edited by Taako
-        self.scheduler.start()  # Start the scheduler  # Edited by Taako
+        self._current_weather = self._generate_weather(default_time_zone)  # Pass default time zone  # Edited by Taako
+        self._refresh_weather_loop.start()  # Start the task loop on cog initialization  # Edited by Taako
 
     async def _post_weather_update(self):
         """Fallback method to post weather updates using APScheduler."""  # Edited by Taako
@@ -82,10 +78,9 @@ class WeatherCog(commands.Cog):
         await self._bot.wait_until_ready()  # Edited by Taako
 
     def cog_unload(self):
-        """Clean up tasks and unregister commands when the cog is unloaded."""  # Edited by Taako
+        """Clean up tasks when the cog is unloaded."""  # Edited by Taako
         logging.debug("Unloading cog and stopping weather update loop.")  # Edited by Taako
         self._refresh_weather_loop.cancel()  # Stop the weather update loop  # Edited by Taako
-        self.scheduler.shutdown()  # Shut down the scheduler  # Edited by Taako
 
     def _get_current_season(self, time_zone):
         """Determine the current season based on the time zone and date."""  # Edited by Taako
