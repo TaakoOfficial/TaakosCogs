@@ -174,7 +174,7 @@ class WeatherCog(commands.Cog):
             color=embed_color  # Edited by Taako
         )  # Edited by Taako
         embed.add_field(name=_("Time Zone"), value=time_zone, inline=False)  # Edited by Taako
-        embed.add_field(name=_("Refresh Interval"), value=f"{refresh_interval} seconds" if refresh_interval else _("") "Not set", inline=False)  # Edited by Taako
-        embed.add_field(name=_("Refresh Time"), value=refresh_time if refresh_time else _("") "Not set", inline=False)  # Edited by Taako
+        embed.add_field(name=_("Refresh Interval"), value=f"{refresh_interval} seconds" if refresh_interval else _("Not set"), inline=False)  # Edited by Taako
+        embed.add_field(name=_("Refresh Time"), value=refresh_time if refresh_time else _("Not set"), inline=False)  # Edited by Taako
         embed.add_field(name=_("Embed Color"), value=str(embed_color), inline=False)  # Edited by Taako
         await ctx.send(embed=embed)  # Edited by Taako
