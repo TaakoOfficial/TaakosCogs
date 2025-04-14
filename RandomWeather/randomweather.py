@@ -26,127 +26,82 @@ class WeatherCog(commands.Cog):
             "tag_role": False,
             "refresh_interval": None,
             "refresh_time": "0000",
-            "time_zone": "America/Chicago",
             "show_footer": True,
             "embed_color": 0xFF0000,
             "last_refresh": 0,
         }
         self.config.register_guild(**default_guild)
-        self.bot.loop.create_task(self._startup_debug())
         self._refresh_weather_loop.start()
 
-    async def _startup_debug(self):
-        """Log debug information when the cog is loaded."""
-        await self.bot.wait_until_ready()
-        logging.info(f"WeatherCog loaded in {len(self.bot.guilds)} guilds.")
-
-    @tasks.loop(minutes=1)
-    async def _refresh_weather_loop(self):
-        """Task loop to post daily weather updates."""
-        all_guilds = await self.config.all_guilds()
-        for guild_id, guild_settings in all_guilds.items():
-            refresh_interval = guild_settings.get("refresh_interval")
-            refresh_time = guild_settings.get("refresh_time")
-            time_zone = validate_timezone(guild_settings.get("time_zone", "UTC"))
-            last_refresh = guild_settings.get("last_refresh", 0)
-
-            try:
-                next_post_time = calculate_next_refresh_time(
-                    last_refresh, refresh_interval, refresh_time, time_zone
-                )
-
-                if datetime.now(pytz.timezone(time_zone)) >= next_post_time:
-                    await self._post_weather_update(guild_id, guild_settings)
-            except Exception as e:
-                logging.error(f"Error in weather update loop for guild {guild_id}: {e}")
-
-    async def _post_weather_update(self, guild_id: int, guild_settings: dict):
-        """Post a weather update to the configured channel for a specific guild."""
-        channel_id = guild_settings.get("channel_id")
-        if not channel_id:
-            logging.debug(f"No channel configured for guild {guild_id}. Skipping.")
-            return
-
-        time_zone = guild_settings.get("time_zone", "UTC")
-        weather_data = generate_weather(time_zone)
-        embed = create_weather_embed(weather_data, guild_settings)
-
-        channel = self.bot.get_channel(channel_id)
-        if channel:
-            await channel.send(embed=embed)
-            await self.config.guild_from_id(guild_id).last_refresh.set(datetime.now().timestamp())
-            logging.info(f"Weather update sent to channel {channel.name} in guild {guild_id}.")
-        else:
-            logging.warning(f"Channel {channel_id} not found for guild {guild_id}.")
-
-    @_refresh_weather_loop.before_loop
-    async def before_refresh_weather_loop(self):
-        """Wait until the bot is ready before starting the loop."""
-        await self.bot.wait_until_ready()
-
-    @_refresh_weather_loop.error
-    async def _refresh_weather_loop_error(self, error: Exception):
-        """Handle errors in the weather update loop."""
-        logging.error(f"Error in weather update loop: {error}")
+    async def cog_unload(self):
+        """Clean up tasks when the cog is unloaded."""
+        self._refresh_weather_loop.cancel()
 
     @commands.group(name="rweather", invoke_without_command=True)
+    @commands.admin_or_permissions(administrator=True)
     async def rweather(self, ctx: commands.Context):
-        """Main command group for RandomWeather."""
+        """Weather management commands. Requires administrator permissions."""
         if ctx.invoked_subcommand is None:
             await ctx.send_help(ctx.command)
 
-    @rweather.command(name="setchannel")
+    @rweather.command(name="channel")
     async def set_channel(self, ctx: commands.Context, channel: discord.TextChannel):
         """Set the channel for weather updates."""
         await self.config.guild(ctx.guild).channel_id.set(channel.id)
-        await ctx.send(f"Weather updates will now be sent to: {channel.mention}")
+        await ctx.send(f"Weather updates will now be sent to {channel.mention}")
 
-    @rweather.command(name="setrole")
+    @rweather.command(name="role")
     async def set_role(self, ctx: commands.Context, role: discord.Role):
         """Set the role to be tagged for weather updates."""
         await self.config.guild(ctx.guild).role_id.set(role.id)
-        await ctx.send(f"Weather updates will now tag the role: {role.name}")
+        await ctx.send(f"Weather updates will now tag {role.name}")
 
-    @rweather.command(name="toggle_role")
+    @rweather.command(name="toggle")
     async def toggle_role(self, ctx: commands.Context):
-        """Toggle whether the role should be tagged in weather updates."""
-        tag_role = await self.config.guild(ctx.guild).tag_role()
-        await self.config.guild(ctx.guild).tag_role.set(not tag_role)
-        status = "enabled" if not tag_role else "disabled"
-        await ctx.send(f"Role tagging has been {status}.")
+        """Toggle role tagging on/off for weather updates."""
+        current = await self.config.guild(ctx.guild).tag_role()
+        await self.config.guild(ctx.guild).tag_role.set(not current)
+        state = "enabled" if not current else "disabled"
+        await ctx.send(f"Role tagging has been {state}")
 
-    @rweather.command(name="setrefresh")
+    @rweather.command(name="refresh")
     async def set_refresh(self, ctx: commands.Context, value: str):
-        """Set how often the weather should refresh or specify a time (e.g., `10m` or `1830`)."""
+        """Set refresh interval (10m, 1h) or time (1830)."""
         time_units = {"s": 1, "m": 60, "h": 3600, "d": 86400}
 
         if value.isdigit() and len(value) == 4:
             await self.config.guild(ctx.guild).refresh_time.set(value)
             await self.config.guild(ctx.guild).refresh_interval.set(None)
-            await ctx.send(f"Weather will now refresh daily at {value} (military time).")
-        elif value[-1] in time_units:
-            try:
-                unit = value[-1]
-                interval = int(value[:-1])
-                refresh_interval = interval * time_units[unit]
-                await self.config.guild(ctx.guild).refresh_interval.set(refresh_interval)
-                await self.config.guild(ctx.guild).refresh_time.set(None)
-                await ctx.send(f"Weather will now refresh every {value}.")
-            except (ValueError, IndexError):
-                await ctx.send("Invalid format. Use a number followed by s (seconds), m (minutes), h (hours), or d (days).")
-        else:
-            await ctx.send("Invalid format. Use a valid military time (e.g., 1830) or an interval (e.g., 10m, 1h).")
+            await ctx.send(f"Weather will refresh daily at {value}")
+            return
 
-    @rweather.command(name="set_embed_color")
-    async def set_embed_color(self, ctx: commands.Context, color: discord.Color):
-        """Set the embed color for weather updates dynamically."""
+        if not value[-1] in time_units:
+            await ctx.send("Invalid format. Use time (1830) or interval (10m, 1h)")
+            return
+
+        try:
+            unit = value[-1]
+            interval = int(value[:-1])
+            refresh_interval = interval * time_units[unit]
+            await self.config.guild(ctx.guild).refresh_interval.set(refresh_interval)
+            await self.config.guild(ctx.guild).refresh_time.set(None)
+            await ctx.send(f"Weather will refresh every {value}")
+        except ValueError:
+            await ctx.send("Invalid format. Use a number with s, m, h, or d")
+
+    @rweather.command(name="color")
+    async def set_color(self, ctx: commands.Context, color: discord.Color):
+        """Set the embed color for weather updates."""
         await self.config.guild(ctx.guild).embed_color.set(color.value)
-        await ctx.send(f"Embed color updated to: {color}")
+        await ctx.send(f"Embed color set to: {str(color)}")
 
-    @rweather.command(name="set_time_zone")
-    async def set_time_zone(self, ctx: commands.Context, time_zone: str):
-        """Remove the set_time_zone command as the bot will now use the system's timezone."""
-        await ctx.send("Setting the timezone is no longer supported. The bot will use the system's timezone.")
+    @rweather.command(name="footer")
+    async def toggle_footer(self, ctx: commands.Context):
+        """Toggle footer on/off for weather embeds."""
+        current = await self.config.guild(ctx.guild).show_footer()
+        await self.config.guild(ctx.guild).show_footer.set(not current)
+        state = "enabled" if not current else "disabled"
+        await ctx.send(f"Footer has been {state}")
 
     @rweather.command(name="info")
     async def info(self, ctx: commands.Context):
