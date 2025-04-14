@@ -27,6 +27,7 @@ def calculate_next_refresh_time(
     now = datetime.now(tz)
 
     if refresh_interval:
+        # Ensure the datetime from timestamp is timezone-aware
         next_post_time = datetime.fromtimestamp(last_refresh, tz) + timedelta(seconds=refresh_interval)
     elif refresh_time:
         # Parse the refresh time and set it for today
@@ -35,7 +36,7 @@ def calculate_next_refresh_time(
         )
 
         # If the target time has already passed today, set it for tomorrow
-        if now > target_time:
+        if now >= target_time:
             target_time += timedelta(days=1)
 
         next_post_time = target_time
