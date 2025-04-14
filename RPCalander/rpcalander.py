@@ -5,6 +5,10 @@ import pytz  # Edited by Taako
 from discord.ext import tasks  # Edited by Taako
 from .timing_utils import get_next_post_time, has_already_posted_today, save_last_posted  # Edited by Taako
 from .file_utils import read_last_posted, write_last_posted  # Edited by Taako
+import logging  # Edited by Taako
+
+# Configure logging for debugging  # Edited by Taako
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')  # Edited by Taako
 
 class RPCalander(commands.Cog):
     """A cog for managing an RP calendar with daily updates."""  # Edited by Taako
@@ -26,6 +30,7 @@ class RPCalander(commands.Cog):
 
     async def cog_load(self):
         """Start the daily update loop without triggering an immediate post."""  # Edited by Taako
+        logging.debug("Starting cog_load method.")  # Edited by Taako
         last_posted = read_last_posted()  # Read the last posted timestamp from the file  # Edited by Taako
 
         # Skip starting the loop if already posted today  # Edited by Taako
@@ -35,9 +40,11 @@ class RPCalander(commands.Cog):
             today = datetime.now(tz).replace(hour=0, minute=0, second=0)  # Start of today  # Edited by Taako
 
             if last_posted_dt >= today:
-                return  # Skip starting the loop if already posted today  # Edited by Taako
+                logging.debug("Already posted today. Skipping loop start.")  # Edited by Taako
+                return  # Edited by Taako
 
         if not self._daily_update_loop.is_running():
+            logging.debug("Starting daily update loop.")  # Edited by Taako
             self._daily_update_loop.start()  # Edited by Taako
 
         # Check for missed dates without sending an embed  # Edited by Taako
@@ -108,6 +115,14 @@ class RPCalander(commands.Cog):
                 if channel:
                     await channel.send(embed=embed)
                     write_last_posted()  # Log the last posted time after sending the embed  # Edited by Taako
+
+    @_daily_update_loop.error
+    async def _daily_update_loop_error(self, error):
+        """Handle errors in the daily update loop and restart it if necessary."""  # Edited by Taako
+        logging.error(f"Error in daily update loop: {error}")  # Edited by Taako
+        if not self._daily_update_loop.is_running():
+            logging.debug("Restarting daily update loop after error.")  # Edited by Taako
+            self._daily_update_loop.start()  # Edited by Taako
 
     @commands.group(name="rpca")
     @commands.admin_or_permissions(administrator=True)  # Add permission check  # Edited by Taako
@@ -276,11 +291,7 @@ class RPCalander(commands.Cog):
         await channel.send(embed=embed)
         await ctx.send(f"Calendar update sent to {channel.mention}")  # Edited by Taako
 
-    @_daily_update_loop.before_loop
-    async def before_daily_update_loop(self):
-        """Wait until the bot is ready before starting the loop."""  # Edited by Taako
-        await self._bot.wait_until_ready()
-
     def cog_unload(self):
         """Clean up tasks and unregister commands when the cog is unloaded."""  # Edited by Taako
+        logging.debug("Unloading cog and stopping daily update loop.")  # Edited by Taako
         self._daily_update_loop.cancel()  # Stop the daily update loop  # Edited by Taako

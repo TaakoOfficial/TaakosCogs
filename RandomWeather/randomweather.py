@@ -7,6 +7,11 @@ import pytz  # Edited by Taako
 from redbot.core.utils.chat_formatting import humanize_list  # Edited by Taako
 from discord.ext import tasks  # Edited by Taako
 from .file_utils import read_last_posted, write_last_posted  # Edited by Taako
+from apscheduler.schedulers.asyncio import AsyncIOScheduler  # Edited by Taako
+import logging  # Edited by Taako
+
+# Configure logging for debugging  # Edited by Taako
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')  # Edited by Taako
 
 class WeatherCog(commands.Cog):
     """A cog for generating random daily weather."""  # Edited by Taako
@@ -32,10 +37,55 @@ class WeatherCog(commands.Cog):
         default_time_zone = default_guild["time_zone"]  # Edited by Taako
         self._current_weather = self._generate_weather(default_time_zone)  # Pass default time zone
         self._refresh_weather_loop.start()  # Start the task loop on cog initialization
+        self.scheduler = AsyncIOScheduler()  # Initialize APScheduler  # Edited by Taako
+        self.scheduler.add_job(self._post_weather_update, 'cron', hour=0, minute=0)  # Default to daily at midnight  # Edited by Taako
+        self.scheduler.start()  # Start the scheduler  # Edited by Taako
+
+    async def _post_weather_update(self):
+        """Fallback method to post weather updates using APScheduler."""  # Edited by Taako
+        all_guilds = await self.config.all_guilds()  # Edited by Taako
+        for guild_id, guild_settings in all_guilds.items():
+            channel_id = guild_settings["channel_id"]  # Edited by Taako
+            if not channel_id:
+                continue  # Edited by Taako
+
+            time_zone = guild_settings["time_zone"] or "UTC"  # Default to UTC if not set  # Edited by Taako
+            self._current_weather = self._generate_weather(time_zone)  # Generate weather  # Edited by Taako
+            self._current_weather["guild_settings"] = guild_settings  # Pass guild settings  # Edited by Taako
+            embed = self._create_weather_embed(self._current_weather)  # Create embed  # Edited by Taako
+
+            channel = self._bot.get_channel(channel_id)  # Edited by Taako
+            if channel:
+                await channel.send(embed=embed)  # Send the embed  # Edited by Taako
+            else:
+                print(f"[DEBUG] Channel not found for guild {guild_id}.")  # Debug log  # Edited by Taako
+
+    async def cog_load(self):
+        """Start the weather update loop without triggering an immediate post."""  # Edited by Taako
+        logging.debug("Starting cog_load method.")  # Edited by Taako
+        if not self._refresh_weather_loop.is_running():
+            logging.debug("Starting weather update loop.")  # Edited by Taako
+            self._refresh_weather_loop.start()  # Edited by Taako
+
+    @_refresh_weather_loop.error
+    async def _refresh_weather_loop_error(self, error):
+        """Handle errors in the weather update loop and restart it if necessary."""  # Edited by Taako
+        logging.error(f"Error in weather update loop: {error}")  # Edited by Taako
+        if not self._refresh_weather_loop.is_running():
+            logging.debug("Restarting weather update loop after error.")  # Edited by Taako
+            self._refresh_weather_loop.start()  # Edited by Taako
+
+    @_refresh_weather_loop.before_loop
+    async def before_refresh_weather_loop(self):
+        """Wait until the bot is ready before starting the loop."""  # Edited by Taako
+        logging.debug("Waiting for bot to be ready before starting loop.")  # Edited by Taako
+        await self._bot.wait_until_ready()  # Edited by Taako
 
     def cog_unload(self):
-        """Clean up tasks when the cog is unloaded."""  # Edited by Taako
-        self._refresh_weather_loop.cancel()  # Cancel the task loop
+        """Clean up tasks and unregister commands when the cog is unloaded."""  # Edited by Taako
+        logging.debug("Unloading cog and stopping weather update loop.")  # Edited by Taako
+        self._refresh_weather_loop.cancel()  # Stop the weather update loop  # Edited by Taako
+        self.scheduler.shutdown()  # Shut down the scheduler  # Edited by Taako
 
     def _get_current_season(self, time_zone):
         """Determine the current season based on the time zone and date."""  # Edited by Taako
@@ -202,12 +252,12 @@ class WeatherCog(commands.Cog):
                 next_post_time = now.replace(hour=0, minute=0, second=0) + timedelta(days=1)  # Edited by Taako
 
             # Debug logging to track loop behavior  # Edited by Taako
-            print(f"[DEBUG] Current time: {now}")  # Edited by Taako
-            print(f"[DEBUG] Next post time: {next_post_time}")  # Edited by Taako
+            logging.debug(f"[DEBUG] Current time: {now}")  # Edited by Taako
+            logging.debug(f"[DEBUG] Next post time: {next_post_time}")  # Edited by Taako
 
             # Check if it's time to post  # Edited by Taako
             if now >= next_post_time:  # Edited by Taako
-                print("[DEBUG] It's time to post the weather update.")  # Edited by Taako
+                logging.debug("[DEBUG] It's time to post the weather update.")  # Edited by Taako
                 # Generate and send the weather update  # Edited by Taako
                 weather_data = self._generate_weather_data()  # Edited by Taako
                 embed = discord.Embed(
@@ -217,22 +267,17 @@ class WeatherCog(commands.Cog):
                 )
                 channel = self._bot.get_channel(channel_id)  # Edited by Taako
                 if channel:
-                    print(f"[DEBUG] Sending weather update to channel: {channel.name}")  # Edited by Taako
+                    logging.debug(f"[DEBUG] Sending weather update to channel: {channel.name}")  # Edited by Taako
                     await channel.send(embed=embed)  # Edited by Taako
                     write_last_posted()  # Log the last posted time after sending the embed  # Edited by Taako
                 else:
-                    print("[DEBUG] Channel not found or invalid.")  # Edited by Taako
+                    logging.debug("[DEBUG] Channel not found or invalid.")  # Edited by Taako
 
                 # Update the next post time after posting  # Edited by Taako
                 if refresh_interval:
                     next_post_time = now + timedelta(seconds=refresh_interval)  # Edited by Taako
                 elif refresh_time:
                     next_post_time = target_time + timedelta(days=1)  # Move to the next day for time-based refresh  # Edited by Taako
-
-    @_refresh_weather_loop.before_loop
-    async def before_refresh_weather_loop(self):
-        """Wait until the bot is ready before starting the loop."""  # Edited by Taako
-        await self._bot.wait_until_ready()  # Edited by Taako
 
     @commands.group(name="rweather", invoke_without_command=True)
     async def rweather(self, ctx):
