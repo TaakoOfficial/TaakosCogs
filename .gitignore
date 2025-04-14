@@ -50,3 +50,4 @@ audiotest/
 trusty-cogs.sublime-workspace
 *.sublime-workspace
 .idea/
+.github/copilot/
