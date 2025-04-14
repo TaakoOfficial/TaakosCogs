@@ -34,8 +34,9 @@ class RPCalander(commands.Cog):
             if has_already_posted_today(last_posted, time_zone):
                 continue  # Edited by Taako
 
+        # Ensure the loop starts only after all checks are complete  # Edited by Taako
         if not self._daily_update_loop.is_running():
-            self._daily_update_loop.start()  # Start the loop without sending an embed  # Edited by Taako
+            self._daily_update_loop.start()  # Edited by Taako
 
         # Check for missed dates without sending an embed  # Edited by Taako
         all_guilds = await self._config.all_guilds()  # Edited by Taako
