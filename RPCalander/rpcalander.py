@@ -25,6 +25,15 @@ class RPCalander(commands.Cog):
 
     async def cog_load(self):
         """Start the daily update loop without triggering an immediate post."""  # Edited by Taako
+        all_guilds = await self._config.all_guilds()  # Edited by Taako
+        for guild_id, guild_settings in all_guilds.items():
+            time_zone = guild_settings["time_zone"] or "America/Chicago"  # Edited by Taako
+            last_posted = guild_settings.get("last_posted")  # Edited by Taako
+
+            # Skip starting the loop if already posted today  # Edited by Taako
+            if has_already_posted_today(last_posted, time_zone):
+                continue  # Edited by Taako
+
         if not self._daily_update_loop.is_running():
             self._daily_update_loop.start()  # Start the loop without sending an embed  # Edited by Taako
 
