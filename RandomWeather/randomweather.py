@@ -150,66 +150,74 @@ class WeatherCog(commands.Cog):
 
     @rweather.command(name="info")
     async def info(self, ctx: commands.Context):
-        """View the current settings for weather updates."""
-        guild_settings = await self.config.guild(ctx.guild).all()
-        embed_color = discord.Color(guild_settings.get("embed_color", 0xFF0000))
-        refresh_interval = guild_settings.get("refresh_interval")
-        refresh_time = guild_settings.get("refresh_time")
-        last_refresh = guild_settings.get("last_refresh", 0)
+        """View the current settings for weather updates."""  # Edited by Taako
+        guild_settings = await self.config.guild(ctx.guild).all()  # Edited by Taako
+        embed_color = discord.Color(guild_settings.get("embed_color", 0xFF0000))  # Edited by Taako
+        refresh_interval = guild_settings.get("refresh_interval")  # Edited by Taako
+        refresh_time = guild_settings.get("refresh_time")  # Edited by Taako
+        last_refresh = guild_settings.get("last_refresh", 0)  # Edited by Taako
 
-        # Use the system's timezone for all time-related calculations
-        now, system_time_zone = get_system_time_and_timezone()
+        # Use the system's timezone for all time-related calculations  # Edited by Taako
+        now, system_time_zone = get_system_time_and_timezone()  # Edited by Taako
+        time_until_next_refresh_str = "❌ Not set"  # Edited by Taako
         try:
             next_post_time = calculate_next_refresh_time(
-                last_refresh, refresh_interval, refresh_time, system_time_zone
+                last_refresh, refresh_interval, refresh_time, system_time_zone  # Edited by Taako
             )
-            time_until_next_refresh = (next_post_time - now).total_seconds()
-            if time_until_next_refresh > 0:
-                days, remainder = divmod(time_until_next_refresh, 86400)
-                hours, remainder = divmod(remainder, 3600)
-                minutes, seconds = divmod(remainder, 60)
-                time_until_next_refresh_str = (
-                    (f"{int(days)}d " if days else "") +
-                    (f"{int(hours)}h " if hours else "") +
-                    (f"{int(minutes)}m " if minutes else "") +
-                    (f"{int(seconds)}s" if seconds else "")
-                ).strip()
+            # Ensure both are timezone-aware  # Edited by Taako
+            if next_post_time is not None and hasattr(next_post_time, 'tzinfo') and next_post_time.tzinfo is not None:
+                if now.tzinfo is None:
+                    import pytz  # Edited by Taako
+                    now = pytz.timezone(system_time_zone).localize(now)
+                time_until_next_refresh = (next_post_time - now).total_seconds()
+                if time_until_next_refresh > 0:
+                    days, remainder = divmod(time_until_next_refresh, 86400)
+                    hours, remainder = divmod(remainder, 3600)
+                    minutes, seconds = divmod(remainder, 60)
+                    time_until_next_refresh_str = (
+                        (f"{int(days)}d " if days else "") +
+                        (f"{int(hours)}h " if hours else "") +
+                        (f"{int(minutes)}m " if minutes else "") +
+                        (f"{int(seconds)}s" if seconds else "")
+                    ).strip()
+                else:
+                    time_until_next_refresh_str = "❌ Not set"  # Edited by Taako
             else:
-                time_until_next_refresh_str = "❌ Not set"
+                time_until_next_refresh_str = "❌ Error"  # Edited by Taako
         except Exception as e:
-            logging.error(f"Error calculating next refresh time: {e}")
-            time_until_next_refresh_str = "❌ Error"
+            logging.error(f"Error calculating next refresh time: {e}")  # Edited by Taako
+            time_until_next_refresh_str = "❌ Error"  # Edited by Taako
 
-        # Determine current season
-        month = now.month
+        # Determine current season  # Edited by Taako
+        month = now.month  # Edited by Taako
         if month in [12, 1, 2]:
-            current_season = "❄️ Winter"
+            current_season = "❄️ Winter"  # Edited by Taako
         elif month in [3, 4, 5]:
-            current_season = "🌸 Spring"
+            current_season = "🌸 Spring"  # Edited by Taako
         elif month in [6, 7, 8]:
-            current_season = "☀️ Summer"
+            current_season = "☀️ Summer"  # Edited by Taako
         else:
-            current_season = "🍂 Autumn"
+            current_season = "🍂 Autumn"  # Edited by Taako
 
-        # Get channel and role
-        channel = self.bot.get_channel(guild_settings.get("channel_id")) if guild_settings.get("channel_id") else None
-        role = ctx.guild.get_role(guild_settings.get("role_id")) if guild_settings.get("role_id") else None
+        # Get channel and role  # Edited by Taako
+        channel = self.bot.get_channel(guild_settings.get("channel_id")) if guild_settings.get("channel_id") else None  # Edited by Taako
+        role = ctx.guild.get_role(guild_settings.get("role_id")) if guild_settings.get("role_id") else None  # Edited by Taako
 
-        # Get the current time in the system's timezone
-        current_time = now.strftime('%Y-%m-%d %H:%M:%S')
+        # Get the current time in the system's timezone  # Edited by Taako
+        current_time = now.strftime('%Y-%m-%d %H:%M:%S')  # Edited by Taako
 
         embed = discord.Embed(
             title=_("🌦️ RandomWeather Settings"),
             color=embed_color
-        )
-        embed.add_field(name=_("🔄 Refresh Mode:"), value="⏱️ Interval: {} seconds".format(refresh_interval) if refresh_interval else "🕒 Military Time: {}".format(refresh_time) if refresh_time else "❌ Not set", inline=True)
-        embed.add_field(name=_("⏳ Time Until Next Refresh:"), value=time_until_next_refresh_str, inline=True)
-        embed.add_field(name=_("🕰️ Current Time:"), value=current_time, inline=True)
-        embed.add_field(name=_("📢 Channel:"), value=channel.mention if channel else "❌ Not set", inline=True)
-        embed.add_field(name=_("🏷️ Role Tagging:"), value="✅ Enabled" if guild_settings.get("tag_role") else "❌ Disabled", inline=True)
-        embed.add_field(name=_("🔖 Tag Role:"), value=role.name if role else "❌ Not set", inline=True)
-        embed.add_field(name=_("🎨 Embed Color:"), value=str(embed_color), inline=True)
-        embed.add_field(name=_("📜 Footer:"), value="✅ Enabled" if guild_settings.get("show_footer") else "❌ Disabled", inline=True)
-        embed.add_field(name=_("🌱 Current Season:"), value=current_season, inline=True)
+        )  # Edited by Taako
+        embed.add_field(name=_("🔄 Refresh Mode:"), value="⏱️ Interval: {} seconds".format(refresh_interval) if refresh_interval else "🕒 Military Time: {}".format(refresh_time) if refresh_time else "❌ Not set", inline=True)  # Edited by Taako
+        embed.add_field(name=_("⏳ Time Until Next Refresh:"), value=time_until_next_refresh_str, inline=True)  # Edited by Taako
+        embed.add_field(name=_("🕰️ Current Time:"), value=current_time, inline=True)  # Edited by Taako
+        embed.add_field(name=_("📢 Channel:"), value=channel.mention if channel else "❌ Not set", inline=True)  # Edited by Taako
+        embed.add_field(name=_("🏷️ Role Tagging:"), value="✅ Enabled" if guild_settings.get("tag_role") else "❌ Disabled", inline=True)  # Edited by Taako
+        embed.add_field(name=_("🔖 Tag Role:"), value=role.name if role else "❌ Not set", inline=True)  # Edited by Taako
+        embed.add_field(name=_("🎨 Embed Color:"), value=str(embed_color), inline=True)  # Edited by Taako
+        embed.add_field(name=_("📜 Footer:"), value="✅ Enabled" if guild_settings.get("show_footer") else "❌ Disabled", inline=True)  # Edited by Taako
+        embed.add_field(name=_("🌱 Current Season:"), value=current_season, inline=True)  # Edited by Taako
 
-        await ctx.send(embed=embed)
+        await ctx.send(embed=embed)  # Edited by Taako
