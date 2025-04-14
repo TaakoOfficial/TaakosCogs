@@ -147,7 +147,8 @@ class RPCalander(commands.Cog):
         time_components.append(f"{int(minutes):02}m")  # Always include minutes  # Edited by Taako
         time_components.append(f"{int(seconds):02}s")  # Always include seconds  # Edited by Taako
         time_until_next_post_str = " ".join(time_components)  # Edited by Taako
-        else:
+
+        if not time_components:  # Edited by Taako
             time_until_next_post_str = "Not scheduled"  # Edited by Taako
 
         embed.add_field(name="Time Until Next Post", value=time_until_next_post_str, inline=False)  # Edited by Taako
