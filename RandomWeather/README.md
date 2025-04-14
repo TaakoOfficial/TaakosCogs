@@ -33,8 +33,35 @@ Welcome to **RandomWeather**, a Discord bot cog that generates random daily weat
 
 ---
 
+## 🛠️ Installation
+
+To install the **RandomWeather** cog:
+
+1. Add Taako's repository to your bot:
+
+   ```
+   [p]repo add TaakosCogs https://github.com/TaakoOfficial/TaakosCogs
+   ```
+
+2. Install the RandomWeather cog:
+
+   ```
+   [p]cog install TaakosCogs RandomWeather
+   ```
+
+3. Load the cog:
+
+   ```
+   [p]load RandomWeather
+   ```
+
+4. Use `[p]rweather` to start configuring the RandomWeather cog.
+
+---
+
 ## 🔗 Additional Resources
 
+- Learn more about [Red-DiscordBot](https://github.com/Cog-Creators/Red-DiscordBot/tree/V3/develop).
 - View the full list of time zones: [Wikipedia Time Zones](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones).
 
 ---
