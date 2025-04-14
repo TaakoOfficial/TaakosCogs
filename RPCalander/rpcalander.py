@@ -127,24 +127,26 @@ class RPCalander(commands.Cog):
         embed.add_field(name="Start Date", value=start_date, inline=False)
         embed.add_field(name="Current Date", value=current_date, inline=False)
 
-        # Calculate time until the next post
-        next_post_time = self._daily_update_loop.next_iteration  # Edited by Taako
-        if next_post_time:
-            now = datetime.now(next_post_time.tzinfo)  # Make 'now' timezone-aware using the same timezone as 'next_post_time'  # Edited by Taako
-            time_until_next_post = next_post_time - now  # Edited by Taako
-            days, seconds = divmod(time_until_next_post.total_seconds(), 86400)  # Edited by Taako
-            hours, remainder = divmod(seconds, 3600)  # Edited by Taako
-            minutes, seconds = divmod(remainder, 60)  # Edited by Taako
+        # Calculate the next post time explicitly for 00:00 in the configured timezone
+        tz = pytz.timezone(time_zone)  # Edited by Taako
+        now = datetime.now(tz)  # Get the current time in the configured timezone  # Edited by Taako
+        next_post_time = now.replace(hour=0, minute=0, second=0) + timedelta(days=1)  # Set to 00:00 of the next day  # Edited by Taako
 
-            # Build the time string, excluding `00` for days and hours, but keeping `00m`  # Edited by Taako
-            time_components = []  # Edited by Taako
-            if days > 0:
-                time_components.append(f"{int(days)}d")  # Edited by Taako
-            if hours > 0:
-                time_components.append(f"{int(hours)}h")  # Edited by Taako
-            time_components.append(f"{int(minutes):02}m")  # Always include minutes  # Edited by Taako
-            time_components.append(f"{int(seconds):02}s")  # Always include seconds  # Edited by Taako
-            time_until_next_post_str = " ".join(time_components)  # Edited by Taako
+        # Calculate the time until the next post
+        time_until_next_post = next_post_time - now  # Edited by Taako
+        days, seconds = divmod(time_until_next_post.total_seconds(), 86400)  # Edited by Taako
+        hours, remainder = divmod(seconds, 3600)  # Edited by Taako
+        minutes, seconds = divmod(remainder, 60)  # Edited by Taako
+
+        # Build the time string, excluding `00` for days and hours, but keeping `00m`  # Edited by Taako
+        time_components = []  # Edited by Taako
+        if days > 0:
+            time_components.append(f"{int(days)}d")  # Edited by Taako
+        if hours > 0:
+            time_components.append(f"{int(hours)}h")  # Edited by Taako
+        time_components.append(f"{int(minutes):02}m")  # Always include minutes  # Edited by Taako
+        time_components.append(f"{int(seconds):02}s")  # Always include seconds  # Edited by Taako
+        time_until_next_post_str = " ".join(time_components)  # Edited by Taako
         else:
             time_until_next_post_str = "Not scheduled"  # Edited by Taako
 
