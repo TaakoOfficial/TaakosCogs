@@ -17,38 +17,6 @@ class WeatherCog(commands.Cog):
     __author__ = ["Taako"]
     __version__ = "2.0.1"
 
-    @tasks.loop(minutes=1)
-    async def weather_update_loop(self) -> None:
-        """Task loop to post daily weather updates at the correct time or interval."""
-        try:
-            all_guilds = await self.config.all_guilds()
-            for guild_id, guild_settings in all_guilds.items():
-                try:
-                    channel_id = guild_settings.get("channel_id")
-                    if not channel_id:
-                        continue
-                    last_refresh = guild_settings.get("last_refresh", 0)
-                    refresh_interval = guild_settings.get("refresh_interval")
-                    refresh_time = guild_settings.get("refresh_time")
-                    # Use system timezone
-                    _, system_time_zone = get_system_time_and_timezone()
-                    next_post_time = calculate_next_refresh_time(
-                        last_refresh, refresh_interval, refresh_time, system_time_zone
-                    )
-                    now = datetime.now().timestamp()
-                    # Only post if it's time
-                    if next_post_time is not None and now >= next_post_time.timestamp():
-                        await self._post_weather_update(guild_id, guild_settings, scheduled_time=next_post_time.timestamp())
-                except Exception as e:
-                    logging.error(f"Error in weather update for guild {guild_id}: {e}")
-        except Exception as e:
-            logging.error(f"Error in weather update loop: {e}")
-
-    @weather_update_loop.before_loop
-    async def before_weather_loop(self):
-        """Wait for bot to be ready before starting the loop."""
-        await self.bot.wait_until_ready()
-
     def __init__(self, bot: commands.Bot):
         """Initialize the weather cog."""
         self.bot = bot
@@ -62,9 +30,52 @@ class WeatherCog(commands.Cog):
             "show_footer": True,
             "embed_color": 0xFF0000,
             "last_refresh": 0,
+            "time_zone": "UTC",  # Per-guild time zone support
         }
         self.config.register_guild(**default_guild)
         self.weather_update_loop.start()
+
+    @rweather.command(name="timezone")
+    async def set_timezone(self, ctx: commands.Context, timezone: str = None):
+        """Set the timezone for weather updates (e.g., UTC, America/New_York)."""
+        if not timezone:
+            await ctx.send("Please provide a timezone (e.g., UTC, America/New_York)")
+            return
+        if timezone in pytz.all_timezones:
+            await self.config.guild(ctx.guild).time_zone.set(timezone)
+            await ctx.send(f"Timezone set to: {timezone}")
+        else:
+            await ctx.send("Invalid timezone. See: https://en.wikipedia.org/wiki/List_of_tz_database_time_zones")
+
+    @tasks.loop(minutes=1)
+    async def weather_update_loop(self) -> None:
+        """Task loop to post daily weather updates at the correct time or interval."""
+        try:
+            all_guilds = await self.config.all_guilds()
+            for guild_id, guild_settings in all_guilds.items():
+                try:
+                    channel_id = guild_settings.get("channel_id")
+                    if not channel_id:
+                        continue
+                    last_refresh = guild_settings.get("last_refresh", 0)
+                    refresh_interval = guild_settings.get("refresh_interval")
+                    refresh_time = guild_settings.get("refresh_time")
+                    time_zone = guild_settings.get("time_zone") or "UTC"
+                    next_post_time = calculate_next_refresh_time(
+                        last_refresh, refresh_interval, refresh_time, time_zone
+                    )
+                    now = datetime.now(pytz.timezone(time_zone)).timestamp()
+                    if next_post_time is not None and now >= next_post_time.timestamp():
+                        await self._post_weather_update(guild_id, guild_settings, scheduled_time=next_post_time.timestamp())
+                except Exception as e:
+                    logging.error(f"Error in weather update for guild {guild_id}: {e}")
+        except Exception as e:
+            logging.error(f"Error in weather update loop: {e}")
+
+    @weather_update_loop.before_loop
+    async def before_weather_loop(self):
+        """Wait for bot to be ready before starting the loop."""
+        await self.bot.wait_until_ready()
 
     async def cog_unload(self):
         """Clean up tasks when the cog is unloaded."""
@@ -243,29 +254,18 @@ class WeatherCog(commands.Cog):
             channel = self.bot.get_channel(guild_settings.get("channel_id"))
             if not channel:
                 return
-
-            # Get system timezone and prepare settings
-            _, system_time_zone = get_system_time_and_timezone()
+            time_zone = guild_settings.get("time_zone") or "UTC"
             update_settings = guild_settings.copy()
-            update_settings["time_zone"] = system_time_zone
-            
-            # Generate weather and create embed
-            data = generate_weather(time_zone=system_time_zone)
+            update_settings["time_zone"] = time_zone
+            data = generate_weather(time_zone=time_zone)
             embed = create_weather_embed(data, update_settings)
-
-            # Add role mention if enabled
             content = None
             if guild_settings.get("tag_role"):
                 role_id = guild_settings.get("role_id")
                 if role_id:
                     content = f"<@&{role_id}>"
-
-            # Send the update
             await channel.send(content=content, embed=embed)
-            
-            # Update last refresh time to the scheduled time
-            last_refresh = scheduled_time if scheduled_time is not None else datetime.now().timestamp()
+            last_refresh = scheduled_time if scheduled_time is not None else datetime.now(pytz.timezone(time_zone)).timestamp()
             await self.config.guild(self.bot.get_guild(guild_id)).last_refresh.set(last_refresh)
-
         except Exception as e:
             logging.error(f"Error posting weather update for guild {guild_id}: {e}")
