@@ -248,13 +248,13 @@ class WeatherCog(commands.Cog):
             await ctx.send("No channel configured for weather updates.")
             return
         try:
-            await self._post_weather_update(ctx.guild.id, guild_settings)
+            await self._post_weather_update(ctx.guild.id, guild_settings, is_forced=True)
             await ctx.send("Weather update posted.")
         except Exception as e:
             logging.error(f"Error in force post: {e}")
             await ctx.send(f"Failed to post weather update: {e}")
 
-    async def _post_weather_update(self, guild_id: int, guild_settings: dict, scheduled_time: float = None) -> None:
+    async def _post_weather_update(self, guild_id: int, guild_settings: dict, scheduled_time: float = None, is_forced: bool = False) -> None:
         """Post a weather update for a guild.
         
         Parameters
@@ -265,6 +265,8 @@ class WeatherCog(commands.Cog):
             The guild's settings dictionary
         scheduled_time: float, optional
             The scheduled time for this post (timestamp). If not provided, uses now.
+        is_forced: bool, optional
+            Whether this is a forced post (should set last_refresh to now)
         """
         try:
             channel = self.bot.get_channel(guild_settings.get("channel_id"))
@@ -282,7 +284,10 @@ class WeatherCog(commands.Cog):
                     content = f"<@&{role_id}>"
             await channel.send(content=content, embed=embed)
             # Update last_refresh in config and file
-            last_refresh = scheduled_time if scheduled_time is not None else datetime.now(pytz.timezone(time_zone)).timestamp()
+            if is_forced:
+                last_refresh = datetime.now(pytz.timezone(time_zone)).timestamp()
+            else:
+                last_refresh = scheduled_time if scheduled_time is not None else datetime.now(pytz.timezone(time_zone)).timestamp()
             await self.config.guild(self.bot.get_guild(guild_id)).last_refresh.set(last_refresh)
             write_last_posted()  # Write to file for global tracking
         except Exception as e:
