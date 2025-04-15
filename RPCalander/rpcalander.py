@@ -40,6 +40,8 @@ class RPCalander(commands.Cog, DashboardIntegration):
             "last_posted": None
         }
         self._config.register_guild(**self._default_guild)
+        if _dashboard_available:
+            logging.info("Red-Dashboard integration registered for RPCalander.")
 
     async def cog_load(self):
         """Start the daily update loop without triggering an immediate post."""
@@ -357,3 +359,35 @@ class RPCalander(commands.Cog, DashboardIntegration):
         except Exception as e:
             logging.error(f"Error in force post date calculation: {e}")
             await ctx.send(f"Failed to calculate current date: {e}")
+
+    if _dashboard_available:
+        @dashboard_page("test", "RP Calendar Dashboard Test")
+        async def dashboard_test(self, request, guild):
+            """A test page to verify dashboard integration."""
+            return {"message": "Dashboard integration is working!"}
+
+        @dashboard_page("settings", "RP Calendar Settings")
+        async def dashboard_settings(self, request, guild):
+            """Dashboard page for viewing and editing RP Calendar settings."""
+            settings = await self._config.guild(guild).all()
+            if request.method == "POST":
+                data = await request.post()
+                embed_title = data.get("embed_title", settings["embed_title"])
+                time_zone = data.get("time_zone", settings["time_zone"])
+                embed_color = int(data.get("embed_color", settings["embed_color"]))
+                show_footer = data.get("show_footer", "off") == "on"
+                await self._config.guild(guild).embed_title.set(embed_title)
+                await self._config.guild(guild).time_zone.set(time_zone)
+                await self._config.guild(guild).embed_color.set(embed_color)
+                await self._config.guild(guild).show_footer.set(show_footer)
+                settings = await self._config.guild(guild).all()
+            return {
+                "embed_title": settings["embed_title"],
+                "time_zone": settings["time_zone"],
+                "embed_color": settings["embed_color"],
+                "show_footer": settings["show_footer"],
+            }
+
+        def get_dashboard_views(self):
+            """Return dashboard page methods for Red-Dashboard discovery."""
+            return [self.dashboard_test, self.dashboard_settings]
