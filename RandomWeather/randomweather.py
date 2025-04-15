@@ -15,7 +15,7 @@ class WeatherCog(commands.Cog):
     """A cog for generating random daily weather updates."""
 
     __author__ = ["Taako"]
-    __version__ = "2.0.0"
+    __version__ = "2.0.1"
 
     @tasks.loop(minutes=1)
     async def weather_update_loop(self) -> None:
@@ -38,7 +38,7 @@ class WeatherCog(commands.Cog):
                     now = datetime.now().timestamp()
                     # Only post if it's time
                     if next_post_time is not None and now >= next_post_time.timestamp():
-                        await self._post_weather_update(guild_id, guild_settings)
+                        await self._post_weather_update(guild_id, guild_settings, scheduled_time=next_post_time.timestamp())
                 except Exception as e:
                     logging.error(f"Error in weather update for guild {guild_id}: {e}")
         except Exception as e:
@@ -227,7 +227,7 @@ class WeatherCog(commands.Cog):
             logging.error(f"Error in force post: {e}")
             await ctx.send(f"Failed to post weather update: {e}")
 
-    async def _post_weather_update(self, guild_id: int, guild_settings: dict) -> None:
+    async def _post_weather_update(self, guild_id: int, guild_settings: dict, scheduled_time: float = None) -> None:
         """Post a weather update for a guild.
         
         Parameters
@@ -236,6 +236,8 @@ class WeatherCog(commands.Cog):
             The ID of the guild to post the update for
         guild_settings: dict
             The guild's settings dictionary
+        scheduled_time: float, optional
+            The scheduled time for this post (timestamp). If not provided, uses now.
         """
         try:
             channel = self.bot.get_channel(guild_settings.get("channel_id"))
@@ -261,9 +263,9 @@ class WeatherCog(commands.Cog):
             # Send the update
             await channel.send(content=content, embed=embed)
             
-            # Update last refresh time
-            now = datetime.now().timestamp()
-            await self.config.guild(self.bot.get_guild(guild_id)).last_refresh.set(now)
+            # Update last refresh time to the scheduled time
+            last_refresh = scheduled_time if scheduled_time is not None else datetime.now().timestamp()
+            await self.config.guild(self.bot.get_guild(guild_id)).last_refresh.set(last_refresh)
 
         except Exception as e:
             logging.error(f"Error posting weather update for guild {guild_id}: {e}")
