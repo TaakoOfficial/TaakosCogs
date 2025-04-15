@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 from typing import Optional
 from .weather_utils import generate_weather, create_weather_embed
 from .time_utils import get_system_time_and_timezone, validate_timezone, calculate_next_refresh_time  # Edited by Taako
+from .file_utils import read_last_posted, write_last_posted
 import logging
 
 _ = Translator("RandomWeather", __file__)  # Edited by Taako
@@ -61,11 +62,26 @@ class WeatherCog(commands.Cog):
                     refresh_interval = guild_settings.get("refresh_interval")
                     refresh_time = guild_settings.get("refresh_time")
                     time_zone = guild_settings.get("time_zone") or "UTC"
+                    # Read last posted from file (for extra safety)
+                    file_last_posted = read_last_posted()
+                    tz = pytz.timezone(time_zone)
+                    now = datetime.now(tz)
+                    # Use the most recent last_refresh
+                    if file_last_posted:
+                        try:
+                            file_last_dt = datetime.fromisoformat(file_last_posted).astimezone(tz)
+                            last_refresh = max(last_refresh, file_last_dt.timestamp())
+                        except Exception:
+                            pass
                     next_post_time = calculate_next_refresh_time(
                         last_refresh, refresh_interval, refresh_time, time_zone
                     )
-                    now = datetime.now(pytz.timezone(time_zone)).timestamp()
-                    if next_post_time is not None and now >= next_post_time.timestamp():
+                    # Ensure both are timezone-aware
+                    if next_post_time.tzinfo is None:
+                        next_post_time = tz.localize(next_post_time)
+                    if now.tzinfo is None:
+                        now = tz.localize(now)
+                    if now >= next_post_time:
                         await self._post_weather_update(guild_id, guild_settings, scheduled_time=next_post_time.timestamp())
                 except Exception as e:
                     logging.error(f"Error in weather update for guild {guild_id}: {e}")
@@ -265,7 +281,9 @@ class WeatherCog(commands.Cog):
                 if role_id:
                     content = f"<@&{role_id}>"
             await channel.send(content=content, embed=embed)
+            # Update last_refresh in config and file
             last_refresh = scheduled_time if scheduled_time is not None else datetime.now(pytz.timezone(time_zone)).timestamp()
             await self.config.guild(self.bot.get_guild(guild_id)).last_refresh.set(last_refresh)
+            write_last_posted()  # Write to file for global tracking
         except Exception as e:
             logging.error(f"Error posting weather update for guild {guild_id}: {e}")
