@@ -1,50 +1,33 @@
+from datetime import datetime, timedelta
 import pytz
-from datetime import datetime, timedelta  # Ensure timedelta is imported
 
-def get_system_time_and_timezone():
-    """Get the current system time and timezone."""
-    now = datetime.now()
-    try:
-        import tzlocal
-        system_timezone = tzlocal.get_localzone().zone
-    except ImportError:
-        system_timezone = "UTC"  # Fallback if tzlocal is not available
-
-    return now, system_timezone
-
-def validate_timezone(configured_timezone: str) -> str:
-    """Validate the configured timezone against the system timezone."""
-    if configured_timezone in pytz.all_timezones:
-        return configured_timezone
-    else:
-        return "UTC"  # Default to UTC if the configured timezone is invalid
-
-def calculate_next_refresh_time(last_refresh: int, refresh_interval: int, refresh_time: str, time_zone: str):
-    """Calculate the next refresh time based on the configuration."""
+def get_next_post_time(time_zone: str) -> datetime:
+    """Calculate the next post time (00:00) in the given timezone."""
     tz = pytz.timezone(time_zone)
-    now = datetime.now(tz)  # Ensure `now` is timezone-aware
-    last_refresh_dt = datetime.fromtimestamp(last_refresh, tz) if last_refresh else now
-
-    if refresh_interval:
-        # For intervals, simply add the interval to the last refresh time
-        next_post_time = last_refresh_dt + timedelta(seconds=refresh_interval)
-    elif refresh_time:
-        # Parse the refresh time
-        refresh_hour = int(refresh_time[:2])
-        refresh_minute = int(refresh_time[2:])
-        
-        # Start with the last refresh date and set the target time
-        target_time = last_refresh_dt.replace(hour=refresh_hour, minute=refresh_minute, second=0, microsecond=0)
-        
-        # If the target time is before the last refresh time, move to next day
-        if target_time <= last_refresh_dt:
-            target_time += timedelta(days=1)
-            
-        next_post_time = target_time
-    else:
-        # Default to midnight of the next day if no refresh time or interval is set
-        next_post_time = now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
-
+    now = datetime.now(tz)
+    next_post_time = now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
     return next_post_time
 
-# Edited by Taako
+def has_already_posted_today(last_posted: datetime, time_zone: str) -> bool:
+    """Check if the last post was made today in the given timezone."""
+    if not last_posted:
+        return False
+
+    tz = pytz.timezone(time_zone)
+    if isinstance(last_posted, str):
+        last_posted = datetime.fromisoformat(last_posted)
+    
+    last_posted_dt = last_posted.astimezone(tz)
+    today = datetime.now(tz).replace(hour=0, minute=0, second=0, microsecond=0)
+    return last_posted_dt >= today
+
+def calculate_next_refresh_time(last_posted: datetime, time_zone: str) -> datetime:
+    """Calculate the next refresh time based on the last posted time."""
+    tz = pytz.timezone(time_zone)
+    now = datetime.now(tz)
+    next_post_time = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    
+    if now >= next_post_time:
+        next_post_time += timedelta(days=1)
+    
+    return next_post_time
