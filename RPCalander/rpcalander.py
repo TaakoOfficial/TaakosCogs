@@ -101,13 +101,23 @@ class RPCAGroup(app_commands.Group):
         await interaction.response.send_message(f"Embed title set to: {title}", ephemeral=True)
 
     @app_commands.command(name="setcolor", description="Set the embed color for calendar updates.")
-    async def setcolor(self, interaction: discord.Interaction, color: discord.Color) -> None:
-        """Slash command to set the embed color."""
+    async def setcolor(self, interaction: discord.Interaction, color: str) -> None:
+        """Slash command to set the embed color. Accepts a hex code (e.g. #00ff00 or 0x00ff00 or 00ff00)."""
         if not interaction.guild:
             await interaction.response.send_message("This command can only be used in a server.", ephemeral=True)
             return
-        await self.cog._config.guild(interaction.guild).embed_color.set(color.value)
-        await interaction.response.send_message(f"Embed color set to: {str(color)}", ephemeral=True)
+        color_str = color.strip().lower().replace("#", "").replace("0x", "")
+        try:
+            color_value = int(color_str, 16)
+            if not (0x000000 <= color_value <= 0xFFFFFF):
+                raise ValueError
+            color_obj = discord.Color(color_value)
+        except Exception:
+            await interaction.response.send_message(
+                "Invalid color. Please provide a valid hex code (e.g. #00ff00).", ephemeral=True)
+            return
+        await self.cog._config.guild(interaction.guild).embed_color.set(color_value)
+        await interaction.response.send_message(f"Embed color set to: #{color_str.zfill(6)}", ephemeral=True)
 
     @app_commands.command(name="settimezone", description="Set the timezone for the calendar.")
     async def settimezone(self, interaction: discord.Interaction, timezone: str) -> None:
