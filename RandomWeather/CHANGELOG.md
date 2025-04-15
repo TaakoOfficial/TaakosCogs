@@ -3,6 +3,7 @@
 ## [v2.0.1] - 2025-04-14
 
 ### 🛠️ Improvements
+
 - Improved scheduled weather update logic: updates now always respect the configured interval or set time, even after restarts or delays.
 - Fixed issue where weather updates could drift or jump a day if the bot was restarted or delayed.
 
