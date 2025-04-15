@@ -304,13 +304,24 @@ class RPCalander(commands.Cog):
         now = datetime.now(tz)
         
         try:
-            # Get the year from stored current_date
-            current_year = datetime.strptime(current_date, "%m-%d-%Y").year
-            # Create a new date using today's month/day but the stored year
-            current_date_obj = now.replace(year=current_year)
-            # Update the stored current_date
-            new_date_str = current_date_obj.strftime("%A %m-%d-%Y")
-            await self._config.guild(ctx.guild).current_date.set(current_date_obj.strftime("%m-%d-%Y"))
+            # Parse current stored date
+            current_date_obj = datetime.strptime(current_date, "%m-%d-%Y").replace(tzinfo=tz)
+            today_date_obj = now.replace(hour=0, minute=0, second=0, microsecond=0)
+
+            # Check if we need to increment the date
+            if not self._is_same_month_day(current_date_obj, today_date_obj):
+                days_missed = (today_date_obj - current_date_obj.replace(year=today_date_obj.year)).days
+                if days_missed < 1:
+                    days_missed = 1
+                # Keep the stored year but increment by the needed days
+                new_date_obj = current_date_obj + timedelta(days=days_missed)
+            else:
+                new_date_obj = current_date_obj
+
+            # Update the stored current_date and format display string
+            new_date_str = new_date_obj.strftime("%A %m-%d-%Y")
+            await self._config.guild(ctx.guild).current_date.set(new_date_obj.strftime("%m-%d-%Y"))
+            await self._config.guild(ctx.guild).last_posted.set(now.isoformat())
             
             embed = discord.Embed(
                 title=embed_title,
