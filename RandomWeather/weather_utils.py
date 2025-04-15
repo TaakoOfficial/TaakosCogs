@@ -51,11 +51,26 @@ def generate_weather(time_zone: str) -> Dict[str, str]:
 
 def create_weather_embed(weather_data: Dict[str, str], guild_settings: Dict[str, any]) -> discord.Embed:
     """Create a Discord embed for weather data."""
+    # Define weather condition icons
+    condition_icons = {
+        "Sunny ☀️": "https://cdn-icons-png.flaticon.com/512/869/869869.png",        
+        "Partly Cloudy 🌤️": "https://cdn-icons-png.flaticon.com/512/1163/1163661.png",        
+        "Cloudy ☁️": "https://cdn-icons-png.flaticon.com/512/414/414825.png",        "Rainy 🌧️": "https://cdn-icons-png.flaticon.com/512/3351/3351979.png",
+        "Thunderstorm ⛈️": "https://cdn-icons-png.flaticon.com/512/1146/1146860.png",
+        "Snowy 🌨️": "https://cdn-icons-png.flaticon.com/512/2315/2315309.png",
+        "Windy 🌬️": "https://cdn-icons-png.flaticon.com/512/17640214/17640214.png",
+        "Foggy 🌫️": "https://cdn-icons-png.flaticon.com/512/4005/4005901.png"
+    }
+
     embed = discord.Embed(
         title="☀️ Today's Weather",
         color=discord.Color(guild_settings.get("embed_color", 0xFF0000))
     )
     
+    # Set thumbnail based on weather condition
+    if weather_data["condition"] in condition_icons:
+        embed.set_thumbnail(url=condition_icons[weather_data["condition"]])
+
     # Temperature and Feels Like
     embed.add_field(
         name="🌡️ Temperature | 🌡️ Feels Like",
@@ -85,6 +100,6 @@ def create_weather_embed(weather_data: Dict[str, str], guild_settings: Dict[str,
     )
     
     if guild_settings.get("show_footer", True):
-        embed.set_footer(text="🎲 Weather conditions are randomly generated")
+        embed.set_footer(text="🎲 Weather conditions are randomly generated • Icons by Flaticon")
     
     return embed
