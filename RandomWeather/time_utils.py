@@ -6,7 +6,7 @@ def validate_timezone(configured_timezone: str) -> str:
     """Validate the configured timezone against pytz timezones."""
     if configured_timezone in pytz.all_timezones:
         return configured_timezone
-    return "UTC"
+    return "America/Chicago"  # Default to US Central Time
 
 def get_seconds_until_target(current_time: datetime, target_hour: int, target_minute: int) -> int:
     """Calculate seconds until the next occurrence of a target time."""
@@ -69,15 +69,25 @@ def calculate_next_refresh_time(
         if should_post_now(now, target_hour, target_minute):
             return now
             
-        # Calculate time until next occurrence
-        seconds_to_wait = get_seconds_until_target(now, target_hour, target_minute)
-        next_post_time = now + timedelta(seconds=seconds_to_wait)
-        next_post_time = next_post_time.replace(second=0, microsecond=0)
+        # Set up next post time at the target hour/minute
+        next_post_time = now.replace(
+            hour=target_hour,
+            minute=target_minute,
+            second=0,
+            microsecond=0
+        )
         
+        # If this time has already passed today, move to tomorrow
+        if next_post_time <= now:
+            next_post_time += timedelta(days=1)
+            
     else:
-        # Default to next midnight
-        seconds_until_midnight = ((24 - now.hour) * 3600) - (now.minute * 60) - now.second
-        next_post_time = now + timedelta(seconds=seconds_until_midnight)
-        next_post_time = next_post_time.replace(microsecond=0)
+        # Default to next midnight in the specified timezone
+        next_post_time = now.replace(
+            hour=0,
+            minute=0,
+            second=0,
+            microsecond=0
+        ) + timedelta(days=1)
     
     return next_post_time

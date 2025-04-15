@@ -31,7 +31,7 @@ class WeatherCog(commands.Cog):
             "show_footer": True,
             "embed_color": 0xFF0000,
             "last_refresh": 0,
-            "time_zone": "UTC"
+            "time_zone": "America/Chicago"
         }
         self.config.register_guild(**default_guild)
         self._task = self.weather_update_loop.start()
