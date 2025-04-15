@@ -55,7 +55,7 @@ class WeatherCog(commands.Cog):
         else:
             await ctx.send("Invalid timezone. See: https://en.wikipedia.org/wiki/List_of_tz_database_time_zones")
 
-    @tasks.loop(minutes=1)
+    @tasks.loop(minutes=5)  # Check every 5 minutes instead of every minute
     async def weather_update_loop(self) -> None:
         """Task loop to post daily weather updates at the correct time or interval."""
         try:
@@ -65,31 +65,28 @@ class WeatherCog(commands.Cog):
                     channel_id = guild_settings.get("channel_id")
                     if not channel_id:
                         continue
+                    
+                    time_zone = guild_settings.get("time_zone") or "UTC"
+                    tz = pytz.timezone(time_zone)
+                    now = datetime.now(tz)
+                    
                     last_refresh = guild_settings.get("last_refresh", 0)
                     refresh_interval = guild_settings.get("refresh_interval")
                     refresh_time = guild_settings.get("refresh_time")
-                    time_zone = guild_settings.get("time_zone") or "UTC"
-                    
-                    tz = pytz.timezone(time_zone)
-                    now = datetime.now(tz)
                     
                     # Get next scheduled post time
                     next_post_time = calculate_next_refresh_time(
                         last_refresh, refresh_interval, refresh_time, time_zone
                     )
                     
-                    # Ensure times are timezone-aware for comparison
-                    if next_post_time.tzinfo is None:
-                        next_post_time = tz.localize(next_post_time)
-                    if now.tzinfo is None:
-                        now = tz.localize(now)
-                    
-                    if now >= next_post_time:
+                    # Only post if we've passed the next post time
+                    if next_post_time and now >= next_post_time:
                         await self._post_weather_update(
                             guild_id, 
                             guild_settings,
                             scheduled_time=next_post_time.timestamp()
                         )
+
                 except Exception as e:
                     logging.error(f"Error in weather update for guild {guild_id}: {e}")
         except Exception as e:
