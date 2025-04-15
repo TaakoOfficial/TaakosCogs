@@ -1,5 +1,23 @@
 # 🌦️ RandomWeather Changelog
 
+## [v2.1.0] - 2025-04-15
+
+### ✨ New Features
+
+- Enhanced weather generation with realistic seasonal patterns
+- Added smart condition-based calculations for humidity and visibility
+- Improved wind speed variation based on weather conditions
+- Added beautiful weather condition icons from Flaticon
+- Added proper heat index and wind chill calculations
+
+### 🛠️ Improvements
+
+- Weather conditions now reflect realistic seasonal probabilities
+- Temperature ranges now adapt to each season
+- Weather elements (temp, humidity, wind) now properly influence each other
+- Embeds now show more organized and detailed information
+- Footer now includes attribution for Flaticon icons
+
 ## [v2.0.1] - 2025-04-14
 
 ### 🛠️ Improvements
