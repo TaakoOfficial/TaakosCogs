@@ -190,6 +190,121 @@ class WeatherCog(commands.Cog):
         except ValueError:
             await ctx.send("Invalid format. Use a number with s, m, h, or d")
 
+    @rweather.command(name="channel")
+    @commands.guild_only()
+    @commands.admin_or_permissions(administrator=True)
+    async def set_channel(self, ctx: commands.Context, channel: discord.TextChannel) -> None:
+        """Set the channel for weather updates."""
+        await self.config.guild(ctx.guild).channel_id.set(channel.id)
+        await ctx.send(f"Weather updates will now be sent to {channel.mention}")
+
+    @rweather.command(name="role")
+    @commands.guild_only()
+    @commands.admin_or_permissions(administrator=True)
+    async def set_role(self, ctx: commands.Context, role: discord.Role) -> None:
+        """Set the role to tag in weather updates."""
+        await self.config.guild(ctx.guild).role_id.set(role.id)
+        await ctx.send(f"Weather updates will now tag {role.name}")
+
+    @rweather.command(name="toggle")
+    @commands.guild_only()
+    @commands.admin_or_permissions(administrator=True)
+    async def toggle_role(self, ctx: commands.Context) -> None:
+        """Toggle whether to tag the set role in weather updates."""
+        current = await self.config.guild(ctx.guild).tag_role()
+        await self.config.guild(ctx.guild).tag_role.set(not current)
+        state = "disabled" if current else "enabled"
+        await ctx.send(f"Role tagging has been {state}")
+
+    @rweather.command(name="color")
+    @commands.guild_only()
+    @commands.admin_or_permissions(administrator=True)
+    async def set_color(self, ctx: commands.Context, color: discord.Color) -> None:
+        """Set the color for weather embed messages."""
+        await self.config.guild(ctx.guild).embed_color.set(color.value)
+        await ctx.send(f"Embed color set to: {str(color)}")
+
+    @rweather.command(name="footer")
+    @commands.guild_only()
+    @commands.admin_or_permissions(administrator=True)
+    async def toggle_footer(self, ctx: commands.Context) -> None:
+        """Toggle whether to show the footer in weather updates."""
+        current = await self.config.guild(ctx.guild).show_footer()
+        await self.config.guild(ctx.guild).show_footer.set(not current)
+        state = "disabled" if current else "enabled"
+        await ctx.send(f"Footer has been {state}")
+
+    @rweather.command(name="info")
+    @commands.guild_only()
+    async def info(self, ctx: commands.Context) -> None:
+        """Show current weather settings."""
+        guild_settings = await self.config.guild(ctx.guild).all()
+        
+        embed_color = discord.Color(guild_settings.get("embed_color", 0xFF0000))
+        refresh_interval = guild_settings.get("refresh_interval")
+        refresh_time = guild_settings.get("refresh_time")
+        last_refresh = guild_settings.get("last_refresh", 0)
+        time_zone = guild_settings.get("time_zone") or "UTC"
+        tz = pytz.timezone(time_zone)
+        
+        embed = discord.Embed(
+            title="🌦️ RandomWeather Settings",
+            color=embed_color
+        )
+        
+        # Get channel and role info
+        channel = self.bot.get_channel(guild_settings.get("channel_id")) if guild_settings.get("channel_id") else None
+        role = ctx.guild.get_role(guild_settings.get("role_id")) if guild_settings.get("role_id") else None
+        
+        # Add basic fields
+        embed.add_field(name="📢 Channel:", value=channel.mention if channel else "❌ Not set", inline=True)
+        embed.add_field(name="🔖 Tag Role:", value=role.name if role else "❌ Not set", inline=True)
+        embed.add_field(name="🌍 Timezone:", value=time_zone, inline=True)
+        
+        # Add timing fields
+        if refresh_time:
+            embed.add_field(name="⏰ Update Time:", value=f"{refresh_time[:2]}:{refresh_time[2:]}", inline=True)
+        elif refresh_interval:
+            minutes = refresh_interval // 60
+            if minutes < 60:
+                timing = f"Every {minutes}m"
+            else:
+                hours = minutes // 60
+                timing = f"Every {hours}h"
+            embed.add_field(name="⏰ Update Interval:", value=timing, inline=True)
+        else:
+            embed.add_field(name="⏰ Updates:", value="Not configured", inline=True)
+            
+        # Calculate next post time
+        if last_refresh or refresh_interval or refresh_time:
+            next_post_time = calculate_next_refresh_time(last_refresh, refresh_interval, refresh_time, time_zone)
+            if next_post_time is not None and hasattr(next_post_time, 'tzinfo') and next_post_time.tzinfo is not None:
+                embed.add_field(name="📅 Next Update:", value=discord.utils.format_dt(next_post_time), inline=True)
+        
+        # Add toggle states
+        embed.add_field(name="🏷️ Role Tagging:", value="✅ Enabled" if guild_settings.get("tag_role") else "❌ Disabled", inline=True)
+        embed.add_field(name="📜 Footer:", value="✅ Enabled" if guild_settings.get("show_footer") else "❌ Disabled", inline=True)
+        
+        await ctx.send(embed=embed)
+
+    @rweather.command(name="force")
+    @commands.guild_only()
+    @commands.admin_or_permissions(administrator=True)
+    async def force_post(self, ctx: commands.Context) -> None:
+        """Force a weather update to post now."""
+        try:
+            guild_settings = await self.config.guild(ctx.guild).all()
+            channel_id = guild_settings.get("channel_id")
+            
+            if not channel_id:
+                await ctx.send("No channel configured for weather updates.")
+                return
+            
+            await self._post_weather_update(ctx.guild.id, guild_settings, is_forced=True)
+            await ctx.send("Weather update posted.")
+        except Exception as e:
+            await ctx.send(f"Failed to post weather update: {e}")
+            
 async def setup(bot: Red) -> None:
     """Load WeatherCog."""
     await bot.add_cog(WeatherCog(bot))
