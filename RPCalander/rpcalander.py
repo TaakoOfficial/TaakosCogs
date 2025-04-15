@@ -1,10 +1,12 @@
-import discord
+import discord  # Import from the actual discord.py package
 from typing import Optional
 
 # Optional Red-Dashboard integration
 try:
     from redbot.core.utils.dashboard import DashboardIntegration, dashboard_page
+    _dashboard_available = True
 except ImportError:
+    _dashboard_available = False
     class DashboardIntegration:
         pass
     def dashboard_page(*args, **kwargs):
