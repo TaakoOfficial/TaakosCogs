@@ -109,6 +109,7 @@ class RPCalander(commands.Cog):
         channel_id = guild_settings["channel_id"]
         channel = f"<#{channel_id}>" if channel_id else "Not set"
         time_zone = guild_settings["time_zone"] or "America/Chicago"
+        embed_title = guild_settings["embed_title"] or "📅 RP Calendar Update"
 
         tz = pytz.timezone(time_zone)
         now = datetime.now(tz)
