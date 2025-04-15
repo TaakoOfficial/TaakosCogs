@@ -1,18 +1,10 @@
 import discord
-from redbot.core import commands, Config
-from datetime import datetime, timedelta
-import pytz
-from discord.ext import tasks
-from .timing_utils import get_next_post_time, has_already_posted_today
-from .file_utils import read_last_posted, write_last_posted
-import logging
+from typing import Optional
 
 # Optional Red-Dashboard integration
 try:
     from redbot.core.utils.dashboard import DashboardIntegration, dashboard_page
-    _dashboard_available = True
 except ImportError:
-    _dashboard_available = False
     class DashboardIntegration:
         pass
     def dashboard_page(*args, **kwargs):
@@ -20,14 +12,139 @@ except ImportError:
             return func
         return decorator
 
-# Configure logging for debugging
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+from redbot.core import commands, Config, app_commands
+from datetime import datetime, timedelta
+import pytz
+from discord.ext import tasks
+from .timing_utils import get_next_post_time, has_already_posted_today
+from .file_utils import read_last_posted, write_last_posted
+import logging
+
+class RPCAGroup(app_commands.Group):
+    """Slash command group for RP Calendar management."""
+    def __init__(self, cog: "RPCalander"):
+        super().__init__(name="rpca", description="RP Calendar management commands.")
+        self.cog = cog
+
+    @app_commands.command(name="info", description="View the current settings for the RP calendar.")
+    async def info(self, interaction: discord.Interaction) -> None:
+        """Slash command to view the current RP calendar settings."""
+        if not interaction.guild:
+            await interaction.response.send_message("This command can only be used in a server.", ephemeral=True)
+            return
+        guild_settings = await self.cog._config.guild(interaction.guild).all()
+        embed_color = discord.Color(guild_settings.get("embed_color", 0x0000FF))
+        embed = discord.Embed(title="RP Calendar Settings", color=embed_color)
+        start_date = guild_settings["start_date"] or "Not set"
+        current_date = guild_settings["current_date"] or "Not set"
+        channel_id = guild_settings["channel_id"]
+        channel = f"<#{channel_id}>" if channel_id else "Not set"
+        time_zone = guild_settings["time_zone"] or "America/Chicago"
+        embed_title = guild_settings["embed_title"] or "📅 RP Calendar Update"
+        tz = pytz.timezone(time_zone)
+        now = datetime.now(tz)
+        try:
+            tomorrow_obj = now + timedelta(days=1)
+            if current_date != "Not set":
+                current_date_obj = datetime.strptime(current_date, "%m-%d-%Y")
+                tomorrow_obj = tomorrow_obj.replace(year=current_date_obj.year)
+            tomorrow_str = tomorrow_obj.strftime("%A %m-%d-%Y")
+        except Exception as e:
+            logging.error(f"Error calculating tomorrow's date: {e}")
+            tomorrow_str = "Error"
+        embed.add_field(name="Start Date", value=start_date, inline=False)
+        embed.add_field(name="Current Date", value=current_date, inline=False)
+        embed.add_field(name="Tomorrow's Date", value=tomorrow_str, inline=False)
+        next_post_time = now.replace(hour=0, minute=0, second=0) + timedelta(days=1)
+        time_until_next_post = next_post_time - now
+        days, seconds = divmod(time_until_next_post.total_seconds(), 86400)
+        hours, remainder = divmod(seconds, 3600)
+        minutes, seconds = divmod(remainder, 60)
+        time_components = []
+        if days > 0:
+            time_components.append(f"{int(days)}d")
+        if hours > 0:
+            time_components.append(f"{int(hours)}h")
+        time_components.append(f"{int(minutes):02}m")
+        time_components.append(f"{int(seconds):02}s")
+        time_until_next_post_str = " ".join(time_components)
+        if not time_components:
+            time_until_next_post_str = "Not scheduled"
+        embed.add_field(name="Time Until Next Post", value=time_until_next_post_str, inline=False)
+        embed.add_field(name="Update Channel", value=channel, inline=False)
+        embed.add_field(name="Time Zone", value=time_zone, inline=False)
+        embed.add_field(name="Embed Color", value=str(embed_color), inline=False)
+        embed.add_field(name="Embed Title", value=embed_title, inline=False)
+        embed.set_footer(text="RP Calendar by Taako", icon_url="https://cdn-icons-png.flaticon.com/512/869/869869.png")
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    @app_commands.command(name="force", description="Force post a calendar update to the configured channel immediately.")
+    async def force(self, interaction: discord.Interaction) -> None:
+        """Slash command to force post a calendar update."""
+        if not interaction.guild:
+            await interaction.response.send_message("This command can only be used in a server.", ephemeral=True)
+            return
+        ctx = await self.cog.bot.get_context(interaction)
+        await self.cog.force_post(ctx)
+        await interaction.response.send_message("Force post triggered.", ephemeral=True)
+
+    @app_commands.command(name="settitle", description="Set a custom title for the main embed.")
+    async def settitle(self, interaction: discord.Interaction, title: str) -> None:
+        """Slash command to set the embed title."""
+        if not interaction.guild:
+            await interaction.response.send_message("This command can only be used in a server.", ephemeral=True)
+            return
+        if not title:
+            await interaction.response.send_message("Title cannot be empty.", ephemeral=True)
+            return
+        await self.cog._config.guild(interaction.guild).embed_title.set(title)
+        await interaction.response.send_message(f"Embed title set to: {title}", ephemeral=True)
+
+    @app_commands.command(name="setcolor", description="Set the embed color for calendar updates.")
+    async def setcolor(self, interaction: discord.Interaction, color: discord.Color) -> None:
+        """Slash command to set the embed color."""
+        if not interaction.guild:
+            await interaction.response.send_message("This command can only be used in a server.", ephemeral=True)
+            return
+        await self.cog._config.guild(interaction.guild).embed_color.set(color.value)
+        await interaction.response.send_message(f"Embed color set to: {str(color)}", ephemeral=True)
+
+    @app_commands.command(name="settimezone", description="Set the timezone for the calendar.")
+    async def settimezone(self, interaction: discord.Interaction, timezone: str) -> None:
+        """Slash command to set the timezone."""
+        if not interaction.guild:
+            await interaction.response.send_message("This command can only be used in a server.", ephemeral=True)
+            return
+        if timezone not in pytz.all_timezones:
+            await interaction.response.send_message("Invalid timezone. See: https://en.wikipedia.org/wiki/List_of_tz_database_time_zones", ephemeral=True)
+            return
+        await self.cog._config.guild(interaction.guild).time_zone.set(timezone)
+        await interaction.response.send_message(f"Timezone set to: {timezone}", ephemeral=True)
+
+    @app_commands.command(name="setchannel", description="Set the channel for daily calendar updates.")
+    async def setchannel(self, interaction: discord.Interaction, channel: discord.TextChannel) -> None:
+        """Slash command to set the update channel."""
+        if not interaction.guild:
+            await interaction.response.send_message("This command can only be used in a server.", ephemeral=True)
+            return
+        await self.cog._config.guild(interaction.guild).channel_id.set(channel.id)
+        await interaction.response.send_message(f"Calendar updates will now be sent to: {channel.mention}", ephemeral=True)
+
+    @app_commands.command(name="togglefooter", description="Toggle the footer on/off for calendar embeds.")
+    async def togglefooter(self, interaction: discord.Interaction) -> None:
+        """Slash command to toggle the embed footer."""
+        if not interaction.guild:
+            await interaction.response.send_message("This command can only be used in a server.", ephemeral=True)
+            return
+        current = await self.cog._config.guild(interaction.guild).show_footer()
+        await self.cog._config.guild(interaction.guild).show_footer.set(not current)
+        state = "enabled" if not current else "disabled"
+        await interaction.response.send_message(f"Footer has been {state}.", ephemeral=True)
 
 class RPCalander(commands.Cog, DashboardIntegration):
     """A cog for managing an RP calendar with daily updates."""
-
     def __init__(self, bot: commands.Bot) -> None:
-        self._bot = bot
+        self.bot = bot
         self._config = Config.get_conf(self, identifier=9876543210, force_registration=True)
         self._default_guild = {
             "start_date": None,
@@ -40,8 +157,12 @@ class RPCalander(commands.Cog, DashboardIntegration):
             "last_posted": None
         }
         self._config.register_guild(**self._default_guild)
-        if _dashboard_available:
-            logging.info("Red-Dashboard integration registered for RPCalander.")
+        self.rpca_group = RPCAGroup(self)
+    async def cog_unload(self) -> None:
+        if hasattr(self, 'bot'):
+            self.bot.tree.remove_command(self.rpca_group.name)
+        if hasattr(self, '_daily_update_loop') and self._daily_update_loop.is_running():
+            self._daily_update_loop.cancel()
 
     async def cog_load(self):
         """Start the daily update loop without triggering an immediate post."""
@@ -83,138 +204,6 @@ class RPCalander(commands.Cog, DashboardIntegration):
                     days_missed = (today_date_obj - current_date_obj).days
                     new_date_obj = current_date_obj + timedelta(days=days_missed)
                     await self._config.guild_from_id(guild_id).current_date.set(new_date_obj.strftime("%m-%d-%Y"))
-
-    @commands.group(name="rpca", invoke_without_command=True)
-    @commands.admin_or_permissions(administrator=True)
-    async def rpca(self, ctx: commands.Context) -> None:
-        """Calendar management commands. Requires administrator permissions."""
-        # Only send help if not a subcommand and not already invoked
-        if ctx.invoked_subcommand is None and ctx.command is not None:
-            await ctx.send_help(ctx.command)
-
-    @rpca.error
-    async def rpca_error(self, ctx: commands.Context, error: Exception) -> None:
-        """Handle errors in calendar commands."""
-        if isinstance(error, commands.CheckFailure):
-            await ctx.send("You need administrator permissions to use this command.")
-        else:
-            await ctx.send(f"An error occurred: {str(error)}")
-
-    async def red_delete_data_for_user(self, *, requester, user_id) -> None:
-        """Nothing to delete as we don't store user data."""
-        pass
-
-    @rpca.command(name="settitle")
-    async def set_title(self, ctx: commands.Context, *, title: str) -> None:
-        """Set a custom title for the main embed."""
-        if not title:
-            await ctx.send("Title cannot be empty.")
-            return
-        await self._config.guild(ctx.guild).embed_title.set(title)
-        await ctx.send(f"Embed title set to: {title}")
-
-    @rpca.command(name="info")
-    async def info(self, ctx: commands.Context) -> None:
-        """View the current settings for the RP calendar."""
-        guild_settings = await self._config.guild(ctx.guild).all()
-        embed_color = discord.Color(guild_settings.get("embed_color", 0x0000FF))
-        embed = discord.Embed(title="RP Calendar Settings", color=embed_color)
-        start_date = guild_settings["start_date"] or "Not set"
-        current_date = guild_settings["current_date"] or "Not set"
-        channel_id = guild_settings["channel_id"]
-        channel = f"<#{channel_id}>" if channel_id else "Not set"
-        time_zone = guild_settings["time_zone"] or "America/Chicago"
-        embed_title = guild_settings["embed_title"] or "📅 RP Calendar Update"
-
-        tz = pytz.timezone(time_zone)
-        now = datetime.now(tz)
-        # Calculate tomorrow's date based on the system's current date
-        try:
-            tomorrow_obj = now + timedelta(days=1)
-            if current_date != "Not set":
-                current_date_obj = datetime.strptime(current_date, "%m-%d-%Y")
-                # Keep the year from the current_date but use tomorrow's month and day
-                tomorrow_obj = tomorrow_obj.replace(year=current_date_obj.year)
-            tomorrow_str = tomorrow_obj.strftime("%A %m-%d-%Y")
-        except Exception as e:
-            logging.error(f"Error calculating tomorrow's date: {e}")
-            tomorrow_str = "Error"
-
-        embed.add_field(name="Start Date", value=start_date, inline=False)
-        embed.add_field(name="Current Date", value=current_date, inline=False)
-        embed.add_field(name="Tomorrow's Date", value=tomorrow_str, inline=False)
-
-        next_post_time = now.replace(hour=0, minute=0, second=0) + timedelta(days=1)
-        time_until_next_post = next_post_time - now
-        days, seconds = divmod(time_until_next_post.total_seconds(), 86400)
-        hours, remainder = divmod(seconds, 3600)
-        minutes, seconds = divmod(remainder, 60)
-        time_components = []
-        if days > 0:
-            time_components.append(f"{int(days)}d")
-        if hours > 0:
-            time_components.append(f"{int(hours)}h")
-        time_components.append(f"{int(minutes):02}m")
-        time_components.append(f"{int(seconds):02}s")
-        time_until_next_post_str = " ".join(time_components)
-        if not time_components:
-            time_until_next_post_str = "Not scheduled"
-        embed.add_field(name="Time Until Next Post", value=time_until_next_post_str, inline=False)
-        embed.add_field(name="Update Channel", value=channel, inline=False)
-        embed.add_field(name="Time Zone", value=time_zone, inline=False)
-        embed.add_field(name="Embed Color", value=str(embed_color), inline=False)
-        embed.add_field(name="Embed Title", value=embed_title, inline=False)
-        embed.set_footer(text="RP Calendar by Taako", icon_url="https://cdn-icons-png.flaticon.com/512/869/869869.png")
-        await ctx.send(embed=embed)
-
-    @rpca.command(name="setstart")
-    async def set_start_date(self, ctx: commands.Context, year: int) -> None:
-        """Set the starting date for the RP calendar using the current month and day, and a custom year."""
-        guild_settings = await self._config.guild(ctx.guild).all()
-        time_zone = guild_settings.get("time_zone") or "America/Chicago"
-        tz = pytz.timezone(time_zone)
-        now = datetime.now(tz)
-        try:
-            date = datetime(year, now.month, now.day)
-            date_str = date.strftime("%m-%d-%Y")
-            await self._config.guild(ctx.guild).start_date.set(date_str)
-            await self._config.guild(ctx.guild).current_date.set(date_str)
-            await ctx.send(f"Calendar start date set to: {date_str}")
-        except ValueError:
-            await ctx.send("Invalid year provided. Please provide a valid year (e.g., 2025).")
-
-    @rpca.command(name="setchannel")
-    async def set_channel(self, ctx, channel: discord.TextChannel):
-        """Set the channel for daily calendar updates."""
-        await self._config.guild(ctx.guild).channel_id.set(channel.id)
-        await ctx.send(f"Calendar updates will now be sent to: {channel.mention}")
-
-    @rpca.command(name="settimezone")
-    async def set_timezone(self, ctx, timezone: str = None):
-        """Set the timezone for the calendar."""
-        if not timezone:
-            await ctx.send("Please provide a timezone (e.g., UTC, America/New_York)")
-            return
-
-        if timezone in pytz.all_timezones:
-            await self._config.guild(ctx.guild).time_zone.set(timezone)
-            await ctx.send(f"Timezone set to: {timezone}")
-        else:
-            await ctx.send("Invalid timezone. See: https://en.wikipedia.org/wiki/List_of_tz_database_time_zones")
-
-    @rpca.command(name="setcolor")
-    async def set_color(self, ctx, color: discord.Color):
-        """Set the embed color for calendar updates."""
-        await self._config.guild(ctx.guild).embed_color.set(color.value)
-        await ctx.send(f"Embed color set to: {str(color)}")
-
-    @rpca.command(name="togglefooter")
-    async def toggle_footer(self, ctx):
-        """Toggle the footer on/off for calendar embeds."""
-        current = await self._config.guild(ctx.guild).show_footer()
-        await self._config.guild(ctx.guild).show_footer.set(not current)
-        state = "enabled" if not current else "disabled"
-        await ctx.send(f"Footer has been {state}")
 
     def _format_date(self, date_obj: datetime) -> str:
         """Format a datetime object into our standard format."""
@@ -279,7 +268,7 @@ class RPCalander(commands.Cog, DashboardIntegration):
                 )
                 if show_footer:
                     embed.set_footer(text="RP Calendar by Taako", icon_url="https://cdn-icons-png.flaticon.com/512/869/869869.png")
-                channel = self._bot.get_channel(channel_id)
+                channel = self.bot.get_channel(channel_id)
                 if channel:
                     await channel.send(embed=embed)
 
@@ -290,11 +279,6 @@ class RPCalander(commands.Cog, DashboardIntegration):
         if not self._daily_update_loop.is_running():
             logging.debug("Restarting daily update loop after error.")
             self._daily_update_loop.start()
-
-    async def cog_unload(self) -> None:
-        """Cleanup tasks when the cog is unloaded."""
-        if hasattr(self, '_daily_update_loop') and self._daily_update_loop.is_running():
-            self._daily_update_loop.cancel()
 
     @rpca.command(name="force")
     @commands.admin_or_permissions(administrator=True)
@@ -346,7 +330,7 @@ class RPCalander(commands.Cog, DashboardIntegration):
             if show_footer:
                 embed.set_footer(text="RP Calendar by Taako", icon_url="https://cdn-icons-png.flaticon.com/512/869/869869.png")
             
-            channel = self._bot.get_channel(channel_id)
+            channel = self.bot.get_channel(channel_id)
             if channel:
                 try:
                     await channel.send(embed=embed)
