@@ -1,37 +1,16 @@
+"""RandomWeather cog for Red-DiscordBot."""
 import asyncio
 from typing import Dict, Any, Optional, cast
 import discord
 from discord.ext import tasks
-import platform
-import sys
-import subprocess
 import logging
 from datetime import datetime
+import pytz
 from redbot.core import Config, commands
 from redbot.core.bot import Red
-from redbot.core.utils.chat_formatting import error
 from .weather_utils import generate_weather, create_weather_embed
 from .time_utils import calculate_next_refresh_time, should_post_now, validate_timezone
 from .file_utils import write_last_posted
-
-def ensure_pytz_installed() -> bool:
-    """Ensure pytz is installed on the system."""
-    try:
-        import pytz
-        return True
-    except ImportError:
-        try:
-            python_exe = sys.executable
-            subprocess.check_call(
-                [python_exe, "-m", "pip", "install", "pytz"],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE
-            )
-            import pytz
-            return True
-        except (subprocess.SubprocessError, ImportError) as e:
-            logging.error(f"Failed to install pytz: {e}")
-            return False
 
 class WeatherCog(commands.Cog):
     """A cog for generating random daily weather updates."""
@@ -228,7 +207,7 @@ class WeatherCog(commands.Cog):
     @commands.guild_only()
     @commands.admin_or_permissions(administrator=True)
     async def set_channel(self, ctx: commands.Context, channel: discord.TextChannel) -> None:
-        """Set the channel for weather updates."""
+        """Set the channel for weather updates."""        
         await self.config.guild(ctx.guild).channel_id.set(channel.id)
         await ctx.send(f"Weather updates will now be sent to {channel.mention}")
 
@@ -236,7 +215,7 @@ class WeatherCog(commands.Cog):
     @commands.guild_only()
     @commands.admin_or_permissions(administrator=True)
     async def set_role(self, ctx: commands.Context, role: discord.Role) -> None:
-        """Set the role to tag in weather updates."""
+        """Set the role to tag in weather updates."""        
         await self.config.guild(ctx.guild).role_id.set(role.id)
         await ctx.send(f"Weather updates will now tag {role.name}")
 
@@ -244,7 +223,7 @@ class WeatherCog(commands.Cog):
     @commands.guild_only()
     @commands.admin_or_permissions(administrator=True)
     async def toggle_role(self, ctx: commands.Context) -> None:
-        """Toggle whether to tag the set role in weather updates."""
+        """Toggle whether to tag the set role in weather updates."""        
         current = await self.config.guild(ctx.guild).tag_role()
         await self.config.guild(ctx.guild).tag_role.set(not current)
         state = "disabled" if current else "enabled"
@@ -254,7 +233,7 @@ class WeatherCog(commands.Cog):
     @commands.guild_only()
     @commands.admin_or_permissions(administrator=True)
     async def set_color(self, ctx: commands.Context, color: discord.Color) -> None:
-        """Set the color for weather embed messages."""
+        """Set the color for weather embed messages."""        
         await self.config.guild(ctx.guild).embed_color.set(color.value)
         await ctx.send(f"Embed color set to: {str(color)}")
 
@@ -262,7 +241,7 @@ class WeatherCog(commands.Cog):
     @commands.guild_only()
     @commands.admin_or_permissions(administrator=True)
     async def toggle_footer(self, ctx: commands.Context) -> None:
-        """Toggle whether to show the footer in weather updates."""
+        """Toggle whether to show the footer in weather updates."""        
         current = await self.config.guild(ctx.guild).show_footer()
         await self.config.guild(ctx.guild).show_footer.set(not current)
         state = "disabled" if current else "enabled"
@@ -271,7 +250,7 @@ class WeatherCog(commands.Cog):
     @rweather.command(name="info")
     @commands.guild_only()
     async def info(self, ctx: commands.Context) -> None:
-        """Show current weather settings."""
+        """Show current weather settings."""        
         guild_settings = await self.config.guild(ctx.guild).all()
         
         embed_color = discord.Color(guild_settings.get("embed_color", 0xFF0000))
@@ -333,7 +312,7 @@ class WeatherCog(commands.Cog):
     @commands.guild_only()
     @commands.admin_or_permissions(administrator=True)
     async def force_post(self, ctx: commands.Context) -> None:
-        """Force a weather update to post now."""
+        """Force a weather update to post now."""        
         try:
             guild_settings = await self.config.guild(ctx.guild).all()
             channel_id = guild_settings.get("channel_id")
@@ -348,11 +327,5 @@ class WeatherCog(commands.Cog):
             await ctx.send(f"Failed to post weather update: {e}")
 
 async def setup(bot: Red) -> None:
-    """Load WeatherCog."""
-    if not ensure_pytz_installed():
-        msg = error("Failed to load WeatherCog: Could not install required 'pytz' package. "
-                   "Please install it manually with `pip install pytz`")
-        await bot.send_to_owners(msg)
-        return
-        
+    """Load WeatherCog."""    
     await bot.add_cog(WeatherCog(bot))
