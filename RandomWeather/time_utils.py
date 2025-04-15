@@ -26,20 +26,19 @@ def calculate_next_refresh_time(last_refresh: int, refresh_interval: int, refres
         refresh_hour = int(refresh_time[:2])
         refresh_minute = int(refresh_time[2:])
         
-        # Get today's target refresh time
+        # Calculate next occurrence of the target time
         target_time = now.replace(hour=refresh_hour, minute=refresh_minute, second=0, microsecond=0)
-        
-        # If it's already past today's target time, set for tomorrow
         if now >= target_time:
-            # Reset target time to today's values but move to next occurrence
-            next_base = now + timedelta(seconds=1)
-            target_time = next_base.replace(hour=refresh_hour, minute=refresh_minute, second=0, microsecond=0)
+            # Move time forward by seconds until we find next valid occurrence
+            seconds_to_add = (24 * 60 * 60) - (now.hour * 60 * 60 + now.minute * 60 + now.second)
+            target_time = now + timedelta(seconds=seconds_to_add)
+            target_time = target_time.replace(hour=refresh_hour, minute=refresh_minute, second=0, microsecond=0)
             
         next_post_time = target_time
     else:
-        # Default to next possible occurrence of midnight
-        next_post_time = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        if next_post_time <= now:
-            next_post_time = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        # Find next occurrence of midnight by adding seconds until next day
+        seconds_until_midnight = (24 * 60 * 60) - (now.hour * 60 * 60 + now.minute * 60 + now.second)
+        next_post_time = now + timedelta(seconds=seconds_until_midnight)
+        next_post_time = next_post_time.replace(microsecond=0)
 
     return next_post_time
