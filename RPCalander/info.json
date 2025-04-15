@@ -7,7 +7,7 @@
   "short": "RP calendar with daily updates.",
   "tags": ["calendar", "rp", "utility"],
   "min_bot_version": "3.5.0",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "requirements": ["pytz"],
   "end_user_data_statement": "This cog stores local data in the form of a `post_tracker.json` file to track the last post timestamp. No end user data is stored or shared.",
   "hidden": false,

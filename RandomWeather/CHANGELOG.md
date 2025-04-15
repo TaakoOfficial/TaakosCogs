@@ -1,5 +1,18 @@
 # 🌦️ RandomWeather Changelog
 
+## [v2.1.1] - 2025-04-15
+
+### 🛠️ Improvements
+
+- Switched license to AGPLv3 for stronger copyleft and attribution.
+- Improved input validation and error handling for all commands.
+- Added type hints to all methods and commands.
+- Cleaned up code and removed unnecessary comments.
+
+### 📚 Documentation
+
+- Updated LICENSE file to AGPLv3.
+
 ## [v2.1.0] - 2025-04-15
 
 ### ✨ New Features

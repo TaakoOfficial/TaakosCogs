@@ -1,111 +1,114 @@
-import discord  # Edited by Taako
-from redbot.core import commands, Config  # Edited by Taako
-from datetime import datetime, timedelta  # Edited by Taako
-import pytz  # Edited by Taako
-from discord.ext import tasks  # Edited by Taako
-from .timing_utils import get_next_post_time, has_already_posted_today  # Edited by Taako
-from .file_utils import read_last_posted, write_last_posted  # Edited by Taako
-import logging  # Edited by Taako
+import discord
+from redbot.core import commands, Config
+from datetime import datetime, timedelta
+import pytz
+from discord.ext import tasks
+from .timing_utils import get_next_post_time, has_already_posted_today
+from .file_utils import read_last_posted, write_last_posted
+import logging
 
-# Configure logging for debugging  # Edited by Taako
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')  # Edited by Taako
+# Configure logging for debugging
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
 class RPCalander(commands.Cog):
-    """A cog for managing an RP calendar with daily updates."""  # Edited by Taako
+    """A cog for managing an RP calendar with daily updates."""
 
-    def __init__(self, bot):
-        self._bot = bot  # Edited by Taako
-        self._config = Config.get_conf(self, identifier=9876543210, force_registration=True)  # Edited by Taako
+    def __init__(self, bot: commands.Bot) -> None:
+        self._bot = bot
+        self._config = Config.get_conf(self, identifier=9876543210, force_registration=True)
         self._default_guild = {
-            "start_date": None,  # Format: MM-DD-YYYY  # Edited by Taako
-            "current_date": None,  # Current tracked date  # Edited by Taako
-            "channel_id": None,  # Channel for updates  # Edited by Taako
-            "time_zone": "America/Chicago",  # Default timezone  # Edited by Taako
-            "embed_color": 0x0000FF,  # Default color (blue)  # Edited by Taako
-            "show_footer": True,  # Show footer in embeds  # Edited by Taako
-            "embed_title": "📅 RP Calendar Update",  # Default title  # Edited by Taako
-            "last_posted": None  # Store the last posted timestamp (timezone-aware)  # Edited by Taako
+            "start_date": None,
+            "current_date": None,
+            "channel_id": None,
+            "time_zone": "America/Chicago",
+            "embed_color": 0x0000FF,
+            "show_footer": True,
+            "embed_title": "📅 RP Calendar Update",
+            "last_posted": None
         }
-        self._config.register_guild(**self._default_guild)  # Edited by Taako
+        self._config.register_guild(**self._default_guild)
 
     async def cog_load(self):
-        """Start the daily update loop without triggering an immediate post."""  # Edited by Taako
-        logging.debug("Starting cog_load method.")  # Edited by Taako
-        last_posted = read_last_posted()  # Read the last posted timestamp from the file  # Edited by Taako
+        """Start the daily update loop without triggering an immediate post."""
+        logging.debug("Starting cog_load method.")
+        last_posted = read_last_posted()  # Read the last posted timestamp from the file
 
-        # Skip starting the loop if already posted today  # Edited by Taako
+        # Skip starting the loop if already posted today
         if last_posted:
-            tz = pytz.timezone("America/Chicago")  # Default timezone  # Edited by Taako
-            last_posted_dt = datetime.fromisoformat(last_posted).astimezone(tz)  # Edited by Taako
-            today = datetime.now(tz).replace(hour=0, minute=0, second=0)  # Start of today  # Edited by Taako
+            tz = pytz.timezone("America/Chicago")  # Default timezone
+            last_posted_dt = datetime.fromisoformat(last_posted).astimezone(tz)
+            today = datetime.now(tz).replace(hour=0, minute=0, second=0)  # Start of today
 
             if last_posted_dt >= today:
-                logging.debug("Already posted today. Skipping loop start.")  # Edited by Taako
-                return  # Edited by Taako
+                logging.debug("Already posted today. Skipping loop start.")
+                return
 
         if not self._daily_update_loop.is_running():
-            logging.debug("Starting daily update loop.")  # Edited by Taako
-            self._daily_update_loop.start()  # Edited by Taako
+            logging.debug("Starting daily update loop.")
+            self._daily_update_loop.start()
 
-        # Check for missed dates without sending an embed  # Edited by Taako
-        all_guilds = await self._config.all_guilds()  # Edited by Taako
+        # Check for missed dates without sending an embed
+        all_guilds = await self._config.all_guilds()
         for guild_id, guild_settings in all_guilds.items():
-            time_zone = guild_settings["time_zone"] or "America/Chicago"  # Edited by Taako
-            last_posted = guild_settings.get("last_posted")  # Edited by Taako
+            time_zone = guild_settings["time_zone"] or "America/Chicago"
+            last_posted = guild_settings.get("last_posted")
 
-            # Skip posting if already posted today  # Edited by Taako
+            # Skip posting if already posted today
             if has_already_posted_today(last_posted, time_zone):
-                continue  # Edited by Taako
+                continue
 
-            # Update the current date if necessary  # Edited by Taako
-            current_date = guild_settings["current_date"]  # Edited by Taako
+            # Update the current date if necessary
+            current_date = guild_settings["current_date"]
             if current_date:
-                tz = pytz.timezone(time_zone)  # Edited by Taako
-                current_date_obj = datetime.strptime(current_date, "%m-%d-%Y").astimezone(tz)  # Edited by Taako
-                today_date_obj = datetime.now(tz).replace(hour=0, minute=0, second=0, microsecond=0)  # Edited by Taako
+                tz = pytz.timezone(time_zone)
+                current_date_obj = datetime.strptime(current_date, "%m-%d-%Y").astimezone(tz)
+                today_date_obj = datetime.now(tz).replace(hour=0, minute=0, second=0, microsecond=0)
 
                 if today_date_obj > current_date_obj:
-                    days_missed = (today_date_obj - current_date_obj).days  # Edited by Taako
-                    new_date_obj = current_date_obj + timedelta(days=days_missed)  # Edited by Taako
-                    await self._config.guild_from_id(guild_id).current_date.set(new_date_obj.strftime("%m-%d-%Y"))  # Edited by Taako
+                    days_missed = (today_date_obj - current_date_obj).days
+                    new_date_obj = current_date_obj + timedelta(days=days_missed)
+                    await self._config.guild_from_id(guild_id).current_date.set(new_date_obj.strftime("%m-%d-%Y"))
 
     @commands.group(name="rpca", invoke_without_command=True)
     @commands.admin_or_permissions(administrator=True)
-    async def rpca(self, ctx: commands.Context):
+    async def rpca(self, ctx: commands.Context) -> None:
         """Calendar management commands. Requires administrator permissions."""
         # Only send help if not a subcommand and not already invoked
         if ctx.invoked_subcommand is None and ctx.command is not None:
             await ctx.send_help(ctx.command)
 
     @rpca.error
-    async def rpca_error(self, ctx, error):
-        """Handle errors in calendar commands."""  # Edited by Taako
+    async def rpca_error(self, ctx: commands.Context, error: Exception) -> None:
+        """Handle errors in calendar commands."""
         if isinstance(error, commands.CheckFailure):
-            await ctx.send("You need administrator permissions to use this command.")  # Edited by Taako
+            await ctx.send("You need administrator permissions to use this command.")
         else:
-            await ctx.send(f"An error occurred: {str(error)}")  # Edited by Taako
+            await ctx.send(f"An error occurred: {str(error)}")
 
-    async def red_delete_data_for_user(self, *, requester, user_id):
-        """Nothing to delete as we don't store user data."""  # Edited by Taako
+    async def red_delete_data_for_user(self, *, requester, user_id) -> None:
+        """Nothing to delete as we don't store user data."""
         pass
 
     @rpca.command(name="settitle")
-    async def set_title(self, ctx, *, title: str):
-        """Set a custom title for the main embed."""  # Edited by Taako
+    async def set_title(self, ctx: commands.Context, *, title: str) -> None:
+        """Set a custom title for the main embed."""
+        if not title:
+            await ctx.send("Title cannot be empty.")
+            return
         await self._config.guild(ctx.guild).embed_title.set(title)
-        await ctx.send(f"Embed title set to: {title}")  # Edited by Taako
+        await ctx.send(f"Embed title set to: {title}")
 
     @rpca.command(name="info")
     async def info(self, ctx: commands.Context) -> None:
         """View the current settings for the RP calendar."""
         guild_settings = await self._config.guild(ctx.guild).all()
+        embed_color = discord.Color(guild_settings.get("embed_color", 0x0000FF))
+        embed = discord.Embed(title="RP Calendar Settings", color=embed_color)
         start_date = guild_settings["start_date"] or "Not set"
         current_date = guild_settings["current_date"] or "Not set"
         channel_id = guild_settings["channel_id"]
         channel = f"<#{channel_id}>" if channel_id else "Not set"
         time_zone = guild_settings["time_zone"] or "America/Chicago"
-        embed_color = discord.Color(guild_settings["embed_color"])
-        embed_title = guild_settings["embed_title"] or "📅 RP Calendar Update"
 
         tz = pytz.timezone(time_zone)
         now = datetime.now(tz)
@@ -121,10 +124,6 @@ class RPCalander(commands.Cog):
             logging.error(f"Error calculating tomorrow's date: {e}")
             tomorrow_str = "Error"
 
-        embed = discord.Embed(
-            title="📅 RP Calendar Settings",
-            color=embed_color
-        )
         embed.add_field(name="Start Date", value=start_date, inline=False)
         embed.add_field(name="Current Date", value=current_date, inline=False)
         embed.add_field(name="Tomorrow's Date", value=tomorrow_str, inline=False)
@@ -166,48 +165,48 @@ class RPCalander(commands.Cog):
             await self._config.guild(ctx.guild).current_date.set(date_str)
             await ctx.send(f"Calendar start date set to: {date_str}")
         except ValueError:
-            await ctx.send("Invalid year provided. Please provide a valid year (e.g., 2025).")  # Edited by Taako
+            await ctx.send("Invalid year provided. Please provide a valid year (e.g., 2025).")
 
     @rpca.command(name="setchannel")
     async def set_channel(self, ctx, channel: discord.TextChannel):
-        """Set the channel for daily calendar updates."""  # Edited by Taako
+        """Set the channel for daily calendar updates."""
         await self._config.guild(ctx.guild).channel_id.set(channel.id)
-        await ctx.send(f"Calendar updates will now be sent to: {channel.mention}")  # Edited by Taako
+        await ctx.send(f"Calendar updates will now be sent to: {channel.mention}")
 
     @rpca.command(name="settimezone")
     async def set_timezone(self, ctx, timezone: str = None):
-        """Set the timezone for the calendar."""  # Edited by Taako
+        """Set the timezone for the calendar."""
         if not timezone:
-            await ctx.send("Please provide a timezone (e.g., UTC, America/New_York)")  # Edited by Taako
+            await ctx.send("Please provide a timezone (e.g., UTC, America/New_York)")
             return
 
         if timezone in pytz.all_timezones:
             await self._config.guild(ctx.guild).time_zone.set(timezone)
-            await ctx.send(f"Timezone set to: {timezone}")  # Edited by Taako
+            await ctx.send(f"Timezone set to: {timezone}")
         else:
-            await ctx.send("Invalid timezone. See: https://en.wikipedia.org/wiki/List_of_tz_database_time_zones")  # Edited by Taako
+            await ctx.send("Invalid timezone. See: https://en.wikipedia.org/wiki/List_of_tz_database_time_zones")
 
     @rpca.command(name="setcolor")
     async def set_color(self, ctx, color: discord.Color):
-        """Set the embed color for calendar updates."""  # Edited by Taako
+        """Set the embed color for calendar updates."""
         await self._config.guild(ctx.guild).embed_color.set(color.value)
-        await ctx.send(f"Embed color set to: {str(color)}")  # Edited by Taako
+        await ctx.send(f"Embed color set to: {str(color)}")
 
     @rpca.command(name="togglefooter")
     async def toggle_footer(self, ctx):
-        """Toggle the footer on/off for calendar embeds."""  # Edited by Taako
+        """Toggle the footer on/off for calendar embeds."""
         current = await self._config.guild(ctx.guild).show_footer()
         await self._config.guild(ctx.guild).show_footer.set(not current)
         state = "enabled" if not current else "disabled"
-        await ctx.send(f"Footer has been {state}")  # Edited by Taako
+        await ctx.send(f"Footer has been {state}")
 
     def _format_date(self, date_obj: datetime) -> str:
-        """Format a datetime object into our standard format."""  # Edited by Taako
-        return date_obj.strftime("%A %m-%d-%Y")  # Edited by Taako
+        """Format a datetime object into our standard format."""
+        return date_obj.strftime("%A %m-%d-%Y")
 
     def _parse_date(self, date_str: str, tz: datetime.tzinfo) -> datetime:
-        """Parse a date string into a datetime object."""  # Edited by Taako
-        return datetime.strptime(date_str, "%m-%d-%Y").replace(tzinfo=tz)  # Edited by Taako
+        """Parse a date string into a datetime object."""
+        return datetime.strptime(date_str, "%m-%d-%Y").replace(tzinfo=tz)
 
     def _is_same_month_day(self, date1: datetime, date2: datetime) -> bool:
         """Check if two dates have the same month and day."""
@@ -270,16 +269,16 @@ class RPCalander(commands.Cog):
 
     @_daily_update_loop.error
     async def _daily_update_loop_error(self, error):
-        """Handle errors in the daily update loop and restart it if necessary."""  # Edited by Taako
-        logging.error(f"Error in daily update loop: {error}")  # Edited by Taako
+        """Handle errors in the daily update loop and restart it if necessary."""
+        logging.error(f"Error in daily update loop: {error}")
         if not self._daily_update_loop.is_running():
-            logging.debug("Restarting daily update loop after error.")  # Edited by Taako
-            self._daily_update_loop.start()  # Edited by Taako
+            logging.debug("Restarting daily update loop after error.")
+            self._daily_update_loop.start()
 
-    def cog_unload(self):
-        """Clean up tasks and unregister commands when the cog is unloaded."""  # Edited by Taako
-        logging.debug("Unloading cog and stopping daily update loop.")  # Edited by Taako
-        self._daily_update_loop.cancel()  # Stop the daily update loop  # Edited by Taako
+    async def cog_unload(self) -> None:
+        """Cleanup tasks when the cog is unloaded."""
+        if hasattr(self, '_daily_update_loop') and self._daily_update_loop.is_running():
+            self._daily_update_loop.cancel()
 
     @rpca.command(name="force")
     @commands.admin_or_permissions(administrator=True)
