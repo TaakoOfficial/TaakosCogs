@@ -13,58 +13,75 @@ def generate_weather(time_zone: str) -> Dict[str, str]:
     except ImportError:
         current_time = datetime.datetime.now()
 
-    # Rest of weather generation code...
     weather_conditions = [
         "Sunny ☀️", "Partly Cloudy 🌤️", "Cloudy ☁️", "Rainy 🌧️", 
         "Thunderstorm ⛈️", "Snowy 🌨️", "Windy 🌬️", "Foggy 🌫️"
     ]
     
     temp_f = random.randint(0, 100)
+    feels_like = temp_f + random.randint(-5, 5)  # Random variation for "feels like"
     temp_c = round((temp_f - 32) * 5/9, 1)
     humidity = random.randint(30, 90)
     wind_speed = random.randint(0, 30)
+    visibility = round(random.uniform(0.5, 10.0), 1)
     condition = random.choice(weather_conditions)
+    
+    # Determine season based on month
+    month = current_time.month
+    if month in (3, 4, 5):
+        season = "Spring 🌸"
+    elif month in (6, 7, 8):
+        season = "Summer ☀️"
+    elif month in (9, 10, 11):
+        season = "Fall 🍂"
+    else:
+        season = "Winter ❄️"
     
     return {
         "temperature_f": f"{temp_f}°F",
         "temperature_c": f"{temp_c}°C",
+        "feels_like": f"{feels_like}°F",
         "humidity": f"{humidity}%",
         "wind_speed": f"{wind_speed} mph",
+        "visibility": f"{visibility} miles",
         "condition": condition,
+        "season": season,
         "time": current_time.strftime("%I:%M %p")
     }
 
 def create_weather_embed(weather_data: Dict[str, str], guild_settings: Dict[str, any]) -> discord.Embed:
     """Create a Discord embed for weather data."""
     embed = discord.Embed(
-        title="🌦️ Current Weather",
+        title="☀️ Today's Weather",
         color=discord.Color(guild_settings.get("embed_color", 0xFF0000))
     )
     
+    # Temperature and Feels Like
     embed.add_field(
-        name="Condition",
+        name="🌡️ Temperature | 🌡️ Feels Like",
+        value=f"{weather_data['temperature_f']} | {weather_data['feels_like']}",
+        inline=False
+    )
+    
+    # Conditions
+    embed.add_field(
+        name="☁️ Conditions",
         value=weather_data["condition"],
-        inline=True
+        inline=False
     )
+    
+    # Wind, Humidity, and Visibility
     embed.add_field(
-        name="Temperature", 
-        value=f"{weather_data['temperature_f']} ({weather_data['temperature_c']})",
-        inline=True
+        name="🌬️ Wind | 💧 Humidity | 👀 Visibility",
+        value=f"{weather_data['wind_speed']} | {weather_data['humidity']} | {weather_data['visibility']}",
+        inline=False
     )
+    
+    # Current Season
     embed.add_field(
-        name="Humidity",
-        value=weather_data["humidity"],
-        inline=True
-    )
-    embed.add_field(
-        name="Wind Speed",
-        value=weather_data["wind_speed"],
-        inline=True
-    )
-    embed.add_field(
-        name="Time",
-        value=weather_data["time"],
-        inline=True
+        name="🍂 Current Season",
+        value=weather_data["season"],
+        inline=False
     )
     
     if guild_settings.get("show_footer", True):
