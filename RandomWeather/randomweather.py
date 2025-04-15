@@ -159,6 +159,7 @@ class WeatherCog(commands.Cog):
                 
                 await self.config.guild(ctx.guild).refresh_time.set(value)
                 await self.config.guild(ctx.guild).refresh_interval.set(None)
+                await self.config.guild(ctx.guild).last_refresh.set(0)  # Reset last refresh
                 
                 # Get current settings and check if we should post now
                 guild_settings = await self.config.guild(ctx.guild).all()
@@ -169,7 +170,9 @@ class WeatherCog(commands.Cog):
                     await self._post_weather_update(ctx.guild.id, guild_settings, is_forced=True)
                     await ctx.send(f"Weather will refresh daily at {value}. Posted initial update since it's that time now.")
                 else:
-                    await ctx.send(f"Weather will refresh daily at {value}")
+                    # Calculate and show next update time
+                    next_time = calculate_next_refresh_time(0, None, value, time_zone)
+                    await ctx.send(f"Weather will refresh daily at {value} ({discord.utils.format_dt(next_time)})")
                 return
             except ValueError:
                 await ctx.send("Invalid time format. Use HHMM (e.g., 1830 for 6:30 PM)")
@@ -184,9 +187,18 @@ class WeatherCog(commands.Cog):
             unit = value[-1]
             interval = int(value[:-1])
             refresh_interval = interval * time_units[unit]
+            
+            # Update settings and reset last refresh
             await self.config.guild(ctx.guild).refresh_interval.set(refresh_interval)
             await self.config.guild(ctx.guild).refresh_time.set(None)
-            await ctx.send(f"Weather will refresh every {value}")
+            await self.config.guild(ctx.guild).last_refresh.set(0)  # Reset last refresh
+            
+            # Calculate and show next update
+            guild_settings = await self.config.guild(ctx.guild).all()
+            time_zone = guild_settings.get("time_zone") or "UTC"
+            next_time = calculate_next_refresh_time(0, refresh_interval, None, time_zone)
+            await ctx.send(f"Weather will refresh every {value} (next: {discord.utils.format_dt(next_time)})")
+            
         except ValueError:
             await ctx.send("Invalid format. Use a number with s, m, h, or d")
 
@@ -246,6 +258,7 @@ class WeatherCog(commands.Cog):
         last_refresh = guild_settings.get("last_refresh", 0)
         time_zone = guild_settings.get("time_zone") or "UTC"
         tz = pytz.timezone(time_zone)
+        current_time = datetime.now(tz)
         
         embed = discord.Embed(
             title="🌦️ RandomWeather Settings",
@@ -260,6 +273,9 @@ class WeatherCog(commands.Cog):
         embed.add_field(name="📢 Channel:", value=channel.mention if channel else "❌ Not set", inline=True)
         embed.add_field(name="🔖 Tag Role:", value=role.name if role else "❌ Not set", inline=True)
         embed.add_field(name="🌍 Timezone:", value=time_zone, inline=True)
+        
+        # Add current time
+        embed.add_field(name="🕒 Current Time:", value=discord.utils.format_dt(current_time, "T"), inline=True)
         
         # Add timing fields
         if refresh_time:
@@ -276,10 +292,14 @@ class WeatherCog(commands.Cog):
             embed.add_field(name="⏰ Updates:", value="Not configured", inline=True)
             
         # Calculate next post time
-        if last_refresh or refresh_interval or refresh_time:
-            next_post_time = calculate_next_refresh_time(last_refresh, refresh_interval, refresh_time, time_zone)
-            if next_post_time is not None and hasattr(next_post_time, 'tzinfo') and next_post_time.tzinfo is not None:
-                embed.add_field(name="📅 Next Update:", value=discord.utils.format_dt(next_post_time), inline=True)
+        next_post_time = calculate_next_refresh_time(
+            last_refresh,
+            refresh_interval,
+            refresh_time,
+            time_zone
+        )
+        if next_post_time:
+            embed.add_field(name="📅 Next Update:", value=discord.utils.format_dt(next_post_time), inline=True)
         
         # Add toggle states
         embed.add_field(name="🏷️ Role Tagging:", value="✅ Enabled" if guild_settings.get("tag_role") else "❌ Disabled", inline=True)
