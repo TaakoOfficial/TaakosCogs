@@ -19,26 +19,27 @@ def validate_timezone(configured_timezone: str) -> str:
     else:
         return "UTC"  # Default to UTC if the configured timezone is invalid
 
-def calculate_next_refresh_time(
-    last_refresh: int, refresh_interval: int, refresh_time: str, time_zone: str
-):
+def calculate_next_refresh_time(last_refresh: int, refresh_interval: int, refresh_time: str, time_zone: str):
     """Calculate the next refresh time based on the configuration."""
     tz = pytz.timezone(time_zone)
     now = datetime.now(tz)  # Ensure `now` is timezone-aware
+    last_refresh_dt = datetime.fromtimestamp(last_refresh, tz) if last_refresh else now
 
     if refresh_interval:
-        # Ensure the datetime from timestamp is timezone-aware
-        next_post_time = datetime.fromtimestamp(last_refresh, tz) + timedelta(seconds=refresh_interval)
+        # For intervals, simply add the interval to the last refresh time
+        next_post_time = last_refresh_dt + timedelta(seconds=refresh_interval)
     elif refresh_time:
-        # Parse the refresh time and set it for today
-        target_time = datetime.strptime(refresh_time, "%H%M").replace(
-            tzinfo=tz, year=now.year, month=now.month, day=now.day
-        )
-
-        # If the target time has already passed today, set it for tomorrow
-        if now >= target_time:
+        # Parse the refresh time
+        refresh_hour = int(refresh_time[:2])
+        refresh_minute = int(refresh_time[2:])
+        
+        # Start with the last refresh date and set the target time
+        target_time = last_refresh_dt.replace(hour=refresh_hour, minute=refresh_minute, second=0, microsecond=0)
+        
+        # If the target time is before the last refresh time, move to next day
+        if target_time <= last_refresh_dt:
             target_time += timedelta(days=1)
-
+            
         next_post_time = target_time
     else:
         # Default to midnight of the next day if no refresh time or interval is set
