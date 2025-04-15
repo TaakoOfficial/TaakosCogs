@@ -290,7 +290,7 @@ class RPCalander(commands.Cog, DashboardIntegration):
             logging.debug("Restarting daily update loop after error.")
             self._daily_update_loop.start()
 
-    @rpca.command(name="force")
+    @commands.command(name="force")
     @commands.admin_or_permissions(administrator=True)
     async def force_post(self, ctx: commands.Context) -> None:
         """Force post a calendar update to the configured channel immediately."""
