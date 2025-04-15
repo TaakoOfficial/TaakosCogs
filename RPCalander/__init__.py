@@ -28,18 +28,6 @@ async def setup(bot: commands.Bot):
     check_and_install_pytz()
     cog = RPCalander(bot)
     await bot.add_cog(cog)
-    # Register all slash commands
-    if hasattr(cog, "rpcalendar_info"):
-        bot.tree.add_command(cog.rpcalendar_info)
-    if hasattr(cog, "rpcalendar_force"):
-        bot.tree.add_command(cog.rpcalendar_force)
-    if hasattr(cog, "rpcalendar_settitle"):
-        bot.tree.add_command(cog.rpcalendar_settitle)
-    if hasattr(cog, "rpcalendar_setcolor"):
-        bot.tree.add_command(cog.rpcalendar_setcolor)
-    if hasattr(cog, "rpcalendar_settimezone"):
-        bot.tree.add_command(cog.rpcalendar_settimezone)
-    if hasattr(cog, "rpcalendar_setchannel"):
-        bot.tree.add_command(cog.rpcalendar_setchannel)
-    if hasattr(cog, "rpcalendar_togglefooter"):
-        bot.tree.add_command(cog.rpcalendar_togglefooter)
+    # Register the grouped slash commands
+    if hasattr(cog, "rpca_group"):
+        bot.tree.add_command(cog.rpca_group)
