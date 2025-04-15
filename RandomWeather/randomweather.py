@@ -55,7 +55,7 @@ class WeatherCog(commands.Cog):
         else:
             await ctx.send("Invalid timezone. See: https://en.wikipedia.org/wiki/List_of_tz_database_time_zones")
 
-    @tasks.loop(minutes=5)  # Check every 5 minutes instead of every minute
+    @tasks.loop(minutes=5)
     async def weather_update_loop(self) -> None:
         """Task loop to post daily weather updates at the correct time or interval."""
         try:
@@ -68,7 +68,8 @@ class WeatherCog(commands.Cog):
                     
                     time_zone = guild_settings.get("time_zone") or "UTC"
                     tz = pytz.timezone(time_zone)
-                    now = datetime.now(tz)
+                    # Get system time and convert to guild's timezone
+                    now = datetime.now().astimezone(tz)
                     
                     last_refresh = guild_settings.get("last_refresh", 0)
                     refresh_interval = guild_settings.get("refresh_interval")
@@ -79,14 +80,13 @@ class WeatherCog(commands.Cog):
                         last_refresh, refresh_interval, refresh_time, time_zone
                     )
                     
-                    # Only post if we've passed the next post time
+                    # Both times are now guaranteed to be timezone-aware
                     if next_post_time and now >= next_post_time:
                         await self._post_weather_update(
                             guild_id, 
                             guild_settings,
                             scheduled_time=next_post_time.timestamp()
                         )
-
                 except Exception as e:
                     logging.error(f"Error in weather update for guild {guild_id}: {e}")
         except Exception as e:
@@ -261,19 +261,7 @@ class WeatherCog(commands.Cog):
         scheduled_time: Optional[float] = None, 
         is_forced: bool = False
     ) -> None:
-        """Post a weather update for a guild.
-        
-        Parameters
-        ----------
-        guild_id: int
-            The ID of the guild to post the update for
-        guild_settings: Dict[str, Any]
-            The guild's settings dictionary
-        scheduled_time: Optional[float]
-            The scheduled time for this post (timestamp). If not provided, uses now.
-        is_forced: bool
-            Whether this is a forced post
-        """
+        """Post a weather update for a guild."""
         try:
             channel = self.bot.get_channel(guild_settings.get("channel_id"))
             if not channel:
@@ -281,13 +269,13 @@ class WeatherCog(commands.Cog):
             
             time_zone = guild_settings.get("time_zone") or "UTC"
             tz = pytz.timezone(time_zone)
-            now = datetime.now(tz)
+            # Get system time and convert to guild's timezone
+            now = datetime.now().astimezone(tz)
             
-            # For forced posts, we want to use the current time
-            # For scheduled posts, we use the scheduled time
-            update_time = now if is_forced else (
-                datetime.fromtimestamp(scheduled_time, tz) if scheduled_time 
-                else now
+            # For forced posts or when no scheduled time, use current time
+            # For scheduled posts, use the provided timestamp
+            update_time = now if is_forced or not scheduled_time else (
+                datetime.fromtimestamp(scheduled_time).astimezone(tz)
             )
             
             update_settings = guild_settings.copy()
@@ -303,7 +291,7 @@ class WeatherCog(commands.Cog):
             
             await channel.send(content=content, embed=embed)
             
-            # Update the last refresh time
+            # Update the last refresh time using the timezone-aware timestamp
             await self.config.guild(self.bot.get_guild(guild_id)).last_refresh.set(update_time.timestamp())
             write_last_posted()
             
