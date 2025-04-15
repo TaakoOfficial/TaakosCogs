@@ -1,5 +1,6 @@
 import pytz
 from datetime import datetime, timedelta
+from typing import Optional, Union
 
 def validate_timezone(configured_timezone: str) -> str:
     """Validate the configured timezone against pytz timezones."""
@@ -7,10 +8,44 @@ def validate_timezone(configured_timezone: str) -> str:
         return configured_timezone
     return "UTC"
 
-def calculate_next_refresh_time(last_refresh: int, refresh_interval: int, refresh_time: str, time_zone: str):
-    """Calculate the next refresh time based on the configuration."""
+def get_seconds_until_target(current_time: datetime, target_hour: int, target_minute: int) -> int:
+    """Calculate seconds until the next occurrence of a target time."""
+    current_seconds = current_time.hour * 3600 + current_time.minute * 60 + current_time.second
+    target_seconds = target_hour * 3600 + target_minute * 60
+    
+    if target_seconds <= current_seconds:
+        return (24 * 3600) - (current_seconds - target_seconds)
+    else:
+        return target_seconds - current_seconds
+
+def should_post_now(current_time: datetime, target_hour: int, target_minute: int) -> bool:
+    """
+    Check if we should post at the current time.
+    Allows for a 1-minute window to avoid missing the exact time.
+    """
+    return (current_time.hour == target_hour and 
+            current_time.minute == target_minute and 
+            current_time.second < 60)
+
+def calculate_next_refresh_time(
+    last_refresh: Union[int, float],
+    refresh_interval: Optional[int], 
+    refresh_time: Optional[str],
+    time_zone: str
+) -> datetime:
+    """
+    Calculate the next refresh time based on the configuration.
+    
+    Args:
+        last_refresh: Timestamp of last refresh
+        refresh_interval: Interval in seconds between refreshes
+        refresh_time: Daily refresh time in HHMM format
+        time_zone: Timezone string (e.g., 'UTC', 'America/New_York')
+    
+    Returns:
+        datetime: The next scheduled refresh time
+    """
     tz = pytz.timezone(time_zone)
-    # Get system time and convert it to the guild's timezone
     now = datetime.now().astimezone(tz)
     
     if refresh_interval:
@@ -30,28 +65,17 @@ def calculate_next_refresh_time(last_refresh: int, refresh_interval: int, refres
         target_hour = int(refresh_time[:2])
         target_minute = int(refresh_time[2:])
         
-        # Get today's target time
-        target_time = now.replace(hour=target_hour, minute=target_minute, second=0, microsecond=0)
-        
-        if now >= target_time:
-            # Calculate seconds until next occurrence
-            current_seconds = now.hour * 3600 + now.minute * 60 + now.second
-            target_seconds = target_hour * 3600 + target_minute * 60
+        # Check if we should post right now
+        if should_post_now(now, target_hour, target_minute):
+            return now
             
-            # If target is earlier in the day than current time,
-            # we need to wait until that time tomorrow
-            if target_seconds <= current_seconds:
-                seconds_to_wait = (24 * 3600) - (current_seconds - target_seconds)
-            else:
-                seconds_to_wait = target_seconds - current_seconds
-                
-            next_post_time = now + timedelta(seconds=seconds_to_wait)
-            # Ensure the time is exactly what we want
-            next_post_time = next_post_time.replace(hour=target_hour, minute=target_minute, second=0, microsecond=0)
-        else:
-            next_post_time = target_time
+        # Calculate time until next occurrence
+        seconds_to_wait = get_seconds_until_target(now, target_hour, target_minute)
+        next_post_time = now + timedelta(seconds=seconds_to_wait)
+        next_post_time = next_post_time.replace(second=0, microsecond=0)
+        
     else:
-        # Calculate exact seconds until next midnight
+        # Default to next midnight
         seconds_until_midnight = ((24 - now.hour) * 3600) - (now.minute * 60) - now.second
         next_post_time = now + timedelta(seconds=seconds_until_midnight)
         next_post_time = next_post_time.replace(microsecond=0)
