@@ -36,6 +36,13 @@ class WeatherCog(commands.Cog):
         self.config.register_guild(**default_guild)
         self.weather_update_loop.start()
 
+    @commands.group(name="rweather", invoke_without_command=True)
+    @commands.admin_or_permissions(administrator=True)
+    async def rweather(self, ctx: commands.Context):
+        """Weather management commands. Requires administrator permissions."""
+        if ctx.invoked_subcommand is None:
+            await ctx.send_help(ctx.command)
+
     @rweather.command(name="timezone")
     async def set_timezone(self, ctx: commands.Context, timezone: str = None):
         """Set the timezone for weather updates (e.g., UTC, America/New_York)."""
@@ -97,13 +104,6 @@ class WeatherCog(commands.Cog):
         """Clean up tasks when the cog is unloaded."""
         if self.weather_update_loop.is_running():
             self.weather_update_loop.cancel()
-
-    @commands.group(name="rweather", invoke_without_command=True)
-    @commands.admin_or_permissions(administrator=True)
-    async def rweather(self, ctx: commands.Context):
-        """Weather management commands. Requires administrator permissions."""
-        if ctx.invoked_subcommand is None:
-            await ctx.send_help(ctx.command)
 
     @rweather.command(name="channel")
     async def set_channel(self, ctx: commands.Context, channel: discord.TextChannel):
