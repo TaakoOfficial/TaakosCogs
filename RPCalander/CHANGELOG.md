@@ -1,5 +1,11 @@
 # 📅 rpcalander Changelog
 
+## [v1.2.1] - 2025-04-15
+
+### 🛠️ Improvements
+
+- Added automatic installation for the `pytz` dependency. Now the cog handles its time zone magic seamlessly! ✨
+
 ## v1.2.0
 
 ### Added
