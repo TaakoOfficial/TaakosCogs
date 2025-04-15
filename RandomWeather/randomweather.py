@@ -1,15 +1,37 @@
+import asyncio
 from typing import Dict, Any, Optional, cast
 import discord
 from discord.ext import tasks
-import pytz
-from datetime import datetime
+import platform
+import sys
+import subprocess
 import logging
-
+from datetime import datetime
 from redbot.core import Config, commands
 from redbot.core.bot import Red
+from redbot.core.utils.chat_formatting import error
 from .weather_utils import generate_weather, create_weather_embed
 from .time_utils import calculate_next_refresh_time, should_post_now, validate_timezone
 from .file_utils import write_last_posted
+
+def ensure_pytz_installed() -> bool:
+    """Ensure pytz is installed on the system."""
+    try:
+        import pytz
+        return True
+    except ImportError:
+        try:
+            python_exe = sys.executable
+            subprocess.check_call(
+                [python_exe, "-m", "pip", "install", "pytz"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE
+            )
+            import pytz
+            return True
+        except (subprocess.SubprocessError, ImportError) as e:
+            logging.error(f"Failed to install pytz: {e}")
+            return False
 
 class WeatherCog(commands.Cog):
     """A cog for generating random daily weather updates."""
@@ -324,7 +346,13 @@ class WeatherCog(commands.Cog):
             await ctx.send("Weather update posted.")
         except Exception as e:
             await ctx.send(f"Failed to post weather update: {e}")
-            
+
 async def setup(bot: Red) -> None:
     """Load WeatherCog."""
+    if not ensure_pytz_installed():
+        msg = error("Failed to load WeatherCog: Could not install required 'pytz' package. "
+                   "Please install it manually with `pip install pytz`")
+        await bot.send_to_owners(msg)
+        return
+        
     await bot.add_cog(WeatherCog(bot))
