@@ -3,10 +3,11 @@ Yet Another Logging Cog (YALC) Slash Commands for Redbot.
 """
 from redbot.core import app_commands, commands
 import discord
-from .utils import (
+from YALC.utils import (
     set_embed_footer,
     check_manage_guild,
-    validate_retention_days
+    validate_retention_days,
+    safe_send
 )
 
 class YALCSlashGroup(app_commands.Group):
