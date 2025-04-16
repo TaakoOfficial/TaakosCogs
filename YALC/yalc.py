@@ -1,9 +1,9 @@
 from redbot.core import commands, Config, app_commands
 import discord
 from typing import Optional, Any
-from .classic_commands import YALCClassicCommands
-from .slash_commands import YALCSlashGroup
-from .utils import (
+from .classic_commands import YALCClassicCommands  # relative import
+from .slash_commands import YALCSlashGroup  # relative import
+from .utils import (  # relative import
     mention_from_id,
     validate_retention_days,
     set_embed_footer,
