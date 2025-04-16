@@ -1,8 +1,16 @@
 from redbot.core import commands, Config, app_commands
 import discord
-from typing import Optional
+from typing import Optional, Any
 from .classic_commands import YALCClassicCommands
 from .slash_commands import YALCSlashGroup
+from .utils import (
+    mention_from_id,
+    validate_retention_days,
+    set_embed_footer,
+    log_exception,
+    check_manage_guild,
+    safe_send
+)
 
 class EventLogGroup(app_commands.Group):
     """Slash command group for event log channel configuration."""
@@ -11,36 +19,46 @@ class EventLogGroup(app_commands.Group):
         self.cog = cog
 
     @app_commands.command(name="set", description="Set a log channel for a specific event type.")
-    async def set_eventlog(self, interaction: discord.Interaction, event: str, channel: discord.TextChannel):
+    async def set_eventlog(self, interaction: discord.Interaction, event: str, channel: discord.TextChannel) -> None:
         """Slash command to set a log channel for an event type."""
         if not interaction.guild or not interaction.user:
-            await interaction.response.send_message("❌ This command can only be used in a server.", ephemeral=True)
+            await safe_send(interaction, "❌ This command can only be used in a server.")
             return
-        if not interaction.user.guild_permissions.manage_guild:
-            await interaction.response.send_message("❌ You need Manage Server permission!", ephemeral=True)
+        member = interaction.user if isinstance(interaction.user, discord.Member) else None
+        if not member or not check_manage_guild(member):
+            await safe_send(interaction, "❌ You need Manage Server permission!")
             return
-        valid_events = list((await self.cog.config.guild(interaction.guild).log_events()).keys())
-        if event not in valid_events:
-            await interaction.response.send_message(f"❌ Invalid event type. Valid events: {', '.join(valid_events)}", ephemeral=True)
-            return
-        await self.cog.config.guild(interaction.guild).event_channels.set_raw(event, value=channel.id)
-        await interaction.response.send_message(f"✅ Log channel for `{event}` set to {channel.mention}!", ephemeral=True)
+        try:
+            valid_events = list((await self.cog.config.guild(interaction.guild).log_events()).keys())
+            if event not in valid_events:
+                await safe_send(interaction, f"❌ Invalid event type. Valid events: {', '.join(valid_events)}")
+                return
+            await self.cog.config.guild(interaction.guild).event_channels.set_raw(event, value=channel.id)
+            await safe_send(interaction, f"✅ Log channel for `{event}` set to {channel.mention}!")
+        except Exception as e:
+            log_exception(self.cog, e, context="set_eventlog")
+            await safe_send(interaction, "❌ An error occurred while setting the log channel.")
 
     @app_commands.command(name="clear", description="Clear the log channel for an event type (use default).")
-    async def clear_eventlog(self, interaction: discord.Interaction, event: str):
+    async def clear_eventlog(self, interaction: discord.Interaction, event: str) -> None:
         """Slash command to clear a specific event log channel (revert to default)."""
         if not interaction.guild or not interaction.user:
-            await interaction.response.send_message("❌ This command can only be used in a server.", ephemeral=True)
+            await safe_send(interaction, "❌ This command can only be used in a server.")
             return
-        if not interaction.user.guild_permissions.manage_guild:
-            await interaction.response.send_message("❌ You need Manage Server permission!", ephemeral=True)
+        member = interaction.user if isinstance(interaction.user, discord.Member) else None
+        if not member or not check_manage_guild(member):
+            await safe_send(interaction, "❌ You need Manage Server permission!")
             return
-        valid_events = list((await self.cog.config.guild(interaction.guild).log_events()).keys())
-        if event not in valid_events:
-            await interaction.response.send_message(f"❌ Invalid event type. Valid events: {', '.join(valid_events)}", ephemeral=True)
-            return
-        await self.cog.config.guild(interaction.guild).event_channels.clear_raw(event)
-        await interaction.response.send_message(f"✅ Log channel for `{event}` cleared (will use default log channel).", ephemeral=True)
+        try:
+            valid_events = list((await self.cog.config.guild(interaction.guild).log_events()).keys())
+            if event not in valid_events:
+                await safe_send(interaction, f"❌ Invalid event type. Valid events: {', '.join(valid_events)}")
+                return
+            await self.cog.config.guild(interaction.guild).event_channels.clear_raw(event)
+            await safe_send(interaction, f"✅ Log channel for `{event}` cleared (will use default log channel).")
+        except Exception as e:
+            log_exception(self.cog, e, context="clear_eventlog")
+            await safe_send(interaction, "❌ An error occurred while clearing the log channel.")
 
 class YALC(commands.Cog):
     """📝 Yet Another Logging Cog (YALC)! Logs all the spicy server events with style and fun! 🎉"""
@@ -122,7 +140,7 @@ class YALC(commands.Cog):
     @yalcretention.command(name="set")
     async def set_retention(self, ctx: commands.Context, days: int) -> None:
         """Set the log retention period in days (minimum 1, maximum 365)."""
-        if days < 1 or days > 365:
+        if not validate_retention_days(days):
             await ctx.send("❌ Please provide a value between 1 and 365 days.")
             return
         await self.config.guild(ctx.guild).set_raw("retention_days", value=days)
@@ -152,9 +170,11 @@ class YALC(commands.Cog):
                         try:
                             await msg.delete()
                             await asyncio.sleep(1)
-                        except Exception:
+                        except Exception as e:
+                            log_exception(self, e, context="prune_old_logs:delete")
                             continue
-            except Exception:
+            except Exception as e:
+                log_exception(self, e, context="prune_old_logs:outer")
                 continue
 
     # Schedule pruning on cog load
@@ -170,6 +190,13 @@ class YALC(commands.Cog):
     # Call this in __init__
     # await self.initialize_pruning()
 
+    # --- Utility for safe mention ---
+    def _safe_mention(self, obj: Any) -> str:
+        if hasattr(obj, "mention"):
+            return obj.mention
+        return str(obj) if obj else "unknown channel"
+
+    # --- Example usage in listeners ---
     @commands.Cog.listener()
     async def on_voice_state_update(self, member: discord.Member, before: discord.VoiceState, after: discord.VoiceState) -> None:
         """Log voice state changes (join/leave/mute)."""
@@ -181,27 +208,25 @@ class YALC(commands.Cog):
         log_channel = await self._get_event_channel(member.guild, "voice_state")
         if not log_channel:
             return
-        def safe_mention(channel):
-            return channel.mention if hasattr(channel, "mention") else str(channel)
         if before.channel != after.channel:
             if before.channel is None and after.channel:
-                desc = f"{member.mention} joined voice channel {safe_mention(after.channel)}"
+                desc = f"{member.mention} joined voice channel {self._safe_mention(after.channel)}"
             elif before.channel and after.channel is None:
-                desc = f"{member.mention} left voice channel {safe_mention(before.channel)}"
+                desc = f"{member.mention} left voice channel {self._safe_mention(before.channel)}"
             elif before.channel and after.channel:
-                desc = f"{member.mention} moved from {safe_mention(before.channel)} to {safe_mention(after.channel)}"
+                desc = f"{member.mention} moved from {self._safe_mention(before.channel)} to {self._safe_mention(after.channel)}"
             else:
                 return
             embed = discord.Embed(title="🔊 Voice State Update", description=desc, color=discord.Color.blue())
             embed.timestamp = discord.utils.utcnow()
-            self._set_embed_footer(embed)
+            set_embed_footer(embed, self)
             await log_channel.send(embed=embed)
         elif before.mute != after.mute:
             state = "muted" if after.mute else "unmuted"
             desc = f"{member.mention} was {state} in voice."
             embed = discord.Embed(title="🔇 Voice Mute Update", description=desc, color=discord.Color.purple())
             embed.timestamp = discord.utils.utcnow()
-            self._set_embed_footer(embed)
+            set_embed_footer(embed, self)
             await log_channel.send(embed=embed)
 
     @commands.Cog.listener()
@@ -217,10 +242,10 @@ class YALC(commands.Cog):
         if not log_channel:
             return
         channel = invite.channel if hasattr(invite, "channel") and invite.channel else None
-        desc = f"Invite `{invite.code}` created for {channel.mention if hasattr(channel, 'mention') else str(channel) if channel else 'unknown channel'}"
+        desc = f"Invite `{invite.code}` created for {self._safe_mention(channel)}"
         embed = discord.Embed(title="🔗 Invite Created", description=desc, color=discord.Color.green())
         embed.timestamp = discord.utils.utcnow()
-        self._set_embed_footer(embed)
+        set_embed_footer(embed, self)
         await log_channel.send(embed=embed)
 
     @commands.Cog.listener()
@@ -236,10 +261,10 @@ class YALC(commands.Cog):
         if not log_channel:
             return
         channel = invite.channel if hasattr(invite, "channel") and invite.channel else None
-        desc = f"Invite `{invite.code}` deleted for {channel.mention if hasattr(channel, 'mention') else str(channel) if channel else 'unknown channel'}"
+        desc = f"Invite `{invite.code}` deleted for {self._safe_mention(channel)}"
         embed = discord.Embed(title="❌ Invite Deleted", description=desc, color=discord.Color.red())
         embed.timestamp = discord.utils.utcnow()
-        self._set_embed_footer(embed)
+        set_embed_footer(embed, self)
         await log_channel.send(embed=embed)
 
     @commands.Cog.listener()
@@ -254,10 +279,10 @@ class YALC(commands.Cog):
         log_channel = await self._get_event_channel(guild, "webhook_update")
         if not log_channel:
             return
-        desc = f"Webhook `{webhook.name}` (ID: {webhook.id}) was updated in {webhook.channel.mention if hasattr(webhook, 'channel') and webhook.channel else 'unknown channel'} by <@{webhook.user.id}>." if hasattr(webhook, 'user') and webhook.user else f"Webhook `{webhook.name}` (ID: {webhook.id}) was updated."
+        desc = f"Webhook `{webhook.name}` (ID: {webhook.id}) was updated in {self._safe_mention(webhook.channel) if hasattr(webhook, 'channel') and webhook.channel else 'unknown channel'} by <@{webhook.user.id}>." if hasattr(webhook, 'user') and webhook.user else f"Webhook `{webhook.name}` (ID: {webhook.id}) was updated."
         embed = discord.Embed(title="🪝 Webhook Updated", description=desc, color=discord.Color.teal())
         embed.timestamp = discord.utils.utcnow()
-        self._set_embed_footer(embed)
+        set_embed_footer(embed, self)
         await log_channel.send(embed=embed)
 
     @commands.Cog.listener()
@@ -271,10 +296,10 @@ class YALC(commands.Cog):
         log_channel = await self._get_event_channel(message.guild, "webhook_update")
         if not log_channel:
             return
-        desc = f"Webhook message sent in {message.channel.mention} by webhook ID `{message.webhook_id}`."
+        desc = f"Webhook message sent in {self._safe_mention(message.channel)} by webhook ID `{message.webhook_id}`."
         embed = discord.Embed(title="🪝 Webhook Message Sent", description=desc, color=discord.Color.teal())
         embed.timestamp = discord.utils.utcnow()
-        self._set_embed_footer(embed)
+        set_embed_footer(embed, self)
         await log_channel.send(embed=embed)
 
     @commands.Cog.listener()
@@ -289,10 +314,10 @@ class YALC(commands.Cog):
         if not log_channel:
             return
         parent = thread.parent if hasattr(thread, "parent") and thread.parent else None
-        desc = f"Thread `{thread.name}` created in {parent.mention if hasattr(parent, 'mention') else str(parent) if parent else 'unknown channel'}"
+        desc = f"Thread `{thread.name}` created in {self._safe_mention(parent)}"
         embed = discord.Embed(title="🧵 Thread Created", description=desc, color=discord.Color.green())
         embed.timestamp = discord.utils.utcnow()
-        self._set_embed_footer(embed)
+        set_embed_footer(embed, self)
         await log_channel.send(embed=embed)
 
     @commands.Cog.listener()
@@ -307,10 +332,10 @@ class YALC(commands.Cog):
         if not log_channel:
             return
         parent = thread.parent if hasattr(thread, "parent") and thread.parent else None
-        desc = f"Thread `{thread.name}` deleted from {parent.mention if hasattr(parent, 'mention') else str(parent) if parent else 'unknown channel'}"
+        desc = f"Thread `{thread.name}` deleted from {self._safe_mention(parent)}"
         embed = discord.Embed(title="🧵 Thread Deleted", description=desc, color=discord.Color.red())
         embed.timestamp = discord.utils.utcnow()
-        self._set_embed_footer(embed)
+        set_embed_footer(embed, self)
         await log_channel.send(embed=embed)
 
     @commands.Cog.listener()
@@ -331,9 +356,9 @@ class YALC(commands.Cog):
                 desc = f"User `{before.name}` changed username to `{after.name}`"
                 embed = discord.Embed(title="📝 Username Changed", description=desc, color=discord.Color.blurple())
                 embed.timestamp = discord.utils.utcnow()
-                self._set_embed_footer(embed)
+                set_embed_footer(embed, self)
                 await log_channel.send(embed=embed)
-            # Nickname changes are handled in on_member_update
+        # Nickname changes are handled in on_member_update
 
     @commands.Cog.listener()
     async def on_member_update(self, before: discord.Member, after: discord.Member) -> None:
@@ -353,7 +378,7 @@ class YALC(commands.Cog):
                 )
                 embed.set_author(name=str(after), icon_url=self._get_avatar_url(after))
                 embed.timestamp = discord.utils.utcnow()
-                self._set_embed_footer(embed)
+                set_embed_footer(embed, self)
                 await log_channel.send(embed=embed)
         # Role change
         if settings["log_events"].get("role_update", False):
@@ -370,7 +395,7 @@ class YALC(commands.Cog):
                 embed.add_field(name="After", value=after_roles, inline=False)
                 embed.set_author(name=str(after), icon_url=self._get_avatar_url(after))
                 embed.timestamp = discord.utils.utcnow()
-                self._set_embed_footer(embed)
+                set_embed_footer(embed, self)
                 await log_channel.send(embed=embed)
 
     @commands.Cog.listener()
@@ -395,7 +420,7 @@ class YALC(commands.Cog):
             color=discord.Color.teal()
         )
         embed.timestamp = discord.utils.utcnow()
-        self._set_embed_footer(embed)
+        set_embed_footer(embed, self)
         await log_channel.send(embed=embed)
 
     @commands.Cog.listener()
@@ -416,7 +441,7 @@ class YALC(commands.Cog):
         )
         embed.set_author(name=str(member), icon_url=self._get_avatar_url(member))
         embed.timestamp = discord.utils.utcnow()
-        self._set_embed_footer(embed)
+        set_embed_footer(embed, self)
         await log_channel.send(embed=embed)
 
     @commands.Cog.listener()
@@ -441,13 +466,13 @@ class YALC(commands.Cog):
         reason = entry.reason if entry and entry.reason else "No reason provided."
         embed = discord.Embed(
             title="🧹 Bulk Message Delete",
-            description=f"{count} messages were deleted in {channel.mention}",
+            description=f"{count} messages were deleted in {self._safe_mention(channel)}",
             color=discord.Color.red()
         )
         embed.add_field(name="Moderator", value=moderator)
         embed.add_field(name="Reason", value=reason)
         embed.timestamp = discord.utils.utcnow()
-        self._set_embed_footer(embed)
+        set_embed_footer(embed, self)
         await log_channel.send(embed=embed)
 
     # --- Ignore Lists ---
@@ -541,9 +566,9 @@ class YALC(commands.Cog):
         embed.add_field(name="Channels", value=", ".join(channel_mentions) or "None", inline=False)
         await ctx.send(embed=embed)
 
-    def is_ignored(self, guild: discord.Guild, user: Optional[discord.abc.User] = None, channel: Optional[discord.abc.GuildChannel] = None) -> bool:
+    def is_ignored(self, guild: discord.Guild, user: Optional[discord.abc.User] = None, channel: Optional[discord.abc.GuildChannel] = None) -> Any:
         """Check if a user or channel should be ignored for logging."""
-        async def check():
+        async def check() -> bool:
             if not guild:
                 return False
             users = await self.config.guild(guild).get_raw("ignored_users", default=[])
