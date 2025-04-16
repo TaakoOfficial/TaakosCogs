@@ -4,7 +4,7 @@ YALC Classic Commands for Redbot.
 from redbot.core import commands
 import discord
 from typing import Optional
-from YALC.utils import set_embed_footer, validate_retention_days
+from .utils import set_embed_footer, validate_retention_days
 
 class YALCClassicCommands:
     """Classic command group for YALC logging configuration."""

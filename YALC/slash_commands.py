@@ -3,7 +3,7 @@ Yet Another Logging Cog (YALC) Slash Commands for Redbot.
 """
 from redbot.core import app_commands, commands
 import discord
-from YALC.utils import (
+from .utils import (
     set_embed_footer,
     check_manage_guild,
     validate_retention_days,
@@ -13,7 +13,7 @@ from YALC.utils import (
 class YALCSlashGroup(app_commands.Group):
     """Slash command group for YALC logging configuration."""
     def __init__(self, cog: commands.Cog):
-        super().__init__(name="yalc", description="YALC logging commands.")
+        super().__init__(name="YALC", description="YALC logging commands.")
         self.cog = cog
 
     @app_commands.command(name="info", description="Show enabled events and their log channels.")

@@ -5,9 +5,9 @@ Main cog implementation.
 from redbot.core import commands, Config, app_commands
 import discord
 from typing import Optional, Any
-from YALC.classic_commands import YALCClassicCommands
-from YALC.slash_commands import YALCSlashGroup
-from YALC.utils import (
+from .classic_commands import YALCClassicCommands
+from .slash_commands import YALCSlashGroup
+from .utils import (
     mention_from_id,
     validate_retention_days,
     set_embed_footer,
