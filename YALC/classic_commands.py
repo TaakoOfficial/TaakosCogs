@@ -1,25 +1,51 @@
 """
-YALC Classic Commands for Redbot.
+Yet Another Logging Cog (YALC) Classic Commands for Redbot.
+
+This module contains all classic (prefix-based) command implementations for YALC.
+Commands are organized in command groups for better organization.
 """
-from redbot.core import commands
+from redbot.core import commands, Config
 import discord
-from typing import Optional
-from .utils import set_embed_footer, validate_retention_days
+from typing import Optional, Dict, List, Union, cast
+from .utils import check_manage_guild, validate_retention_days
 
 class YALCClassicCommands:
-    """Classic command group for YALC logging configuration."""
-    def __init__(self, cog: commands.Cog):
+    """Classic command group for YALC logging configuration.
+    
+    This class implements all classic (prefix-based) commands for YALC.
+    Commands are organized in groups for better organization and help text.
+    All commands use proper permission checking and error handling.
+    """
+
+    def __init__(self, cog: commands.Cog) -> None:
+        """Initialize the YALC classic commands handler.
+        
+        Parameters
+        ----------
+        cog: commands.Cog
+            The YALC cog instance that owns these commands.
+        """
         self.cog = cog
 
     @commands.group(name="yalc")
+    @commands.guild_only()
+    @commands.admin_or_permissions(manage_guild=True)
     async def yalc(self, ctx: commands.Context) -> None:
-        """YALC logging configuration commands."""
-        if ctx.invoked_subcommand is None:
+        """Manage YALC logging configuration.
+        
+        This is the base command group for all YALC classic commands.
+        Use subcommands to configure logging settings.
+        """
+        if not ctx.invoked_subcommand:
             await ctx.send_help(ctx.command)
 
     @yalc.command(name="info")
-    async def yalc_info(self, ctx: commands.Context) -> None:
-        """Show enabled events and their log channels."""
+    async def info(self, ctx: commands.Context) -> None:
+        """Show enabled events and their log channels.
+        
+        This command displays all configured log events and their
+        associated channels in a clean embed format.
+        """
         try:
             settings = await self.cog.config.guild(ctx.guild).all()
             log_events = settings["log_events"]

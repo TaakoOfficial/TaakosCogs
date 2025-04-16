@@ -1,33 +1,46 @@
-# 📝 Yet Another Logging Cog (YALC) Changelog
+# 📝 YALC Changelog
 
-Welcome to the official YALC changelog! Here you'll find all the spicy details about what's new, improved, or fixed in your favorite logging cog. Grab your popcorn 🍿 and enjoy the show!
+All notable changes to YALC will be documented in this file.
 
----
-
-## [v0.1.0] - 2025-04-16
+## [v2.0.0] - 2025-04-16
 
 ### ✨ New Features
 
-- Initial release of YALC! 🎉
-- Classic command `[p]yalc setlog` to set your log channel.
-- Slash command `/setlog` for easy log channel setup.
-- Logs message deletions with beautiful, emoji-filled embeds.
-- Fun, emoji-rich documentation and user messages throughout the cog.
-- User-friendly error messages for all commands and actions.
-- Fully persistent settings using Redbot's Config system.
-- Modular, PEP8-compliant codebase for easy maintenance and upgrades.
+- Added slash command support
+- Added log retention management
+- Added rich embed formatting for all logs
 
 ### 🛠️ Improvements
 
-- Follows Redbot and Discord.py best practices for reliability and performance.
-- Clean, readable code with type hints and docstrings everywhere.
-- All commands and listeners validate input and permissions before acting.
+- Improved type hints throughout codebase
+- Enhanced docstrings following Red standards
+- Better organization of commands in groups
+- Improved error handling and user feedback
+
+### 🐛 Bug Fixes
+
+- Fixed message cache management
+- Fixed permission checks in slash commands
+- Fixed embed footer consistency
 
 ### 📚 Documentation
 
-- README.md with clear install, usage, and example sections.
-- This changelog, so you never miss a beat! 🥁
+- Added detailed docstrings
+- Improved README with examples
+- Added proper type hints
 
----
+### 🚀 Performance
 
-Stay tuned for more features, improvements, and fun updates! 🚀
+- Optimized message caching
+- Reduced database calls
+- Improved event handler efficiency
+
+## [v1.0.0] - 2025-03-15
+
+### ✨ New Features
+
+- Initial release
+- Basic logging functionality
+- Classic command support
+- Channel configuration
+- Event filtering

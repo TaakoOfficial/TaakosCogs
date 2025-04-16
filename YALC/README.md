@@ -1,78 +1,63 @@
 # 📝 YALC - Yet Another Logging Cog
 
-A modern, modular Redbot cog for logging all the spicy server events with style and fun! 🎉
+A powerful Discord server logging solution for Red-DiscordBot with both classic and slash commands! 🌟
 
 ---
 
 ## 🚀 Features
 
-- Per-event logging for nearly every Discord server event
-- Classic and slash command support
-- Per-event log channel configuration (set each event to a different channel!)
-- All logging is opt-in: enable only what you want
-- Rich, readable embeds for all logs
-- Tracks moderation actions, nickname/username changes, channel/role/thread/emoji events, and more
-- Case numbers for moderation actions
-- Staff command usage logging
-- Follows Red V3+ and Discord best practices
+- Comprehensive server logging
+- Both classic and slash commands
+- Per-channel event configuration
+- User, role, and channel ignore lists
+- Log retention management
+- Rich embed formatting
+- Fully type-hinted codebase
 
 ## 🛠️ Installation
 
-1. Ensure you have Redbot 3.5+ installed and running.
-2. Install this cog using Redbot's downloader:
-   ```bash
+1. Add Taako's repo:
+
+   ```
    [p]repo add TaakosCogs https://github.com/TaakoOfficial/TaakosCogs
-   [p]cog install TaakosCogs  YALC
+   ```
+
+2. Install YALC:
+
+   ```
+   [p]cog install TaakosCogs YALC
+   ```
+
+3. Load it up:
+
+   ```
    [p]load YALC
    ```
 
 ## 🎮 Usage
 
-- Enable logging for events you want:
-  - `[p]yalc setlog #channel` — Set the default log channel
-  - `/eventlog set <event> <#channel>` — Set a log channel for a specific event
-  - `/eventlog clear <event>` — Reset an event to use the default log channel
-- Enable/disable events in your config (see `[p]help yalc` for all options)
-- All logs are sent as rich embeds for clarity
+### Slash Commands
+
+- `/yalc info` - Show enabled events and channels
+- `/yalc listevents` - List available event types
+- `/yalc setchannel` - Set log channel for events
+- `/yalc ignore` - Manage ignore lists
+- `/yalc filters` - Manage event filters
+
+### Classic Commands
+
+- `[p]yalc info` - Show current settings
+- `[p]yalc setup` - Interactive setup
+- `[p]yalc ignore` - Manage ignore lists
+- `[p]help yalc` - Show all commands
 
 ## 🧩 Example
 
 ```bash
-[p]yalc setlog #mod-logs
-/eventlog set member_ban #ban-logs
-/eventlog set command_log #staff-commands
+/yalc setchannel #server-logs
+/yalc enable message_delete message_edit
 ```
-
-## ⚙️ Configuration Tips
-
-- All logging is opt-in. Enable only the events you want to log.
-- Use `/eventlog set <event> <#channel>` to send each event to a different channel.
-- Use `/eventlog clear <event>` to reset an event to the default log channel.
-- Enable/disable events using Redbot's config system or with your preferred config editor.
-- You can check your current settings with `[p]yamlc` or `[p]yamlc settings` (if implemented).
-- For best results, create dedicated channels for moderation, join/leave, and staff command logs.
-
-## ❓ FAQ
-
-**Q: Why aren't any logs showing up?**
-- Make sure you've set a log channel and enabled at least one event in your config.
-- Check bot permissions: it needs to view and send messages in the log channels.
-
-**Q: Can I log each event to a different channel?**
-- Yes! Use `/eventlog set <event> <#channel>` for each event you want to separate.
-
-**Q: How do I enable/disable specific events?**
-- Use your config editor or commands to set `log_events.<event>` to true/false.
-
-**Q: Does this support both classic and slash commands?**
-- Yes, both are supported and logged if enabled.
-
-**Q: How do I update the cog?**
-- Use `[p]cog update yalc` and reload with `[p]reload yalc`.
-
-**Q: Where can I get help?**
-- Open an issue on the GitHub repo or ask in the Redbot support server.
 
 ## 📜 License
 
-AGPL-3.0 License. See `LICENSE` file.
+MIT License. See `LICENSE` file.

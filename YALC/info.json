@@ -1,14 +1,18 @@
 {
-  "name": "YALC",
+  "$schema": "https://raw.githubusercontent.com/Cog-Creators/Red-DiscordBot/V3/develop/schema/red_cog.schema.json",
   "author": ["Taako"],
-  "short": "Yet Another Logging Cog",
-  "description": "📝 Yet Another Logging Cog (YALC)! Logs all the spicy server events with style and fun! 🎉",
-  "install_msg": "Thanks for installing YALC! Use `[p]help YALC` to get started.",
-  "tags": ["logging", "moderation", "utility"],
-  "requirements": [],
-  "type": "COG",
-  "end_user_data_statement": "This cog stores log channel and event settings per guild. No personal user data is stored.",
+  "name": "YALC",
+  "version": "2.0.0",
+  "install_msg": "Thanks for installing YALC (Yet Another Logging Cog)! Use `[p]help YALC` or `/yalc` to get started. For full documentation, visit the repo.",
+  "short": "Comprehensive server logging with style!",
+  "description": "📝 A powerful Discord server logging cog with customizable events, channels, and filters. Supports both classic and slash commands.",
   "min_bot_version": "3.5.0",
+  "min_python_version": [3, 9, 0],
   "hidden": false,
-  "disabled": false
+  "disabled": false,
+  "required_cogs": {},
+  "requirements": [],
+  "tags": ["logging", "moderation", "utility", "admin", "audit"],
+  "type": "COG",
+  "end_user_data_statement": "This cog stores guild-specific settings like log channels and event configurations. No personal user data is stored permanently."
 }

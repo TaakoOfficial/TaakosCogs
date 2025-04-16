@@ -1,657 +1,865 @@
 """
-Yet Another Logging Cog (YALC) for Redbot.
-Main cog implementation.
+YALC - Yet Another Logging Cog for Red-DiscordBot.
+A comprehensive logging solution with both classic and slash commands.
 """
-from redbot.core import commands, Config, app_commands
 import discord
-from typing import Optional, Any
-from .classic_commands import YALCClassicCommands
-from .slash_commands import YALCSlashGroup
-from .utils import (
-    mention_from_id,
-    validate_retention_days,
-    set_embed_footer,
-    log_exception,
-    check_manage_guild,
-    safe_send
-)
-
-class EventLogGroup(app_commands.Group):
-    """Slash command group for YALC event log configuration."""
-    def __init__(self, cog: commands.Cog):
-        super().__init__(name="eventlog", description="Event log channel configuration.")
-        self.cog = cog
-
-    @app_commands.command(name="set", description="Set a log channel for a specific event type.")
-    async def set_eventlog(self, interaction: discord.Interaction, event: str, channel: discord.TextChannel) -> None:
-        """Slash command to set a log channel for an event type."""
-        if not interaction.guild or not interaction.user:
-            await safe_send(interaction, "❌ This command can only be used in a server.")
-            return
-        member = interaction.user if isinstance(interaction.user, discord.Member) else None
-        if not member or not check_manage_guild(member):
-            await safe_send(interaction, "❌ You need Manage Server permission!")
-            return
-        try:
-            valid_events = list((await self.cog.config.guild(interaction.guild).log_events()).keys())
-            if event not in valid_events:
-                await safe_send(interaction, f"❌ Invalid event type. Valid events: {', '.join(valid_events)}")
-                return
-            await self.cog.config.guild(interaction.guild).event_channels.set_raw(event, value=channel.id)
-            await safe_send(interaction, f"✅ Log channel for `{event}` set to {channel.mention}!")
-        except Exception as e:
-            log_exception(self.cog, e, context="set_eventlog")
-            await safe_send(interaction, "❌ An error occurred while setting the log channel.")
-
-    @app_commands.command(name="clear", description="Clear the log channel for an event type (use default).")
-    async def clear_eventlog(self, interaction: discord.Interaction, event: str) -> None:
-        """Slash command to clear a specific event log channel (revert to default)."""
-        if not interaction.guild or not interaction.user:
-            await safe_send(interaction, "❌ This command can only be used in a server.")
-            return
-        member = interaction.user if isinstance(interaction.user, discord.Member) else None
-        if not member or not check_manage_guild(member):
-            await safe_send(interaction, "❌ You need Manage Server permission!")
-            return
-        try:
-            valid_events = list((await self.cog.config.guild(interaction.guild).log_events()).keys())
-            if event not in valid_events:
-                await safe_send(interaction, f"❌ Invalid event type. Valid events: {', '.join(valid_events)}")
-                return
-            await self.cog.config.guild(interaction.guild).event_channels.clear_raw(event)
-            await safe_send(interaction, f"✅ Log channel for `{event}` cleared (will use default log channel).")
-        except Exception as e:
-            log_exception(self.cog, e, context="clear_eventlog")
-            await safe_send(interaction, "❌ An error occurred while clearing the log channel.")
+from redbot.core import Config, commands
+from redbot.core.bot import Red
+from typing import Dict, List, Optional, Union, cast
+import datetime
+import asyncio
 
 class YALC(commands.Cog):
-    """📝 Yet Another Logging Cog (YALC)! Logs all the spicy server events with style and fun! 🎉"""
+    """📝 Yet Another Logging Cog - Log all the things!
+    
+    A powerful Discord server logging solution that supports both classic and slash commands.
+    Features include:
+    - Customizable event logging
+    - Per-channel configurations
+    - Ignore lists for users, roles, and channels
+    - Log retention management
+    - Rich embed formatting
+    """
 
-    def __init__(self, bot: commands.Bot):
-        """Initialize the YALC cog."""
+    def __init__(self, bot: Red) -> None:
+        """Initialize YALC cog.
+        
+        Parameters
+        ----------
+        bot: Red
+            The Red Discord Bot instance.
+        """
         self.bot = bot
-        self.config = Config.get_conf(self, identifier=2025041601)
+        self.config = Config.get_conf(
+            self, identifier=2025041601, force_registration=True
+        )
+        
         default_guild = {
             "log_channel": None,
-            "log_events": {
+            "ignored_users": [],
+            "ignored_channels": [],
+            "ignored_categories": [],
+            "events": {
                 "message_delete": False,
                 "message_edit": False,
                 "member_join": False,
-                "member_remove": False,
+                "member_leave": False,
                 "member_ban": False,
                 "member_unban": False,
+                "member_update": False,
                 "channel_create": False,
                 "channel_delete": False,
                 "channel_update": False,
                 "role_create": False,
                 "role_delete": False,
                 "role_update": False,
-                "emoji_create": False,
-                "emoji_delete": False,
                 "emoji_update": False,
-                "voice_state": False,
-                "invite_create": False,
-                "invite_delete": False,
-                "webhook_update": False,
-                "thread_create": False,
-                "thread_delete": False,
-                "thread_update": False,
-                "nickname_change": False,
-                "command_log": False,
                 "guild_update": False,
-                "timeout": False,
-                "username_change": False
+                "voice_update": False,
+                "member_kick": False
             },
-            "event_channels": {},
-            "ignored_users": [],
-            "ignored_roles": [],
-            "ignored_channels": [],
             "retention_days": 30
         }
+        
         self.config.register_guild(**default_guild)
-        self.eventlog_group = EventLogGroup(self)
-        self.classic_commands = YALCClassicCommands(self)
-        self.slash_group = YALCSlashGroup(self)
-        self.bot.add_command(self.classic_commands.yalc)
-        self.bot.add_command(self.classic_commands.yalctemplate)
-        self.bot.add_command(self.classic_commands.yalcretention)
-        self.bot.add_command(self.classic_commands.yalcignore)
-        self.bot.add_command(self.classic_commands.yalcfilter)
-        self.bot.tree.add_command(self.slash_group)
+        self._cached_deletes: Dict[int, discord.Message] = {}
+        self._cached_edits: Dict[int, discord.Message] = {}
 
-    async def cog_unload(self) -> None:
-        """Cleanup tasks when the cog is unloaded."""
-        self.bot.tree.remove_command(self.eventlog_group.name)
-        self.bot.tree.remove_command(self.slash_group.name)
-        self.bot.remove_command("yalc")
-        self.bot.remove_command("yalctemplate")
-        self.bot.remove_command("yalcretention")
-        self.bot.remove_command("yalcignore")
-        self.bot.remove_command("yalcfilter")
+    async def _is_guild_message(self, message: discord.Message) -> bool:
+        """Check if a message is from a guild and in a text channel.
+        
+        Parameters
+        ----------
+        message: discord.Message
+            The message to check.
+            
+        Returns
+        -------
+        bool
+            True if the message is from a guild text channel, False otherwise.
+        """
+        return (
+            message.guild is not None 
+            and isinstance(message.channel, discord.TextChannel)
+            and isinstance(message.author, discord.Member)
+        )
 
-    # --- Log Retention/Pruning ---
-    @commands.group(name="yalcretention")
-    async def yalcretention(self, ctx: commands.Context) -> None:
-        """Configure log retention for YALC."""
+    async def _get_log_channel(self, guild: discord.Guild) -> Optional[discord.TextChannel]:
+        """Get the log channel for a guild.
+        
+        Parameters
+        ----------
+        guild: discord.Guild
+            The guild to get the log channel for.
+            
+        Returns
+        -------
+        Optional[discord.TextChannel]
+            The text channel set for logging, or None if not set.
+        """
+        if not guild:
+            return None
+        channel_id = await self.config.guild(guild).log_channel()
+        if not channel_id:
+            return None
+        channel = guild.get_channel(channel_id)
+        return cast(discord.TextChannel, channel) if isinstance(channel, discord.TextChannel) else None
+
+    async def _should_log(
+        self,
+        guild: discord.Guild,
+        event: str,
+        channel: Optional[discord.abc.GuildChannel] = None,
+        user: Optional[discord.Member] = None
+    ) -> bool:
+        """Check if an event should be logged based on guild settings.
+        
+        Parameters
+        ----------
+        guild: discord.Guild
+            The guild where the event occurred.
+        event: str
+            The event type as a string.
+        channel: Optional[discord.abc.GuildChannel]
+            The channel where the event occurred, if applicable.
+        user: Optional[discord.Member]
+            The user associated with the event, if applicable.
+            
+        Returns
+        -------
+        bool
+            True if the event should be logged, False otherwise.
+        """
+        if not guild:
+            return False
+            
+        data = await self.config.guild(guild).all()
+        
+        # Check if logging is enabled and channel exists
+        if not data["log_channel"]:
+            return False
+            
+        # Check if event is enabled
+        if not data["events"].get(event, False):
+            return False
+            
+        # Check ignore lists
+        if channel:
+            if channel.id in data["ignored_channels"]:
+                return False
+            if (
+                isinstance(channel, discord.TextChannel)
+                and channel.category
+                and channel.category.id in data["ignored_categories"]
+            ):
+                return False
+                
+        if user and user.id in data["ignored_users"]:
+            return False
+            
+        return True
+
+    @commands.group(name="log")
+    @commands.guild_only()
+    @commands.admin_or_permissions(manage_guild=True)
+    async def _log(self, ctx: commands.Context) -> None:
+        """Configure server logging settings."""
         if ctx.invoked_subcommand is None:
-            await ctx.send_help(ctx.command)
+            await ctx.send_help()
 
-    @yalcretention.command(name="set")
-    async def set_retention(self, ctx: commands.Context, days: int) -> None:
-        """Set the log retention period in days (minimum 1, maximum 365)."""
-        if not validate_retention_days(days):
-            await ctx.send("❌ Please provide a value between 1 and 365 days.")
+    @_log.command(name="channel")
+    async def set_log_channel(self, ctx: commands.Context, *, channel: Optional[discord.TextChannel] = None) -> None:
+        """Set the channel for server logs."""
+        channel = channel or ctx.channel
+        if not isinstance(channel, discord.TextChannel):
+            await ctx.send("❌ That's not a valid text channel!")
             return
-        await self.config.guild(ctx.guild).set_raw("retention_days", value=days)
-        await ctx.send(f"✅ Log retention set to {days} days.")
+            
+        await self.config.guild(ctx.guild).log_channel.set(channel.id)
+        await ctx.send(f"✅ Log channel set to {channel.mention}")
 
-    @yalcretention.command(name="show")
-    async def show_retention(self, ctx: commands.Context) -> None:
-        """Show the current log retention period."""
-        days = await self.config.guild(ctx.guild).get_raw("retention_days", default=30)
-        await ctx.send(f"Current log retention: {days} days.")
-
-    async def prune_old_logs(self) -> None:
-        """Prune old log messages based on retention settings for all guilds."""
-        import datetime, asyncio
-        for guild in self.bot.guilds:
-            try:
-                days = await self.config.guild(guild).get_raw("retention_days", default=30)
-                cutoff = discord.utils.utcnow() - datetime.timedelta(days=days)
-                log_channel_id = await self.config.guild(guild).log_channel()
-                if not log_channel_id:
-                    continue
-                channel = guild.get_channel(log_channel_id)
-                if not isinstance(channel, discord.TextChannel):
-                    continue
-                async for msg in channel.history(limit=1000, before=cutoff):
-                    if msg.author == self.bot.user:
-                        try:
-                            await msg.delete()
-                            await asyncio.sleep(1)
-                        except Exception as e:
-                            log_exception(self, e, context="prune_old_logs:delete")
-                            continue
-            except Exception as e:
-                log_exception(self, e, context="prune_old_logs:outer")
-                continue
-
-    # Schedule pruning on cog load
-    async def initialize_pruning(self) -> None:
-        """Start the background task for log pruning."""
-        import asyncio
-        async def task():
-            while True:
-                await self.prune_old_logs()
-                await asyncio.sleep(24 * 60 * 60)  # Run daily
-        self._prune_task = self.bot.loop.create_task(task())
-
-    # Call this in __init__
-    # await self.initialize_pruning()
-
-    # --- Utility for safe mention ---
-    def _safe_mention(self, obj: Any) -> str:
-        if hasattr(obj, "mention"):
-            return obj.mention
-        return str(obj) if obj else "unknown channel"
-
-    # --- Example usage in listeners ---
-    @commands.Cog.listener()
-    async def on_voice_state_update(self, member: discord.Member, before: discord.VoiceState, after: discord.VoiceState) -> None:
-        """Log voice state changes (join/leave/mute)."""
-        if not member.guild:
+    @_log.command(name="toggle")
+    async def toggle_event(self, ctx: commands.Context, *, event: Optional[str] = None) -> None:
+        """Toggle logging for a specific event."""
+        events = await self.config.guild(ctx.guild).events()
+        
+        if not event:
+            msg = "Available events:\n"
+            msg += "\n".join(f"`{k}`: {'✅' if v else '❌'}" for k, v in events.items())
+            await ctx.send(msg)
             return
-        settings = await self.config.guild(member.guild).all()
-        if not settings["log_events"].get("voice_state", False):
+            
+        if event not in events:
+            await ctx.send(f"❌ Unknown event. Available events: {', '.join(events.keys())}")
             return
-        log_channel = await self._get_event_channel(member.guild, "voice_state")
-        if not log_channel:
-            return
-        if before.channel != after.channel:
-            if before.channel is None and after.channel:
-                desc = f"{member.mention} joined voice channel {self._safe_mention(after.channel)}"
-            elif before.channel and after.channel is None:
-                desc = f"{member.mention} left voice channel {self._safe_mention(before.channel)}"
-            elif before.channel and after.channel:
-                desc = f"{member.mention} moved from {self._safe_mention(before.channel)} to {self._safe_mention(after.channel)}"
-            else:
+
+        events[event] = not events[event]
+        await self.config.guild(ctx.guild).events.set(events)
+        status = "enabled" if events[event] else "disabled"
+        await ctx.send(f"✅ Logging for `{event}` is now {status}")
+
+    @_log.group(name="ignore")
+    async def _ignore(self, ctx: commands.Context) -> None:
+        """Manage ignored users, channels, and categories."""
+        if ctx.invoked_subcommand is None:
+            await ctx.send_help()
+
+    @_ignore.command(name="user")
+    async def ignore_user(self, ctx: commands.Context, user: discord.Member) -> None:
+        """Ignore a user from being logged."""
+        async with self.config.guild(ctx.guild).ignored_users() as ignored:
+            if user.id in ignored:
+                await ctx.send(f"❌ {user.mention} is already ignored")
                 return
-            embed = discord.Embed(title="🔊 Voice State Update", description=desc, color=discord.Color.blue())
-            embed.timestamp = discord.utils.utcnow()
-            set_embed_footer(embed, self)
+            ignored.append(user.id)
+        await ctx.send(f"✅ Now ignoring {user.mention}")
+
+    @_ignore.command(name="channel")
+    async def ignore_channel(self, ctx: commands.Context, channel: discord.TextChannel) -> None:
+        """Ignore a channel from being logged."""
+        async with self.config.guild(ctx.guild).ignored_channels() as ignored:
+            if channel.id in ignored:
+                await ctx.send(f"❌ {channel.mention} is already ignored")
+                return
+            ignored.append(channel.id)
+        await ctx.send(f"✅ Now ignoring {channel.mention}")
+
+    @_ignore.command(name="category")
+    async def ignore_category(self, ctx: commands.Context, category: discord.CategoryChannel) -> None:
+        """Ignore an entire category from being logged."""
+        async with self.config.guild(ctx.guild).ignored_categories() as ignored:
+            if category.id in ignored:
+                await ctx.send(f"❌ Category {category.name} is already ignored")
+                return
+            ignored.append(category.id)
+        await ctx.send(f"✅ Now ignoring category {category.name}")
+
+    @_log.group(name="unignore")
+    async def _unignore(self, ctx: commands.Context) -> None:
+        """Remove users, channels, or categories from ignore list."""
+        if ctx.invoked_subcommand is None:
+            await ctx.send_help()
+
+    @_unignore.command(name="user")
+    async def unignore_user(self, ctx: commands.Context, user: discord.Member) -> None:
+        """Stop ignoring a user."""
+        async with self.config.guild(ctx.guild).ignored_users() as ignored:
+            if user.id not in ignored:
+                await ctx.send(f"❌ {user.mention} is not ignored")
+                return
+            ignored.remove(user.id)
+        await ctx.send(f"✅ No longer ignoring {user.mention}")
+
+    @_unignore.command(name="channel")
+    async def unignore_channel(self, ctx: commands.Context, channel: discord.TextChannel) -> None:
+        """Stop ignoring a channel."""
+        async with self.config.guild(ctx.guild).ignored_channels() as ignored:
+            if channel.id not in ignored:
+                await ctx.send(f"❌ {channel.mention} is not ignored")
+                return
+            ignored.remove(channel.id)
+        await ctx.send(f"✅ No longer ignoring {channel.mention}")
+
+    @_unignore.command(name="category")
+    async def unignore_category(self, ctx: commands.Context, category: discord.CategoryChannel) -> None:
+        """Stop ignoring a category."""
+        async with self.config.guild(ctx.guild).ignored_categories() as ignored:
+            if category.id not in ignored:
+                await ctx.send(f"❌ Category {category.name} is not ignored")
+                return
+            ignored.remove(category.id)
+        await ctx.send(f"✅ No longer ignoring category {category.name}")
+
+    @_log.command(name="show")
+    async def show_settings(self, ctx: commands.Context) -> None:
+        """Show current logging settings."""
+        settings = await self.config.guild(ctx.guild).all()
+        
+        log_channel = ctx.guild.get_channel(settings["log_channel"]) if settings["log_channel"] else None
+        
+        embed = discord.Embed(
+            title="📝 Logging Settings",
+            color=discord.Color.blue(),
+            timestamp=discord.utils.utcnow()
+        )
+        
+        embed.add_field(
+            name="Log Channel",
+            value=log_channel.mention if log_channel else "*Not set*",
+            inline=False
+        )
+        
+        # Show enabled events
+        enabled = [k for k, v in settings["events"].items() if v]
+        if enabled:
+            embed.add_field(
+                name="Enabled Events",
+                value="\n".join(f"✅ {e}" for e in enabled),
+                inline=False
+            )
+        
+        # Show ignored entities
+        ignored_users = []
+        for uid in settings["ignored_users"]:
+            user = ctx.guild.get_member(uid)
+            if user:
+                ignored_users.append(user.mention)
+        
+        ignored_channels = []
+        for cid in settings["ignored_channels"]:
+            channel = ctx.guild.get_channel(cid)
+            if channel:
+                ignored_channels.append(channel.mention)
+                
+        ignored_categories = []
+        for cid in settings["ignored_categories"]:
+            category = ctx.guild.get_channel(cid)
+            if category:
+                ignored_categories.append(category.name)
+                
+        if ignored_users:
+            embed.add_field(name="Ignored Users", value="\n".join(ignored_users), inline=False)
+        if ignored_channels:
+            embed.add_field(name="Ignored Channels", value="\n".join(ignored_channels), inline=False)
+        if ignored_categories:
+            embed.add_field(name="Ignored Categories", value="\n".join(ignored_categories), inline=False)
+            
+        await ctx.send(embed=embed)
+
+    @commands.Cog.listener()
+    async def on_message_delete(self, message: discord.Message) -> None:
+        """Log message deletions."""
+        if not await self._is_guild_message(message):
+            return
+            
+        guild = cast(discord.Guild, message.guild)
+        channel = cast(discord.TextChannel, message.channel)
+        author = cast(discord.Member, message.author)
+            
+        if not await self._should_log(guild, "message_delete", channel, author):
+            return
+            
+        log_channel = await self._get_log_channel(guild)
+        if not log_channel:
+            return
+            
+        embed = discord.Embed(
+            description=f"**Message sent by {author.mention} deleted in {channel.mention}**\n{message.content}",
+            color=discord.Color.red(),
+            timestamp=discord.utils.utcnow()
+        )
+        embed.set_author(name=str(author), icon_url=author.display_avatar.url)
+        
+        if message.attachments:
+            embed.add_field(
+                name="Attachments",
+                value="\n".join(a.filename for a in message.attachments),
+                inline=False
+            )
+            
+        await log_channel.send(embed=embed)
+
+    @commands.Cog.listener()
+    async def on_message_edit(self, before: discord.Message, after: discord.Message) -> None:
+        """Log message edits."""
+        if not all([
+            await self._is_guild_message(before),
+            before.content != after.content  # Only log if content changed
+        ]):
+            return
+            
+        guild = cast(discord.Guild, before.guild)
+        channel = cast(discord.TextChannel, before.channel)
+        author = cast(discord.Member, before.author)
+            
+        if not await self._should_log(guild, "message_edit", channel, author):
+            return
+            
+        log_channel = await self._get_log_channel(guild)
+        if not log_channel:
+            return
+            
+        embed = discord.Embed(
+            description=f"**Message edited in {channel.mention}**",
+            color=discord.Color.blue(),
+            timestamp=discord.utils.utcnow()
+        )
+        embed.set_author(name=str(author), icon_url=author.display_avatar.url)
+        embed.add_field(name="Before", value=before.content[:1024] or "*Empty message*", inline=False)
+        embed.add_field(name="After", value=after.content[:1024] or "*Empty message*", inline=False)
+        embed.add_field(name="Jump to", value=f"[Message]({after.jump_url})", inline=False)
+        
+        await log_channel.send(embed=embed)
+
+    @commands.Cog.listener()
+    async def on_member_join(self, member: discord.Member) -> None:
+        """Log member joins."""
+        if not await self._should_log(member.guild, "member_join"):
+            return
+            
+        log_channel = await self._get_log_channel(member.guild)
+        if not log_channel:
+            return
+            
+        embed = discord.Embed(
+            description=f"👋 {member.mention} joined the server",
+            color=discord.Color.green(),
+            timestamp=discord.utils.utcnow()
+        )
+        embed.set_author(name=str(member), icon_url=member.display_avatar.url)
+        embed.add_field(name="Account created", value=discord.utils.format_dt(member.created_at, "R"))
+        
+        await log_channel.send(embed=embed)
+
+    @commands.Cog.listener()
+    async def on_member_remove(self, member: discord.Member) -> None:
+        """Log member leaves."""
+        if not await self._should_log(member.guild, "member_leave"):
+            return
+            
+        log_channel = await self._get_log_channel(member.guild)
+        if not log_channel:
+            return
+            
+        embed = discord.Embed(
+            description=f"👋 {member.mention} left the server",
+            color=discord.Color.red(),
+            timestamp=discord.utils.utcnow()
+        )
+        embed.set_author(name=str(member), icon_url=member.display_avatar.url)
+        
+        # Try to get ban info to differentiate between leaves and kicks/bans
+        try:
+            ban = await member.guild.fetch_ban(member)
+            if ban:
+                embed.description = f"🔨 {member.mention} was banned\nReason: {ban.reason or 'No reason provided'}"
+                embed.color = discord.Color.dark_red()
+        except discord.NotFound:
+            pass
+            
+        await log_channel.send(embed=embed)
+
+    @commands.Cog.listener()
+    async def on_member_update(self, before: discord.Member, after: discord.Member) -> None:
+        """Log member updates (roles, nickname, etc)."""
+        if not await self._should_log(after.guild, "member_update"):
+            return
+            
+        log_channel = await self._get_log_channel(after.guild)
+        if not log_channel:
+            return
+            
+        embed = None
+        
+        # Nickname change
+        if before.nick != after.nick:
+            embed = discord.Embed(
+                description=f"📝 Nickname changed for {after.mention}",
+                color=discord.Color.blue(),
+                timestamp=discord.utils.utcnow()
+            )
+            embed.add_field(name="Before", value=before.nick or "*No nickname*")
+            embed.add_field(name="After", value=after.nick or "*No nickname*")
+            
+        # Role changes
+        elif before.roles != after.roles:
+            added = set(after.roles) - set(before.roles)
+            removed = set(before.roles) - set(after.roles)
+            
+            if added or removed:
+                embed = discord.Embed(
+                    description=f"👥 Roles updated for {after.mention}",
+                    color=discord.Color.blue(),
+                    timestamp=discord.utils.utcnow()
+                )
+                if added:
+                    embed.add_field(name="Added", value=" ".join(r.mention for r in added))
+                if removed:
+                    embed.add_field(name="Removed", value=" ".join(r.mention for r in removed))
+                    
+        if embed:
+            embed.set_author(name=str(after), icon_url=after.display_avatar.url)
             await log_channel.send(embed=embed)
-        elif before.mute != after.mute:
-            state = "muted" if after.mute else "unmuted"
-            desc = f"{member.mention} was {state} in voice."
-            embed = discord.Embed(title="🔇 Voice Mute Update", description=desc, color=discord.Color.purple())
-            embed.timestamp = discord.utils.utcnow()
-            set_embed_footer(embed, self)
+
+    @commands.Cog.listener()
+    async def on_guild_channel_create(self, channel: discord.abc.GuildChannel) -> None:
+        """Log channel creation."""
+        if not await self._should_log(channel.guild, "channel_create"):
+            return
+            
+        log_channel = await self._get_log_channel(channel.guild)
+        if not log_channel:
+            return
+            
+        embed = discord.Embed(
+            description=f"📝 Channel {channel.mention} was created",
+            color=discord.Color.green(),
+            timestamp=discord.utils.utcnow()
+        )
+        
+        if isinstance(channel, discord.CategoryChannel):
+            embed.description = f"📝 Category **{channel.name}** was created"
+        
+        await log_channel.send(embed=embed)
+
+    @commands.Cog.listener()
+    async def on_guild_channel_delete(self, channel: discord.abc.GuildChannel) -> None:
+        """Log channel deletion."""
+        if not await self._should_log(channel.guild, "channel_delete"):
+            return
+            
+        log_channel = await self._get_log_channel(channel.guild)
+        if not log_channel:
+            return
+            
+        embed = discord.Embed(
+            description=f"🗑️ Channel **#{channel.name}** was deleted",
+            color=discord.Color.red(),
+            timestamp=discord.utils.utcnow()
+        )
+        
+        if isinstance(channel, discord.CategoryChannel):
+            embed.description = f"🗑️ Category **{channel.name}** was deleted"
+        
+        await log_channel.send(embed=embed)
+
+    @commands.Cog.listener()
+    async def on_guild_channel_update(self, before: discord.abc.GuildChannel, after: discord.abc.GuildChannel) -> None:
+        """Log channel updates."""
+        if not await self._should_log(after.guild, "channel_update"):
+            return
+            
+        log_channel = await self._get_log_channel(after.guild)
+        if not log_channel:
+            return
+        
+        changes = []
+        
+        if isinstance(before, discord.TextChannel) and isinstance(after, discord.TextChannel):
+            if before.name != after.name:
+                changes.append(f"Name: {before.name} ➔ {after.name}")
+            if before.topic != after.topic:
+                changes.append(f"Topic: {before.topic or '*No topic*'} ➔ {after.topic or '*No topic*'}")
+            if before.slowmode_delay != after.slowmode_delay:
+                changes.append(f"Slowmode: {before.slowmode_delay}s ➔ {after.slowmode_delay}s")
+            if before.nsfw != after.nsfw:
+                changes.append(f"NSFW: {before.nsfw} ➔ {after.nsfw}")
+        
+        if changes:
+            embed = discord.Embed(
+                title="📝 Channel Updated",
+                description=f"Changes in {after.mention}:\n" + "\n".join(f"• {c}" for c in changes),
+                color=discord.Color.blue(),
+                timestamp=discord.utils.utcnow()
+            )
             await log_channel.send(embed=embed)
-
-    @commands.Cog.listener()
-    async def on_invite_create(self, invite: discord.Invite) -> None:
-        """Log invite creation."""
-        guild = invite.guild if isinstance(invite.guild, discord.Guild) else None
-        if not guild:
-            return
-        settings = await self.config.guild(guild).all()
-        if not settings["log_events"].get("invite_create", False):
-            return
-        log_channel = await self._get_event_channel(guild, "invite_create")
-        if not log_channel:
-            return
-        channel = invite.channel if hasattr(invite, "channel") and invite.channel else None
-        desc = f"Invite `{invite.code}` created for {self._safe_mention(channel)}"
-        embed = discord.Embed(title="🔗 Invite Created", description=desc, color=discord.Color.green())
-        embed.timestamp = discord.utils.utcnow()
-        set_embed_footer(embed, self)
-        await log_channel.send(embed=embed)
-
-    @commands.Cog.listener()
-    async def on_invite_delete(self, invite: discord.Invite) -> None:
-        """Log invite deletion."""
-        guild = invite.guild if isinstance(invite.guild, discord.Guild) else None
-        if not guild:
-            return
-        settings = await self.config.guild(guild).all()
-        if not settings["log_events"].get("invite_delete", False):
-            return
-        log_channel = await self._get_event_channel(guild, "invite_delete")
-        if not log_channel:
-            return
-        channel = invite.channel if hasattr(invite, "channel") and invite.channel else None
-        desc = f"Invite `{invite.code}` deleted for {self._safe_mention(channel)}"
-        embed = discord.Embed(title="❌ Invite Deleted", description=desc, color=discord.Color.red())
-        embed.timestamp = discord.utils.utcnow()
-        set_embed_footer(embed, self)
-        await log_channel.send(embed=embed)
-
-    @commands.Cog.listener()
-    async def on_webhook_update(self, webhook: discord.Webhook) -> None:
-        """Log webhook executions and changes."""
-        guild = webhook.guild if hasattr(webhook, "guild") else None
-        if not guild:
-            return
-        settings = await self.config.guild(guild).all()
-        if not settings["log_events"].get("webhook_update", False):
-            return
-        log_channel = await self._get_event_channel(guild, "webhook_update")
-        if not log_channel:
-            return
-        desc = f"Webhook `{webhook.name}` (ID: {webhook.id}) was updated in {self._safe_mention(webhook.channel) if hasattr(webhook, 'channel') and webhook.channel else 'unknown channel'} by <@{webhook.user.id}>." if hasattr(webhook, 'user') and webhook.user else f"Webhook `{webhook.name}` (ID: {webhook.id}) was updated."
-        embed = discord.Embed(title="🪝 Webhook Updated", description=desc, color=discord.Color.teal())
-        embed.timestamp = discord.utils.utcnow()
-        set_embed_footer(embed, self)
-        await log_channel.send(embed=embed)
-
-    @commands.Cog.listener()
-    async def on_webhook_send(self, message: discord.Message) -> None:
-        """Log webhook message sends (if supported by your Redbot/discord.py version)."""
-        if not message.guild or not message.webhook_id:
-            return
-        settings = await self.config.guild(message.guild).all()
-        if not settings["log_events"].get("webhook_update", False):
-            return
-        log_channel = await self._get_event_channel(message.guild, "webhook_update")
-        if not log_channel:
-            return
-        desc = f"Webhook message sent in {self._safe_mention(message.channel)} by webhook ID `{message.webhook_id}`."
-        embed = discord.Embed(title="🪝 Webhook Message Sent", description=desc, color=discord.Color.teal())
-        embed.timestamp = discord.utils.utcnow()
-        set_embed_footer(embed, self)
-        await log_channel.send(embed=embed)
 
     @commands.Cog.listener()
     async def on_thread_create(self, thread: discord.Thread) -> None:
         """Log thread creation."""
-        if not thread.guild:
+        if not await self._should_log(thread.guild, "channel_create"):
             return
-        settings = await self.config.guild(thread.guild).all()
-        if not settings["log_events"].get("thread_create", False):
-            return
-        log_channel = await self._get_event_channel(thread.guild, "thread_create")
+            
+        log_channel = await self._get_log_channel(thread.guild)
         if not log_channel:
             return
-        parent = thread.parent if hasattr(thread, "parent") and thread.parent else None
-        desc = f"Thread `{thread.name}` created in {self._safe_mention(parent)}"
-        embed = discord.Embed(title="🧵 Thread Created", description=desc, color=discord.Color.green())
-        embed.timestamp = discord.utils.utcnow()
-        set_embed_footer(embed, self)
+            
+        embed = discord.Embed(
+            title="🧵 Thread Created",
+            description=f"Thread {thread.mention} was created in {thread.parent.mention if thread.parent else 'Unknown Channel'}",
+            color=discord.Color.green(),
+            timestamp=discord.utils.utcnow()
+        )
+        
+        if thread.owner:
+            embed.add_field(name="Created By", value=thread.owner.mention)
+            
         await log_channel.send(embed=embed)
 
     @commands.Cog.listener()
     async def on_thread_delete(self, thread: discord.Thread) -> None:
         """Log thread deletion."""
-        if not thread.guild:
+        if not await self._should_log(thread.guild, "channel_delete"):
             return
-        settings = await self.config.guild(thread.guild).all()
-        if not settings["log_events"].get("thread_delete", False):
-            return
-        log_channel = await self._get_event_channel(thread.guild, "thread_delete")
+            
+        log_channel = await self._get_log_channel(thread.guild)
         if not log_channel:
             return
-        parent = thread.parent if hasattr(thread, "parent") and thread.parent else None
-        desc = f"Thread `{thread.name}` deleted from {self._safe_mention(parent)}"
-        embed = discord.Embed(title="🧵 Thread Deleted", description=desc, color=discord.Color.red())
-        embed.timestamp = discord.utils.utcnow()
-        set_embed_footer(embed, self)
+            
+        embed = discord.Embed(
+            title="🧵 Thread Deleted",
+            description=f"Thread **{thread.name}** was deleted from {thread.parent.mention if thread.parent else 'Unknown Channel'}",
+            color=discord.Color.red(),
+            timestamp=discord.utils.utcnow()
+        )
         await log_channel.send(embed=embed)
 
     @commands.Cog.listener()
-    async def on_user_update(self, before: discord.User, after: discord.User) -> None:
-        """Log username changes."""
-        # Only log for members in guilds
-        for guild in self.bot.guilds:
-            member = guild.get_member(after.id)
-            if not member:
-                continue
-            settings = await self.config.guild(guild).all()
-            if not settings["log_events"].get("nickname_change", False):
-                continue
-            log_channel = await self._get_event_channel(guild, "nickname_change")
-            if not log_channel:
-                continue
-            if before.name != after.name:
-                desc = f"User `{before.name}` changed username to `{after.name}`"
-                embed = discord.Embed(title="📝 Username Changed", description=desc, color=discord.Color.blurple())
-                embed.timestamp = discord.utils.utcnow()
-                set_embed_footer(embed, self)
-                await log_channel.send(embed=embed)
-        # Nickname changes are handled in on_member_update
+    async def on_thread_update(self, before: discord.Thread, after: discord.Thread) -> None:
+        """Log thread updates."""
+        if not await self._should_log(after.guild, "channel_update"):
+            return
+            
+        log_channel = await self._get_log_channel(after.guild)
+        if not log_channel:
+            return
+            
+        changes = []
+        
+        if before.name != after.name:
+            changes.append(f"Name: {before.name} ➔ {after.name}")
+        if before.archived != after.archived:
+            changes.append(f"{'Archived' if after.archived else 'Unarchived'}")
+        if before.locked != after.locked:
+            changes.append(f"{'Locked' if after.locked else 'Unlocked'}")
+            
+        if changes:
+            embed = discord.Embed(
+                title="🧵 Thread Updated",
+                description=f"Changes in {after.mention}:\n" + "\n".join(f"• {c}" for c in changes),
+                color=discord.Color.blue(),
+                timestamp=discord.utils.utcnow()
+            )
+            await log_channel.send(embed=embed)
 
     @commands.Cog.listener()
-    async def on_member_update(self, before: discord.Member, after: discord.Member) -> None:
-        """Log nickname and role changes."""
-        if not before.guild:
+    async def on_webhook_update(self, channel: discord.TextChannel) -> None:
+        """Log webhook changes."""
+        if not await self._should_log(channel.guild, "channel_update"):
             return
-        settings = await self.config.guild(before.guild).all()
-        # Nickname change
-        if settings["log_events"].get("nickname_change", False):
-            log_channel = await self._get_event_channel(before.guild, "nickname_change")
-            if log_channel and before.nick != after.nick:
-                desc = f"{after.mention} changed nickname: `{before.nick or before.name}` ➔ `{after.nick or after.name}`"
-                embed = discord.Embed(
-                    title="📝 Nickname Changed",
-                    description=desc,
-                    color=discord.Color.blurple()
-                )
-                embed.set_author(name=str(after), icon_url=self._get_avatar_url(after))
-                embed.timestamp = discord.utils.utcnow()
-                set_embed_footer(embed, self)
-                await log_channel.send(embed=embed)
-        # Role change
-        if settings["log_events"].get("role_update", False):
-            log_channel = await self._get_event_channel(before.guild, "role_update")
-            if log_channel and set(before.roles) != set(after.roles):
-                before_roles = ', '.join([r.mention for r in before.roles if r.name != '@everyone']) or 'None'
-                after_roles = ', '.join([r.mention for r in after.roles if r.name != '@everyone']) or 'None'
-                embed = discord.Embed(
-                    title="🎭 Roles Updated",
-                    description=f"{after.mention} roles changed.",
-                    color=discord.Color.gold()
-                )
-                embed.add_field(name="Before", value=before_roles, inline=False)
-                embed.add_field(name="After", value=after_roles, inline=False)
-                embed.set_author(name=str(after), icon_url=self._get_avatar_url(after))
-                embed.timestamp = discord.utils.utcnow()
-                set_embed_footer(embed, self)
-                await log_channel.send(embed=embed)
+            
+        log_channel = await self._get_log_channel(channel.guild)
+        if not log_channel:
+            return
+            
+        embed = discord.Embed(
+            title="🔗 Webhook Updated",
+            description=f"Webhooks were updated in {channel.mention}",
+            color=discord.Color.blue(),
+            timestamp=discord.utils.utcnow()
+        )
+        await log_channel.send(embed=embed)
+
+    @commands.Cog.listener()
+    async def on_guild_role_create(self, role: discord.Role) -> None:
+        """Log role creation."""
+        if not await self._should_log(role.guild, "role_create"):
+            return
+            
+        log_channel = await self._get_log_channel(role.guild)
+        if not log_channel:
+            return
+            
+        embed = discord.Embed(
+            title="👥 Role Created",
+            description=f"Role {role.mention} was created",
+            color=role.color,
+            timestamp=discord.utils.utcnow()
+        )
+        
+        perms = []
+        for perm, value in role.permissions:
+            if value:
+                perms.append(perm.replace("_", " ").title())
+        
+        if perms:
+            embed.add_field(name="Permissions", value="\n".join(f"✅ {p}" for p in perms))
+            
+        await log_channel.send(embed=embed)
+
+    @commands.Cog.listener()
+    async def on_guild_role_delete(self, role: discord.Role) -> None:
+        """Log role deletion."""
+        if not await self._should_log(role.guild, "role_delete"):
+            return
+            
+        log_channel = await self._get_log_channel(role.guild)
+        if not log_channel:
+            return
+            
+        embed = discord.Embed(
+            title="👥 Role Deleted",
+            description=f"Role **{role.name}** was deleted",
+            color=discord.Color.red(),
+            timestamp=discord.utils.utcnow()
+        )
+        await log_channel.send(embed=embed)
+
+    @commands.Cog.listener()
+    async def on_guild_role_update(self, before: discord.Role, after: discord.Role) -> None:
+        """Log role updates."""
+        if not await self._should_log(after.guild, "role_update"):
+            return
+            
+        log_channel = await self._get_log_channel(after.guild)
+        if not log_channel:
+            return
+            
+        changes = []
+        
+        if before.name != after.name:
+            changes.append(f"Name: {before.name} ➔ {after.name}")
+        if before.color != after.color:
+            changes.append(f"Color: {before.color} ➔ {after.color}")
+        if before.hoist != after.hoist:
+            changes.append(f"Hoisted: {before.hoist} ➔ {after.hoist}")
+        if before.mentionable != after.mentionable:
+            changes.append(f"Mentionable: {before.mentionable} ➔ {after.mentionable}")
+            
+        # Check permission changes
+        perm_changes = []
+        for perm, value in after.permissions:
+            if value != getattr(before.permissions, perm):
+                perm_changes.append(f"{perm.replace('_', ' ').title()}: {getattr(before.permissions, perm)} ➔ {value}")
+                
+        if changes or perm_changes:
+            embed = discord.Embed(
+                title="👥 Role Updated",
+                description=f"Changes in {after.mention}:",
+                color=after.color,
+                timestamp=discord.utils.utcnow()
+            )
+            
+            if changes:
+                embed.add_field(name="General Changes", value="\n".join(f"• {c}" for c in changes), inline=False)
+            if perm_changes:
+                embed.add_field(name="Permission Changes", value="\n".join(f"• {c}" for c in perm_changes), inline=False)
+                
+            await log_channel.send(embed=embed)
+
+    @commands.Cog.listener()
+    async def on_voice_state_update(self, member: discord.Member, before: discord.VoiceState, after: discord.VoiceState) -> None:
+        """Log voice channel events."""
+        if not await self._should_log(member.guild, "voice_update", user=member):
+            return
+            
+        log_channel = await self._get_log_channel(member.guild)
+        if not log_channel:
+            return
+            
+        embed = discord.Embed(
+            title="🎤 Voice Update",
+            color=discord.Color.blue(),
+            timestamp=discord.utils.utcnow()
+        )
+        embed.set_author(name=str(member), icon_url=member.display_avatar.url)
+        
+        # Track channel changes
+        if before.channel != after.channel:
+            if before.channel is None and after.channel is not None:
+                embed.description = f"{member.mention} joined voice channel {after.channel.mention}"
+                embed.color = discord.Color.green()
+            elif before.channel is not None and after.channel is None:
+                embed.description = f"{member.mention} left voice channel {before.channel.mention}"
+                embed.color = discord.Color.red()
+            elif before.channel is not None and after.channel is not None:
+                embed.description = f"{member.mention} moved from {before.channel.mention} to {after.channel.mention}"
+                
+        # Track mute/deafen changes
+        elif before.self_mute != after.self_mute:
+            embed.description = f"{member.mention} {'muted' if after.self_mute else 'unmuted'} themselves"
+        elif before.self_deaf != after.self_deaf:
+            embed.description = f"{member.mention} {'deafened' if after.self_deaf else 'undeafened'} themselves"
+        elif before.mute != after.mute:
+            embed.description = f"{member.mention} was {'server muted' if after.mute else 'server unmuted'}"
+        elif before.deaf != after.deaf:
+            embed.description = f"{member.mention} was {'server deafened' if after.deaf else 'server undeafened'}"
+        else:
+            return  # No relevant changes
+            
+        await log_channel.send(embed=embed)
+
+    @commands.Cog.listener()
+    async def on_guild_emojis_update(self, guild: discord.Guild, before: tuple[discord.Emoji, ...], after: tuple[discord.Emoji, ...]) -> None:
+        """Log emoji updates."""
+        if not await self._should_log(guild, "emoji_update"):
+            return
+            
+        log_channel = await self._get_log_channel(guild)
+        if not log_channel:
+            return
+            
+        # Find added and removed emojis
+        before_ids = {e.id for e in before}
+        after_ids = {e.id for e in after}
+        
+        added = [e for e in after if e.id not in before_ids]
+        removed = [e for e in before if e.id not in after_ids]
+        
+        if added:
+            embed = discord.Embed(
+                title="😀 Emoji Added",
+                description="\n".join(f"{str(e)} `:{e.name}:`" for e in added),
+                color=discord.Color.green(),
+                timestamp=discord.utils.utcnow()
+            )
+            await log_channel.send(embed=embed)
+            
+        if removed:
+            embed = discord.Embed(
+                title="😢 Emoji Removed",
+                description="\n".join(f"`:{e.name}:`" for e in removed),
+                color=discord.Color.red(),
+                timestamp=discord.utils.utcnow()
+            )
+            await log_channel.send(embed=embed)
 
     @commands.Cog.listener()
     async def on_guild_update(self, before: discord.Guild, after: discord.Guild) -> None:
-        """Log server setting changes (name, icon, etc)."""
-        settings = await self.config.guild(after).all()
-        if not settings["log_events"].get("guild_update", False):
+        """Log server setting changes."""
+        if not await self._should_log(after, "guild_update"):
             return
-        log_channel = await self._get_event_channel(after, "guild_update")
+            
+        log_channel = await self._get_log_channel(after)
         if not log_channel:
             return
+            
         changes = []
+        
         if before.name != after.name:
-            changes.append(f"**Name:** `{before.name}` ➔ `{after.name}`")
+            changes.append(f"Name: {before.name} ➔ {after.name}")
+        if before.description != after.description:
+            changes.append(f"Description: {before.description or '*None*'} ➔ {after.description or '*None*'}")
         if before.icon != after.icon:
-            changes.append("**Icon changed**")
-        if not changes:
-            return
-        embed = discord.Embed(
-            title="🏛️ Server Updated",
-            description='\n'.join(changes),
-            color=discord.Color.teal()
-        )
-        embed.timestamp = discord.utils.utcnow()
-        set_embed_footer(embed, self)
-        await log_channel.send(embed=embed)
+            changes.append("Server icon was changed")
+        if before.banner != after.banner:
+            changes.append("Server banner was changed")
+        if before.splash != after.splash:
+            changes.append("Invite splash image was changed")
+        if before.discovery_splash != after.discovery_splash:
+            changes.append("Discovery splash image was changed")
+        if before.owner_id != after.owner_id:
+            changes.append(f"Owner: <@{before.owner_id}> ➔ <@{after.owner_id}>")
+        if before.verification_level != after.verification_level:
+            changes.append(f"Verification Level: {before.verification_level} ➔ {after.verification_level}")
+        if before.explicit_content_filter != after.explicit_content_filter:
+            changes.append(f"Content Filter: {before.explicit_content_filter} ➔ {after.explicit_content_filter}")
+        if before.vanity_url_code != after.vanity_url_code:
+            changes.append(f"Vanity URL: {before.vanity_url_code or '*None*'} ➔ {after.vanity_url_code or '*None*'}")
+        
+        if changes:
+            embed = discord.Embed(
+                title="🏰 Server Updated",
+                description="\n".join(f"• {c}" for c in changes),
+                color=discord.Color.blue(),
+                timestamp=discord.utils.utcnow()
+            )
+            
+            # Add new icon preview if it changed
+            if before.icon != after.icon and after.icon:
+                embed.set_thumbnail(url=after.icon.url)
+                
+            await log_channel.send(embed=embed)
 
-    @commands.Cog.listener()
-    async def on_member_timeout(self, member: discord.Member) -> None:
-        """Log when a member is timed out (if supported by your Redbot/discord.py version)."""
-        if not member.guild:
-            return
-        settings = await self.config.guild(member.guild).all()
-        if not settings["log_events"].get("timeout", False):
-            return
-        log_channel = await self._get_event_channel(member.guild, "timeout")
-        if not log_channel:
-            return
-        embed = discord.Embed(
-            title="⏳ Member Timed Out",
-            description=f"{member.mention} was timed out.",
-            color=discord.Color.dark_purple()
-        )
-        embed.set_author(name=str(member), icon_url=self._get_avatar_url(member))
-        embed.timestamp = discord.utils.utcnow()
-        set_embed_footer(embed, self)
-        await log_channel.send(embed=embed)
-
-    @commands.Cog.listener()
-    async def on_bulk_message_delete(self, messages: list[discord.Message]) -> None:
-        """Log bulk message deletions (purges)."""
-        if not messages:
-            return
-        guild = messages[0].guild if messages[0].guild else None
-        if not guild:
-            return
-        settings = await self.config.guild(guild).all()
-        if not settings["log_events"].get("message_delete", False):
-            return
-        log_channel = await self._get_event_channel(guild, "message_delete")
-        if not log_channel:
-            return
-        channel = messages[0].channel
-        count = len(messages)
-        # Try to correlate with audit log (purge)
-        entry = await self.get_audit_log_entry(guild, discord.AuditLogAction.message_bulk_delete, channel.id)
-        moderator = entry.user.mention if entry and entry.user else "Unknown"
-        reason = entry.reason if entry and entry.reason else "No reason provided."
-        embed = discord.Embed(
-            title="🧹 Bulk Message Delete",
-            description=f"{count} messages were deleted in {self._safe_mention(channel)}",
-            color=discord.Color.red()
-        )
-        embed.add_field(name="Moderator", value=moderator)
-        embed.add_field(name="Reason", value=reason)
-        embed.timestamp = discord.utils.utcnow()
-        set_embed_footer(embed, self)
-        await log_channel.send(embed=embed)
-
-    # --- Ignore Lists ---
-    @commands.group(name="yalcignore")
-    async def yalcignore(self, ctx: commands.Context) -> None:
-        """Manage ignore lists for YALC logging."""
-        if ctx.invoked_subcommand is None:
-            await ctx.send_help(ctx.command)
-
-    @yalcignore.command(name="adduser")
-    async def ignore_user(self, ctx: commands.Context, user: discord.User) -> None:
-        """Ignore a user from being logged."""
-        ignored = await self.config.guild(ctx.guild).get_raw("ignored_users", default=[])
-        if user.id in ignored:
-            await ctx.send(f"{user.mention} is already ignored.")
-            return
-        ignored.append(user.id)
-        await self.config.guild(ctx.guild).set_raw("ignored_users", value=ignored)
-        await ctx.send(f"{user.mention} will now be ignored in logs.")
-
-    @yalcignore.command(name="removeuser")
-    async def unignore_user(self, ctx: commands.Context, user: discord.User) -> None:
-        """Remove a user from the ignore list."""
-        ignored = await self.config.guild(ctx.guild).get_raw("ignored_users", default=[])
-        if user.id not in ignored:
-            await ctx.send(f"{user.mention} is not ignored.")
-            return
-        ignored.remove(user.id)
-        await self.config.guild(ctx.guild).set_raw("ignored_users", value=ignored)
-        await ctx.send(f"{user.mention} will no longer be ignored in logs.")
-
-    @yalcignore.command(name="addrole")
-    async def ignore_role(self, ctx: commands.Context, role: discord.Role) -> None:
-        """Ignore a role from being logged."""
-        ignored = await self.config.guild(ctx.guild).get_raw("ignored_roles", default=[])
-        if role.id in ignored:
-            await ctx.send(f"{role.mention} is already ignored.")
-            return
-        ignored.append(role.id)
-        await self.config.guild(ctx.guild).set_raw("ignored_roles", value=ignored)
-        await ctx.send(f"{role.mention} will now be ignored in logs.")
-
-    @yalcignore.command(name="removerole")
-    async def unignore_role(self, ctx: commands.Context, role: discord.Role) -> None:
-        """Remove a role from the ignore list."""
-        ignored = await self.config.guild(ctx.guild).get_raw("ignored_roles", default=[])
-        if role.id not in ignored:
-            await ctx.send(f"{role.mention} is not ignored.")
-            return
-        ignored.remove(role.id)
-        await self.config.guild(ctx.guild).set_raw("ignored_roles", value=ignored)
-        await ctx.send(f"{role.mention} will no longer be ignored in logs.")
-
-    @yalcignore.command(name="addchannel")
-    async def ignore_channel(self, ctx: commands.Context, channel: discord.TextChannel) -> None:
-        """Ignore a channel from being logged."""
-        ignored = await self.config.guild(ctx.guild).get_raw("ignored_channels", default=[])
-        if channel.id in ignored:
-            await ctx.send(f"{channel.mention} is already ignored.")
-            return
-        ignored.append(channel.id)
-        await self.config.guild(ctx.guild).set_raw("ignored_channels", value=ignored)
-        await ctx.send(f"{channel.mention} will now be ignored in logs.")
-
-    @yalcignore.command(name="removechannel")
-    async def unignore_channel(self, ctx: commands.Context, channel: discord.TextChannel) -> None:
-        """Remove a channel from the ignore list."""
-        ignored = await self.config.guild(ctx.guild).get_raw("ignored_channels", default=[])
-        if channel.id not in ignored:
-            await ctx.send(f"{channel.mention} is not ignored.")
-            return
-        ignored.remove(channel.id)
-        await self.config.guild(ctx.guild).set_raw("ignored_channels", value=ignored)
-        await ctx.send(f"{channel.mention} will no longer be ignored in logs.")
-
-    @yalcignore.command(name="list")
-    async def list_ignores(self, ctx: commands.Context) -> None:
-        """List all ignored users, roles, and channels."""
-        users = await self.config.guild(ctx.guild).get_raw("ignored_users", default=[])
-        roles = await self.config.guild(ctx.guild).get_raw("ignored_roles", default=[])
-        channels = await self.config.guild(ctx.guild).get_raw("ignored_channels", default=[])
-        user_mentions = [f"<@{uid}>" for uid in users]
-        role_mentions = [f"<@&{rid}>" for rid in roles]
-        channel_mentions = [f"<#{cid}>" for cid in channels]
-        embed = discord.Embed(
-            title="YALC Ignore Lists",
-            color=discord.Color.blurple()
-        )
-        embed.add_field(name="Users", value=", ".join(user_mentions) or "None", inline=False)
-        embed.add_field(name="Roles", value=", ".join(role_mentions) or "None", inline=False)
-        embed.add_field(name="Channels", value=", ".join(channel_mentions) or "None", inline=False)
-        await ctx.send(embed=embed)
-
-    def is_ignored(self, guild: discord.Guild, user: Optional[discord.abc.User] = None, channel: Optional[discord.abc.GuildChannel] = None) -> Any:
-        """Check if a user or channel should be ignored for logging."""
-        async def check() -> bool:
-            if not guild:
-                return False
-            users = await self.config.guild(guild).get_raw("ignored_users", default=[])
-            roles = await self.config.guild(guild).get_raw("ignored_roles", default=[])
-            channels = await self.config.guild(guild).get_raw("ignored_channels", default=[])
-            if user and user.id in users:
-                return True
-            if hasattr(user, "roles"):
-                if any(r.id in roles for r in getattr(user, "roles", [])):
-                    return True
-            if channel and channel.id in channels:
-                return True
-            return False
-        return check
-
-    # --- Advanced Filtering ---
-    @commands.group(name="yalcfilter")
-    async def yalcfilter(self, ctx: commands.Context) -> None:
-        """Manage advanced filters for YALC logging."""
-        if ctx.invoked_subcommand is None:
-            await ctx.send_help(ctx.command)
-
-    @yalcfilter.command(name="add")
-    async def add_filter(self, ctx: commands.Context, event: str, *, filter_str: str) -> None:
-        """Add a filter for an event (e.g. only log if user/role/channel/keyword matches)."""
-        valid_events = list((await self.config.guild(ctx.guild).log_events()).keys())
-        if event not in valid_events:
-            await ctx.send(f"❌ Invalid event type. Valid events: {', '.join(valid_events)}")
-            return
-        filters = await self.config.guild(ctx.guild).get_raw(f"filters_{event}", default=[])
-        if filter_str in filters:
-            await ctx.send("This filter already exists for this event.")
-            return
-        filters.append(filter_str)
-        await self.config.guild(ctx.guild).set_raw(f"filters_{event}", value=filters)
-        await ctx.send(f"✅ Filter added for `{event}`.")
-
-    @yalcfilter.command(name="remove")
-    async def remove_filter(self, ctx: commands.Context, event: str, *, filter_str: str) -> None:
-        """Remove a filter from an event."""
-        valid_events = list((await self.config.guild(ctx.guild).log_events()).keys())
-        if event not in valid_events:
-            await ctx.send(f"❌ Invalid event type. Valid events: {', '.join(valid_events)}")
-            return
-        filters = await self.config.guild(ctx.guild).get_raw(f"filters_{event}", default=[])
-        if filter_str not in filters:
-            await ctx.send("This filter does not exist for this event.")
-            return
-        filters.remove(filter_str)
-        await self.config.guild(ctx.guild).set_raw(f"filters_{event}", value=filters)
-        await ctx.send(f"✅ Filter removed for `{event}`.")
-
-    @yalcfilter.command(name="list")
-    async def list_filters(self, ctx: commands.Context, event: str) -> None:
-        """List all filters for an event."""
-        valid_events = list((await self.config.guild(ctx.guild).log_events()).keys())
-        if event not in valid_events:
-            await ctx.send(f"❌ Invalid event type. Valid events: {', '.join(valid_events)}")
-            return
-        filters = await self.config.guild(ctx.guild).get_raw(f"filters_{event}", default=[])
-        embed = discord.Embed(
-            title=f"Filters for {event}",
-            description="\n".join(filters) or "No filters set.",
-            color=discord.Color.blurple()
-        )
-        await ctx.send(embed=embed)
-
-    async def passes_filters(self, guild: discord.Guild, event: str, user: Optional[discord.abc.User] = None, channel: Optional[discord.abc.GuildChannel] = None, content: Optional[str] = None) -> bool:
-        """Check if an event passes advanced filters (user/role/channel/keyword)."""
-        filters = await self.config.guild(guild).get_raw(f"filters_{event}", default=[])
-        if not filters:
-            return True
-        for f in filters:
-            if f.startswith("user:") and user and str(user.id) == f[5:]:
-                return True
-            if f.startswith("role:") and user and hasattr(user, "roles") and any(str(r.id) == f[5:] for r in getattr(user, "roles", [])):
-                return True
-            if f.startswith("channel:") and channel and str(channel.id) == f[8:]:
-                return True
-            if f.startswith("keyword:") and content and f[8:].lower() in content.lower():
-                return True
-        return False
-
-async def setup(bot: commands.Bot):
-    cog = YALC(bot)
-    await bot.add_cog(cog)
-    bot.tree.add_command(cog.eventlog_group)
+    # Utility method to check audit logs
+    async def get_audit_log_entry(self, guild: discord.Guild, action: discord.AuditLogAction, target_id: Optional[int] = None) -> Optional[discord.AuditLogEntry]:
+        """Get the most recent audit log entry for an action."""
+        try:
+            async for entry in guild.audit_logs(limit=1, action=action):
+                if target_id is None:
+                    return entry
+                if entry.target and hasattr(entry.target, 'id') and entry.target.id == target_id:
+                    return entry
+        except (discord.Forbidden, discord.HTTPException):
+            pass
+        return None

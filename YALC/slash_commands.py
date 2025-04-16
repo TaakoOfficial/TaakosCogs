@@ -1,8 +1,12 @@
 """
 Yet Another Logging Cog (YALC) Slash Commands for Redbot.
+
+This module contains all slash command implementations for YALC.
+Commands are organized in a group structure for better organization.
 """
 from redbot.core import app_commands, commands
 import discord
+from typing import Optional, Dict, List, cast
 from .utils import (
     set_embed_footer,
     check_manage_guild,
@@ -11,14 +15,37 @@ from .utils import (
 )
 
 class YALCSlashGroup(app_commands.Group):
-    """Slash command group for YALC logging configuration."""
+    """Slash command group for YALC logging configuration.
+    
+    This class implements all slash commands for YALC, organized in a
+    command group structure. All commands use proper permission checking
+    and error handling.
+    """
+
     def __init__(self, cog: commands.Cog):
-        super().__init__(name="YALC", description="YALC logging commands.")
+        """Initialize the YALC slash command group.
+        
+        Parameters
+        ----------
+        cog: commands.Cog
+            The YALC cog instance that owns this command group.
+        """
+        super().__init__(name="yalc", description="YALC logging configuration commands.")
         self.cog = cog
 
     @app_commands.command(name="info", description="Show enabled events and their log channels.")
+    @app_commands.checks.has_permissions(manage_guild=True)
     async def info(self, interaction: discord.Interaction) -> None:
-        """Show enabled log events and their channels."""
+        """Show enabled log events and their channels.
+        
+        This command displays all configured log events and their
+        associated channels in a clean embed format.
+        
+        Parameters
+        ----------
+        interaction: discord.Interaction
+            The interaction that triggered this command.
+        """
         if not interaction.guild or not interaction.user:
             await interaction.response.send_message("❌ This command can only be used in a server.", ephemeral=True)
             return
@@ -47,7 +74,16 @@ class YALCSlashGroup(app_commands.Group):
 
     @app_commands.command(name="listevents", description="List all available log event types.")
     async def listevents(self, interaction: discord.Interaction) -> None:
-        """List all available log event types."""
+        """List all available log event types.
+        
+        This command provides a list of all log event types that can be
+        configured for logging in the server.
+        
+        Parameters
+        ----------
+        interaction: discord.Interaction
+            The interaction that triggered this command.
+        """
         if not interaction.guild or not interaction.user:
             await interaction.response.send_message("❌ This command can only be used in a server.", ephemeral=True)
             return
@@ -65,7 +101,16 @@ class YALCSlashGroup(app_commands.Group):
 
     @app_commands.command(name="retention", description="Show the current log retention period.")
     async def retention(self, interaction: discord.Interaction) -> None:
-        """Show the current log retention period."""
+        """Show the current log retention period.
+        
+        This command displays the number of days that logs are retained
+        before being deleted.
+        
+        Parameters
+        ----------
+        interaction: discord.Interaction
+            The interaction that triggered this command.
+        """
         if not interaction.guild or not interaction.user:
             await interaction.response.send_message("❌ This command can only be used in a server.", ephemeral=True)
             return
@@ -77,7 +122,18 @@ class YALCSlashGroup(app_commands.Group):
 
     @app_commands.command(name="setretention", description="Set the log retention period in days (1-365).")
     async def setretention(self, interaction: discord.Interaction, days: int) -> None:
-        """Set the log retention period in days."""
+        """Set the log retention period in days.
+        
+        This command allows you to configure how many days logs are kept
+        before they are automatically deleted by the bot.
+        
+        Parameters
+        ----------
+        interaction: discord.Interaction
+            The interaction that triggered this command.
+        days: int
+            The number of days to retain logs for. Must be between 1 and 365.
+        """
         if not interaction.guild or not interaction.user:
             await interaction.response.send_message("❌ This command can only be used in a server.", ephemeral=True)
             return
@@ -96,7 +152,16 @@ class YALCSlashGroup(app_commands.Group):
 
     @app_commands.command(name="ignores", description="List all ignored users, roles, and channels.")
     async def ignores(self, interaction: discord.Interaction) -> None:
-        """List all ignored users, roles, and channels."""
+        """List all ignored users, roles, and channels.
+        
+        This command provides a list of all users, roles, and channels
+        that are currently being ignored by the logging system.
+        
+        Parameters
+        ----------
+        interaction: discord.Interaction
+            The interaction that triggered this command.
+        """
         if not interaction.guild or not interaction.user:
             await interaction.response.send_message("❌ This command can only be used in a server.", ephemeral=True)
             return
@@ -127,7 +192,19 @@ class YALCSlashGroup(app_commands.Group):
 
     @app_commands.command(name="filters", description="List all filters for an event.")
     async def filters(self, interaction: discord.Interaction, event: str) -> None:
-        """List all filters for a log event."""
+        """List all filters for a log event.
+        
+        This command shows all filters that have been applied to a
+        specific log event, which determine what gets logged for that
+        event.
+        
+        Parameters
+        ----------
+        interaction: discord.Interaction
+            The interaction that triggered this command.
+        event: str
+            The name of the log event to list filters for.
+        """
         if not interaction.guild or not interaction.user:
             await interaction.response.send_message("❌ This command can only be used in a server.", ephemeral=True)
             return

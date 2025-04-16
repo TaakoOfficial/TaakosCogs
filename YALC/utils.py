@@ -1,58 +1,92 @@
 """
-YALC utility functions for Redbot cogs.
-Provides helpers for formatting, validation, permissions, and DRY logic.
+YALC utility functions.
+
+This module contains helper functions used across YALC's commands and listeners.
+All functions include proper type hints and error handling.
 """
 from redbot.core import commands
 import discord
-from typing import Any, Optional, Union
-
-def mention_from_id(guild: discord.Guild, id_: int, type_: str) -> str:
-    """Return a mention string for a user, role, or channel by ID."""
-    if type_ == "user":
-        member = guild.get_member(id_)
-        return member.mention if member else f"<@{id_}>"
-    if type_ == "role":
-        role = guild.get_role(id_)
-        return role.mention if role else f"<@&{id_}>"
-    if type_ == "channel":
-        channel = guild.get_channel(id_)
-        return channel.mention if channel else f"<# {id_}>"
-    return str(id_)
-
-def validate_retention_days(days: int) -> bool:
-    """Return True if days is between 1 and 365 inclusive."""
-    return 1 <= days <= 365
+from typing import Optional, Union, List, Dict, cast
+import datetime
 
 def set_embed_footer(embed: discord.Embed, cog: commands.Cog) -> None:
-    """Set a standard embed footer for YALC embeds."""
-    embed.set_footer(text=f"YALC Logging • {cog.__class__.__name__}")
+    """Set consistent footer for YALC embeds.
+    
+    Parameters
+    ----------
+    embed: discord.Embed
+        The embed to set the footer on
+    cog: commands.Cog
+        The YALC cog instance for version info
+    """
+    embed.set_footer(text=f"YALC v{cog.__version__}")
 
-def log_exception(cog: Optional[commands.Cog], error: Exception, context: Optional[Any] = None) -> None:
-    """Log an exception for debugging."""
-    logger = getattr(getattr(cog, 'bot', None), 'logger', None)
-    if logger:
-        logger.error(f"[YALC] Exception: {error} | Context: {context}")
-    else:
-        print(f"[YALC] Exception: {error} | Context: {context}")
+async def check_manage_guild(ctx: Union[commands.Context, discord.Interaction]) -> bool:
+    """Check if user has manage guild permission.
+    
+    Parameters
+    ----------
+    ctx: Union[commands.Context, discord.Interaction]
+        The context or interaction to check permissions for
+        
+    Returns
+    -------
+    bool
+        True if user has permission, False otherwise
+    
+    Raises
+    ------
+    commands.CheckFailure
+        If the user lacks required permissions
+    """
+    if isinstance(ctx, discord.Interaction):
+        if not ctx.guild or not ctx.user:
+            return False
+        member = cast(discord.Member, ctx.user)
+        return member.guild_permissions.manage_guild
+    return ctx.author.guild_permissions.manage_guild
 
-def check_manage_guild(member: discord.Member) -> bool:
-    """Return True if the member has Manage Server permission."""
-    return hasattr(member, "guild_permissions") and member.guild_permissions.manage_guild
+def validate_retention_days(days: int) -> bool:
+    """Validate log retention period is within acceptable range.
+    
+    Parameters
+    ----------
+    days: int
+        Number of days to validate
+        
+    Returns
+    -------
+    bool
+        True if days is within valid range (1-365)
+    """
+    return 1 <= days <= 365
 
 async def safe_send(
-    interaction_or_ctx: Union[discord.Interaction, commands.Context],
+    channel: discord.TextChannel,
     content: Optional[str] = None,
+    *,
     embed: Optional[discord.Embed] = None,
-    ephemeral: bool = True
-) -> None:
-    """Send a message safely, handling both discord.Interaction and commands.Context."""
+    **kwargs
+) -> Optional[discord.Message]:
+    """Safely send a message to a channel with error handling.
+    
+    Parameters
+    ----------
+    channel: discord.TextChannel
+        The channel to send the message to
+    content: Optional[str]
+        The message content to send
+    embed: Optional[discord.Embed]
+        The embed to send
+    **kwargs
+        Additional kwargs to pass to send()
+        
+    Returns
+    -------
+    Optional[discord.Message]
+        The sent message if successful, None otherwise
+    """
     try:
-        if hasattr(interaction_or_ctx, 'response') and hasattr(interaction_or_ctx.response, 'send_message'):
-            if embed:
-                await interaction_or_ctx.response.send_message(content=content, embed=embed, ephemeral=ephemeral)
-            else:
-                await interaction_or_ctx.response.send_message(content=content, ephemeral=ephemeral)
-        elif hasattr(interaction_or_ctx, 'send'):
-            await interaction_or_ctx.send(content=content, embed=embed)
-    except Exception as e:
-        log_exception(getattr(interaction_or_ctx, 'cog', None), e, context="safe_send")
+        return await channel.send(content=content, embed=embed, **kwargs)
+    except (discord.Forbidden, discord.HTTPException):
+        return None
