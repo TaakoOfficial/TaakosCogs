@@ -93,6 +93,9 @@ class WeatherGroup(app_commands.Group):
             await interaction.response.send_message("You need administrator permissions to use this command.", ephemeral=True)
             return
         await interaction.response.defer(ephemeral=True)
+        if not channel:
+            await interaction.followup.send("Channel is required.", ephemeral=True)
+            return
         await self.cog.config.guild(interaction.guild).channel_id.set(channel.id)
         await interaction.followup.send(f"Weather updates will now be sent to {channel.mention}", ephemeral=True)
 
@@ -102,6 +105,9 @@ class WeatherGroup(app_commands.Group):
             await interaction.response.send_message("You need administrator permissions to use this command.", ephemeral=True)
             return
         await interaction.response.defer(ephemeral=True)
+        if not role:
+            await interaction.followup.send("Role is required.", ephemeral=True)
+            return
         await self.cog.config.guild(interaction.guild).role_id.set(role.id)
         await interaction.followup.send(f"Weather updates will now tag {role.name}", ephemeral=True)
 
@@ -122,6 +128,9 @@ class WeatherGroup(app_commands.Group):
             await interaction.response.send_message("You need administrator permissions to use this command.", ephemeral=True)
             return
         await interaction.response.defer(ephemeral=True)
+        if not color:
+            await interaction.followup.send("Color value is required.", ephemeral=True)
+            return
         color_str = color.strip().lower().replace("#", "").replace("0x", "")
         try:
             color_value = int(color_str, 16)
@@ -200,8 +209,12 @@ class WeatherGroup(app_commands.Group):
         if not channel_id:
             await interaction.followup.send("No channel configured for weather updates.", ephemeral=True)
             return
-        await self.cog._post_weather_update(interaction.guild.id, guild_settings, is_forced=True)
-        await interaction.followup.send("Weather update posted.", ephemeral=True)
+        try:
+            await self.cog._post_weather_update(interaction.guild.id, guild_settings, is_forced=True)
+            await interaction.followup.send("Weather update posted.", ephemeral=True)
+        except Exception as e:
+            logging.error(f"Error in slash force weather update: {e}")
+            await interaction.followup.send(f"Failed to post weather update: {e}", ephemeral=True)
 
 class WeatherCog(commands.Cog):
     """A cog for generating random daily weather updates."""
@@ -344,8 +357,6 @@ class WeatherCog(commands.Cog):
             await ctx.send("Invalid format. Use time (1830) or interval (10m, 1h)")
             return
         time_units = {"s": 1, "m": 60, "h": 3600, "d": 86400}
-        
-        # Handle military time
         if value.isdigit() and len(value) == 4:
             try:
                 hour = int(value[:2])
@@ -353,49 +364,36 @@ class WeatherCog(commands.Cog):
                 if hour > 23 or minute > 59:
                     await ctx.send("Invalid time format. Hours must be 00-23, minutes must be 00-59")
                     return
-                
                 await self.config.guild(ctx.guild).refresh_time.set(value)
                 await self.config.guild(ctx.guild).refresh_interval.set(None)
-                await self.config.guild(ctx.guild).last_refresh.set(0)  # Reset last refresh
-                
-                # Get current settings and check if we should post now
+                await self.config.guild(ctx.guild).last_refresh.set(0)
                 guild_settings = await self.config.guild(ctx.guild).all()
                 time_zone = guild_settings.get("time_zone") or "UTC"
                 now = datetime.now(pytz.timezone(time_zone))
-                
                 if should_post_now(now, hour, minute):
                     await self._post_weather_update(ctx.guild.id, guild_settings, is_forced=True)
                     await ctx.send(f"Weather will refresh daily at {value}. Posted initial update since it's that time now.")
                 else:
-                    # Calculate and show next update time
                     next_time = calculate_next_refresh_time(0, None, value, time_zone)
                     await ctx.send(f"Weather will refresh daily at {value} ({discord.utils.format_dt(next_time)})")
                 return
             except ValueError:
                 await ctx.send("Invalid time format. Use HHMM (e.g., 1830 for 6:30 PM)")
                 return
-        
-        # Handle intervals
         if not value[-1] in time_units:
             await ctx.send("Invalid format. Use time (1830) or interval (10m, 1h)")
             return
-            
         try:
             unit = value[-1]
             interval = int(value[:-1])
             refresh_interval = interval * time_units[unit]
-            
-            # Update settings and reset last refresh
             await self.config.guild(ctx.guild).refresh_interval.set(refresh_interval)
             await self.config.guild(ctx.guild).refresh_time.set(None)
-            await self.config.guild(ctx.guild).last_refresh.set(0)  # Reset last refresh
-            
-            # Calculate and show next update
+            await self.config.guild(ctx.guild).last_refresh.set(0)
             guild_settings = await self.config.guild(ctx.guild).all()
             time_zone = guild_settings.get("time_zone") or "UTC"
             next_time = calculate_next_refresh_time(0, refresh_interval, None, time_zone)
             await ctx.send(f"Weather will refresh every {value} (next: {discord.utils.format_dt(next_time)})")
-            
         except ValueError:
             await ctx.send("Invalid format. Use a number with s, m, h, or d")
 
@@ -459,23 +457,15 @@ class WeatherCog(commands.Cog):
         guild_settings = await self.config.guild(ctx.guild).all()
         embed_color = discord.Color(guild_settings.get("embed_color", 0xFF0000))
         embed = discord.Embed(title="RandomWeather Settings", color=embed_color)
-        
-        # Get channel and role info
         channel = self.bot.get_channel(guild_settings.get("channel_id")) if guild_settings.get("channel_id") else None
         role = ctx.guild.get_role(guild_settings.get("role_id")) if guild_settings.get("role_id") else None
-        
-        # Add basic fields
         embed.add_field(name="📢 Channel:", value=channel.mention if channel else "❌ Not set", inline=True)
         embed.add_field(name="🔖 Tag Role:", value=role.name if role else "❌ Not set", inline=True)
         embed.add_field(name="🌍 Timezone:", value=guild_settings.get("time_zone") or "UTC", inline=True)
-        
-        # Add current time
         time_zone = guild_settings.get("time_zone") or "UTC"
         tz = pytz.timezone(time_zone)
         current_time = datetime.now(tz)
         embed.add_field(name="🕒 Current Time:", value=discord.utils.format_dt(current_time, "T"), inline=True)
-        
-        # Add timing fields
         refresh_time = guild_settings.get("refresh_time")
         refresh_interval = guild_settings.get("refresh_interval")
         if refresh_time:
@@ -490,8 +480,6 @@ class WeatherCog(commands.Cog):
             embed.add_field(name="⏰ Update Interval:", value=timing, inline=True)
         else:
             embed.add_field(name="⏰ Updates:", value="Not configured", inline=True)
-            
-        # Calculate next post time
         last_refresh = guild_settings.get("last_refresh", 0)
         next_post_time = calculate_next_refresh_time(
             last_refresh,
@@ -501,11 +489,8 @@ class WeatherCog(commands.Cog):
         )
         if next_post_time:
             embed.add_field(name="📅 Next Update:", value=discord.utils.format_dt(next_post_time), inline=True)
-        
-        # Add toggle states
         embed.add_field(name="🏷️ Role Tagging:", value="✅ Enabled" if guild_settings.get("tag_role") else "❌ Disabled", inline=True)
         embed.add_field(name="📜 Footer:", value="✅ Enabled" if guild_settings.get("show_footer") else "❌ Disabled", inline=True)
-        
         await ctx.send(embed=embed)
 
     @rweather.command(name="force")
@@ -516,14 +501,13 @@ class WeatherCog(commands.Cog):
         try:
             guild_settings = await self.config.guild(ctx.guild).all()
             channel_id = guild_settings.get("channel_id")
-            
             if not channel_id:
                 await ctx.send("No channel configured for weather updates.")
                 return
-            
             await self._post_weather_update(ctx.guild.id, guild_settings, is_forced=True)
             await ctx.send("Weather update posted.")
         except Exception as e:
+            logging.error(f"Error in classic force weather update: {e}")
             await ctx.send(f"Failed to post weather update: {e}")
 
 async def setup(bot: Red) -> None:

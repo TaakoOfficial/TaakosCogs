@@ -86,9 +86,8 @@ class RPCAGroup(app_commands.Group):
             await interaction.response.send_message("This command can only be used in a server.", ephemeral=True)
             return
         await interaction.response.defer(ephemeral=True)
-        ctx = await self.cog.bot.get_context(interaction)
-        await self.cog.force_post(ctx, suppress_ctx_send=True)
-        await interaction.followup.send("Force post triggered.", ephemeral=True)
+        status, message = await self.cog.force_post_slash(interaction.guild)
+        await interaction.followup.send(message, ephemeral=True)
 
     @app_commands.command(name="settitle", description="Set a custom title for the main embed.")
     async def settitle(self, interaction: discord.Interaction, title: str) -> None:
@@ -108,6 +107,9 @@ class RPCAGroup(app_commands.Group):
             await interaction.response.send_message("This command can only be used in a server.", ephemeral=True)
             return
         await interaction.response.defer(ephemeral=True)
+        if not color:
+            await interaction.followup.send("Color value is required.", ephemeral=True)
+            return
         color_str = color.strip().lower().replace("#", "").replace("0x", "")
         try:
             color_value = int(color_str, 16)
@@ -126,6 +128,9 @@ class RPCAGroup(app_commands.Group):
             await interaction.response.send_message("This command can only be used in a server.", ephemeral=True)
             return
         await interaction.response.defer(ephemeral=True)
+        if not timezone:
+            await interaction.followup.send("Timezone is required.", ephemeral=True)
+            return
         if timezone not in pytz.all_timezones:
             await interaction.followup.send("Invalid timezone. See: https://en.wikipedia.org/wiki/List_of_tz_database_time_zones", ephemeral=True)
             return
@@ -138,6 +143,9 @@ class RPCAGroup(app_commands.Group):
             await interaction.response.send_message("This command can only be used in a server.", ephemeral=True)
             return
         await interaction.response.defer(ephemeral=True)
+        if not channel:
+            await interaction.followup.send("Channel is required.", ephemeral=True)
+            return
         await self.cog._config.guild(interaction.guild).channel_id.set(channel.id)
         await interaction.followup.send(f"Calendar updates will now be sent to: {channel.mention}", ephemeral=True)
 
@@ -290,19 +298,20 @@ class RPCalander(commands.Cog, DashboardIntegration):
 
     @commands.command(name="force")
     @commands.admin_or_permissions(administrator=True)
-    async def force_post(self, ctx: commands.Context, suppress_ctx_send: bool = False) -> None:
-        """Force post a calendar update to the configured channel immediately. If suppress_ctx_send is True, do not send ctx.send messages."""
-        guild_settings = await self._config.guild(ctx.guild).all()
+    async def force_post_command(self, ctx: commands.Context) -> None:
+        """Force post a calendar update to the configured channel immediately."""
+        status, message = await self.force_post(ctx.guild)
+        await ctx.send(message)
+
+    async def force_post(self, guild: discord.Guild) -> tuple[bool, str]:
+        """Core logic for posting a calendar update. Returns (success, message)."""
+        guild_settings = await self._config.guild(guild).all()
         channel_id = guild_settings.get("channel_id")
         if not channel_id:
-            if not suppress_ctx_send:
-                await ctx.send("No channel configured for calendar updates.")
-            return
+            return False, "No channel configured for calendar updates."
         current_date = guild_settings.get("current_date")
         if not current_date:
-            if not suppress_ctx_send:
-                await ctx.send("No current date set for the calendar.")
-            return
+            return False, "No current date set for the calendar."
         time_zone = guild_settings.get("time_zone") or "America/Chicago"
         embed_color = guild_settings.get("embed_color") or 0x0000FF
         embed_title = guild_settings.get("embed_title") or "📅 RP Calendar Update"
@@ -320,8 +329,8 @@ class RPCalander(commands.Cog, DashboardIntegration):
             else:
                 new_date_obj = current_date_obj
             new_date_str = new_date_obj.strftime("%A %m-%d-%Y")
-            await self._config.guild(ctx.guild).current_date.set(new_date_obj.strftime("%m-%d-%Y"))
-            await self._config.guild(ctx.guild).last_posted.set(now.isoformat())
+            await self._config.guild(guild).current_date.set(new_date_obj.strftime("%m-%d-%Y"))
+            await self._config.guild(guild).last_posted.set(now.isoformat())
             embed = discord.Embed(
                 title=embed_title,
                 description=f"Today's date: **{new_date_str}**",
@@ -333,19 +342,19 @@ class RPCalander(commands.Cog, DashboardIntegration):
             if channel:
                 try:
                     await channel.send(embed=embed)
-                    if not suppress_ctx_send:
-                        await ctx.send("Calendar update posted.")
+                    return True, "Calendar update posted."
                 except Exception as e:
                     logging.error(f"Error in force post: {e}")
-                    if not suppress_ctx_send:
-                        await ctx.send(f"Failed to post calendar update: {e}")
+                    return False, f"Failed to post calendar update: {e}"
             else:
-                if not suppress_ctx_send:
-                    await ctx.send("Configured channel not found.")
+                return False, "Configured channel not found."
         except Exception as e:
             logging.error(f"Error in force post date calculation: {e}")
-            if not suppress_ctx_send:
-                await ctx.send(f"Failed to calculate current date: {e}")
+            return False, f"Failed to calculate current date: {e}"
+
+    async def force_post_slash(self, guild: discord.Guild) -> tuple[bool, str]:
+        """Wrapper for slash command force post, returns (success, message)."""
+        return await self.force_post(guild)
 
     if _dashboard_available:
         @dashboard_page("test", "RP Calendar Dashboard Test")
