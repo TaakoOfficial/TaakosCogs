@@ -64,6 +64,7 @@ class YALC(commands.Cog):
     """📝 Yet Another Logging Cog (YALC)! Logs all the spicy server events with style and fun! 🎉"""
 
     def __init__(self, bot: commands.Bot):
+        """Initialize the YALC cog."""
         self.bot = bot
         self.config = Config.get_conf(self, identifier=2025041601)
         default_guild = {
@@ -101,29 +102,23 @@ class YALC(commands.Cog):
             "ignored_users": [],
             "ignored_roles": [],
             "ignored_channels": [],
-            "retention_days": 30  # Default log retention period in days
+            "retention_days": 30
         }
         self.config.register_guild(**default_guild)
         self.eventlog_group = EventLogGroup(self)
         self.classic_commands = YALCClassicCommands(self)
         self.slash_group = YALCSlashGroup(self)
-        # Register classic commands with the bot
-        bot.add_command(self.classic_commands.yalc)
-        bot.add_command(self.classic_commands.yalctemplate)
-        bot.add_command(self.classic_commands.yalcretention)
-        bot.add_command(self.classic_commands.yalcignore)
-        bot.add_command(self.classic_commands.yalcfilter)
-        # Register slash command group
-        bot.tree.add_command(self.slash_group)
+        self.bot.add_command(self.classic_commands.yalc)
+        self.bot.add_command(self.classic_commands.yalctemplate)
+        self.bot.add_command(self.classic_commands.yalcretention)
+        self.bot.add_command(self.classic_commands.yalcignore)
+        self.bot.add_command(self.classic_commands.yalcfilter)
+        self.bot.tree.add_command(self.slash_group)
 
     async def cog_unload(self) -> None:
-        """
-        Cleanup tasks when the cog is unloaded.
-        """
+        """Cleanup tasks when the cog is unloaded."""
         self.bot.tree.remove_command(self.eventlog_group.name)
         self.bot.tree.remove_command(self.slash_group.name)
-        # Optionally cancel any scheduled tasks here
-        # Unregister classic commands
         self.bot.remove_command("yalc")
         self.bot.remove_command("yalctemplate")
         self.bot.remove_command("yalcretention")

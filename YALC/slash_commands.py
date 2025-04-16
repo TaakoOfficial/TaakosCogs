@@ -3,7 +3,7 @@ YALC Slash Commands for Redbot.
 """
 from redbot.core import app_commands, commands
 import discord
-from .utils import set_embed_footer
+from .utils import set_embed_footer, check_manage_guild, validate_retention_days
 
 class YALCSlashGroup(app_commands.Group):
     """Slash command group for YALC logging configuration."""
@@ -13,8 +13,9 @@ class YALCSlashGroup(app_commands.Group):
 
     @app_commands.command(name="info", description="Show enabled events and their log channels.")
     async def info(self, interaction: discord.Interaction) -> None:
+        """Show enabled log events and their channels."""
         if not interaction.guild or not interaction.user:
-            await interaction.response.send_message("This command can only be used in a server.", ephemeral=True)
+            await interaction.response.send_message("❌ This command can only be used in a server.", ephemeral=True)
             return
         try:
             settings = await self.cog.config.guild(interaction.guild).all()
@@ -37,12 +38,13 @@ class YALCSlashGroup(app_commands.Group):
             set_embed_footer(embed, self.cog)
             await interaction.response.send_message(embed=embed, ephemeral=True)
         except Exception as e:
-            await interaction.response.send_message(f"Error: {e}", ephemeral=True)
+            await interaction.response.send_message(f"❌ Error: {e}", ephemeral=True)
 
     @app_commands.command(name="listevents", description="List all available log event types.")
     async def listevents(self, interaction: discord.Interaction) -> None:
+        """List all available log event types."""
         if not interaction.guild or not interaction.user:
-            await interaction.response.send_message("This command can only be used in a server.", ephemeral=True)
+            await interaction.response.send_message("❌ This command can only be used in a server.", ephemeral=True)
             return
         try:
             event_types = list((await self.cog.config.guild(interaction.guild).log_events()).keys())
@@ -51,28 +53,30 @@ class YALCSlashGroup(app_commands.Group):
                 description="\n".join(f"`{e}`" for e in event_types),
                 color=discord.Color.blurple()
             )
+            set_embed_footer(embed, self.cog)
             await interaction.response.send_message(embed=embed, ephemeral=True)
         except Exception as e:
-            await interaction.response.send_message(f"Error: {e}", ephemeral=True)
+            await interaction.response.send_message(f"❌ Error: {e}", ephemeral=True)
 
     @app_commands.command(name="retention", description="Show the current log retention period.")
     async def retention(self, interaction: discord.Interaction) -> None:
+        """Show the current log retention period."""
         if not interaction.guild or not interaction.user:
-            await interaction.response.send_message("This command can only be used in a server.", ephemeral=True)
+            await interaction.response.send_message("❌ This command can only be used in a server.", ephemeral=True)
             return
         try:
             days = await self.cog.config.guild(interaction.guild).get_raw("retention_days", default=30)
             await interaction.response.send_message(f"Current log retention: {days} days.", ephemeral=True)
         except Exception as e:
-            await interaction.response.send_message(f"Error: {e}", ephemeral=True)
+            await interaction.response.send_message(f"❌ Error: {e}", ephemeral=True)
 
     @app_commands.command(name="setretention", description="Set the log retention period in days (1-365).")
     async def setretention(self, interaction: discord.Interaction, days: int) -> None:
+        """Set the log retention period in days."""
         if not interaction.guild or not interaction.user:
-            await interaction.response.send_message("This command can only be used in a server.", ephemeral=True)
+            await interaction.response.send_message("❌ This command can only be used in a server.", ephemeral=True)
             return
         member = interaction.guild.get_member(interaction.user.id)
-        from .utils import check_manage_guild, validate_retention_days
         if not member or not check_manage_guild(member):
             await interaction.response.send_message("❌ You need Manage Server permission!", ephemeral=True)
             return
@@ -83,12 +87,13 @@ class YALCSlashGroup(app_commands.Group):
             await self.cog.config.guild(interaction.guild).set_raw("retention_days", value=days)
             await interaction.response.send_message(f"✅ Log retention set to {days} days.", ephemeral=True)
         except Exception as e:
-            await interaction.response.send_message(f"Error: {e}", ephemeral=True)
+            await interaction.response.send_message(f"❌ Error: {e}", ephemeral=True)
 
     @app_commands.command(name="ignores", description="List all ignored users, roles, and channels.")
     async def ignores(self, interaction: discord.Interaction) -> None:
+        """List all ignored users, roles, and channels."""
         if not interaction.guild or not interaction.user:
-            await interaction.response.send_message("This command can only be used in a server.", ephemeral=True)
+            await interaction.response.send_message("❌ This command can only be used in a server.", ephemeral=True)
             return
         try:
             users = await self.cog.config.guild(interaction.guild).get_raw("ignored_users", default=[])
@@ -102,22 +107,24 @@ class YALCSlashGroup(app_commands.Group):
                 color=discord.Color.blurple()
             )
             embed.add_field(
-                name="Users", value=", ".join(user_mentions) or "None", inline=False
+                name="users", value=", ".join(user_mentions) or "None", inline=False
             )
             embed.add_field(
-                name="Roles", value=", ".join(role_mentions) or "None", inline=False
+                name="roles", value=", ".join(role_mentions) or "None", inline=False
             )
             embed.add_field(
-                name="Channels", value=", ".join(channel_mentions) or "None", inline=False
+                name="channels", value=", ".join(channel_mentions) or "None", inline=False
             )
+            set_embed_footer(embed, self.cog)
             await interaction.response.send_message(embed=embed, ephemeral=True)
         except Exception as e:
-            await interaction.response.send_message(f"Error: {e}", ephemeral=True)
+            await interaction.response.send_message(f"❌ Error: {e}", ephemeral=True)
 
     @app_commands.command(name="filters", description="List all filters for an event.")
     async def filters(self, interaction: discord.Interaction, event: str) -> None:
+        """List all filters for a log event."""
         if not interaction.guild or not interaction.user:
-            await interaction.response.send_message("This command can only be used in a server.", ephemeral=True)
+            await interaction.response.send_message("❌ This command can only be used in a server.", ephemeral=True)
             return
         try:
             valid_events = list((await self.cog.config.guild(interaction.guild).log_events()).keys())
@@ -133,7 +140,7 @@ class YALCSlashGroup(app_commands.Group):
                 description="\n".join(filters) or "No filters set.",
                 color=discord.Color.blurple()
             )
+            set_embed_footer(embed, self.cog)
             await interaction.response.send_message(embed=embed, ephemeral=True)
         except Exception as e:
-            await interaction.response.send_message(f"Error: {e}", ephemeral=True)
-```
+            await interaction.response.send_message(f"❌ Error: {e}", ephemeral=True)

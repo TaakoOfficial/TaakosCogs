@@ -4,6 +4,7 @@ YALC Classic Commands for Redbot.
 from redbot.core import commands
 import discord
 from typing import Optional
+from .utils import set_embed_footer, validate_retention_days
 
 class YALCClassicCommands:
     """Classic command group for YALC logging configuration."""
@@ -19,36 +20,43 @@ class YALCClassicCommands:
     @yalc.command(name="info")
     async def yalc_info(self, ctx: commands.Context) -> None:
         """Show enabled events and their log channels."""
-        settings = await self.cog.config.guild(ctx.guild).all()
-        log_events = settings["log_events"]
-        event_channels = settings["event_channels"]
-        log_channel_id = settings["log_channel"]
-        log_channel = ctx.guild.get_channel(log_channel_id) if log_channel_id else None
-        lines = []
-        for event, enabled in log_events.items():
-            channel_id = event_channels.get(event, log_channel_id)
-            channel = ctx.guild.get_channel(channel_id) if channel_id else None
-            emoji = "✅" if enabled else "❌"
-            channel_str = channel.mention if channel else "*Not set*"
-            lines.append(f"{emoji} `{event}` → {channel_str}")
-        embed = discord.Embed(
-            title="📝 YALC Logging Status",
-            description="\n".join(lines) or "No events configured.",
-            color=discord.Color.blurple()
-        )
-        self.cog._set_embed_footer(embed)
-        await ctx.send(embed=embed)
+        try:
+            settings = await self.cog.config.guild(ctx.guild).all()
+            log_events = settings["log_events"]
+            event_channels = settings["event_channels"]
+            log_channel_id = settings["log_channel"]
+            log_channel = ctx.guild.get_channel(log_channel_id) if log_channel_id else None
+            lines = []
+            for event, enabled in log_events.items():
+                channel_id = event_channels.get(event, log_channel_id)
+                channel = ctx.guild.get_channel(channel_id) if channel_id else None
+                emoji = "✅" if enabled else "❌"
+                channel_str = channel.mention if channel else "*Not set*"
+                lines.append(f"{emoji} `{event}` → {channel_str}")
+            embed = discord.Embed(
+                title="📝 YALC Logging Status",
+                description="\n".join(lines) or "No events configured.",
+                color=discord.Color.blurple()
+            )
+            set_embed_footer(embed, self.cog)
+            await ctx.send(embed=embed)
+        except Exception as e:
+            await ctx.send(f"❌ Error: {e}")
 
     @yalc.command(name="listevents")
     async def yalc_listevents(self, ctx: commands.Context) -> None:
         """List all available log event types."""
-        event_types = list((await self.cog.config.guild(ctx.guild).log_events()).keys())
-        embed = discord.Embed(
-            title="Available Log Event Types",
-            description="\n".join(f"`{e}`" for e in event_types),
-            color=discord.Color.blurple()
-        )
-        await ctx.send(embed=embed)
+        try:
+            event_types = list((await self.cog.config.guild(ctx.guild).log_events()).keys())
+            embed = discord.Embed(
+                title="Available Log Event Types",
+                description="\n".join(f"`{e}`" for e in event_types),
+                color=discord.Color.blurple()
+            )
+            set_embed_footer(embed, self.cog)
+            await ctx.send(embed=embed)
+        except Exception as e:
+            await ctx.send(f"❌ Error: {e}")
 
     @commands.group(name="yalctemplate")
     async def yalctemplate(self, ctx: commands.Context) -> None:
@@ -85,7 +93,7 @@ class YALCClassicCommands:
     @yalcretention.command(name="set")
     async def set_retention(self, ctx: commands.Context, days: int) -> None:
         """Set the log retention period in days (minimum 1, maximum 365)."""
-        if days < 1 or days > 365:
+        if not validate_retention_days(days):
             await ctx.send("❌ Please provide a value between 1 and 365 days.")
             return
         await self.cog.config.guild(ctx.guild).set_raw("retention_days", value=days)
@@ -177,7 +185,7 @@ class YALCClassicCommands:
         channels = await self.cog.config.guild(ctx.guild).get_raw("ignored_channels", default=[])
         user_mentions = [f"<@{uid}>" for uid in users]
         role_mentions = [f"<@&{rid}>" for rid in roles]
-        channel_mentions = [f"<#{cid}>" for cid in channels]
+        channel_mentions = [f"<# {cid}>" for cid in channels]
         embed = discord.Embed(
             title="YALC Ignore Lists",
             color=discord.Color.blurple()
@@ -185,6 +193,7 @@ class YALCClassicCommands:
         embed.add_field(name="Users", value=", ".join(user_mentions) or "None", inline=False)
         embed.add_field(name="Roles", value=", ".join(role_mentions) or "None", inline=False)
         embed.add_field(name="Channels", value=", ".join(channel_mentions) or "None", inline=False)
+        set_embed_footer(embed, self.cog)
         await ctx.send(embed=embed)
 
     @commands.group(name="yalcfilter")
@@ -236,4 +245,5 @@ class YALCClassicCommands:
             description="\n".join(filters) or "No filters set.",
             color=discord.Color.blurple()
         )
+        set_embed_footer(embed, self.cog)
         await ctx.send(embed=embed)
