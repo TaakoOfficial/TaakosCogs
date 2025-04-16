@@ -1,9 +1,13 @@
 """
-YALC Slash Commands for Redbot.
+Yet Another Logging Cog (YALC) Slash Commands for Redbot.
 """
 from redbot.core import app_commands, commands
 import discord
-from .utils import set_embed_footer, check_manage_guild, validate_retention_days
+from .utils import (
+    set_embed_footer,
+    check_manage_guild,
+    validate_retention_days
+)
 
 class YALCSlashGroup(app_commands.Group):
     """Slash command group for YALC logging configuration."""

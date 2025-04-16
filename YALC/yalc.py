@@ -1,9 +1,13 @@
+"""
+Yet Another Logging Cog (YALC) for Redbot.
+Main cog implementation.
+"""
 from redbot.core import commands, Config, app_commands
 import discord
 from typing import Optional, Any
-from .classic_commands import YALCClassicCommands  # relative import
-from .slash_commands import YALCSlashGroup  # relative import
-from .utils import (  # relative import
+from .classic_commands import YALCClassicCommands
+from .slash_commands import YALCSlashGroup
+from .utils import (
     mention_from_id,
     validate_retention_days,
     set_embed_footer,
@@ -13,7 +17,7 @@ from .utils import (  # relative import
 )
 
 class EventLogGroup(app_commands.Group):
-    """Slash command group for event log channel configuration."""
+    """Slash command group for YALC event log configuration."""
     def __init__(self, cog: commands.Cog):
         super().__init__(name="eventlog", description="Event log channel configuration.")
         self.cog = cog

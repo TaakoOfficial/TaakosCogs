@@ -1,5 +1,5 @@
 """
-YALC Classic Commands for Redbot.
+Yet Another Logging Cog (YALC) Classic Commands for Redbot.
 """
 from redbot.core import commands
 import discord
