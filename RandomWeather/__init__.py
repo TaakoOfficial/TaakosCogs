@@ -24,13 +24,12 @@ def ensure_pytz_installed() -> bool:
             logging.error(f"Failed to install pytz: {e}")
             return False
 
-async def setup(bot: Red) -> None:
-    """Load the RandomWeather cog."""
-    if not ensure_pytz_installed():
-        msg = error("Failed to load RandomWeather: Could not install required 'pytz' package. "
-                   "Please install it manually with `pip install pytz`")
-        await bot.send_to_owners(msg)
-        return
+from .randomweather import WeatherCog
+from redbot.core import commands
 
-    from .randomweather import WeatherCog
-    await bot.add_cog(WeatherCog(bot))
+async def setup(bot: commands.Bot):
+    cog = WeatherCog(bot)
+    await bot.add_cog(cog)
+    # Register the slash command group for /rweather
+    if hasattr(cog, "weather_group"):
+        bot.tree.add_command(cog.weather_group)
