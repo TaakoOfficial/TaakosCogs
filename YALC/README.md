@@ -22,8 +22,8 @@ A modern, modular Redbot cog for logging all the spicy server events with style 
 2. Install this cog using Redbot's downloader:
    ```bash
    [p]repo add TaakosCogs https://github.com/TaakoOfficial/TaakosCogs
-   [p]cog install TaakosCogs  yalc
-   [p]load yalc
+   [p]cog install TaakosCogs  YALC
+   [p]load YALC
    ```
 
 ## 🎮 Usage
