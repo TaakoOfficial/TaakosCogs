@@ -1,18 +1,14 @@
 {
-  "author": "Taako",
+  "name": "YALC",
+  "author": ["Taako"],
+  "short": "Yet Another Logging Cog",
   "description": "📝 Yet Another Logging Cog (YALC)! Logs all the spicy server events with style and fun! 🎉",
-  "install_msg": "Thanks for installing YALC! Use `[p]yalc setlog` or `/setlog` to get started!",
-  "short": "A fun and powerful logging cog for Redbot.",
+  "install_msg": "Thanks for installing YALC! Use `[p]help YALC` to get started.",
+  "tags": ["logging", "moderation", "utility"],
   "requirements": [],
-  "tags": ["logging", "moderation", "utility", "fun"],
   "type": "COG",
   "end_user_data_statement": "This cog stores log channel and event settings per guild. No personal user data is stored.",
   "min_bot_version": "3.5.0",
-  "min_python_version": [3, 8, 0],
   "hidden": false,
-  "disabled": false,
-  "required_cogs": {},
-  "requirements_file": null,
-  "docs": "https://github.com/TaakoOfficial/YALC",
-  "version": "0.1.0"
+  "disabled": false
 }
