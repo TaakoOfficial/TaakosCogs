@@ -461,68 +461,7 @@ class YALC(commands.Cog):
         self.set_embed_footer(embed)
         await ctx.send(embed=embed)
 
-    @app_commands.command(
-        name="events",
-        description="Show all available event types that can be logged"
-    )
-    @app_commands.checks.has_permissions(manage_guild=True)
-    async def slash_listevents(self, interaction: discord.Interaction) -> None:
-        """Show all available event types that can be logged."""
-        if not interaction.guild:
-            await interaction.response.send_message(
-                "This command can only be used in a server.", 
-                ephemeral=True
-            )
-            return
-            
-        events = await self.config.guild(interaction.guild).events()
-        
-        # Group events by category for better organization
-        categories = {
-            "Messages": ["message_delete", "message_edit"],
-            "Members": ["member_join", "member_leave", "member_ban", "member_unban", "member_update", "member_kick"],
-            "Channels": ["channel_create", "channel_delete", "channel_update", "voice_update"],
-            "Threads": ["thread_create", "thread_delete", "thread_update", "thread_member_join", "thread_member_leave"],
-            "Roles": ["role_create", "role_delete", "role_update"],
-            "Commands": ["command_use", "command_error", "application_cmd"],
-            "Server": ["emoji_update", "guild_update", "cog_load"]
-        }
-        
-        embed = discord.Embed(
-            title="📝 YALC Event Types",
-            description="Here are all the events that YALC can log:",
-            color=discord.Color.blurple()
-        )
-        
-        # Add each category as a field
-        for category, event_list in categories.items():
-            lines = []
-            for event_name in event_list:
-                if event_name in events:
-                    emoji, description = self.event_descriptions.get(event_name, ("❔", "Unknown"))
-                    enabled = events[event_name]
-                    status = "✅" if enabled else "❌"
-                    lines.append(f"{emoji} `{event_name}`\n┗ {status} {description}")
-            
-            if lines:
-                embed.add_field(
-                    name=f"**{category}**",
-                    value="\n".join(lines),
-                    inline=False
-                )
-        
-        embed.add_field(
-            name="📌 How to Use",
-            value=(
-                "• Use `/yalc toggle <event>` to enable/disable events\n"
-                "• Use `/yalc setchannel <event> #channel` for custom channels\n"
-                "• Use `/yalc channel #channel` to set the default log channel"
-            ),
-            inline=False
-        )
-        
-        self.set_embed_footer(embed)
-        await interaction.response.send_message(embed=embed, ephemeral=True)
+    # Removed slash command implementation as hybrid commands provide slash functionality
 
     @yalc.command(name="setchannel")
     async def yalc_set_event_channel(self, ctx: commands.Context, event: str, channel: discord.TextChannel) -> None:
@@ -936,10 +875,3 @@ async def setup(bot: Red) -> None:
             if owner:
                 await cog.yalc.sync(guild=None)  # Global sync
                 break
-
-class YALCSlashGroup(app_commands.Group):
-    """Group of YALC slash commands."""
-
-    def __init__(self, cog: "YALC"):
-        super().__init__(name="yalc", description="Configure YALC logging settings")
-        self.cog = cog
