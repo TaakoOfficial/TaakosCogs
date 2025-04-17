@@ -7,7 +7,28 @@ Commands are organized in command groups for better organization.
 from redbot.core import commands, Config
 import discord
 from typing import Optional, Dict, List, Union, cast
-from .utils import check_manage_guild, validate_retention_days
+try:
+    from .utils import set_embed_footer, check_manage_guild, validate_retention_days
+except (ImportError, ModuleNotFoundError):
+    # Fallback for when the cog is installed in Red's cogs directory
+    from utils import set_embed_footer, check_manage_guild, validate_retention_days
+"""
+from redbot.core import commands, Config
+import discord
+from typing import Optional, Dict, List, Union, cast
+try:
+    from .utils import check_manage_guild, validate_retention_days
+except ImportError:
+    # Fallback for when the cog is installed in Red's cogs directory
+    from utils import check_manage_guild, validate_retention_daysother Logging Cog (YALC) Classic Commands for Redbot.
+
+This module contains all classic (prefix-based) command implementations for YALC.
+Commands are organized in command groups for better organization.
+"""
+from redbot.core import commands, Config
+import discord
+from typing import Optional, Dict, List, Union, cast
+from YALC.utils import check_manage_guild, validate_retention_days
 
 class YALCClassicCommands:
     """Classic command group for YALC logging configuration.
