@@ -547,11 +547,8 @@ class YALC(commands.Cog):
             "❌": "cancel"
         })
         
-        self.log.debug(f"[setup] User selected setup option: {option}")
-        
         if not option or option == "❌":
             await ctx.send("Setup cancelled!")
-            self.log.debug("[setup] Setup cancelled by user.")
             return
             
         # Step 2: Event Types
@@ -574,14 +571,12 @@ class YALC(commands.Cog):
             "⚙️": "custom"
         })
         
-        self.log.debug(f"[setup] User selected event choice: {event_choice}")
-        
         if not event_choice:
             await ctx.send("Setup timed out!")
-            self.log.debug("[setup] Setup timed out waiting for event choice.")
             return
         
         try:
+            self.log.debug(f"[setup] User selected organization option: {option}")
             # Create channels based on selection
             if option == "categories":
                 self.log.debug("[setup] Entering 'categories' setup path.")
@@ -631,9 +626,10 @@ class YALC(commands.Cog):
                 
                 channel_overrides = {}
                 channel_list = []
-                self.log.debug(f"[setup] Beginning channel creation loop for 'categories'.")
+                
                 for group, info in channels.items():
                     channel_name = f"{info['emoji']}-{info['name']}"
+                    self.log.debug(f"[setup] Creating channel: {channel_name} for group: {group}")
                     channel = await category.create_text_channel(
                         channel_name,
                         reason=f"YALC Setup - Channel for {group} events"
@@ -645,11 +641,11 @@ class YALC(commands.Cog):
                     channel_list.append(f"{info['emoji']} {channel.mention}")
                     for event in info["events"]:
                         channel_overrides[event] = channel.id
-                self.log.debug(f"[setup] Channel creation loop complete. channel_overrides: {channel_overrides}")
-                
+                    self.log.debug(f"[setup] Channel created: {channel_name} (ID: {channel.id})")
                 # Overwrite config: reset all relevant fields
                 async with self.config.guild(ctx.guild).all() as settings:
                     settings["event_channels"] = channel_overrides
+                    self.log.debug(f"[setup] Saved event-to-channel mapping: {channel_overrides}")
                     settings["log_channel"] = None
                     settings["ignored_users"] = []
                     settings["ignored_channels"] = []
@@ -674,7 +670,6 @@ class YALC(commands.Cog):
                         ]
                         for event in settings["events"]:
                             settings["events"][event] = event in common_events
-                self.log.debug(f"[setup] Saved event-to-channel mapping to config: {channel_overrides}")
                 
                 setup_embed = discord.Embed(
                     title="✅ YALC Setup Complete!",
@@ -697,10 +692,10 @@ class YALC(commands.Cog):
                     ctx.guild.default_role,
                     read_messages=False
                 )
-                
                 async with self.config.guild(ctx.guild).all() as settings:
                     settings["log_channel"] = log_channel.id
                     settings["event_channels"] = {}
+                    self.log.debug(f"[setup] Saved single log channel ID: {log_channel.id}")
                     settings["ignored_users"] = []
                     settings["ignored_channels"] = []
                     settings["ignored_categories"] = []
@@ -724,7 +719,6 @@ class YALC(commands.Cog):
                         ]
                         for event in settings["events"]:
                             settings["events"][event] = event in common_events
-                self.log.debug(f"[setup] Saved single log channel to config: {log_channel.id}")
                 
                 setup_embed = discord.Embed(
                     title="✅ YALC Setup Complete!",
