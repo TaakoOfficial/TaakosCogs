@@ -228,14 +228,16 @@ class YALC(commands.Cog):
             content = getattr(message, "content", "")
             attachments = [a.url for a in getattr(message, "attachments", [])]
             embeds = getattr(message, "embeds", [])
-            self.log.debug(f"Logging message_delete: author={author}, content={content}, attachments={attachments}, embeds={embeds}")
+            channel_name = getattr(message.channel, "name", str(message.channel) if message.channel else "Unknown")
+            self.log.debug(f"Logging message_delete: author={author}, content={content}, attachments={attachments}, embeds={embeds}, channel_name={channel_name}")
             embed = self.create_embed(
                 "message_delete",
                 f"🗑️ Message deleted in {getattr(message.channel, 'mention', str(message.channel))}",
                 user=f"{author} ({getattr(author, 'id', 'N/A')})" if author else "Unknown",
                 content=content,
                 attachments=attachments,
-                embeds=embeds
+                embeds=embeds,
+                channel_name=channel_name
             )
             await self.safe_send(channel, embed=embed)
         except Exception as e:
@@ -271,14 +273,16 @@ class YALC(commands.Cog):
             content_after = getattr(after, "content", "")
             attachments = [a.url for a in getattr(after, "attachments", [])]
             embeds = getattr(after, "embeds", [])
-            self.log.debug(f"Logging message_edit: author={author}, before={content_before}, after={content_after}, attachments={attachments}, embeds={embeds}")
+            channel_name = getattr(before.channel, "name", str(before.channel) if before.channel else "Unknown")
+            self.log.debug(f"Logging message_edit: author={author}, before={content_before}, after={content_after}, attachments={attachments}, embeds={embeds}, channel_name={channel_name}")
             embed = self.create_embed(
                 "message_edit",
                 f"✏️ Message edited in {getattr(before.channel, 'mention', str(before.channel))}",
                 user=f"{author} ({getattr(author, 'id', 'N/A')})" if author else "Unknown",
                 content=f"**Before:** {content_before}\n**After:** {content_after}",
                 attachments=attachments,
-                embeds=embeds
+                embeds=embeds,
+                channel_name=channel_name
             )
             await self.safe_send(channel, embed=embed)
         except Exception as e:
@@ -365,7 +369,8 @@ class YALC(commands.Cog):
         embed = self.create_embed(
             "member_ban",
             f"🔨 {user} has been banned.",
-            user=f"{user} ({user.id})"
+            user=f"{user} ({user.id})",
+            channel_name=guild.name if guild else "Unknown"
         )
         await self.safe_send(channel, embed=embed)
 
@@ -382,7 +387,8 @@ class YALC(commands.Cog):
         embed = self.create_embed(
             "member_unban",
             f"🔓 {user} has been unbanned.",
-            user=f"{user} ({user.id})"
+            user=f"{user} ({user.id})",
+            channel_name=guild.name if guild else "Unknown"
         )
         await self.safe_send(channel, embed=embed)
 
@@ -415,11 +421,13 @@ class YALC(commands.Cog):
                 changes.append("roles")
             if before.nick != after.nick:
                 changes.append("nickname")
+            channel_name = before.guild.name if before.guild else "Unknown"
             embed = self.create_embed(
                 "member_update",
                 f"👤 {after}'s information has been updated: {', '.join(changes)}",
                 user=f"{before} ({before.id})",
-                changes=", ".join(changes)
+                changes=", ".join(changes),
+                channel_name=channel_name
             )
             await self.safe_send(channel, embed=embed)
         except Exception as e:
@@ -454,7 +462,8 @@ class YALC(commands.Cog):
                 f"📝 Channel created: {getattr(channel, 'mention', str(channel))}",
                 name=channel.name,
                 id=channel.id,
-                type=type(channel).__name__
+                type=type(channel).__name__,
+                channel_name=channel.name
             )
             await self.safe_send(log_channel, embed=embed)
         except Exception as e:
@@ -489,7 +498,8 @@ class YALC(commands.Cog):
                 f"🗑️ Channel deleted: {getattr(channel, 'mention', str(channel))}",
                 name=channel.name,
                 id=channel.id,
-                type=type(channel).__name__
+                type=type(channel).__name__,
+                channel_name=channel.name
             )
             await self.safe_send(log_channel, embed=embed)
         except Exception as e:
@@ -539,7 +549,8 @@ class YALC(commands.Cog):
             embed = self.create_embed(
                 "channel_update",
                 f"🔄 Channel updated: {getattr(after, 'mention', str(after))}",
-                changes="\n".join(changes)
+                changes="\n".join(changes),
+                channel_name=after.name
             )
             await self.safe_send(log_channel, embed=embed)
         except Exception as e:
