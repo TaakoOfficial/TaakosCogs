@@ -1,11 +1,22 @@
-"""Yet Another Logging Cog (YALC) for Red-DiscordBot."""
-from redbot.core.bot import Red
+"""YALC - Yet Another Logging Cog for Red-DiscordBot."""
+from typing import TYPE_CHECKING
 
-from .yalc import YALC
+if TYPE_CHECKING:
+    from redbot.core.bot import Red
 
-__red_end_user_data_statement__ = "This cog stores guild-specific settings like log channels and event configurations. No personal user data is stored permanently."
-
-async def setup(bot: Red) -> None:
+async def setup(bot: "Red") -> None:
     """Set up the YALC cog."""
+    from .yalc import YALC
     cog = YALC(bot)
     await bot.add_cog(cog)
+    
+    # Register slash commands
+    if bot.owner_ids:
+        for owner_id in bot.owner_ids:
+            owner = bot.get_user(owner_id)
+            if owner:
+                # Add the log command group
+                bot.tree.add_command(cog.slash_group)
+                # Global sync
+                await bot.tree.sync()
+                break

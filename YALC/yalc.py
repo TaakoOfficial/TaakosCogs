@@ -22,17 +22,41 @@ class YALC(commands.Cog):
     """
 
     def __init__(self, bot: Red) -> None:
-        """Initialize YALC cog.
-        
-        Parameters
-        ----------
-        bot: Red
-            The Red Discord Bot instance.
-        """
+        """Initialize YALC cog."""
         self.bot = bot
         self.config = Config.get_conf(
             self, identifier=2025041601, force_registration=True
         )
+        
+        self.event_descriptions = {
+            "message_delete": ("🗑️", "Message deletions"),
+            "message_edit": ("📝", "Message edits"),
+            "member_join": ("👋", "Member joins"),
+            "member_leave": ("👋", "Member leaves"),
+            "member_ban": ("🔨", "Member bans"),
+            "member_unban": ("🔓", "Member unbans"),
+            "member_update": ("👤", "Member updates (roles, nickname)"),
+            "channel_create": ("📝", "Channel creations"),
+            "channel_delete": ("🗑️", "Channel deletions"),
+            "channel_update": ("🔄", "Channel updates"),
+            "role_create": ("✨", "Role creations"),
+            "role_delete": ("🗑️", "Role deletions"),
+            "role_update": ("🔄", "Role updates"),
+            "emoji_update": ("😀", "Emoji updates"),
+            "guild_update": ("⚙️", "Server setting updates"),
+            "voice_update": ("🎤", "Voice channel updates"),
+            "member_kick": ("👢", "Member kicks"),
+            "command_use": ("⌨️", "Command usage"),
+            "command_error": ("⚠️", "Command errors"),
+            "cog_load": ("📦", "Cog loads/unloads"),
+            "application_cmd": ("🔷", "Slash command usage"),
+            "thread_create": ("🧵", "Thread creations"),
+            "thread_delete": ("🗑️", "Thread deletions"),
+            "thread_update": ("🔄", "Thread updates"),
+            "thread_member_join": ("➡️", "Thread member joins"),
+            "thread_member_leave": ("⬅️", "Thread member leaves")
+        }
+        
         # Initialize default settings
         default_guild = {
             "log_channel": None,
@@ -57,14 +81,100 @@ class YALC(commands.Cog):
                 "emoji_update": False,
                 "guild_update": False,
                 "voice_update": False,
-                "member_kick": False
+                "member_kick": False,
+                "command_use": False,
+                "command_error": False,
+                "cog_load": False,
+                "application_cmd": False,
+                "thread_create": False,
+                "thread_delete": False,
+                "thread_update": False,
+                "thread_member_join": False,
+                "thread_member_leave": False
             },
-            "retention_days": 30
+            "retention_days": 30,
+            "ignored_commands": [],
+            "ignored_cogs": []
         }
         
         self.config.register_guild(**default_guild)
-        self._cached_deletes: Dict[int, discord.Message] = {}
-        self._cached_edits: Dict[int, discord.Message] = {}
+        
+        # Initialize listeners and slash commands
+        from .listeners import Listeners
+        self.listeners = Listeners(self)
+        self.slash_group = YALCSlashGroup(self)
+
+    async def should_log_event(self, guild: discord.Guild, event_type: str, channel: Optional[discord.abc.GuildChannel] = None) -> bool:
+        """Check if an event should be logged based on settings."""
+        if not guild:
+            return False
+            
+        settings = await self.config.guild(guild).all()
+        if not settings["events"].get(event_type, False):
+            return False
+
+        # Check channel, category, and user ignore lists
+        if channel:
+            if channel.id in settings["ignored_channels"]:
+                return False
+            if isinstance(channel, discord.TextChannel) and channel.category:
+                if channel.category.id in settings["ignored_categories"]:
+                    return False
+
+        return True
+
+    async def get_log_channel(self, guild: discord.Guild, event_type: str) -> Optional[discord.TextChannel]:
+        """Get the appropriate logging channel for an event."""
+        settings = await self.config.guild(guild).all()
+        
+        # Check for event-specific channel override
+        channel_id = settings["event_channels"].get(event_type, settings["log_channel"])
+        if not channel_id:
+            return None
+            
+        channel = guild.get_channel(channel_id)
+        return channel if isinstance(channel, discord.TextChannel) else None
+
+    def create_embed(self, event_type: str, description: str, **kwargs) -> discord.Embed:
+        """Create a standardized embed for logging."""
+        color_map = {
+            "message_delete": discord.Color.red(),
+            "message_edit": discord.Color.blue(),
+            "member_join": discord.Color.green(),
+            "member_leave": discord.Color.orange(),
+            "member_ban": discord.Color.dark_red(),
+            "member_unban": discord.Color.teal()
+        }
+        
+        embed = discord.Embed(
+            title=f"📝 {event_type.replace('_', ' ').title()}",
+            description=description,
+            color=color_map.get(event_type, discord.Color.blurple()),
+            timestamp=datetime.datetime.now(datetime.UTC)
+        )
+        
+        # Add any additional fields from kwargs
+        for key, value in kwargs.items():
+            if value:
+                embed.add_field(name=key.replace('_', ' ').title(), value=str(value))
+                
+        self.set_embed_footer(embed)
+        return embed
+
+    async def cog_unload(self) -> None:
+        """Clean up when cog is unloaded."""
+        # Clear any cached messages in listeners
+        if hasattr(self, "listeners"):
+            self.listeners._cached_deletes.clear()
+            self.listeners._cached_edits.clear()
+            
+        # Unregister hybrid commands
+        if self.bot.owner_ids:
+            for owner_id in self.bot.owner_ids:
+                owner = self.bot.get_user(owner_id)
+                if owner:
+                    await self.yalc.sync(guild=None)  # Global sync
+                    break
 
     # Hybrid Commands - work as both classic and slash commands
     @commands.hybrid_group(name="yalc")
@@ -315,13 +425,104 @@ class YALC(commands.Cog):
     async def yalc_listevents(self, ctx: commands.Context) -> None:
         """List all available log event types."""
         events = await self.config.guild(ctx.guild).events()
+        
+        # Group events by their current status
+        enabled_events = []
+        disabled_events = []
+        
+        for event_name, enabled in events.items():
+            emoji, description = self.event_descriptions.get(event_name, ("❔", "Unknown event type"))
+            line = f"{emoji} `{event_name}` - {description}"
+            if enabled:
+                enabled_events.append(line)
+            else:
+                disabled_events.append(line)
+        
         embed = discord.Embed(
-            title="Available Log Event Types",
-            description="\n".join(f"`{e}`" for e in events.keys()),
-            color=discord.Color.blurple()
+            title="📝 Available Log Event Types",
+            color=discord.Color.blurple(),
+            description="Use `/yalc toggle <event>` to enable or disable events."
         )
+        
+        if enabled_events:
+            embed.add_field(
+                name="✅ Enabled Events",
+                value="\n".join(enabled_events),
+                inline=False
+            )
+        
+        if disabled_events:
+            embed.add_field(
+                name="❌ Disabled Events",
+                value="\n".join(disabled_events),
+                inline=False
+            )
+        
         self.set_embed_footer(embed)
         await ctx.send(embed=embed)
+
+    @app_commands.command(
+        name="events",
+        description="Show all available event types that can be logged"
+    )
+    @app_commands.checks.has_permissions(manage_guild=True)
+    async def slash_listevents(self, interaction: discord.Interaction) -> None:
+        """Show all available event types that can be logged."""
+        if not interaction.guild:
+            await interaction.response.send_message(
+                "This command can only be used in a server.", 
+                ephemeral=True
+            )
+            return
+            
+        events = await self.config.guild(interaction.guild).events()
+        
+        # Group events by category for better organization
+        categories = {
+            "Messages": ["message_delete", "message_edit"],
+            "Members": ["member_join", "member_leave", "member_ban", "member_unban", "member_update", "member_kick"],
+            "Channels": ["channel_create", "channel_delete", "channel_update", "voice_update"],
+            "Threads": ["thread_create", "thread_delete", "thread_update", "thread_member_join", "thread_member_leave"],
+            "Roles": ["role_create", "role_delete", "role_update"],
+            "Commands": ["command_use", "command_error", "application_cmd"],
+            "Server": ["emoji_update", "guild_update", "cog_load"]
+        }
+        
+        embed = discord.Embed(
+            title="📝 YALC Event Types",
+            description="Here are all the events that YALC can log:",
+            color=discord.Color.blurple()
+        )
+        
+        # Add each category as a field
+        for category, event_list in categories.items():
+            lines = []
+            for event_name in event_list:
+                if event_name in events:
+                    emoji, description = self.event_descriptions.get(event_name, ("❔", "Unknown"))
+                    enabled = events[event_name]
+                    status = "✅" if enabled else "❌"
+                    lines.append(f"{emoji} `{event_name}`\n┗ {status} {description}")
+            
+            if lines:
+                embed.add_field(
+                    name=f"**{category}**",
+                    value="\n".join(lines),
+                    inline=False
+                )
+        
+        embed.add_field(
+            name="📌 How to Use",
+            value=(
+                "• Use `/yalc toggle <event>` to enable/disable events\n"
+                "• Use `/yalc setchannel <event> #channel` for custom channels\n"
+                "• Use `/yalc channel #channel` to set the default log channel"
+            ),
+            inline=False
+        )
+        
+        self.set_embed_footer(embed)
+        await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @yalc.command(name="setchannel")
     async def yalc_set_event_channel(self, ctx: commands.Context, event: str, channel: discord.TextChannel) -> None:
@@ -440,12 +641,6 @@ class YALC(commands.Cog):
             return await channel.send(content=content, **kwargs)
         except (discord.Forbidden, discord.HTTPException):
             return None
-
-    async def cog_unload(self) -> None:
-        """Clean up when cog is unloaded."""
-        # Clear any cached messages
-        self._cached_deletes.clear()
-        self._cached_edits.clear()
 
 async def setup(bot: Red) -> None:
     """Set up the YALC cog."""
