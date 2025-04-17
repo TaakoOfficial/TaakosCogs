@@ -547,8 +547,11 @@ class YALC(commands.Cog):
             "❌": "cancel"
         })
         
+        self.log.debug(f"[setup] User selected setup option: {option}")
+        
         if not option or option == "❌":
             await ctx.send("Setup cancelled!")
+            self.log.debug("[setup] Setup cancelled by user.")
             return
             
         # Step 2: Event Types
@@ -571,13 +574,17 @@ class YALC(commands.Cog):
             "⚙️": "custom"
         })
         
+        self.log.debug(f"[setup] User selected event choice: {event_choice}")
+        
         if not event_choice:
             await ctx.send("Setup timed out!")
+            self.log.debug("[setup] Setup timed out waiting for event choice.")
             return
         
         try:
             # Create channels based on selection
             if option == "categories":
+                self.log.debug("[setup] Entering 'categories' setup path.")
                 # Create category and channels
                 category = await ctx.guild.create_category(
                     "📝 Server Logs",
@@ -624,7 +631,7 @@ class YALC(commands.Cog):
                 
                 channel_overrides = {}
                 channel_list = []
-                
+                self.log.debug(f"[setup] Beginning channel creation loop for 'categories'.")
                 for group, info in channels.items():
                     channel_name = f"{info['emoji']}-{info['name']}"
                     channel = await category.create_text_channel(
@@ -638,6 +645,7 @@ class YALC(commands.Cog):
                     channel_list.append(f"{info['emoji']} {channel.mention}")
                     for event in info["events"]:
                         channel_overrides[event] = channel.id
+                self.log.debug(f"[setup] Channel creation loop complete. channel_overrides: {channel_overrides}")
                 
                 # Overwrite config: reset all relevant fields
                 async with self.config.guild(ctx.guild).all() as settings:
@@ -666,6 +674,7 @@ class YALC(commands.Cog):
                         ]
                         for event in settings["events"]:
                             settings["events"][event] = event in common_events
+                self.log.debug(f"[setup] Saved event-to-channel mapping to config: {channel_overrides}")
                 
                 setup_embed = discord.Embed(
                     title="✅ YALC Setup Complete!",
@@ -679,6 +688,7 @@ class YALC(commands.Cog):
                     color=discord.Color.green()
                 )
             else:  # Single channel
+                self.log.debug("[setup] Entering 'single' setup path.")
                 log_channel = await ctx.guild.create_text_channel(
                     "📝-server-logs",
                     reason="YALC Setup Wizard - Creating log channel"
@@ -714,6 +724,7 @@ class YALC(commands.Cog):
                         ]
                         for event in settings["events"]:
                             settings["events"][event] = event in common_events
+                self.log.debug(f"[setup] Saved single log channel to config: {log_channel.id}")
                 
                 setup_embed = discord.Embed(
                     title="✅ YALC Setup Complete!",
@@ -816,8 +827,10 @@ class YALC(commands.Cog):
             return None
 
 async def setup(bot: Red) -> None:
-    """Set up the YALC cog."""
-    cog = YALC(bot)
-    await bot.add_cog(cog)
-    await bot.add_cog(cog.listeners)
-    # No manual sync needed for hybrid commands
+        """Set up the YALC cog."""
+        cog = YALC(bot)
+        await bot.add_cog(cog)
+        await bot.add_cog(cog.listeners)
+        # Register hybrid slash group with the application command tree
+        bot.tree.add_command(cog.yalc)
+        # No need to call sync() on the group; Redbot handles hybrid command registration
