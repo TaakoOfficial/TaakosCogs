@@ -153,6 +153,13 @@ class YALC(commands.Cog):
         self.set_embed_footer(embed)
         return embed
 
+    def set_embed_footer(self, embed: discord.Embed) -> None:
+        """Set a standard footer for all log embeds."""
+        embed.set_footer(
+            text="YALC Logger",
+            icon_url="https://cdn-icons-png.flaticon.com/512/928/928797.png"
+        )
+
     async def cog_unload(self) -> None:
         """Clean up when cog is unloaded."""
         # Clear any cached messages in listeners
@@ -180,75 +187,154 @@ class YALC(commands.Cog):
     async def on_message_delete(self, message: discord.Message) -> None:
         """Log message deletion events."""
         self.log.debug("Listener triggered: on_message_delete")
-        if not message.guild or not await self.should_log_event(message.guild, "message_delete"):
+        if not message.guild:
+            self.log.debug("No guild on message.")
             return
-        channel = await self.get_log_channel(message.guild, "message_delete")
+        try:
+            should_log = await self.should_log_event(message.guild, "message_delete")
+        except Exception as e:
+            self.log.error(f"Error in should_log_event: {e}")
+            return
+        if not should_log:
+            self.log.debug("should_log_event returned False for message_delete.")
+            return
+        try:
+            channel = await self.get_log_channel(message.guild, "message_delete")
+        except Exception as e:
+            self.log.error(f"Error in get_log_channel: {e}")
+            return
         self.log.debug(f"About to send to channel: {channel}")
         if not channel:
+            self.log.warning("No log channel set for message_delete.")
             return
-        embed = self.create_embed(
-            "message_delete",
-            f"🗑️ Message deleted in {getattr(message.channel, 'mention', str(message.channel))}",
-            user=f"{message.author} ({message.author.id})",
-            content=message.content,
-            attachments=[a.url for a in message.attachments],
-            embeds=message.embeds
-        )
-        await self.safe_send(channel, embed=embed)
+        try:
+            author = getattr(message, "author", None)
+            content = getattr(message, "content", "")
+            attachments = [a.url for a in getattr(message, "attachments", [])]
+            embeds = getattr(message, "embeds", [])
+            self.log.debug(f"Logging message_delete: author={author}, content={content}, attachments={attachments}, embeds={embeds}")
+            embed = self.create_embed(
+                "message_delete",
+                f"🗑️ Message deleted in {getattr(message.channel, 'mention', str(message.channel))}",
+                user=f"{author} ({getattr(author, 'id', 'N/A')})" if author else "Unknown",
+                content=content,
+                attachments=attachments,
+                embeds=embeds
+            )
+            await self.safe_send(channel, embed=embed)
+        except Exception as e:
+            self.log.error(f"Failed to log message_delete: {e}")
 
     @commands.Cog.listener()
     async def on_message_edit(self, before: discord.Message, after: discord.Message) -> None:
         """Log message edit events."""
         self.log.debug("Listener triggered: on_message_edit")
-        if not before.guild or not await self.should_log_event(before.guild, "message_edit"):
+        if not before.guild:
+            self.log.debug("No guild on message.")
             return
-        channel = await self.get_log_channel(before.guild, "message_edit")
+        try:
+            should_log = await self.should_log_event(before.guild, "message_edit")
+        except Exception as e:
+            self.log.error(f"Error in should_log_event: {e}")
+            return
+        if not should_log:
+            self.log.debug("should_log_event returned False for message_edit.")
+            return
+        try:
+            channel = await self.get_log_channel(before.guild, "message_edit")
+        except Exception as e:
+            self.log.error(f"Error in get_log_channel: {e}")
+            return
         self.log.debug(f"About to send to channel: {channel}")
         if not channel:
+            self.log.warning("No log channel set for message_edit.")
             return
-        embed = self.create_embed(
-            "message_edit",
-            f"✏️ Message edited in {getattr(before.channel, 'mention', str(before.channel))}",
-            user=f"{before.author} ({before.author.id})",
-            content=f"**Before:** {before.content}\n**After:** {after.content}",
-            attachments=[a.url for a in after.attachments],
-            embeds=after.embeds
-        )
-        await self.safe_send(channel, embed=embed)
+        try:
+            author = getattr(before, "author", None)
+            content_before = getattr(before, "content", "")
+            content_after = getattr(after, "content", "")
+            attachments = [a.url for a in getattr(after, "attachments", [])]
+            embeds = getattr(after, "embeds", [])
+            self.log.debug(f"Logging message_edit: author={author}, before={content_before}, after={content_after}, attachments={attachments}, embeds={embeds}")
+            embed = self.create_embed(
+                "message_edit",
+                f"✏️ Message edited in {getattr(before.channel, 'mention', str(before.channel))}",
+                user=f"{author} ({getattr(author, 'id', 'N/A')})" if author else "Unknown",
+                content=f"**Before:** {content_before}\n**After:** {content_after}",
+                attachments=attachments,
+                embeds=embeds
+            )
+            await self.safe_send(channel, embed=embed)
+        except Exception as e:
+            self.log.error(f"Failed to log message_edit: {e}")
 
     @commands.Cog.listener()
     async def on_member_join(self, member: discord.Member) -> None:
         """Log member join events."""
         self.log.debug("Listener triggered: on_member_join")
-        if not member.guild or not await self.should_log_event(member.guild, "member_join"):
+        if not member.guild:
+            self.log.debug("No guild on member.")
             return
-        channel = await self.get_log_channel(member.guild, "member_join")
+        try:
+            should_log = await self.should_log_event(member.guild, "member_join")
+        except Exception as e:
+            self.log.error(f"Error in should_log_event: {e}")
+            return
+        if not should_log:
+            self.log.debug("should_log_event returned False for member_join.")
+            return
+        try:
+            channel = await self.get_log_channel(member.guild, "member_join")
+        except Exception as e:
+            self.log.error(f"Error in get_log_channel: {e}")
+            return
         self.log.debug(f"About to send to channel: {channel}")
         if not channel:
+            self.log.warning("No log channel set for member_join.")
             return
-        embed = self.create_embed(
-            "member_join",
-            f"👋 {member} has joined the server.",
-            user=f"{member} ({member.id})"
-        )
-        await self.safe_send(channel, embed=embed)
+        try:
+            embed = self.create_embed(
+                "member_join",
+                f"👋 {member} has joined the server.",
+                user=f"{member} ({member.id})"
+            )
+            await self.safe_send(channel, embed=embed)
+        except Exception as e:
+            self.log.error(f"Failed to log member_join: {e}")
 
     @commands.Cog.listener()
     async def on_member_remove(self, member: discord.Member) -> None:
         """Log member leave events."""
         self.log.debug("Listener triggered: on_member_remove")
-        if not member.guild or not await self.should_log_event(member.guild, "member_leave"):
+        if not member.guild:
+            self.log.debug("No guild on member.")
             return
-        channel = await self.get_log_channel(member.guild, "member_leave")
+        try:
+            should_log = await self.should_log_event(member.guild, "member_leave")
+        except Exception as e:
+            self.log.error(f"Error in should_log_event: {e}")
+            return
+        if not should_log:
+            self.log.debug("should_log_event returned False for member_leave.")
+            return
+        try:
+            channel = await self.get_log_channel(member.guild, "member_leave")
+        except Exception as e:
+            self.log.error(f"Error in get_log_channel: {e}")
+            return
         self.log.debug(f"About to send to channel: {channel}")
         if not channel:
+            self.log.warning("No log channel set for member_leave.")
             return
-        embed = self.create_embed(
-            "member_leave",
-            f"👋 {member} has left the server.",
-            user=f"{member} ({member.id})"
-        )
-        await self.safe_send(channel, embed=embed)
+        try:
+            embed = self.create_embed(
+                "member_leave",
+                f"👋 {member} has left the server.",
+                user=f"{member} ({member.id})"
+            )
+            await self.safe_send(channel, embed=embed)
+        except Exception as e:
+            self.log.error(f"Failed to log member_leave: {e}")
 
     @commands.Cog.listener()
     async def on_member_ban(self, guild: discord.Guild, user: discord.User) -> None:
@@ -286,338 +372,580 @@ class YALC(commands.Cog):
 
     @commands.Cog.listener()
     async def on_member_update(self, before: discord.Member, after: discord.Member) -> None:
-        """Log member update events."""
         self.log.debug("Listener triggered: on_member_update")
-        if not before.guild or not await self.should_log_event(before.guild, "member_update"):
+        if not before.guild:
+            self.log.debug("No guild on member.")
             return
-        channel = await self.get_log_channel(before.guild, "member_update")
+        try:
+            should_log = await self.should_log_event(before.guild, "member_update")
+        except Exception as e:
+            self.log.error(f"Error in should_log_event: {e}")
+            return
+        if not should_log:
+            self.log.debug("should_log_event returned False for member_update.")
+            return
+        try:
+            channel = await self.get_log_channel(before.guild, "member_update")
+        except Exception as e:
+            self.log.error(f"Error in get_log_channel: {e}")
+            return
         self.log.debug(f"About to send to channel: {channel}")
         if not channel:
+            self.log.warning("No log channel set for member_update.")
             return
-        changes = []
-        if before.roles != after.roles:
-            changes.append("roles")
-        if before.nick != after.nick:
-            changes.append("nickname")
-        embed = self.create_embed(
-            "member_update",
-            f"👤 {after}'s information has been updated: {', '.join(changes)}",
-            user=f"{before} ({before.id})",
-            changes=", ".join(changes)
-        )
-        await self.safe_send(channel, embed=embed)
+        try:
+            changes = []
+            if before.roles != after.roles:
+                changes.append("roles")
+            if before.nick != after.nick:
+                changes.append("nickname")
+            embed = self.create_embed(
+                "member_update",
+                f"👤 {after}'s information has been updated: {', '.join(changes)}",
+                user=f"{before} ({before.id})",
+                changes=", ".join(changes)
+            )
+            await self.safe_send(channel, embed=embed)
+        except Exception as e:
+            self.log.error(f"Failed to log member_update: {e}")
 
     @commands.Cog.listener()
     async def on_guild_channel_create(self, channel: discord.abc.GuildChannel) -> None:
         self.log.debug("Listener triggered: on_guild_channel_create")
-        if not channel.guild or not await self.should_log_event(channel.guild, "channel_create", channel):
+        if not channel.guild:
+            self.log.debug("No guild on channel.")
             return
-        log_channel = await self.get_log_channel(channel.guild, "channel_create")
+        try:
+            should_log = await self.should_log_event(channel.guild, "channel_create", channel)
+        except Exception as e:
+            self.log.error(f"Error in should_log_event: {e}")
+            return
+        if not should_log:
+            self.log.debug("should_log_event returned False for channel_create.")
+            return
+        try:
+            log_channel = await self.get_log_channel(channel.guild, "channel_create")
+        except Exception as e:
+            self.log.error(f"Error in get_log_channel: {e}")
+            return
         self.log.debug(f"About to send to channel: {log_channel}")
         if not log_channel:
+            self.log.warning("No log channel set for channel_create.")
             return
-        embed = self.create_embed(
-            "channel_create",
-            f"📝 Channel created: {getattr(channel, 'mention', str(channel))}",
-            name=channel.name,
-            id=channel.id,
-            type=type(channel).__name__
-        )
-        await self.safe_send(log_channel, embed=embed)
+        try:
+            embed = self.create_embed(
+                "channel_create",
+                f"📝 Channel created: {getattr(channel, 'mention', str(channel))}",
+                name=channel.name,
+                id=channel.id,
+                type=type(channel).__name__
+            )
+            await self.safe_send(log_channel, embed=embed)
+        except Exception as e:
+            self.log.error(f"Failed to log channel_create: {e}")
 
     @commands.Cog.listener()
     async def on_guild_channel_delete(self, channel: discord.abc.GuildChannel) -> None:
         self.log.debug("Listener triggered: on_guild_channel_delete")
-        if not channel.guild or not await self.should_log_event(channel.guild, "channel_delete", channel):
+        if not channel.guild:
+            self.log.debug("No guild on channel.")
             return
-        log_channel = await self.get_log_channel(channel.guild, "channel_delete")
+        try:
+            should_log = await self.should_log_event(channel.guild, "channel_delete", channel)
+        except Exception as e:
+            self.log.error(f"Error in should_log_event: {e}")
+            return
+        if not should_log:
+            self.log.debug("should_log_event returned False for channel_delete.")
+            return
+        try:
+            log_channel = await self.get_log_channel(channel.guild, "channel_delete")
+        except Exception as e:
+            self.log.error(f"Error in get_log_channel: {e}")
+            return
         self.log.debug(f"About to send to channel: {log_channel}")
         if not log_channel:
+            self.log.warning("No log channel set for channel_delete.")
             return
-        embed = self.create_embed(
-            "channel_delete",
-            f"🗑️ Channel deleted: {getattr(channel, 'mention', str(channel))}",
-            name=channel.name,
-            id=channel.id,
-            type=type(channel).__name__
-        )
-        await self.safe_send(log_channel, embed=embed)
+        try:
+            embed = self.create_embed(
+                "channel_delete",
+                f"🗑️ Channel deleted: {getattr(channel, 'mention', str(channel))}",
+                name=channel.name,
+                id=channel.id,
+                type=type(channel).__name__
+            )
+            await self.safe_send(log_channel, embed=embed)
+        except Exception as e:
+            self.log.error(f"Failed to log channel_delete: {e}")
 
     @commands.Cog.listener()
     async def on_guild_channel_update(self, before: discord.abc.GuildChannel, after: discord.abc.GuildChannel) -> None:
         self.log.debug("Listener triggered: on_guild_channel_update")
-        if not before.guild or not await self.should_log_event(before.guild, "channel_update", after):
+        if not before.guild:
+            self.log.debug("No guild on channel.")
             return
-        log_channel = await self.get_log_channel(before.guild, "channel_update")
+        try:
+            should_log = await self.should_log_event(before.guild, "channel_update", after)
+        except Exception as e:
+            self.log.error(f"Error in should_log_event: {e}")
+            return
+        if not should_log:
+            self.log.debug("should_log_event returned False for channel_update.")
+            return
+        try:
+            log_channel = await self.get_log_channel(before.guild, "channel_update")
+        except Exception as e:
+            self.log.error(f"Error in get_log_channel: {e}")
+            return
         self.log.debug(f"About to send to channel: {log_channel}")
         if not log_channel:
+            self.log.warning("No log channel set for channel_update.")
             return
-        changes = []
-        if hasattr(before, "name") and before.name != getattr(after, "name", None):
-            changes.append(f"Name: {before.name} → {after.name}")
-        if isinstance(before, discord.TextChannel) and isinstance(after, discord.TextChannel):
-            if before.topic != after.topic:
-                changes.append(f"Topic: {before.topic} → {after.topic}")
-            if before.nsfw != after.nsfw:
-                changes.append(f"NSFW: {before.nsfw} → {after.nsfw}")
-            if before.slowmode_delay != after.slowmode_delay:
-                changes.append(f"Slowmode: {before.slowmode_delay}s → {after.slowmode_delay}s")
-        if isinstance(before, discord.VoiceChannel) and isinstance(after, discord.VoiceChannel):
-            if before.bitrate != after.bitrate:
-                changes.append(f"Bitrate: {before.bitrate} → {after.bitrate}")
-            if before.user_limit != after.user_limit:
-                changes.append(f"User limit: {before.user_limit} → {after.user_limit}")
-        if not changes:
-            return
-        embed = self.create_embed(
-            "channel_update",
-            f"🔄 Channel updated: {getattr(after, 'mention', str(after))}",
-            changes="\n".join(changes)
-        )
-        await self.safe_send(log_channel, embed=embed)
+        try:
+            changes = []
+            if hasattr(before, "name") and before.name != getattr(after, "name", None):
+                changes.append(f"Name: {before.name} → {after.name}")
+            if isinstance(before, discord.TextChannel) and isinstance(after, discord.TextChannel):
+                if before.topic != after.topic:
+                    changes.append(f"Topic: {before.topic} → {after.topic}")
+                if before.nsfw != after.nsfw:
+                    changes.append(f"NSFW: {before.nsfw} → {after.nsfw}")
+                if before.slowmode_delay != after.slowmode_delay:
+                    changes.append(f"Slowmode: {before.slowmode_delay}s → {after.slowmode_delay}s")
+            if isinstance(before, discord.VoiceChannel) and isinstance(after, discord.VoiceChannel):
+                if before.bitrate != after.bitrate:
+                    changes.append(f"Bitrate: {before.bitrate} → {after.bitrate}")
+                if before.user_limit != after.user_limit:
+                    changes.append(f"User limit: {before.user_limit} → {after.user_limit}")
+            if not changes:
+                return
+            embed = self.create_embed(
+                "channel_update",
+                f"🔄 Channel updated: {getattr(after, 'mention', str(after))}",
+                changes="\n".join(changes)
+            )
+            await self.safe_send(log_channel, embed=embed)
+        except Exception as e:
+            self.log.error(f"Failed to log channel_update: {e}")
 
     @commands.Cog.listener()
     async def on_thread_create(self, thread: discord.Thread) -> None:
         self.log.debug("Listener triggered: on_thread_create")
-        if not thread.guild or not await self.should_log_event(thread.guild, "thread_create"):
+        if not thread.guild:
+            self.log.debug("No guild on thread.")
             return
-        log_channel = await self.get_log_channel(thread.guild, "thread_create")
+        try:
+            should_log = await self.should_log_event(thread.guild, "thread_create")
+        except Exception as e:
+            self.log.error(f"Error in should_log_event: {e}")
+            return
+        if not should_log:
+            self.log.debug("should_log_event returned False for thread_create.")
+            return
+        try:
+            log_channel = await self.get_log_channel(thread.guild, "thread_create")
+        except Exception as e:
+            self.log.error(f"Error in get_log_channel: {e}")
+            return
         self.log.debug(f"About to send to channel: {log_channel}")
         if not log_channel:
+            self.log.warning("No log channel set for thread_create.")
             return
-        embed = self.create_embed(
-            "thread_create",
-            f"🧵 Thread created in {getattr(thread.parent, 'mention', None)}",
-            thread=thread.mention,
-            name=thread.name,
-            creator=f"{thread.owner} ({thread.owner_id})" if thread.owner else f"ID: {thread.owner_id}",
-            type=str(thread.type),
-            slowmode=f"{thread.slowmode_delay}s" if thread.slowmode_delay else "None"
-        )
-        await self.safe_send(log_channel, embed=embed)
+        try:
+            embed = self.create_embed(
+                "thread_create",
+                f"🧵 Thread created in {getattr(thread.parent, 'mention', None)}",
+                thread=thread.mention,
+                name=thread.name,
+                creator=f"{thread.owner} ({thread.owner_id})" if thread.owner else f"ID: {thread.owner_id}",
+                type=str(thread.type),
+                slowmode=f"{thread.slowmode_delay}s" if thread.slowmode_delay else "None"
+            )
+            await self.safe_send(log_channel, embed=embed)
+        except Exception as e:
+            self.log.error(f"Failed to log thread_create: {e}")
 
     @commands.Cog.listener()
     async def on_thread_delete(self, thread: discord.Thread) -> None:
         self.log.debug("Listener triggered: on_thread_delete")
-        if not thread.guild or not await self.should_log_event(thread.guild, "thread_delete"):
+        if not thread.guild:
+            self.log.debug("No guild on thread.")
             return
-        log_channel = await self.get_log_channel(thread.guild, "thread_delete")
+        try:
+            should_log = await self.should_log_event(thread.guild, "thread_delete")
+        except Exception as e:
+            self.log.error(f"Error in should_log_event: {e}")
+            return
+        if not should_log:
+            self.log.debug("should_log_event returned False for thread_delete.")
+            return
+        try:
+            log_channel = await self.get_log_channel(thread.guild, "thread_delete")
+        except Exception as e:
+            self.log.error(f"Error in get_log_channel: {e}")
+            return
         self.log.debug(f"About to send to channel: {log_channel}")
         if not log_channel:
+            self.log.warning("No log channel set for thread_delete.")
             return
-        embed = self.create_embed(
-            "thread_delete",
-            f"🗑️ Thread deleted from {getattr(thread.parent, 'mention', None)}",
-            name=thread.name,
-            archived=thread.archived,
-            locked=thread.locked,
-            type=str(thread.type)
-        )
-        await self.safe_send(log_channel, embed=embed)
+        try:
+            embed = self.create_embed(
+                "thread_delete",
+                f"🗑️ Thread deleted from {getattr(thread.parent, 'mention', None)}",
+                name=thread.name,
+                archived=thread.archived,
+                locked=thread.locked,
+                type=str(thread.type)
+            )
+            await self.safe_send(log_channel, embed=embed)
+        except Exception as e:
+            self.log.error(f"Failed to log thread_delete: {e}")
 
     @commands.Cog.listener()
     async def on_thread_update(self, before: discord.Thread, after: discord.Thread) -> None:
         self.log.debug("Listener triggered: on_thread_update")
-        if not before.guild or not await self.should_log_event(before.guild, "thread_update"):
+        if not before.guild:
+            self.log.debug("No guild on thread.")
             return
-        log_channel = await self.get_log_channel(before.guild, "thread_update")
+        try:
+            should_log = await self.should_log_event(before.guild, "thread_update")
+        except Exception as e:
+            self.log.error(f"Error in should_log_event: {e}")
+            return
+        if not should_log:
+            self.log.debug("should_log_event returned False for thread_update.")
+            return
+        try:
+            log_channel = await self.get_log_channel(before.guild, "thread_update")
+        except Exception as e:
+            self.log.error(f"Error in get_log_channel: {e}")
+            return
         self.log.debug(f"About to send to channel: {log_channel}")
         if not log_channel:
+            self.log.warning("No log channel set for thread_update.")
             return
-        changes = []
-        if before.name != after.name:
-            changes.append(f"Name: {before.name} → {after.name}")
-        if before.archived != after.archived:
-            changes.append(f"Archived: {before.archived} → {after.archived}")
-        if before.locked != after.locked:
-            changes.append(f"Locked: {before.locked} → {after.locked}")
-        if before.slowmode_delay != after.slowmode_delay:
-            changes.append(f"Slowmode: {before.slowmode_delay}s → {after.slowmode_delay}s")
-        if before.auto_archive_duration != after.auto_archive_duration:
-            changes.append(f"Auto Archive: {before.auto_archive_duration} minutes → {after.auto_archive_duration} minutes")
-        if not changes:
-            return
-        embed = self.create_embed(
-            "thread_update",
-            f"🔄 Thread updated in {getattr(after.parent, 'mention', None)}",
-            thread=after.mention,
-            changes="\n".join(changes)
-        )
-        await self.safe_send(log_channel, embed=embed)
+        try:
+            changes = []
+            if before.name != after.name:
+                changes.append(f"Name: {before.name} → {after.name}")
+            if before.archived != after.archived:
+                changes.append(f"Archived: {before.archived} → {after.archived}")
+            if before.locked != after.locked:
+                changes.append(f"Locked: {before.locked} → {after.locked}")
+            if before.slowmode_delay != after.slowmode_delay:
+                changes.append(f"Slowmode: {before.slowmode_delay}s → {after.slowmode_delay}s")
+            if before.auto_archive_duration != after.auto_archive_duration:
+                changes.append(f"Auto Archive: {before.auto_archive_duration} minutes → {after.auto_archive_duration} minutes")
+            if not changes:
+                return
+            embed = self.create_embed(
+                "thread_update",
+                f"🔄 Thread updated in {getattr(after.parent, 'mention', None)}",
+                thread=after.mention,
+                changes="\n".join(changes)
+            )
+            await self.safe_send(log_channel, embed=embed)
+        except Exception as e:
+            self.log.error(f"Failed to log thread_update: {e}")
 
     @commands.Cog.listener()
     async def on_thread_member_join(self, member: discord.ThreadMember) -> None:
         self.log.debug("Listener triggered: on_thread_member_join")
-        if not await self.should_log_event(member.thread.guild, "thread_member_join"):
+        try:
+            should_log = await self.should_log_event(member.thread.guild, "thread_member_join")
+        except Exception as e:
+            self.log.error(f"Error in should_log_event: {e}")
             return
-        log_channel = await self.get_log_channel(member.thread.guild, "thread_member_join")
+        if not should_log:
+            self.log.debug("should_log_event returned False for thread_member_join.")
+            return
+        try:
+            log_channel = await self.get_log_channel(member.thread.guild, "thread_member_join")
+        except Exception as e:
+            self.log.error(f"Error in get_log_channel: {e}")
+            return
         self.log.debug(f"About to send to channel: {log_channel}")
         if not log_channel:
+            self.log.warning("No log channel set for thread_member_join.")
             return
-        embed = self.create_embed(
-            "thread_member_join",
-            f"➡️ Member joined thread {member.thread.mention}",
-            member=f"{member} ({member.id})",
-            thread=member.thread.name
-        )
-        await self.safe_send(log_channel, embed=embed)
+        try:
+            embed = self.create_embed(
+                "thread_member_join",
+                f"➡️ Member joined thread {member.thread.mention}",
+                member=f"{member} ({member.id})",
+                thread=member.thread.name
+            )
+            await self.safe_send(log_channel, embed=embed)
+        except Exception as e:
+            self.log.error(f"Failed to log thread_member_join: {e}")
 
     @commands.Cog.listener()
     async def on_thread_member_remove(self, member: discord.ThreadMember) -> None:
         self.log.debug("Listener triggered: on_thread_member_remove")
-        if not await self.should_log_event(member.thread.guild, "thread_member_leave"):
+        try:
+            should_log = await self.should_log_event(member.thread.guild, "thread_member_leave")
+        except Exception as e:
+            self.log.error(f"Error in should_log_event: {e}")
             return
-        log_channel = await self.get_log_channel(member.thread.guild, "thread_member_leave")
+        if not should_log:
+            self.log.debug("should_log_event returned False for thread_member_leave.")
+            return
+        try:
+            log_channel = await self.get_log_channel(member.thread.guild, "thread_member_leave")
+        except Exception as e:
+            self.log.error(f"Error in get_log_channel: {e}")
+            return
         self.log.debug(f"About to send to channel: {log_channel}")
         if not log_channel:
+            self.log.warning("No log channel set for thread_member_leave.")
             return
-        embed = self.create_embed(
-            "thread_member_leave",
-            f"⬅️ Member left thread {member.thread.mention}",
-            member=f"{member} ({member.id})",
-            thread=member.thread.name
-        )
-        await self.safe_send(log_channel, embed=embed)
+        try:
+            embed = self.create_embed(
+                "thread_member_leave",
+                f"⬅️ Member left thread {member.thread.mention}",
+                member=f"{member} ({member.id})",
+                thread=member.thread.name
+            )
+            await self.safe_send(log_channel, embed=embed)
+        except Exception as e:
+            self.log.error(f"Failed to log thread_member_leave: {e}")
 
     @commands.Cog.listener()
     async def on_role_create(self, role: discord.Role) -> None:
         self.log.debug("Listener triggered: on_role_create")
-        if not role.guild or not await self.should_log_event(role.guild, "role_create"):
+        if not role.guild:
+            self.log.debug("No guild on role.")
             return
-        channel = await self.get_log_channel(role.guild, "role_create")
+        try:
+            should_log = await self.should_log_event(role.guild, "role_create")
+        except Exception as e:
+            self.log.error(f"Error in should_log_event: {e}")
+            return
+        if not should_log:
+            self.log.debug("should_log_event returned False for role_create.")
+            return
+        try:
+            channel = await self.get_log_channel(role.guild, "role_create")
+        except Exception as e:
+            self.log.error(f"Error in get_log_channel: {e}")
+            return
         self.log.debug(f"About to send to channel: {channel}")
         if not channel:
+            self.log.warning("No log channel set for role_create.")
             return
-        embed = self.create_embed(
-            "role_create",
-            f"✨ Role created: {role.mention}",
-            name=role.name,
-            id=role.id
-        )
-        await self.safe_send(channel, embed=embed)
+        try:
+            embed = self.create_embed(
+                "role_create",
+                f"✨ Role created: {role.mention}",
+                name=role.name,
+                id=role.id
+            )
+            await self.safe_send(channel, embed=embed)
+        except Exception as e:
+            self.log.error(f"Failed to log role_create: {e}")
 
     @commands.Cog.listener()
     async def on_role_delete(self, role: discord.Role) -> None:
         self.log.debug("Listener triggered: on_role_delete")
-        if not role.guild or not await self.should_log_event(role.guild, "role_delete"):
+        if not role.guild:
+            self.log.debug("No guild on role.")
             return
-        channel = await self.get_log_channel(role.guild, "role_delete")
+        try:
+            should_log = await self.should_log_event(role.guild, "role_delete")
+        except Exception as e:
+            self.log.error(f"Error in should_log_event: {e}")
+            return
+        if not should_log:
+            self.log.debug("should_log_event returned False for role_delete.")
+            return
+        try:
+            channel = await self.get_log_channel(role.guild, "role_delete")
+        except Exception as e:
+            self.log.error(f"Error in get_log_channel: {e}")
+            return
         self.log.debug(f"About to send to channel: {channel}")
         if not channel:
+            self.log.warning("No log channel set for role_delete.")
             return
-        embed = self.create_embed(
-            "role_delete",
-            f"🗑️ Role deleted: {role.name}",
-            name=role.name,
-            id=role.id
-        )
-        await self.safe_send(channel, embed=embed)
+        try:
+            embed = self.create_embed(
+                "role_delete",
+                f"🗑️ Role deleted: {role.name}",
+                name=role.name,
+                id=role.id
+            )
+            await self.safe_send(channel, embed=embed)
+        except Exception as e:
+            self.log.error(f"Failed to log role_delete: {e}")
 
     @commands.Cog.listener()
     async def on_role_update(self, before: discord.Role, after: discord.Role) -> None:
         self.log.debug("Listener triggered: on_role_update")
-        if not before.guild or not await self.should_log_event(before.guild, "role_update"):
+        if not before.guild:
+            self.log.debug("No guild on role.")
             return
-        channel = await self.get_log_channel(before.guild, "role_update")
+        try:
+            should_log = await self.should_log_event(before.guild, "role_update")
+        except Exception as e:
+            self.log.error(f"Error in should_log_event: {e}")
+            return
+        if not should_log:
+            self.log.debug("should_log_event returned False for role_update.")
+            return
+        try:
+            channel = await self.get_log_channel(before.guild, "role_update")
+        except Exception as e:
+            self.log.error(f"Error in get_log_channel: {e}")
+            return
         self.log.debug(f"About to send to channel: {channel}")
         if not channel:
+            self.log.warning("No log channel set for role_update.")
             return
-        changes = []
-        if before.name != after.name:
-            changes.append(f"Name: {before.name} → {after.name}")
-        if before.color != after.color:
-            changes.append(f"Color: {before.color} → {after.color}")
-        if before.permissions != after.permissions:
-            changes.append("Permissions changed")
-        if not changes:
-            return
-        embed = self.create_embed(
-            "role_update",
-            f"🔄 Role updated: {after.mention}",
-            changes="\n".join(changes)
-        )
-        await self.safe_send(channel, embed=embed)
+        try:
+            changes = []
+            if before.name != after.name:
+                changes.append(f"Name: {before.name} → {after.name}")
+            if before.color != after.color:
+                changes.append(f"Color: {before.color} → {after.color}")
+            if before.permissions != after.permissions:
+                changes.append("Permissions changed")
+            if not changes:
+                return
+            embed = self.create_embed(
+                "role_update",
+                f"🔄 Role updated: {after.mention}",
+                changes="\n".join(changes)
+            )
+            await self.safe_send(channel, embed=embed)
+        except Exception as e:
+            self.log.error(f"Failed to log role_update: {e}")
 
     @commands.Cog.listener()
     async def on_guild_update(self, before: discord.Guild, after: discord.Guild) -> None:
         self.log.debug("Listener triggered: on_guild_update")
-        if not await self.should_log_event(before, "guild_update"):
+        try:
+            should_log = await self.should_log_event(before, "guild_update")
+        except Exception as e:
+            self.log.error(f"Error in should_log_event: {e}")
             return
-        channel = await self.get_log_channel(before, "guild_update")
+        if not should_log:
+            self.log.debug("should_log_event returned False for guild_update.")
+            return
+        try:
+            channel = await self.get_log_channel(before, "guild_update")
+        except Exception as e:
+            self.log.error(f"Error in get_log_channel: {e}")
+            return
         self.log.debug(f"About to send to channel: {channel}")
         if not channel:
+            self.log.warning("No log channel set for guild_update.")
             return
-        changes = []
-        if before.name != after.name:
-            changes.append(f"Name: {before.name} → {after.name}")
-        if before.icon != after.icon:
-            changes.append("Icon changed")
-        if before.owner_id != after.owner_id:
-            changes.append(f"Owner: {before.owner_id} → {after.owner_id}")
-        if not changes:
-            return
-        embed = self.create_embed(
-            "guild_update",
-            f"⚙️ Server updated",
-            changes="\n".join(changes)
-        )
-        await self.safe_send(channel, embed=embed)
+        try:
+            changes = []
+            if before.name != after.name:
+                changes.append(f"Name: {before.name} → {after.name}")
+            if before.icon != after.icon:
+                changes.append("Icon changed")
+            if before.owner_id != after.owner_id:
+                changes.append(f"Owner: {before.owner_id} → {after.owner_id}")
+            if not changes:
+                return
+            embed = self.create_embed(
+                "guild_update",
+                f"⚙️ Server updated",
+                changes="\n".join(changes)
+            )
+            await self.safe_send(channel, embed=embed)
+        except Exception as e:
+            self.log.error(f"Failed to log guild_update: {e}")
 
     @commands.Cog.listener()
     async def on_guild_emojis_update(self, guild: discord.Guild, before, after) -> None:
         self.log.debug("Listener triggered: on_guild_emojis_update")
-        if not await self.should_log_event(guild, "emoji_update"):
+        try:
+            should_log = await self.should_log_event(guild, "emoji_update")
+        except Exception as e:
+            self.log.error(f"Error in should_log_event: {e}")
             return
-        channel = await self.get_log_channel(guild, "emoji_update")
+        if not should_log:
+            self.log.debug("should_log_event returned False for emoji_update.")
+            return
+        try:
+            channel = await self.get_log_channel(guild, "emoji_update")
+        except Exception as e:
+            self.log.error(f"Error in get_log_channel: {e}")
+            return
         self.log.debug(f"About to send to channel: {channel}")
         if not channel:
+            self.log.warning("No log channel set for emoji_update.")
             return
-        before_set = set(before)
-        after_set = set(after)
-        added = after_set - before_set
-        removed = before_set - after_set
-        changes = []
-        if added:
-            changes.append(f"Added: {', '.join(str(e) for e in added)}")
-        if removed:
-            changes.append(f"Removed: {', '.join(str(e) for e in removed)}")
-        if not changes:
-            return
-        embed = self.create_embed(
-            "emoji_update",
-            f"😀 Emoji updated",
-            changes="\n".join(changes)
-        )
-        await self.safe_send(channel, embed=embed)
+        try:
+            before_set = set(before)
+            after_set = set(after)
+            added = after_set - before_set
+            removed = before_set - after_set
+            changes = []
+            if added:
+                changes.append(f"Added: {', '.join(str(e) for e in added)}")
+            if removed:
+                changes.append(f"Removed: {', '.join(str(e) for e in removed)}")
+            if not changes:
+                return
+            embed = self.create_embed(
+                "emoji_update",
+                f"😀 Emoji updated",
+                changes="\n".join(changes)
+            )
+            await self.safe_send(channel, embed=embed)
+        except Exception as e:
+            self.log.error(f"Failed to log emoji_update: {e}")
 
     @commands.Cog.listener()
     async def on_voice_state_update(self, member: discord.Member, before: discord.VoiceState, after: discord.VoiceState) -> None:
         self.log.debug("Listener triggered: on_voice_state_update")
-        if not member.guild or not await self.should_log_event(member.guild, "voice_update"):
+        if not member.guild:
+            self.log.debug("No guild on member.")
             return
-        channel = await self.get_log_channel(member.guild, "voice_update")
+        try:
+            should_log = await self.should_log_event(member.guild, "voice_update")
+        except Exception as e:
+            self.log.error(f"Error in should_log_event: {e}")
+            return
+        if not should_log:
+            self.log.debug("should_log_event returned False for voice_update.")
+            return
+        try:
+            channel = await self.get_log_channel(member.guild, "voice_update")
+        except Exception as e:
+            self.log.error(f"Error in get_log_channel: {e}")
+            return
         self.log.debug(f"About to send to channel: {channel}")
         if not channel:
+            self.log.warning("No log channel set for voice_update.")
             return
-        changes = []
-        if before.channel != after.channel:
-            changes.append(f"Channel: {getattr(before.channel, 'mention', None)} → {getattr(after.channel, 'mention', None)}")
-        if before.mute != after.mute:
-            changes.append(f"Muted: {before.mute} → {after.mute}")
-        if before.deaf != after.deaf:
-            changes.append(f"Deafened: {before.deaf} → {after.deaf}")
-        if before.self_mute != after.self_mute:
-            changes.append(f"Self-muted: {before.self_mute} → {after.self_mute}")
-        if before.self_deaf != after.self_deaf:
-            changes.append(f"Self-deafened: {before.self_deaf} → {after.self_deaf}")
-        if not changes:
-            return
-        embed = self.create_embed(
-            "voice_update",
-            f"🎤 Voice state updated for {member.mention}",
-            changes="\n".join(changes)
-        )
-        await self.safe_send(channel, embed=embed)
+        try:
+            changes = []
+            if before.channel != after.channel:
+                changes.append(f"Channel: {getattr(before.channel, 'mention', None)} → {getattr(after.channel, 'mention', None)}")
+            if before.mute != after.mute:
+                changes.append(f"Muted: {before.mute} → {after.mute}")
+            if before.deaf != after.deaf:
+                changes.append(f"Deafened: {before.deaf} → {after.deaf}")
+            if before.self_mute != after.self_mute:
+                changes.append(f"Self-muted: {before.self_mute} → {after.self_mute}")
+            if before.self_deaf != after.self_deaf:
+                changes.append(f"Self-deafened: {before.self_deaf} → {after.self_deaf}")
+            if not changes:
+                return
+            embed = self.create_embed(
+                "voice_update",
+                f"🎤 Voice state updated for {member.mention}",
+                changes="\n".join(changes)
+            )
+            await self.safe_send(channel, embed=embed)
+        except Exception as e:
+            self.log.error(f"Failed to log voice_update: {e}")
 
     @commands.Cog.listener()
     async def on_member_kick(self, guild: discord.Guild, user: discord.User) -> None:
