@@ -599,7 +599,7 @@ class YALC(commands.Cog):
         except asyncio.TimeoutError:
             return None
 
-    @commands.hybrid_command(name="setup")
+    @yalc.command(name="setup")
     @commands.guild_only()
     @commands.admin_or_permissions(manage_guild=True)
     async def yalc_setup(self, ctx: commands.Context) -> None:
