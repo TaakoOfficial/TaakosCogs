@@ -92,7 +92,6 @@ class YALC(commands.Cog):
                 "thread_member_join": False,
                 "thread_member_leave": False
             },
-            "retention_days": 30,
             "ignored_commands": [],
             "ignored_cogs": []
         }
@@ -342,27 +341,6 @@ class YALC(commands.Cog):
         await self.config.guild(ctx.guild).clear_raw(f"template_{event}")
         await ctx.send(f"✅ Template for `{event}` cleared (using default).")
 
-    @yalc.group(name="retention")
-    async def yalc_retention(self, ctx: commands.Context) -> None:
-        """Configure log retention settings."""
-        if ctx.invoked_subcommand is None:
-            await ctx.send_help()
-
-    @yalc_retention.command(name="set")
-    async def yalc_retention_set(self, ctx: commands.Context, days: int) -> None:
-        """Set the log retention period in days (1-365)."""
-        if not self.validate_retention_days(days):
-            await ctx.send("❌ Please provide a value between 1 and 365 days.")
-            return
-        await self.config.guild(ctx.guild).retention_days.set(days)
-        await ctx.send(f"✅ Log retention set to {days} days.")
-
-    @yalc_retention.command(name="show")
-    async def yalc_retention_show(self, ctx: commands.Context) -> None:
-        """Show the current log retention period."""
-        days = await self.config.guild(ctx.guild).retention_days()
-        await ctx.send(f"📝 Current log retention period: {days} days")
-
     @yalc.group(name="filter")
     async def yalc_filter(self, ctx: commands.Context) -> None:
         """Manage event filters."""
@@ -593,36 +571,6 @@ class YALC(commands.Cog):
         if not event_choice:
             await ctx.send("Setup timed out!")
             return
-            
-        # Step 3: Retention Period
-        retention_embed = discord.Embed(
-            title="⏱️ Log Retention",
-            description=(
-                "How long should logs be kept?\n\n"
-                "7️⃣ - 7 days\n"
-                "3️⃣ - 30 days\n"
-                "9️⃣ - 90 days"
-            ),
-            color=discord.Color.blue()
-        )
-        self.set_embed_footer(retention_embed)
-        
-        retention_msg = await ctx.send(embed=retention_embed)
-        retention_choice = await self._handle_setup_reaction(ctx, retention_msg, {
-            "7️⃣": "7",
-            "3️⃣": "30",
-            "9️⃣": "90"
-        })
-        
-        if not retention_choice:
-            await ctx.send("Setup timed out!")
-            return
-            
-        retention_days = {
-            "7️⃣": 7,
-            "3️⃣": 30,
-            "9️⃣": 90
-        }.get(retention_choice, 30)
         
         try:
             # Create channels based on selection
@@ -690,7 +638,6 @@ class YALC(commands.Cog):
                 # Update settings
                 async with self.config.guild(ctx.guild).all() as settings:
                     settings["event_channels"] = channel_overrides
-                    settings["retention_days"] = retention_days
                     
                     # Enable events based on choice
                     if event_choice == "✨":  # All events
@@ -706,14 +653,13 @@ class YALC(commands.Cog):
                         ]
                         for event in settings["events"]:
                             settings["events"][event] = event in common_events
-                            
+                
                 setup_embed = discord.Embed(
                     title="✅ YALC Setup Complete!",
                     description=(
                         "I've created the following structure:\n\n"
                         f"📁 **Server Logs** category with channels:\n"
                         f"{chr(10).join(channel_list)}\n\n"
-                        f"📅 Log retention period: {retention_days} days\n"
                         f"🎯 Events enabled: {'All' if event_choice == '✨' else 'Common' if event_choice == '🎯' else 'Custom'}\n\n"
                         "You can customize this further using `/yalc` commands!"
                     ),
@@ -732,7 +678,6 @@ class YALC(commands.Cog):
                 
                 async with self.config.guild(ctx.guild).all() as settings:
                     settings["log_channel"] = log_channel.id
-                    settings["retention_days"] = retention_days
                     
                     # Enable events based on choice
                     if event_choice == "✨":  # All events
@@ -748,12 +693,11 @@ class YALC(commands.Cog):
                         ]
                         for event in settings["events"]:
                             settings["events"][event] = event in common_events
-                            
+                
                 setup_embed = discord.Embed(
                     title="✅ YALC Setup Complete!",
                     description=(
                         f"I've created {log_channel.mention} for all logs.\n\n"
-                        f"📅 Log retention period: {retention_days} days\n"
                         f"🎯 Events enabled: {'All' if event_choice == '✨' else 'Common' if event_choice == '🎯' else 'Custom'}\n\n"
                         "You can customize the settings using `/yalc` commands!"
                     ),
@@ -814,21 +758,6 @@ class YALC(commands.Cog):
             member = cast(discord.Member, ctx.user)
             return member.guild_permissions.manage_guild
         return ctx.author.guild_permissions.manage_guild
-
-    def validate_retention_days(self, days: int) -> bool:
-        """Validate log retention period is within acceptable range.
-        
-        Parameters
-        ----------
-        days: int
-            Number of days to validate
-            
-        Returns
-        -------
-        bool
-            True if days is within valid range (1-365)
-        """
-        return 1 <= days <= 365
 
     async def safe_send(
         self,
