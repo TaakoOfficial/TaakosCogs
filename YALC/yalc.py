@@ -217,6 +217,16 @@ class YALC(commands.Cog):
         await self.config.guild(ctx.guild).log_channel.set(channel.id)
         await ctx.send(f"✅ Log channel set to {channel.mention}")
 
+    @yalc.command(name="clearchannel")
+    async def yalc_clear_log_channel(self, ctx: commands.Context) -> None:
+        """Remove the default log channel (useful for multi-channel setups)."""
+        log_channel_id = await self.config.guild(ctx.guild).log_channel()
+        if not log_channel_id:
+            await ctx.send("❌ No default log channel is currently set.")
+            return
+        await self.config.guild(ctx.guild).log_channel.set(None)
+        await ctx.send("✅ Default log channel has been cleared. Only event-specific channels will be used.")
+
     @yalc.command(name="toggle")
     async def yalc_toggle(self, ctx: commands.Context, *, event: Optional[str] = None) -> None:
         """Toggle logging for a specific event."""
