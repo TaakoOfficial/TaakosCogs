@@ -539,36 +539,22 @@ class YALC(commands.Cog):
     @commands.guild_only()
     @commands.admin_or_permissions(manage_guild=True)
     async def yalc_setup(self, ctx: commands.Context) -> None:
-        """Start an interactive setup wizard for YALC."""
+        """Start an interactive setup wizard for YALC. Always uses category + multi-channel structure."""
         if not ctx.guild:
             await ctx.send("❌ This command can only be used in a server!")
             return
 
-        # Step 1: Channel Organization
         embed = discord.Embed(
             title="📋 YALC Setup Wizard - Channel Organization",
             description=(
-                "How would you like to organize your logging channels?\n\n"
-                "🗂️ - Create a category with separate channels for different event types\n"
-                "📜 - Use a single channel for all logs\n"
-                "❌ - Cancel setup"
+                "YALC will create a category and separate channels for different event types.\n\n"
+                "You can customize channel assignments later with `/yalc setchannel`."
             ),
             color=discord.Color.blue()
         )
         self.set_embed_footer(embed)
-        
-        msg = await ctx.send(embed=embed)
-        option = await self._handle_setup_reaction(ctx, msg, {
-            "🗂️": "categories",
-            "📜": "single",
-            "❌": "cancel"
-        })
-        
-        if not option or option == "❌":
-            await ctx.send("Setup cancelled!")
-            return
-            
-        # Step 2: Event Types
+        await ctx.send(embed=embed)
+
         event_embed = discord.Embed(
             title="🎯 Event Selection",
             description=(
@@ -580,73 +566,66 @@ class YALC(commands.Cog):
             color=discord.Color.blue()
         )
         self.set_embed_footer(event_embed)
-        
         event_msg = await ctx.send(embed=event_embed)
         event_choice = await self._handle_setup_reaction(ctx, event_msg, {
             "✨": "all",
             "🎯": "common",
             "⚙️": "custom"
         })
-        
         if not event_choice:
             await ctx.send("Setup timed out!")
             return
-        
+
         try:
-            self.log.debug(f"[setup] User selected organization option: {option}")
-            # Create channels based on selection
-            if option == "categories":
-                self.log.debug("[setup] Entering 'categories' setup path.")
-                # Create category and channels
-                category = await ctx.guild.create_category(
-                    "📝 Server Logs",
-                    reason="YALC Setup Wizard - Creating log channels"
-                )
-                
-                channels = {
-                    "messages": {
-                        "name": "logs-messages",
-                        "emoji": "💬",
-                        "events": ["message_delete", "message_edit"]
-                    },
-                    "members": {
-                        "name": "logs-members",
-                        "emoji": "👥",
-                        "events": ["member_join", "member_leave", "member_ban", "member_unban", "member_update", "member_kick"]
-                    },
-                    "channels": {
-                        "name": "logs-channels",
-                        "emoji": "📝",
-                        "events": ["channel_create", "channel_delete", "channel_update", "voice_update"]
-                    },
-                    "threads": {
-                        "name": "logs-threads",
-                        "emoji": "🧵",
-                        "events": ["thread_create", "thread_delete", "thread_update", "thread_member_join", "thread_member_leave"]
-                    },
-                    "roles": {
-                        "name": "logs-roles",
-                        "emoji": "🎭",
-                        "events": ["role_create", "role_delete", "role_update"]
-                    },
-                    "commands": {
-                        "name": "logs-commands",
-                        "emoji": "⌨️",
-                        "events": ["command_use", "command_error", "application_cmd"]
-                    },
-                    "server": {
-                        "name": "logs-server",
-                        "emoji": "⚙️",
-                        "events": ["emoji_update", "guild_update", "cog_load"]
-                    }
+            self.log.debug("[setup] Always using 'categories' setup path.")
+            category = await ctx.guild.create_category(
+                name="📝 Server Logs",
+                reason="YALC Setup Wizard - Creating log channels"
+            )
+            channels = {
+                "messages": {
+                    "name": "logs-messages",
+                    "emoji": "💬",
+                    "events": ["message_delete", "message_edit"]
+                },
+                "members": {
+                    "name": "logs-members",
+                    "emoji": "👥",
+                    "events": ["member_join", "member_leave", "member_ban", "member_unban", "member_update", "member_kick"]
+                },
+                "channels": {
+                    "name": "logs-channels",
+                    "emoji": "📝",
+                    "events": ["channel_create", "channel_delete", "channel_update", "voice_update"]
+                },
+                "threads": {
+                    "name": "logs-threads",
+                    "emoji": "🧵",
+                    "events": ["thread_create", "thread_delete", "thread_update", "thread_member_join", "thread_member_leave"]
+                },
+                "roles": {
+                    "name": "logs-roles",
+                    "emoji": "🎭",
+                    "events": ["role_create", "role_delete", "role_update"]
+                },
+                "commands": {
+                    "name": "logs-commands",
+                    "emoji": "⌨️",
+                    "events": ["command_use", "command_error", "application_cmd"]
+                },
+                "server": {
+                    "name": "logs-server",
+                    "emoji": "⚙️",
+                    "events": ["emoji_update", "guild_update", "cog_load"]
                 }
-                
-                channel_overrides = {}
-                channel_list = []
-                
-                for group, info in channels.items():
-                    channel_name = f"{info['emoji']}-{info['name']}"
-                    self.log.debug(f"[setup] Creating channel: {channel_name} for group: {group}")
+            }
+            channel_overrides = {}
+            channel_list = []
+            failed_channels = []
+            for group, info in channels.items():
+                channel_name = f"{info['emoji']}-{info['name']}"
+                self.log.debug(f"[setup] Creating channel: {channel_name} for group: {group}")
+                try:
                     channel = await category.create_text_channel(
                         channel_name,
                         reason=f"YALC Setup - Channel for {group} events"
@@ -659,97 +638,48 @@ class YALC(commands.Cog):
                     for event in info["events"]:
                         channel_overrides[event] = channel.id
                     self.log.debug(f"[setup] Channel created: {channel_name} (ID: {channel.id})")
-                # Overwrite config: reset all relevant fields
-                async with self.config.guild(ctx.guild).all() as settings:
-                    settings["event_channels"] = channel_overrides
-                    self.log.debug(f"[setup] Saved event-to-channel mapping: {channel_overrides}")
-                    settings["log_channel"] = None
-                    settings["ignored_users"] = []
-                    settings["ignored_channels"] = []
-                    settings["ignored_categories"] = []
-                    settings["ignored_commands"] = []
-                    settings["ignored_cogs"] = []
-                    # Remove all filters and templates
-                    for k in list(settings.keys()):
-                        if k.startswith("filters_") or k.startswith("template_"):
-                            del settings[k]
-                    # Enable events based on choice
-                    if event_choice == "all":  # All events
-                        for event in settings["events"]:
-                            settings["events"][event] = True
-                    elif event_choice == "common":  # Common events
-                        common_events = [
-                            "message_delete", "message_edit",
-                            "member_join", "member_leave",
-                            "member_ban", "member_unban",
-                            "member_kick", "channel_create",
-                            "channel_delete"
-                        ]
-                        for event in settings["events"]:
-                            settings["events"][event] = event in common_events
-                
-                setup_embed = discord.Embed(
-                    title="✅ YALC Setup Complete!",
-                    description=(
-                        "I've created the following structure:\n\n"
-                        f"📁 **Server Logs** category with channels:\n"
-                        f"{chr(10).join(channel_list)}\n\n"
-                        f"🎯 Events enabled: {'All' if event_choice == 'all' else 'Common' if event_choice == 'common' else 'Custom'}\n\n"
-                        "You can customize this further using `/yalc` commands!"
-                    ),
-                    color=discord.Color.green()
-                )
-            else:  # Single channel
-                self.log.debug("[setup] Entering 'single' setup path.")
-                log_channel = await ctx.guild.create_text_channel(
-                    "📝-server-logs",
-                    reason="YALC Setup Wizard - Creating log channel"
-                )
-                await log_channel.set_permissions(
-                    ctx.guild.default_role,
-                    read_messages=False
-                )
-                async with self.config.guild(ctx.guild).all() as settings:
-                    settings["log_channel"] = log_channel.id
-                    settings["event_channels"] = {}
-                    self.log.debug(f"[setup] Saved single log channel ID: {log_channel.id}")
-                    settings["ignored_users"] = []
-                    settings["ignored_channels"] = []
-                    settings["ignored_categories"] = []
-                    settings["ignored_commands"] = []
-                    settings["ignored_cogs"] = []
-                    # Remove all filters and templates
-                    for k in list(settings.keys()):
-                        if k.startswith("filters_") or k.startswith("template_"):
-                            del settings[k]
-                    # Enable events based on choice
-                    if event_choice == "all":  # All events
-                        for event in settings["events"]:
-                            settings["events"][event] = True
-                    elif event_choice == "common":  # Common events
-                        common_events = [
-                            "message_delete", "message_edit",
-                            "member_join", "member_leave",
-                            "member_ban", "member_unban",
-                            "member_kick", "channel_create",
-                            "channel_delete"
-                        ]
-                        for event in settings["events"]:
-                            settings["events"][event] = event in common_events
-                
-                setup_embed = discord.Embed(
-                    title="✅ YALC Setup Complete!",
-                    description=(
-                        f"I've created {log_channel.mention} for all logs.\n\n"
-                        f"🎯 Events enabled: {'All' if event_choice == 'all' else 'Common' if event_choice == 'common' else 'Custom'}\n\n"
-                        "You can customize the settings using `/yalc` commands!"
-                    ),
-                    color=discord.Color.green()
-                )
-            
+                except discord.Forbidden:
+                    failed_channels.append(channel_name)
+                    self.log.error(f"[setup] Failed to create channel: {channel_name}")
+            async with self.config.guild(ctx.guild).all() as settings:
+                settings["event_channels"] = channel_overrides
+                self.log.debug(f"[setup] Saved event-to-channel mapping: {channel_overrides}")
+                settings["log_channel"] = None
+                settings["ignored_users"] = []
+                settings["ignored_channels"] = []
+                settings["ignored_categories"] = []
+                settings["ignored_commands"] = []
+                settings["ignored_cogs"] = []
+                for k in list(settings.keys()):
+                    if k.startswith("filters_") or k.startswith("template_"):
+                        del settings[k]
+                if event_choice == "all":
+                    for event in settings["events"]:
+                        settings["events"][event] = True
+                elif event_choice == "common":
+                    common_events = [
+                        "message_delete", "message_edit",
+                        "member_join", "member_leave",
+                        "member_ban", "member_unban",
+                        "member_kick", "channel_create",
+                        "channel_delete"
+                    ]
+                    for event in settings["events"]:
+                        settings["events"][event] = event in common_events
+            setup_embed = discord.Embed(
+                title="✅ YALC Setup Complete!",
+                description=(
+                    "I've created the following structure:\n\n"
+                    f"📁 **Server Logs** category with channels:\n"
+                    f"{chr(10).join(channel_list)}\n\n"
+                    f"🎯 Events enabled: {'All' if event_choice == 'all' else 'Common' if event_choice == 'common' else 'Custom'}\n\n"
+                    + (f"❌ Failed to create: {', '.join(failed_channels)}\n\n" if failed_channels else "")
+                    + "You can customize this further using `/yalc` commands!"
+                ),
+                color=discord.Color.green() if not failed_channels else discord.Color.red()
+            )
             self.set_embed_footer(setup_embed)
             await ctx.send(embed=setup_embed)
-            # Log config after setup
             config_after = await self.config.guild(ctx.guild).all()
             self.log.info(f"[setup] Config after setup for guild {ctx.guild.id}: {config_after}")
         except discord.Forbidden:
