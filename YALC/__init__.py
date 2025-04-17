@@ -2,7 +2,6 @@
 from redbot.core.bot import Red
 
 from .yalc import YALC
-from . import utils
 
 __red_end_user_data_statement__ = "This cog stores guild-specific settings like log channels and event configurations. No personal user data is stored permanently."
 
