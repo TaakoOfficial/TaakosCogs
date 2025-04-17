@@ -103,8 +103,7 @@ class YALC(commands.Cog):
         # Initialize listeners and slash commands
         from .listeners import Listeners
         self.listeners = Listeners(self)
-        # Register listeners as a cog so event listeners are active
-        bot.add_cog(self.listeners)
+        # Do not add_cog here; must be awaited in setup()
 
     async def should_log_event(self, guild: discord.Guild, event_type: str, channel: Optional[discord.abc.GuildChannel] = None) -> bool:
         """Check if an event should be logged based on settings."""
@@ -170,14 +169,7 @@ class YALC(commands.Cog):
         if hasattr(self, "listeners"):
             self.listeners._cached_deletes.clear()
             self.listeners._cached_edits.clear()
-            
-        # Unregister hybrid commands
-        if self.bot.owner_ids:
-            for owner_id in self.bot.owner_ids:
-                owner = self.bot.get_user(owner_id)
-                if owner:
-                    await self.yalc.sync(guild=None)  # Global sync
-                    break
+        # No manual sync needed for hybrid commands
 
     # Hybrid Commands - work as both classic and slash commands
     @commands.hybrid_group(name="yalc")
@@ -641,10 +633,19 @@ class YALC(commands.Cog):
                     for event in info["events"]:
                         channel_overrides[event] = channel.id
                 
-                # Update settings
+                # Overwrite config: reset all relevant fields
                 async with self.config.guild(ctx.guild).all() as settings:
                     settings["event_channels"] = channel_overrides
-                    
+                    settings["log_channel"] = None
+                    settings["ignored_users"] = []
+                    settings["ignored_channels"] = []
+                    settings["ignored_categories"] = []
+                    settings["ignored_commands"] = []
+                    settings["ignored_cogs"] = []
+                    # Remove all filters and templates
+                    for k in list(settings.keys()):
+                        if k.startswith("filters_") or k.startswith("template_"):
+                            del settings[k]
                     # Enable events based on choice
                     if event_choice == "✨":  # All events
                         for event in settings["events"]:
@@ -683,7 +684,16 @@ class YALC(commands.Cog):
                 
                 async with self.config.guild(ctx.guild).all() as settings:
                     settings["log_channel"] = log_channel.id
-                    
+                    settings["event_channels"] = {}
+                    settings["ignored_users"] = []
+                    settings["ignored_channels"] = []
+                    settings["ignored_categories"] = []
+                    settings["ignored_commands"] = []
+                    settings["ignored_cogs"] = []
+                    # Remove all filters and templates
+                    for k in list(settings.keys()):
+                        if k.startswith("filters_") or k.startswith("template_"):
+                            del settings[k]
                     # Enable events based on choice
                     if event_choice == "✨":  # All events
                         for event in settings["events"]:
@@ -803,10 +813,5 @@ async def setup(bot: Red) -> None:
     """Set up the YALC cog."""
     cog = YALC(bot)
     await bot.add_cog(cog)
-    # Sync hybrid commands
-    if bot.owner_ids:
-        for owner_id in bot.owner_ids:
-            owner = bot.get_user(owner_id)
-            if owner:
-                await cog.yalc.sync(guild=None)  # Global sync
-                break
+    await bot.add_cog(cog.listeners)
+    # No manual sync needed for hybrid commands
