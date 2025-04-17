@@ -8,6 +8,7 @@ from redbot.core.bot import Red
 from typing import Dict, List, Optional, Union, cast
 import datetime
 import asyncio
+import logging
 
 class YALC(commands.Cog):
     """📝 Yet Another Logging Cog - Log all the things!
@@ -27,7 +28,8 @@ class YALC(commands.Cog):
         self.config = Config.get_conf(
             self, identifier=2025041601, force_registration=True
         )
-        
+        self.log = logging.getLogger(f"red.YALC.{__name__}")
+
         self.event_descriptions = {
             "message_delete": ("🗑️", "Message deletions"),
             "message_edit": ("📝", "Message edits"),
@@ -126,13 +128,14 @@ class YALC(commands.Cog):
     async def get_log_channel(self, guild: discord.Guild, event_type: str) -> Optional[discord.TextChannel]:
         """Get the appropriate logging channel for an event."""
         settings = await self.config.guild(guild).all()
-        
+        self.log.debug(f"[get_log_channel] Guild: {guild.id}, Event: {event_type}, Settings: {settings}")
         # Check for event-specific channel override
         channel_id = settings["event_channels"].get(event_type, settings["log_channel"])
+        self.log.debug(f"[get_log_channel] Selected channel_id: {channel_id}")
         if not channel_id:
             return None
-            
         channel = guild.get_channel(channel_id)
+        self.log.debug(f"[get_log_channel] Resolved channel: {channel}")
         return channel if isinstance(channel, discord.TextChannel) else None
 
     def create_embed(self, event_type: str, description: str, **kwargs) -> discord.Embed:
@@ -708,7 +711,9 @@ class YALC(commands.Cog):
             
             self.set_embed_footer(setup_embed)
             await ctx.send(embed=setup_embed)
-            
+            # Log config after setup
+            config_after = await self.config.guild(ctx.guild).all()
+            self.log.info(f"[setup] Config after setup for guild {ctx.guild.id}: {config_after}")
         except discord.Forbidden:
             error_embed = discord.Embed(
                 title="❌ Setup Failed",
