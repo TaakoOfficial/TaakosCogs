@@ -101,6 +101,8 @@ class YALC(commands.Cog):
         # Initialize listeners and slash commands
         from .listeners import Listeners
         self.listeners = Listeners(self)
+        # Register listeners as a cog so event listeners are active
+        bot.add_cog(self.listeners)
 
     async def should_log_event(self, guild: discord.Guild, event_type: str, channel: Optional[discord.abc.GuildChannel] = None) -> bool:
         """Check if an event should be logged based on settings."""
