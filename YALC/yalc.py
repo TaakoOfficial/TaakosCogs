@@ -62,7 +62,6 @@ class YALC(commands.Cog):
         
         # Initialize default settings
         default_guild = {
-            "log_channel": None,
             "ignored_users": [],
             "ignored_channels": [],
             "ignored_categories": [],
@@ -98,7 +97,6 @@ class YALC(commands.Cog):
             "ignored_commands": [],
             "ignored_cogs": []
         }
-        
         self.config.register_guild(**default_guild)
         
         # Initialize listeners and slash commands
@@ -126,11 +124,10 @@ class YALC(commands.Cog):
         return True
 
     async def get_log_channel(self, guild: discord.Guild, event_type: str) -> Optional[discord.TextChannel]:
-        """Get the appropriate logging channel for an event."""
+        """Get the appropriate logging channel for an event. Only event_channels is used."""
         settings = await self.config.guild(guild).all()
         self.log.debug(f"[get_log_channel] Guild: {guild.id}, Event: {event_type}, Settings: {settings}")
-        # Check for event-specific channel override
-        channel_id = settings["event_channels"].get(event_type, settings["log_channel"])
+        channel_id = settings["event_channels"].get(event_type)
         self.log.debug(f"[get_log_channel] Selected channel_id: {channel_id}")
         if not channel_id:
             return None
@@ -206,10 +203,9 @@ class YALC(commands.Cog):
             settings = await self.config.guild(ctx.guild).all()
             log_events = settings["events"]
             event_channels = settings.get("event_channels", {})
-            log_channel_id = settings["log_channel"]
             lines = []
             for event, enabled in log_events.items():
-                channel_id = event_channels.get(event, log_channel_id)
+                channel_id = event_channels.get(event)
                 channel = ctx.guild.get_channel(channel_id) if channel_id else None
                 emoji = "✅" if enabled else "❌"
                 channel_str = channel.mention if channel else "*Not set*"
@@ -226,13 +222,16 @@ class YALC(commands.Cog):
 
     @yalc.command(name="channel")
     async def yalc_channel(self, ctx: commands.Context, *, channel: Optional[discord.TextChannel] = None) -> None:
-        """Set the channel for server logs."""
+        """Set the channel for all events (sets all event_channels at once)."""
         channel = channel or ctx.channel
         if not isinstance(channel, discord.TextChannel):
             await ctx.send("❌ That's not a valid text channel!")
             return
-        await self.config.guild(ctx.guild).log_channel.set(channel.id)
-        await ctx.send(f"✅ Log channel set to {channel.mention}")
+        events = await self.config.guild(ctx.guild).events()
+        async with self.config.guild(ctx.guild).event_channels() as event_channels:
+            for event in events:
+                event_channels[event] = channel.id
+        await ctx.send(f"✅ All events will now log to {channel.mention}")
 
     @yalc.command(name="toggle")
     async def yalc_toggle(self, ctx: commands.Context, *, event: Optional[str] = None) -> None:
@@ -462,36 +461,26 @@ class YALC(commands.Cog):
 
     @yalc.command(name="setchannel")
     async def yalc_set_event_channel(self, ctx: commands.Context, event: str, channel: discord.TextChannel) -> None:
-        """Set a specific channel for an event type.
-        
-        This overrides the default log channel for the specified event.
-        """
+        """Set a specific channel for an event type."""
         events = await self.config.guild(ctx.guild).events()
         if event not in events:
             await ctx.send(f"❌ Invalid event type. Valid events: {', '.join(events.keys())}")
             return
-            
         async with self.config.guild(ctx.guild).event_channels() as channels:
             channels[event] = channel.id
         await ctx.send(f"✅ Channel for `{event}` set to {channel.mention}")
 
     @yalc.command(name="resetchannel")
     async def yalc_reset_event_channel(self, ctx: commands.Context, event: str) -> None:
-        """Reset an event to use the default log channel.
-        
-        Removes the event-specific channel override.
-        """
+        """Remove the event-specific channel override (event will not log unless set again)."""
         events = await self.config.guild(ctx.guild).events()
         if event not in events:
             await ctx.send(f"❌ Invalid event type. Valid events: {', '.join(events.keys())}")
             return
-            
         async with self.config.guild(ctx.guild).event_channels() as channels:
-            if event not in channels:
-                await ctx.send(f"❌ No custom channel set for `{event}`")
-                return
-            del channels[event]
-        await ctx.send(f"✅ Channel for `{event}` reset to default log channel")
+            if event in channels:
+                del channels[event]
+        await ctx.send(f"✅ Channel for `{event}` unset. This event will not log until a channel is set.")
 
     async def _handle_setup_reaction(
         self,
@@ -644,7 +633,6 @@ class YALC(commands.Cog):
             async with self.config.guild(ctx.guild).all() as settings:
                 settings["event_channels"] = channel_overrides
                 self.log.debug(f"[setup] Saved event-to-channel mapping: {channel_overrides}")
-                settings["log_channel"] = None
                 settings["ignored_users"] = []
                 settings["ignored_channels"] = []
                 settings["ignored_categories"] = []
