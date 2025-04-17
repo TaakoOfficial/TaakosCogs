@@ -1,46 +1,40 @@
 # 📝 YALC Changelog
 
-All notable changes to YALC will be documented in this file.
-
-## [v2.0.0] - 2025-04-16
+## [v3.0.0] - 2025-04-17
 
 ### ✨ New Features
 
-- Added slash command support
-- Added log retention management
-- Added rich embed formatting for all logs
+- Added custom log icon in embed footers
+- Enhanced setup wizard with improved channel organization
+- Separate channels for different event types
+- Advanced retention policy management (7/30/90 days)
 
 ### 🛠️ Improvements
 
-- Improved type hints throughout codebase
-- Enhanced docstrings following Red standards
-- Better organization of commands in groups
-- Improved error handling and user feedback
-
-### 🐛 Bug Fixes
-
-- Fixed message cache management
-- Fixed permission checks in slash commands
-- Fixed embed footer consistency
-
-### 📚 Documentation
-
-- Added detailed docstrings
-- Improved README with examples
-- Added proper type hints
+- Improved embed formatting and visual consistency
+- Better error handling and permissions checks
+- Enhanced type hints and documentation
+- Streamlined command organization
 
 ### 🚀 Performance
 
-- Optimized message caching
-- Reduced database calls
-- Improved event handler efficiency
+- Optimized event handling
+- Improved channel creation process
+- Better memory management for cached events
 
-## [v1.0.0] - 2025-03-15
+### 📚 Documentation
 
-### ✨ New Features
+- Completely revamped README
+- Added detailed command documentation
+- Improved inline code comments
 
-- Initial release
+## [v2.0.0] - Previous Release
+
+### ✨ Major Features
+
+- Initial slash command support
 - Basic logging functionality
-- Classic command support
-- Channel configuration
-- Event filtering
+- Event filtering system
+- Simple setup wizard
+
+For older versions, please check the Git history.

@@ -557,7 +557,287 @@ class YALC(commands.Cog):
             del channels[event]
         await ctx.send(f"✅ Channel for `{event}` reset to default log channel")
 
-    __version__ = "2.0.0"
+    async def _handle_setup_reaction(
+        self,
+        ctx: commands.Context,
+        message: discord.Message,
+        emoji_options: Dict[str, str],
+        timeout: float = 30.0
+    ) -> Optional[str]:
+        """Handle reaction-based selection in setup wizard.
+        
+        Parameters
+        ----------
+        ctx: commands.Context
+            The command context
+        message: discord.Message
+            The message to add reactions to
+        emoji_options: Dict[str, str]
+            Mapping of emoji to their meanings
+        timeout: float
+            How long to wait for a reaction
+            
+        Returns
+        -------
+        Optional[str]
+            The selected option or None if timed out
+        """
+        for emoji in emoji_options.keys():
+            await message.add_reaction(emoji)
+            
+        try:
+            reaction, user = await self.bot.wait_for(
+                "reaction_add",
+                check=lambda r, u: (
+                    u == ctx.author and 
+                    str(r.emoji) in emoji_options and 
+                    r.message.id == message.id
+                ),
+                timeout=timeout
+            )
+            return str(reaction.emoji)
+        except asyncio.TimeoutError:
+            return None
+
+    @commands.hybrid_command(name="setup")
+    @commands.guild_only()
+    @commands.admin_or_permissions(manage_guild=True)
+    async def yalc_setup(self, ctx: commands.Context) -> None:
+        """Start an interactive setup wizard for YALC."""
+        if not ctx.guild:
+            await ctx.send("❌ This command can only be used in a server!")
+            return
+
+        # Step 1: Channel Organization
+        embed = discord.Embed(
+            title="📋 YALC Setup Wizard - Channel Organization",
+            description=(
+                "How would you like to organize your logging channels?\n\n"
+                "🗂️ - Create a category with separate channels for different event types\n"
+                "📜 - Use a single channel for all logs\n"
+                "❌ - Cancel setup"
+            ),
+            color=discord.Color.blue()
+        )
+        self.set_embed_footer(embed)
+        
+        msg = await ctx.send(embed=embed)
+        option = await self._handle_setup_reaction(ctx, msg, {
+            "🗂️": "categories",
+            "📜": "single",
+            "❌": "cancel"
+        })
+        
+        if not option or option == "❌":
+            await ctx.send("Setup cancelled!")
+            return
+            
+        # Step 2: Event Types
+        event_embed = discord.Embed(
+            title="🎯 Event Selection",
+            description=(
+                "Which events would you like to enable?\n\n"
+                "✨ - Enable all events\n"
+                "🎯 - Enable common events only (messages, members, moderation)\n"
+                "⚙️ - Let me choose specific events"
+            ),
+            color=discord.Color.blue()
+        )
+        self.set_embed_footer(event_embed)
+        
+        event_msg = await ctx.send(embed=event_embed)
+        event_choice = await self._handle_setup_reaction(ctx, event_msg, {
+            "✨": "all",
+            "🎯": "common",
+            "⚙️": "custom"
+        })
+        
+        if not event_choice:
+            await ctx.send("Setup timed out!")
+            return
+            
+        # Step 3: Retention Period
+        retention_embed = discord.Embed(
+            title="⏱️ Log Retention",
+            description=(
+                "How long should logs be kept?\n\n"
+                "7️⃣ - 7 days\n"
+                "3️⃣ - 30 days\n"
+                "9️⃣ - 90 days"
+            ),
+            color=discord.Color.blue()
+        )
+        self.set_embed_footer(retention_embed)
+        
+        retention_msg = await ctx.send(embed=retention_embed)
+        retention_choice = await self._handle_setup_reaction(ctx, retention_msg, {
+            "7️⃣": "7",
+            "3️⃣": "30",
+            "9️⃣": "90"
+        })
+        
+        if not retention_choice:
+            await ctx.send("Setup timed out!")
+            return
+            
+        retention_days = {
+            "7️⃣": 7,
+            "3️⃣": 30,
+            "9️⃣": 90
+        }.get(retention_choice, 30)
+        
+        try:
+            # Create channels based on selection
+            if option == "🗂️":
+                # Create category and channels
+                category = await ctx.guild.create_category(
+                    "📝 Server Logs",
+                    reason="YALC Setup Wizard - Creating log channels"
+                )
+                
+                channels = {
+                    "messages": {
+                        "name": "logs-messages",
+                        "emoji": "💬",
+                        "events": ["message_delete", "message_edit"]
+                    },
+                    "members": {
+                        "name": "logs-members",
+                        "emoji": "👥",
+                        "events": ["member_join", "member_leave", "member_ban", "member_unban", "member_update", "member_kick"]
+                    },
+                    "channels": {
+                        "name": "logs-channels",
+                        "emoji": "📝",
+                        "events": ["channel_create", "channel_delete", "channel_update", "voice_update"]
+                    },
+                    "threads": {
+                        "name": "logs-threads",
+                        "emoji": "🧵",
+                        "events": ["thread_create", "thread_delete", "thread_update", "thread_member_join", "thread_member_leave"]
+                    },
+                    "roles": {
+                        "name": "logs-roles",
+                        "emoji": "🎭",
+                        "events": ["role_create", "role_delete", "role_update"]
+                    },
+                    "commands": {
+                        "name": "logs-commands",
+                        "emoji": "⌨️",
+                        "events": ["command_use", "command_error", "application_cmd"]
+                    },
+                    "server": {
+                        "name": "logs-server",
+                        "emoji": "⚙️",
+                        "events": ["emoji_update", "guild_update", "cog_load"]
+                    }
+                }
+                
+                channel_overrides = {}
+                channel_list = []
+                
+                for group, info in channels.items():
+                    channel = await category.create_text_channel(
+                        info["name"],
+                        reason=f"YALC Setup - Channel for {group} events"
+                    )
+                    await channel.set_permissions(
+                        ctx.guild.default_role,
+                        read_messages=False
+                    )
+                    channel_list.append(f"{info['emoji']} {channel.mention}")
+                    for event in info["events"]:
+                        channel_overrides[event] = channel.id
+                
+                # Update settings
+                async with self.config.guild(ctx.guild).all() as settings:
+                    settings["event_channels"] = channel_overrides
+                    settings["retention_days"] = retention_days
+                    
+                    # Enable events based on choice
+                    if event_choice == "✨":  # All events
+                        for event in settings["events"]:
+                            settings["events"][event] = True
+                    elif event_choice == "🎯":  # Common events
+                        common_events = [
+                            "message_delete", "message_edit",
+                            "member_join", "member_leave",
+                            "member_ban", "member_unban",
+                            "member_kick", "channel_create",
+                            "channel_delete"
+                        ]
+                        for event in settings["events"]:
+                            settings["events"][event] = event in common_events
+                            
+                setup_embed = discord.Embed(
+                    title="✅ YALC Setup Complete!",
+                    description=(
+                        "I've created the following structure:\n\n"
+                        f"📁 **Server Logs** category with channels:\n"
+                        f"{chr(10).join(channel_list)}\n\n"
+                        f"📅 Log retention period: {retention_days} days\n"
+                        f"🎯 Events enabled: {'All' if event_choice == '✨' else 'Common' if event_choice == '🎯' else 'Custom'}\n\n"
+                        "You can customize this further using `/yalc` commands!"
+                    ),
+                    color=discord.Color.green()
+                )
+                
+            else:  # Single channel
+                log_channel = await ctx.guild.create_text_channel(
+                    "server-logs",
+                    reason="YALC Setup Wizard - Creating log channel"
+                )
+                await log_channel.set_permissions(
+                    ctx.guild.default_role,
+                    read_messages=False
+                )
+                
+                async with self.config.guild(ctx.guild).all() as settings:
+                    settings["log_channel"] = log_channel.id
+                    settings["retention_days"] = retention_days
+                    
+                    # Enable events based on choice
+                    if event_choice == "✨":  # All events
+                        for event in settings["events"]:
+                            settings["events"][event] = True
+                    elif event_choice == "🎯":  # Common events
+                        common_events = [
+                            "message_delete", "message_edit",
+                            "member_join", "member_leave",
+                            "member_ban", "member_unban",
+                            "member_kick", "channel_create",
+                            "channel_delete"
+                        ]
+                        for event in settings["events"]:
+                            settings["events"][event] = event in common_events
+                            
+                setup_embed = discord.Embed(
+                    title="✅ YALC Setup Complete!",
+                    description=(
+                        f"I've created {log_channel.mention} for all logs.\n\n"
+                        f"📅 Log retention period: {retention_days} days\n"
+                        f"🎯 Events enabled: {'All' if event_choice == '✨' else 'Common' if event_choice == '🎯' else 'Custom'}\n\n"
+                        "You can customize the settings using `/yalc` commands!"
+                    ),
+                    color=discord.Color.green()
+                )
+            
+            self.set_embed_footer(setup_embed)
+            await ctx.send(embed=setup_embed)
+            
+        except discord.Forbidden:
+            error_embed = discord.Embed(
+                title="❌ Setup Failed",
+                description=(
+                    "I don't have permission to create channels or categories.\n"
+                    "Please make sure I have the `Manage Channels` permission and try again."
+                ),
+                color=discord.Color.red()
+            )
+            self.set_embed_footer(error_embed)
+            await ctx.send(embed=error_embed)
+
+    __version__ = "3.0.0"
     
     def set_embed_footer(self, embed: discord.Embed) -> None:
         """Set consistent footer for YALC embeds.
@@ -567,7 +847,10 @@ class YALC(commands.Cog):
         embed: discord.Embed
             The embed to set the footer on
         """
-        embed.set_footer(text=f"YALC v{self.__version__}")
+        embed.set_footer(
+            text=f"YALC v{self.__version__}",
+            icon_url="https://cdn-icons-png.flaticon.com/512/928/928797.png"
+        )
 
     async def check_manage_guild(self, ctx: Union[commands.Context, discord.Interaction]) -> bool:
         """Check if user has manage guild permission.
@@ -653,3 +936,10 @@ async def setup(bot: Red) -> None:
             if owner:
                 await cog.yalc.sync(guild=None)  # Global sync
                 break
+
+class YALCSlashGroup(app_commands.Group):
+    """Group of YALC slash commands."""
+
+    def __init__(self, cog: "YALC"):
+        super().__init__(name="yalc", description="Configure YALC logging settings")
+        self.cog = cog
