@@ -623,8 +623,9 @@ class YALC(commands.Cog):
                 channel_list = []
                 
                 for group, info in channels.items():
+                    channel_name = f"{info['emoji']}-{info['name']}"
                     channel = await category.create_text_channel(
-                        info["name"],
+                        channel_name,
                         reason=f"YALC Setup - Channel for {group} events"
                     )
                     await channel.set_permissions(
@@ -665,10 +666,9 @@ class YALC(commands.Cog):
                     ),
                     color=discord.Color.green()
                 )
-                
             else:  # Single channel
                 log_channel = await ctx.guild.create_text_channel(
-                    "server-logs",
+                    "📝-server-logs",
                     reason="YALC Setup Wizard - Creating log channel"
                 )
                 await log_channel.set_permissions(
