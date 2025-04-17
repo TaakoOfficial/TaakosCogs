@@ -181,8 +181,8 @@ class YALC(commands.Cog):
     @commands.admin_or_permissions(manage_guild=True)
     async def yalc(self, ctx: commands.Context) -> None:
         """Manage YALC logging configuration."""
-        if ctx.invoked_subcommand is None:
-            await ctx.send_help()
+        # Do not call ctx.send_help() here; Redbot handles help automatically for hybrid groups.
+        pass
 
     @yalc.command(name="info")
     @commands.guild_only()
