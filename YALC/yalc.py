@@ -181,6 +181,22 @@ class YALC(commands.Cog):
         except Exception as e:
             self.log.error(f"Failed to register YALC case types: {e}")
 
+    async def safe_send(
+        self,
+        channel: discord.TextChannel,
+        *,
+        content: Optional[str] = None,
+        embed: Optional[discord.Embed] = None
+    ) -> None:
+        """Safely send a message or embed to a channel, logging any errors."""
+        try:
+            if embed is not None:
+                await channel.send(content=content, embed=embed)
+            else:
+                await channel.send(content=content)
+        except Exception as e:
+            self.log.error(f"Failed to send message to {channel}: {e}")
+
     # --- Event Listeners ---
 
     @commands.Cog.listener()
