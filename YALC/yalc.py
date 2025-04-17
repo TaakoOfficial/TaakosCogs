@@ -217,16 +217,6 @@ class YALC(commands.Cog):
         await self.config.guild(ctx.guild).log_channel.set(channel.id)
         await ctx.send(f"✅ Log channel set to {channel.mention}")
 
-    @yalc.command(name="clearchannel")
-    async def yalc_clear_log_channel(self, ctx: commands.Context) -> None:
-        """Remove the default log channel (useful for multi-channel setups)."""
-        log_channel_id = await self.config.guild(ctx.guild).log_channel()
-        if not log_channel_id:
-            await ctx.send("❌ No default log channel is currently set.")
-            return
-        await self.config.guild(ctx.guild).log_channel.set(None)
-        await ctx.send("✅ Default log channel has been cleared. Only event-specific channels will be used.")
-
     @yalc.command(name="toggle")
     async def yalc_toggle(self, ctx: commands.Context, *, event: Optional[str] = None) -> None:
         """Toggle logging for a specific event."""
@@ -246,6 +236,12 @@ class YALC(commands.Cog):
         await self.config.guild(ctx.guild).events.set(events)
         status = "enabled" if events[event] else "disabled"
         await ctx.send(f"✅ Logging for `{event}` is now {status}")
+
+    @yalc.command(name="resetdefault")
+    async def yalc_reset_default(self, ctx: commands.Context) -> None:
+        """Reset the default log channel."""
+        await self.config.guild(ctx.guild).log_channel.set(None)
+        await ctx.send("✅ Default log channel has been removed.")
 
     @yalc.group(name="ignore")
     async def yalc_ignore(self, ctx: commands.Context) -> None:
@@ -581,7 +577,7 @@ class YALC(commands.Cog):
         
         try:
             # Create channels based on selection
-            if option == "🗂️":
+            if option == "categories":
                 # Create category and channels
                 category = await ctx.guild.create_category(
                     "📝 Server Logs",
@@ -657,10 +653,10 @@ class YALC(commands.Cog):
                         if k.startswith("filters_") or k.startswith("template_"):
                             del settings[k]
                     # Enable events based on choice
-                    if event_choice == "✨":  # All events
+                    if event_choice == "all":  # All events
                         for event in settings["events"]:
                             settings["events"][event] = True
-                    elif event_choice == "🎯":  # Common events
+                    elif event_choice == "common":  # Common events
                         common_events = [
                             "message_delete", "message_edit",
                             "member_join", "member_leave",
@@ -677,7 +673,7 @@ class YALC(commands.Cog):
                         "I've created the following structure:\n\n"
                         f"📁 **Server Logs** category with channels:\n"
                         f"{chr(10).join(channel_list)}\n\n"
-                        f"🎯 Events enabled: {'All' if event_choice == '✨' else 'Common' if event_choice == '🎯' else 'Custom'}\n\n"
+                        f"🎯 Events enabled: {'All' if event_choice == 'all' else 'Common' if event_choice == 'common' else 'Custom'}\n\n"
                         "You can customize this further using `/yalc` commands!"
                     ),
                     color=discord.Color.green()
@@ -705,10 +701,10 @@ class YALC(commands.Cog):
                         if k.startswith("filters_") or k.startswith("template_"):
                             del settings[k]
                     # Enable events based on choice
-                    if event_choice == "✨":  # All events
+                    if event_choice == "all":  # All events
                         for event in settings["events"]:
                             settings["events"][event] = True
-                    elif event_choice == "🎯":  # Common events
+                    elif event_choice == "common":  # Common events
                         common_events = [
                             "message_delete", "message_edit",
                             "member_join", "member_leave",
@@ -723,7 +719,7 @@ class YALC(commands.Cog):
                     title="✅ YALC Setup Complete!",
                     description=(
                         f"I've created {log_channel.mention} for all logs.\n\n"
-                        f"🎯 Events enabled: {'All' if event_choice == '✨' else 'Common' if event_choice == '🎯' else 'Custom'}\n\n"
+                        f"🎯 Events enabled: {'All' if event_choice == 'all' else 'Common' if event_choice == 'common' else 'Custom'}\n\n"
                         "You can customize the settings using `/yalc` commands!"
                     ),
                     color=discord.Color.green()
