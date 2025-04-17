@@ -98,11 +98,6 @@ class YALC(commands.Cog):
             "ignored_cogs": []
         }
         self.config.register_guild(**default_guild)
-        
-        # Initialize listeners and slash commands
-        from .listeners import Listeners
-        self.listeners = Listeners(self)
-        # Do not add_cog here; must be awaited in setup()
 
     async def should_log_event(self, guild: discord.Guild, event_type: str, channel: Optional[discord.abc.GuildChannel] = None) -> bool:
         """Check if an event should be logged based on settings."""
@@ -164,9 +159,6 @@ class YALC(commands.Cog):
     async def cog_unload(self) -> None:
         """Clean up when cog is unloaded."""
         # Clear any cached messages in listeners
-        if hasattr(self, "listeners"):
-            self.listeners._cached_deletes.clear()
-            self.listeners._cached_edits.clear()
         # No manual sync needed for hybrid commands
 
     async def cog_load(self) -> None:
@@ -185,581 +177,761 @@ class YALC(commands.Cog):
         except Exception as e:
             self.log.error(f"Failed to register YALC case types: {e}")
 
-    # Hybrid Commands - work as both classic and slash commands
-    @commands.hybrid_group(name="yalc")
-    @commands.guild_only()
-    @commands.admin_or_permissions(manage_guild=True)
-    async def yalc(self, ctx: commands.Context) -> None:
-        """Manage YALC logging configuration."""
-        # Do not call ctx.send_help() here; Redbot handles help automatically for hybrid groups.
-        pass
+    # --- Event Listeners ---
 
-    @yalc.command(name="info")
-    @commands.guild_only()
-    @commands.admin_or_permissions(manage_guild=True)
-    async def yalc_info(self, ctx: commands.Context) -> None:
-        """Show enabled events and their log channels."""
-        try:
-            settings = await self.config.guild(ctx.guild).all()
-            log_events = settings["events"]
-            event_channels = settings.get("event_channels", {})
-            lines = []
-            for event, enabled in log_events.items():
-                channel_id = event_channels.get(event)
-                channel = ctx.guild.get_channel(channel_id) if channel_id else None
-                emoji = "✅" if enabled else "❌"
-                channel_str = channel.mention if channel else "*Not set*"
-                lines.append(f"{emoji} `{event}` → {channel_str}")
-            embed = discord.Embed(
-                title="📝 YALC Logging Status",
-                description="\n".join(lines) or "No events configured.",
-                color=discord.Color.blurple()
-            )
-            self.set_embed_footer(embed)
-            await ctx.send(embed=embed, ephemeral=True)
-        except Exception as e:
-            await ctx.send(f"❌ Error: {e}")
-
-    @yalc.command(name="channel")
-    async def yalc_channel(self, ctx: commands.Context, *, channel: Optional[discord.TextChannel] = None) -> None:
-        """Set the channel for all events (sets all event_channels at once)."""
-        channel = channel or ctx.channel
-        if not isinstance(channel, discord.TextChannel):
-            await ctx.send("❌ That's not a valid text channel!")
+    @commands.Cog.listener()
+    async def on_message_delete(self, message: discord.Message) -> None:
+        """Log message deletion events."""
+        self.log.debug("Listener triggered: on_message_delete")
+        if not message.guild or not await self.should_log_event(message.guild, "message_delete"):
             return
-        events = await self.config.guild(ctx.guild).events()
-        async with self.config.guild(ctx.guild).event_channels() as event_channels:
-            for event in events:
-                event_channels[event] = channel.id
-        await ctx.send(f"✅ All events will now log to {channel.mention}")
-
-    @yalc.command(name="toggle")
-    async def yalc_toggle(self, ctx: commands.Context, *, event: Optional[str] = None) -> None:
-        """Toggle logging for a specific event."""
-        events = await self.config.guild(ctx.guild).events()
-        
-        if not event:
-            msg = "Available events:\n"
-            msg += "\n".join(f"`{k}`: {'✅' if v else '❌'}" for k, v in events.items())
-            await ctx.send(msg)
+        channel = await self.get_log_channel(message.guild, "message_delete")
+        self.log.debug(f"About to send to channel: {channel}")
+        if not channel:
             return
-            
-        if event not in events:
-            await ctx.send(f"❌ Unknown event. Available events: {', '.join(events.keys())}")
-            return
-
-        events[event] = not events[event]
-        await self.config.guild(ctx.guild).events.set(events)
-        status = "enabled" if events[event] else "disabled"
-        await ctx.send(f"✅ Logging for `{event}` is now {status}")
-
-    @yalc.command(name="resetdefault")
-    async def yalc_reset_default(self, ctx: commands.Context) -> None:
-        """Reset the default log channel."""
-        await self.config.guild(ctx.guild).log_channel.set(None)
-        await ctx.send("✅ Default log channel has been removed.")
-
-    @yalc.group(name="ignore")
-    async def yalc_ignore(self, ctx: commands.Context) -> None:
-        """Manage ignored users, channels, and categories."""
-        if ctx.invoked_subcommand is None:
-            await ctx.send_help()
-
-    @yalc_ignore.command(name="user")
-    async def yalc_ignore_user(self, ctx: commands.Context, user: discord.Member) -> None:
-        """Ignore a user from being logged."""
-        async with self.config.guild(ctx.guild).ignored_users() as ignored:
-            if user.id in ignored:
-                await ctx.send(f"❌ {user.mention} is already ignored")
-                return
-            ignored.append(user.id)
-        await ctx.send(f"✅ Now ignoring {user.mention}")
-
-    @yalc_ignore.command(name="channel")
-    async def yalc_ignore_channel(self, ctx: commands.Context, channel: discord.TextChannel) -> None:
-        """Ignore a channel from being logged."""
-        async with self.config.guild(ctx.guild).ignored_channels() as ignored:
-            if channel.id in ignored:
-                await ctx.send(f"❌ {channel.mention} is already ignored")
-                return
-            ignored.append(channel.id)
-        await ctx.send(f"✅ Now ignoring {channel.mention}")
-
-    @yalc_ignore.command(name="category")
-    async def yalc_ignore_category(self, ctx: commands.Context, category: discord.CategoryChannel) -> None:
-        """Ignore an entire category from being logged."""
-        async with self.config.guild(ctx.guild).ignored_categories() as ignored:
-            if category.id in ignored:
-                await ctx.send(f"❌ Category {category.name} is already ignored")
-                return
-            ignored.append(category.id)
-        await ctx.send(f"✅ Now ignoring category {category.name}")
-
-    @yalc.group(name="unignore")
-    async def yalc_unignore(self, ctx: commands.Context) -> None:
-        """Remove users, channels, or categories from ignore list."""
-        if ctx.invoked_subcommand is None:
-            await ctx.send_help()
-
-    @yalc_unignore.command(name="user")
-    async def yalc_unignore_user(self, ctx: commands.Context, user: discord.Member) -> None:
-        """Stop ignoring a user."""
-        async with self.config.guild(ctx.guild).ignored_users() as ignored:
-            if user.id not in ignored:
-                await ctx.send(f"❌ {user.mention} is not ignored")
-                return
-            ignored.remove(user.id)
-        await ctx.send(f"✅ No longer ignoring {user.mention}")
-
-    @yalc_unignore.command(name="channel")
-    async def yalc_unignore_channel(self, ctx: commands.Context, channel: discord.TextChannel) -> None:
-        """Stop ignoring a channel."""
-        async with self.config.guild(ctx.guild).ignored_channels() as ignored:
-            if channel.id not in ignored:
-                await ctx.send(f"❌ {channel.mention} is not ignored")
-                return
-            ignored.remove(channel.id)
-        await ctx.send(f"✅ No longer ignoring {channel.mention}")
-
-    @yalc_unignore.command(name="category")
-    async def yalc_unignore_category(self, ctx: commands.Context, category: discord.CategoryChannel) -> None:
-        """Stop ignoring a category."""
-        async with self.config.guild(ctx.guild).ignored_categories() as ignored:
-            if category.id not in ignored:
-                await ctx.send(f"❌ Category {category.name} is not ignored")
-                return
-            ignored.remove(category.id)
-        await ctx.send(f"✅ No longer ignoring category {category.name}")
-
-    @yalc.group(name="template")
-    async def yalc_template(self, ctx: commands.Context) -> None:
-        """Manage log message templates for events."""
-        if ctx.invoked_subcommand is None:
-            await ctx.send_help()
-
-    @yalc_template.command(name="set")
-    async def yalc_template_set(self, ctx: commands.Context, event: str, *, template: str) -> None:
-        """Set a custom log message template for an event.
-        
-        Use placeholders like {user}, {moderator}, {reason}.
-        """
-        events = await self.config.guild(ctx.guild).events()
-        if event not in events:
-            await ctx.send(f"❌ Invalid event type. Valid events: {', '.join(events.keys())}")
-            return
-        await self.config.guild(ctx.guild).set_raw(f"template_{event}", value=template)
-        await ctx.send(f"✅ Template for `{event}` set!")
-
-    @yalc_template.command(name="clear")
-    async def yalc_template_clear(self, ctx: commands.Context, event: str) -> None:
-        """Clear the custom template for an event (revert to default)."""
-        events = await self.config.guild(ctx.guild).events()
-        if event not in events:
-            await ctx.send(f"❌ Invalid event type. Valid events: {', '.join(events.keys())}")
-            return
-        await self.config.guild(ctx.guild).clear_raw(f"template_{event}")
-        await ctx.send(f"✅ Template for `{event}` cleared (using default).")
-
-    @yalc.group(name="filter")
-    async def yalc_filter(self, ctx: commands.Context) -> None:
-        """Manage event filters."""
-        if ctx.invoked_subcommand is None:
-            await ctx.send_help()
-
-    @yalc_filter.command(name="add")
-    async def yalc_filter_add(self, ctx: commands.Context, event: str, *, filter_str: str) -> None:
-        """Add a filter for an event.
-        
-        Filters can target specific users, roles, channels, or keywords.
-        """
-        events = await self.config.guild(ctx.guild).events()
-        if event not in events:
-            await ctx.send(f"❌ Invalid event type. Valid events: {', '.join(events.keys())}")
-            return
-        async with self.config.guild(ctx.guild).all() as settings:
-            filters = settings.get(f"filters_{event}", [])
-            if filter_str in filters:
-                await ctx.send("❌ This filter already exists.")
-                return
-            filters.append(filter_str)
-            settings[f"filters_{event}"] = filters
-        await ctx.send(f"✅ Filter added for `{event}`")
-
-    @yalc_filter.command(name="remove")
-    async def yalc_filter_remove(self, ctx: commands.Context, event: str, *, filter_str: str) -> None:
-        """Remove a filter from an event."""
-        events = await self.config.guild(ctx.guild).events()
-        if event not in events:
-            await ctx.send(f"❌ Invalid event type. Valid events: {', '.join(events.keys())}")
-            return
-        async with self.config.guild(ctx.guild).all() as settings:
-            filters = settings.get(f"filters_{event}", [])
-            if filter_str not in filters:
-                await ctx.send("❌ This filter does not exist.")
-                return
-            filters.remove(filter_str)
-            settings[f"filters_{event}"] = filters
-        await ctx.send(f"✅ Filter removed from `{event}`")
-
-    @yalc_filter.command(name="list")
-    async def yalc_filter_list(self, ctx: commands.Context, event: str) -> None:
-        """List all filters for an event."""
-        events = await self.config.guild(ctx.guild).events()
-        if event not in events:
-            await ctx.send(f"❌ Invalid event type. Valid events: {', '.join(events.keys())}")
-            return
-        filters = await self.config.guild(ctx.guild).get_raw(f"filters_{event}", default=[])
-        embed = discord.Embed(
-            title=f"Filters for {event}",
-            description="\n".join(filters) or "No filters set.",
-            color=discord.Color.blurple()
+        embed = self.create_embed(
+            "message_delete",
+            f"🗑️ Message deleted in {getattr(message.channel, 'mention', str(message.channel))}",
+            user=f"{message.author} ({message.author.id})",
+            content=message.content,
+            attachments=[a.url for a in message.attachments],
+            embeds=message.embeds
         )
-        self.set_embed_footer(embed)
-        await ctx.send(embed=embed)
+        await self.safe_send(channel, embed=embed)
 
-    @yalc.command(name="listevents")
-    async def yalc_listevents(self, ctx: commands.Context) -> None:
-        """List all available log event types."""
-        events = await self.config.guild(ctx.guild).events()
-        
-        # Group events by their current status
-        enabled_events = []
-        disabled_events = []
-        
-        for event_name, enabled in events.items():
-            emoji, description = self.event_descriptions.get(event_name, ("❔", "Unknown event type"))
-            line = f"{emoji} `{event_name}` - {description}"
-            if enabled:
-                enabled_events.append(line)
-            else:
-                disabled_events.append(line)
-        
-        embed = discord.Embed(
-            title="📝 Available Log Event Types",
-            color=discord.Color.blurple(),
-            description="Use `/yalc toggle <event>` to enable or disable events."
-        )
-        
-        if enabled_events:
-            embed.add_field(
-                name="✅ Enabled Events",
-                value="\n".join(enabled_events),
-                inline=False
-            )
-        
-        if disabled_events:
-            embed.add_field(
-                name="❌ Disabled Events",
-                value="\n".join(disabled_events),
-                inline=False
-            )
-        
-        self.set_embed_footer(embed)
-        await ctx.send(embed=embed)
-
-    # Removed slash command implementation as hybrid commands provide slash functionality
-
-    @yalc.command(name="setchannel")
-    async def yalc_set_event_channel(self, ctx: commands.Context, event: str, channel: discord.TextChannel) -> None:
-        """Set a specific channel for an event type."""
-        events = await self.config.guild(ctx.guild).events()
-        if event not in events:
-            await ctx.send(f"❌ Invalid event type. Valid events: {', '.join(events.keys())}")
+    @commands.Cog.listener()
+    async def on_message_edit(self, before: discord.Message, after: discord.Message) -> None:
+        """Log message edit events."""
+        self.log.debug("Listener triggered: on_message_edit")
+        if not before.guild or not await self.should_log_event(before.guild, "message_edit"):
             return
-        async with self.config.guild(ctx.guild).event_channels() as channels:
-            channels[event] = channel.id
-        await ctx.send(f"✅ Channel for `{event}` set to {channel.mention}")
-
-    @yalc.command(name="resetchannel")
-    async def yalc_reset_event_channel(self, ctx: commands.Context, event: str) -> None:
-        """Remove the event-specific channel override (event will not log unless set again)."""
-        events = await self.config.guild(ctx.guild).events()
-        if event not in events:
-            await ctx.send(f"❌ Invalid event type. Valid events: {', '.join(events.keys())}")
+        channel = await self.get_log_channel(before.guild, "message_edit")
+        self.log.debug(f"About to send to channel: {channel}")
+        if not channel:
             return
-        async with self.config.guild(ctx.guild).event_channels() as channels:
-            if event in channels:
-                del channels[event]
-        await ctx.send(f"✅ Channel for `{event}` unset. This event will not log until a channel is set.")
+        embed = self.create_embed(
+            "message_edit",
+            f"✏️ Message edited in {getattr(before.channel, 'mention', str(before.channel))}",
+            user=f"{before.author} ({before.author.id})",
+            content=f"**Before:** {before.content}\n**After:** {after.content}",
+            attachments=[a.url for a in after.attachments],
+            embeds=after.embeds
+        )
+        await self.safe_send(channel, embed=embed)
 
-    async def _handle_setup_reaction(
-        self,
-        ctx: commands.Context,
-        message: discord.Message,
-        emoji_options: Dict[str, str],
-        timeout: float = 30.0
-    ) -> Optional[str]:
-        """Handle reaction-based selection in setup wizard.
-        
-        Parameters
-        ----------
-        ctx: commands.Context
-            The command context
-        message: discord.Message
-            The message to add reactions to
-        emoji_options: Dict[str, str]
-            Mapping of emoji to their meanings
-        timeout: float
-            How long to wait for a reaction
-            
-        Returns
-        -------
-        Optional[str]
-            The selected option or None if timed out
-        """
-        for emoji in emoji_options.keys():
-            await message.add_reaction(emoji)
-            
-        try:
-            reaction, user = await self.bot.wait_for(
-                "reaction_add",
-                check=lambda r, u: (
-                    u == ctx.author and 
-                    str(r.emoji) in emoji_options and 
-                    r.message.id == message.id
-                ),
-                timeout=timeout
-            )
-            return str(reaction.emoji)
-        except asyncio.TimeoutError:
-            return None
-
-    @yalc.command(name="setup")
-    @commands.guild_only()
-    @commands.admin_or_permissions(manage_guild=True)
-    async def yalc_setup(self, ctx: commands.Context) -> None:
-        """Start an interactive setup wizard for YALC. Always uses category + multi-channel structure."""
-        if not ctx.guild:
-            await ctx.send("❌ This command can only be used in a server!")
+    @commands.Cog.listener()
+    async def on_member_join(self, member: discord.Member) -> None:
+        """Log member join events."""
+        self.log.debug("Listener triggered: on_member_join")
+        if not member.guild or not await self.should_log_event(member.guild, "member_join"):
             return
-
-        embed = discord.Embed(
-            title="📋 YALC Setup Wizard - Channel Organization",
-            description=(
-                "YALC will create a category and separate channels for different event types.\n\n"
-                "You can customize channel assignments later with `/yalc setchannel`."
-            ),
-            color=discord.Color.blue()
-        )
-        self.set_embed_footer(embed)
-        await ctx.send(embed=embed)
-
-        event_embed = discord.Embed(
-            title="🎯 Event Selection",
-            description=(
-                "Which events would you like to enable?\n\n"
-                "✨ - Enable all events\n"
-                "🎯 - Enable common events only (messages, members, moderation)\n"
-                "⚙️ - Let me choose specific events"
-            ),
-            color=discord.Color.blue()
-        )
-        self.set_embed_footer(event_embed)
-        event_msg = await ctx.send(embed=event_embed)
-        event_choice = await self._handle_setup_reaction(ctx, event_msg, {
-            "✨": "all",
-            "🎯": "common",
-            "⚙️": "custom"
-        })
-        if not event_choice:
-            await ctx.send("Setup timed out!")
+        channel = await self.get_log_channel(member.guild, "member_join")
+        self.log.debug(f"About to send to channel: {channel}")
+        if not channel:
             return
-
-        try:
-            self.log.debug("[setup] Always using 'categories' setup path.")
-            category = await ctx.guild.create_category(
-                name="📝 Server Logs",
-                reason="YALC Setup Wizard - Creating log channels"
-            )
-            channels = {
-                "messages": {
-                    "name": "logs-messages",
-                    "emoji": "💬",
-                    "events": ["message_delete", "message_edit"]
-                },
-                "members": {
-                    "name": "logs-members",
-                    "emoji": "👥",
-                    "events": ["member_join", "member_leave", "member_ban", "member_unban", "member_update", "member_kick"]
-                },
-                "channels": {
-                    "name": "logs-channels",
-                    "emoji": "📝",
-                    "events": ["channel_create", "channel_delete", "channel_update", "voice_update"]
-                },
-                "threads": {
-                    "name": "logs-threads",
-                    "emoji": "🧵",
-                    "events": ["thread_create", "thread_delete", "thread_update", "thread_member_join", "thread_member_leave"]
-                },
-                "roles": {
-                    "name": "logs-roles",
-                    "emoji": "🎭",
-                    "events": ["role_create", "role_delete", "role_update"]
-                },
-                "commands": {
-                    "name": "logs-commands",
-                    "emoji": "⌨️",
-                    "events": ["command_use", "command_error", "application_cmd"]
-                },
-                "server": {
-                    "name": "logs-server",
-                    "emoji": "⚙️",
-                    "events": ["emoji_update", "guild_update", "cog_load"]
-                }
-            }
-            channel_overrides = {}
-            channel_list = []
-            failed_channels = []
-            for group, info in channels.items():
-                channel_name = f"{info['emoji']}-{info['name']}"
-                self.log.debug(f"[setup] Creating channel: {channel_name} for group: {group}")
-                try:
-                    channel = await category.create_text_channel(
-                        channel_name,
-                        reason=f"YALC Setup - Channel for {group} events"
-                    )
-                    await channel.set_permissions(
-                        ctx.guild.default_role,
-                        read_messages=False
-                    )
-                    channel_list.append(f"{info['emoji']} {channel.mention}")
-                    for event in info["events"]:
-                        channel_overrides[event] = channel.id
-                    self.log.debug(f"[setup] Channel created: {channel_name} (ID: {channel.id})")
-                except discord.Forbidden:
-                    failed_channels.append(channel_name)
-                    self.log.error(f"[setup] Failed to create channel: {channel_name}")
-            async with self.config.guild(ctx.guild).all() as settings:
-                settings["event_channels"] = channel_overrides
-                self.log.debug(f"[setup] Saved event-to-channel mapping: {channel_overrides}")
-                settings["ignored_users"] = []
-                settings["ignored_channels"] = []
-                settings["ignored_categories"] = []
-                settings["ignored_commands"] = []
-                settings["ignored_cogs"] = []
-                for k in list(settings.keys()):
-                    if k.startswith("filters_") or k.startswith("template_"):
-                        del settings[k]
-                if event_choice == "all":
-                    for event in settings["events"]:
-                        settings["events"][event] = True
-                elif event_choice == "common":
-                    common_events = [
-                        "message_delete", "message_edit",
-                        "member_join", "member_leave",
-                        "member_ban", "member_unban",
-                        "member_kick", "channel_create",
-                        "channel_delete"
-                    ]
-                    for event in settings["events"]:
-                        settings["events"][event] = event in common_events
-            setup_embed = discord.Embed(
-                title="✅ YALC Setup Complete!",
-                description=(
-                    "I've created the following structure:\n\n"
-                    f"📁 **Server Logs** category with channels:\n"
-                    f"{chr(10).join(channel_list)}\n\n"
-                    f"🎯 Events enabled: {'All' if event_choice == 'all' else 'Common' if event_choice == 'common' else 'Custom'}\n\n"
-                    + (f"❌ Failed to create: {', '.join(failed_channels)}\n\n" if failed_channels else "")
-                    + "You can customize this further using `/yalc` commands!"
-                ),
-                color=discord.Color.green() if not failed_channels else discord.Color.red()
-            )
-            self.set_embed_footer(setup_embed)
-            await ctx.send(embed=setup_embed)
-            config_after = await self.config.guild(ctx.guild).all()
-            self.log.info(f"[setup] Config after setup for guild {ctx.guild.id}: {config_after}")
-        except discord.Forbidden:
-            error_embed = discord.Embed(
-                title="❌ Setup Failed",
-                description=(
-                    "I don't have permission to create channels or categories.\n"
-                    "Please make sure I have the `Manage Channels` permission and try again."
-                ),
-                color=discord.Color.red()
-            )
-            self.set_embed_footer(error_embed)
-            await ctx.send(embed=error_embed)
-
-    __version__ = "3.0.0"
-    
-    def set_embed_footer(self, embed: discord.Embed) -> None:
-        """Set consistent footer for YALC embeds.
-        
-        Parameters
-        ----------
-        embed: discord.Embed
-            The embed to set the footer on
-        """
-        embed.set_footer(
-            text=f"YALC v{self.__version__}",
-            icon_url="https://cdn-icons-png.flaticon.com/512/928/928797.png"
+        embed = self.create_embed(
+            "member_join",
+            f"👋 {member} has joined the server.",
+            user=f"{member} ({member.id})"
         )
+        await self.safe_send(channel, embed=embed)
 
-    async def check_manage_guild(self, ctx: Union[commands.Context, discord.Interaction]) -> bool:
-        """Check if user has manage guild permission.
-        
-        Parameters
-        ----------
-        ctx: Union[commands.Context, discord.Interaction]
-            The context or interaction to check permissions for
-            
-        Returns
-        -------
-        bool
-            True if user has permission, False otherwise
-        
-        Raises
-        ------
-        commands.CheckFailure
-            If the user lacks required permissions
-        """
-        if isinstance(ctx, discord.Interaction):
-            if not ctx.guild or not ctx.user:
-                return False
-            member = cast(discord.Member, ctx.user)
-            return member.guild_permissions.manage_guild
-        return ctx.author.guild_permissions.manage_guild
+    @commands.Cog.listener()
+    async def on_member_remove(self, member: discord.Member) -> None:
+        """Log member leave events."""
+        self.log.debug("Listener triggered: on_member_remove")
+        if not member.guild or not await self.should_log_event(member.guild, "member_leave"):
+            return
+        channel = await self.get_log_channel(member.guild, "member_leave")
+        self.log.debug(f"About to send to channel: {channel}")
+        if not channel:
+            return
+        embed = self.create_embed(
+            "member_leave",
+            f"👋 {member} has left the server.",
+            user=f"{member} ({member.id})"
+        )
+        await self.safe_send(channel, embed=embed)
 
-    async def safe_send(
-        self,
-        channel: discord.TextChannel,
-        content: Optional[str] = None,
-        *,
-        embed: Optional[discord.Embed] = None,
-        **kwargs
-    ) -> Optional[discord.Message]:
-        """Safely send a message to a channel with error handling.
-        
-        Parameters
-        ----------
-        channel: discord.TextChannel
-            The channel to send the message to
-        content: Optional[str]
-            The message content to send
-        embed: Optional[discord.Embed]
-            The embed to send
-        **kwargs
-            Additional kwargs to pass to send()
-            
-        Returns
-        -------
-        Optional[discord.Message]
-            The sent message if successful, None otherwise
-        """
-        try:
-            if embed:
-                kwargs['embed'] = embed
-            return await channel.send(content=content, **kwargs)
-        except (discord.Forbidden, discord.HTTPException):
-            return None
+    @commands.Cog.listener()
+    async def on_member_ban(self, guild: discord.Guild, user: discord.User) -> None:
+        """Log member ban events."""
+        self.log.debug("Listener triggered: on_member_ban")
+        if not guild or not await self.should_log_event(guild, "member_ban"):
+            return
+        channel = await self.get_log_channel(guild, "member_ban")
+        self.log.debug(f"About to send to channel: {channel}")
+        if not channel:
+            return
+        embed = self.create_embed(
+            "member_ban",
+            f"🔨 {user} has been banned.",
+            user=f"{user} ({user.id})"
+        )
+        await self.safe_send(channel, embed=embed)
 
-async def setup(bot: Red) -> None:
-        """Set up the YALC cog."""
-        cog = YALC(bot)
-        await bot.add_cog(cog)
-        await bot.add_cog(cog.listeners)
-        # Register hybrid slash group with the application command tree
-        bot.tree.add_command(cog.yalc)
-        # No need to call sync() on the group; Redbot handles hybrid command registration
+    @commands.Cog.listener()
+    async def on_member_unban(self, guild: discord.Guild, user: discord.User) -> None:
+        """Log member unban events."""
+        self.log.debug("Listener triggered: on_member_unban")
+        if not guild or not await self.should_log_event(guild, "member_unban"):
+            return
+        channel = await self.get_log_channel(guild, "member_unban")
+        self.log.debug(f"About to send to channel: {channel}")
+        if not channel:
+            return
+        embed = self.create_embed(
+            "member_unban",
+            f"🔓 {user} has been unbanned.",
+            user=f"{user} ({user.id})"
+        )
+        await self.safe_send(channel, embed=embed)
+
+    @commands.Cog.listener()
+    async def on_member_update(self, before: discord.Member, after: discord.Member) -> None:
+        """Log member update events."""
+        self.log.debug("Listener triggered: on_member_update")
+        if not before.guild or not await self.should_log_event(before.guild, "member_update"):
+            return
+        channel = await self.get_log_channel(before.guild, "member_update")
+        self.log.debug(f"About to send to channel: {channel}")
+        if not channel:
+            return
+        changes = []
+        if before.roles != after.roles:
+            changes.append("roles")
+        if before.nick != after.nick:
+            changes.append("nickname")
+        embed = self.create_embed(
+            "member_update",
+            f"👤 {after}'s information has been updated: {', '.join(changes)}",
+            user=f"{before} ({before.id})",
+            changes=", ".join(changes)
+        )
+        await self.safe_send(channel, embed=embed)
+
+    @commands.Cog.listener()
+    async def on_guild_channel_create(self, channel: discord.abc.GuildChannel) -> None:
+        self.log.debug("Listener triggered: on_guild_channel_create")
+        if not channel.guild or not await self.should_log_event(channel.guild, "channel_create", channel):
+            return
+        log_channel = await self.get_log_channel(channel.guild, "channel_create")
+        self.log.debug(f"About to send to channel: {log_channel}")
+        if not log_channel:
+            return
+        embed = self.create_embed(
+            "channel_create",
+            f"📝 Channel created: {getattr(channel, 'mention', str(channel))}",
+            name=channel.name,
+            id=channel.id,
+            type=type(channel).__name__
+        )
+        await self.safe_send(log_channel, embed=embed)
+
+    @commands.Cog.listener()
+    async def on_guild_channel_delete(self, channel: discord.abc.GuildChannel) -> None:
+        self.log.debug("Listener triggered: on_guild_channel_delete")
+        if not channel.guild or not await self.should_log_event(channel.guild, "channel_delete", channel):
+            return
+        log_channel = await self.get_log_channel(channel.guild, "channel_delete")
+        self.log.debug(f"About to send to channel: {log_channel}")
+        if not log_channel:
+            return
+        embed = self.create_embed(
+            "channel_delete",
+            f"🗑️ Channel deleted: {getattr(channel, 'mention', str(channel))}",
+            name=channel.name,
+            id=channel.id,
+            type=type(channel).__name__
+        )
+        await self.safe_send(log_channel, embed=embed)
+
+    @commands.Cog.listener()
+    async def on_guild_channel_update(self, before: discord.abc.GuildChannel, after: discord.abc.GuildChannel) -> None:
+        self.log.debug("Listener triggered: on_guild_channel_update")
+        if not before.guild or not await self.should_log_event(before.guild, "channel_update", after):
+            return
+        log_channel = await self.get_log_channel(before.guild, "channel_update")
+        self.log.debug(f"About to send to channel: {log_channel}")
+        if not log_channel:
+            return
+        changes = []
+        if hasattr(before, "name") and before.name != getattr(after, "name", None):
+            changes.append(f"Name: {before.name} → {after.name}")
+        if isinstance(before, discord.TextChannel) and isinstance(after, discord.TextChannel):
+            if before.topic != after.topic:
+                changes.append(f"Topic: {before.topic} → {after.topic}")
+            if before.nsfw != after.nsfw:
+                changes.append(f"NSFW: {before.nsfw} → {after.nsfw}")
+            if before.slowmode_delay != after.slowmode_delay:
+                changes.append(f"Slowmode: {before.slowmode_delay}s → {after.slowmode_delay}s")
+        if isinstance(before, discord.VoiceChannel) and isinstance(after, discord.VoiceChannel):
+            if before.bitrate != after.bitrate:
+                changes.append(f"Bitrate: {before.bitrate} → {after.bitrate}")
+            if before.user_limit != after.user_limit:
+                changes.append(f"User limit: {before.user_limit} → {after.user_limit}")
+        if not changes:
+            return
+        embed = self.create_embed(
+            "channel_update",
+            f"🔄 Channel updated: {getattr(after, 'mention', str(after))}",
+            changes="\n".join(changes)
+        )
+        await self.safe_send(log_channel, embed=embed)
+
+    @commands.Cog.listener()
+    async def on_thread_create(self, thread: discord.Thread) -> None:
+        self.log.debug("Listener triggered: on_thread_create")
+        if not thread.guild or not await self.should_log_event(thread.guild, "thread_create"):
+            return
+        log_channel = await self.get_log_channel(thread.guild, "thread_create")
+        self.log.debug(f"About to send to channel: {log_channel}")
+        if not log_channel:
+            return
+        embed = self.create_embed(
+            "thread_create",
+            f"🧵 Thread created in {getattr(thread.parent, 'mention', None)}",
+            thread=thread.mention,
+            name=thread.name,
+            creator=f"{thread.owner} ({thread.owner_id})" if thread.owner else f"ID: {thread.owner_id}",
+            type=str(thread.type),
+            slowmode=f"{thread.slowmode_delay}s" if thread.slowmode_delay else "None"
+        )
+        await self.safe_send(log_channel, embed=embed)
+
+    @commands.Cog.listener()
+    async def on_thread_delete(self, thread: discord.Thread) -> None:
+        self.log.debug("Listener triggered: on_thread_delete")
+        if not thread.guild or not await self.should_log_event(thread.guild, "thread_delete"):
+            return
+        log_channel = await self.get_log_channel(thread.guild, "thread_delete")
+        self.log.debug(f"About to send to channel: {log_channel}")
+        if not log_channel:
+            return
+        embed = self.create_embed(
+            "thread_delete",
+            f"🗑️ Thread deleted from {getattr(thread.parent, 'mention', None)}",
+            name=thread.name,
+            archived=thread.archived,
+            locked=thread.locked,
+            type=str(thread.type)
+        )
+        await self.safe_send(log_channel, embed=embed)
+
+    @commands.Cog.listener()
+    async def on_thread_update(self, before: discord.Thread, after: discord.Thread) -> None:
+        self.log.debug("Listener triggered: on_thread_update")
+        if not before.guild or not await self.should_log_event(before.guild, "thread_update"):
+            return
+        log_channel = await self.get_log_channel(before.guild, "thread_update")
+        self.log.debug(f"About to send to channel: {log_channel}")
+        if not log_channel:
+            return
+        changes = []
+        if before.name != after.name:
+            changes.append(f"Name: {before.name} → {after.name}")
+        if before.archived != after.archived:
+            changes.append(f"Archived: {before.archived} → {after.archived}")
+        if before.locked != after.locked:
+            changes.append(f"Locked: {before.locked} → {after.locked}")
+        if before.slowmode_delay != after.slowmode_delay:
+            changes.append(f"Slowmode: {before.slowmode_delay}s → {after.slowmode_delay}s")
+        if before.auto_archive_duration != after.auto_archive_duration:
+            changes.append(f"Auto Archive: {before.auto_archive_duration} minutes → {after.auto_archive_duration} minutes")
+        if not changes:
+            return
+        embed = self.create_embed(
+            "thread_update",
+            f"🔄 Thread updated in {getattr(after.parent, 'mention', None)}",
+            thread=after.mention,
+            changes="\n".join(changes)
+        )
+        await self.safe_send(log_channel, embed=embed)
+
+    @commands.Cog.listener()
+    async def on_thread_member_join(self, member: discord.ThreadMember) -> None:
+        self.log.debug("Listener triggered: on_thread_member_join")
+        if not await self.should_log_event(member.thread.guild, "thread_member_join"):
+            return
+        log_channel = await self.get_log_channel(member.thread.guild, "thread_member_join")
+        self.log.debug(f"About to send to channel: {log_channel}")
+        if not log_channel:
+            return
+        embed = self.create_embed(
+            "thread_member_join",
+            f"➡️ Member joined thread {member.thread.mention}",
+            member=f"{member} ({member.id})",
+            thread=member.thread.name
+        )
+        await self.safe_send(log_channel, embed=embed)
+
+    @commands.Cog.listener()
+    async def on_thread_member_remove(self, member: discord.ThreadMember) -> None:
+        self.log.debug("Listener triggered: on_thread_member_remove")
+        if not await self.should_log_event(member.thread.guild, "thread_member_leave"):
+            return
+        log_channel = await self.get_log_channel(member.thread.guild, "thread_member_leave")
+        self.log.debug(f"About to send to channel: {log_channel}")
+        if not log_channel:
+            return
+        embed = self.create_embed(
+            "thread_member_leave",
+            f"⬅️ Member left thread {member.thread.mention}",
+            member=f"{member} ({member.id})",
+            thread=member.thread.name
+        )
+        await self.safe_send(log_channel, embed=embed)
+
+    @commands.Cog.listener()
+    async def on_role_create(self, role: discord.Role) -> None:
+        self.log.debug("Listener triggered: on_role_create")
+        if not role.guild or not await self.should_log_event(role.guild, "role_create"):
+            return
+        channel = await self.get_log_channel(role.guild, "role_create")
+        self.log.debug(f"About to send to channel: {channel}")
+        if not channel:
+            return
+        embed = self.create_embed(
+            "role_create",
+            f"✨ Role created: {role.mention}",
+            name=role.name,
+            id=role.id
+        )
+        await self.safe_send(channel, embed=embed)
+
+    @commands.Cog.listener()
+    async def on_role_delete(self, role: discord.Role) -> None:
+        self.log.debug("Listener triggered: on_role_delete")
+        if not role.guild or not await self.should_log_event(role.guild, "role_delete"):
+            return
+        channel = await self.get_log_channel(role.guild, "role_delete")
+        self.log.debug(f"About to send to channel: {channel}")
+        if not channel:
+            return
+        embed = self.create_embed(
+            "role_delete",
+            f"🗑️ Role deleted: {role.name}",
+            name=role.name,
+            id=role.id
+        )
+        await self.safe_send(channel, embed=embed)
+
+    @commands.Cog.listener()
+    async def on_role_update(self, before: discord.Role, after: discord.Role) -> None:
+        self.log.debug("Listener triggered: on_role_update")
+        if not before.guild or not await self.should_log_event(before.guild, "role_update"):
+            return
+        channel = await self.get_log_channel(before.guild, "role_update")
+        self.log.debug(f"About to send to channel: {channel}")
+        if not channel:
+            return
+        changes = []
+        if before.name != after.name:
+            changes.append(f"Name: {before.name} → {after.name}")
+        if before.color != after.color:
+            changes.append(f"Color: {before.color} → {after.color}")
+        if before.permissions != after.permissions:
+            changes.append("Permissions changed")
+        if not changes:
+            return
+        embed = self.create_embed(
+            "role_update",
+            f"🔄 Role updated: {after.mention}",
+            changes="\n".join(changes)
+        )
+        await self.safe_send(channel, embed=embed)
+
+    @commands.Cog.listener()
+    async def on_guild_update(self, before: discord.Guild, after: discord.Guild) -> None:
+        self.log.debug("Listener triggered: on_guild_update")
+        if not await self.should_log_event(before, "guild_update"):
+            return
+        channel = await self.get_log_channel(before, "guild_update")
+        self.log.debug(f"About to send to channel: {channel}")
+        if not channel:
+            return
+        changes = []
+        if before.name != after.name:
+            changes.append(f"Name: {before.name} → {after.name}")
+        if before.icon != after.icon:
+            changes.append("Icon changed")
+        if before.owner_id != after.owner_id:
+            changes.append(f"Owner: {before.owner_id} → {after.owner_id}")
+        if not changes:
+            return
+        embed = self.create_embed(
+            "guild_update",
+            f"⚙️ Server updated",
+            changes="\n".join(changes)
+        )
+        await self.safe_send(channel, embed=embed)
+
+    @commands.Cog.listener()
+    async def on_guild_emojis_update(self, guild: discord.Guild, before, after) -> None:
+        self.log.debug("Listener triggered: on_guild_emojis_update")
+        if not await self.should_log_event(guild, "emoji_update"):
+            return
+        channel = await self.get_log_channel(guild, "emoji_update")
+        self.log.debug(f"About to send to channel: {channel}")
+        if not channel:
+            return
+        before_set = set(before)
+        after_set = set(after)
+        added = after_set - before_set
+        removed = before_set - after_set
+        changes = []
+        if added:
+            changes.append(f"Added: {', '.join(str(e) for e in added)}")
+        if removed:
+            changes.append(f"Removed: {', '.join(str(e) for e in removed)}")
+        if not changes:
+            return
+        embed = self.create_embed(
+            "emoji_update",
+            f"😀 Emoji updated",
+            changes="\n".join(changes)
+        )
+        await self.safe_send(channel, embed=embed)
+
+    @commands.Cog.listener()
+    async def on_voice_state_update(self, member: discord.Member, before: discord.VoiceState, after: discord.VoiceState) -> None:
+        self.log.debug("Listener triggered: on_voice_state_update")
+        if not member.guild or not await self.should_log_event(member.guild, "voice_update"):
+            return
+        channel = await self.get_log_channel(member.guild, "voice_update")
+        self.log.debug(f"About to send to channel: {channel}")
+        if not channel:
+            return
+        changes = []
+        if before.channel != after.channel:
+            changes.append(f"Channel: {getattr(before.channel, 'mention', None)} → {getattr(after.channel, 'mention', None)}")
+        if before.mute != after.mute:
+            changes.append(f"Muted: {before.mute} → {after.mute}")
+        if before.deaf != after.deaf:
+            changes.append(f"Deafened: {before.deaf} → {after.deaf}")
+        if before.self_mute != after.self_mute:
+            changes.append(f"Self-muted: {before.self_mute} → {after.self_mute}")
+        if before.self_deaf != after.self_deaf:
+            changes.append(f"Self-deafened: {before.self_deaf} → {after.self_deaf}")
+        if not changes:
+            return
+        embed = self.create_embed(
+            "voice_update",
+            f"🎤 Voice state updated for {member.mention}",
+            changes="\n".join(changes)
+        )
+        await self.safe_send(channel, embed=embed)
+
+    @commands.Cog.listener()
+    async def on_member_kick(self, guild: discord.Guild, user: discord.User) -> None:
+        self.log.debug("Listener triggered: on_member_kick")
+        if not guild or not await self.should_log_event(guild, "member_kick"):
+            return
+        channel = await self.get_log_channel(guild, "member_kick")
+        self.log.debug(f"About to send to channel: {channel}")
+        if not channel:
+            return
+        embed = self.create_embed(
+            "member_kick",
+            f"👢 {user} has been kicked.",
+            user=f"{user} ({user.id})"
+        )
+        await self.safe_send(channel, embed=embed)
+
+    @commands.Cog.listener()
+    async def on_command(self, ctx: commands.Context) -> None:
+        self.log.debug("Listener triggered: on_command")
+        if not ctx.guild or not await self.should_log_event(ctx.guild, "command_use"):
+            return
+        channel = await self.get_log_channel(ctx.guild, "command_use")
+        self.log.debug(f"About to send to channel: {channel}")
+        if not channel:
+            return
+        channel_name = getattr(ctx.channel, "name", str(ctx.channel) if ctx.channel else "Unknown")
+        embed = self.create_embed(
+            "command_use",
+            f"⌨️ Command used: `{ctx.command}`",
+            user=f"{ctx.author} ({ctx.author.id})",
+            channel=channel_name
+        )
+        await self.safe_send(channel, embed=embed)
+
+    @commands.Cog.listener()
+    async def on_command_error(self, ctx: commands.Context, error: Exception) -> None:
+        self.log.debug("Listener triggered: on_command_error")
+        if not ctx.guild or not await self.should_log_event(ctx.guild, "command_error"):
+            return
+        channel = await self.get_log_channel(ctx.guild, "command_error")
+        self.log.debug(f"About to send to channel: {channel}")
+        if not channel:
+            return
+        channel_name = getattr(ctx.channel, "name", str(ctx.channel) if ctx.channel else "Unknown")
+        embed = self.create_embed(
+            "command_error",
+            f"⚠️ Error in command `{ctx.command}`",
+            user=f"{ctx.author} ({ctx.author.id})",
+            error=str(error),
+            channel=channel_name
+        )
+        await self.safe_send(channel, embed=embed)
+
+    @commands.Cog.listener()
+    async def on_application_command(self, interaction: discord.Interaction) -> None:
+        self.log.debug("Listener triggered: on_application_command")
+        if not interaction.guild or not await self.should_log_event(interaction.guild, "application_cmd"):
+            return
+        channel = await self.get_log_channel(interaction.guild, "application_cmd")
+        self.log.debug(f"About to send to channel: {channel}")
+        if not channel:
+            return
+        channel_name = getattr(interaction.channel, "name", str(interaction.channel) if interaction.channel else "Unknown")
+        embed = self.create_embed(
+            "application_cmd",
+            f"🔷 Slash command used: `{interaction.command}`",
+            user=f"{interaction.user} ({interaction.user.id})",
+            channel=channel_name
+        )
+        await self.safe_send(channel, embed=embed)
+
+    @commands.Cog.listener()
+    async def on_thread_create(self, thread: discord.Thread) -> None:
+        self.log.debug("Listener triggered: on_thread_create")
+        if not thread.guild or not await self.should_log_event(thread.guild, "thread_create"):
+            return
+        channel = await self.get_log_channel(thread.guild, "thread_create")
+        self.log.debug(f"About to send to channel: {channel}")
+        if not channel:
+            return
+        embed = self.create_embed(
+            "thread_create",
+            f"🧵 Thread created in {getattr(thread.parent, 'mention', None)}",
+            thread=thread.mention,
+            name=thread.name,
+            creator=f"{thread.owner} ({thread.owner_id})" if thread.owner else f"ID: {thread.owner_id}",
+            type=str(thread.type),
+            slowmode=f"{thread.slowmode_delay}s" if thread.slowmode_delay else "None"
+        )
+        await self.safe_send(channel, embed=embed)
+
+    @commands.Cog.listener()
+    async def on_thread_delete(self, thread: discord.Thread) -> None:
+        self.log.debug("Listener triggered: on_thread_delete")
+        if not thread.guild or not await self.should_log_event(thread.guild, "thread_delete"):
+            return
+        channel = await self.get_log_channel(thread.guild, "thread_delete")
+        self.log.debug(f"About to send to channel: {channel}")
+        if not channel:
+            return
+        embed = self.create_embed(
+            "thread_delete",
+            f"🗑️ Thread deleted from {getattr(thread.parent, 'mention', None)}",
+            name=thread.name,
+            archived=thread.archived,
+            locked=thread.locked,
+            type=str(thread.type)
+        )
+        await self.safe_send(channel, embed=embed)
+
+    @commands.Cog.listener()
+    async def on_thread_update(self, before: discord.Thread, after: discord.Thread) -> None:
+        self.log.debug("Listener triggered: on_thread_update")
+        if not before.guild or not await self.should_log_event(before.guild, "thread_update"):
+            return
+        channel = await self.get_log_channel(before.guild, "thread_update")
+        self.log.debug(f"About to send to channel: {channel}")
+        if not channel:
+            return
+        changes = []
+        if before.name != after.name:
+            changes.append(f"Name: {before.name} → {after.name}")
+        if before.archived != after.archived:
+            changes.append(f"Archived: {before.archived} → {after.archived}")
+        if before.locked != after.locked:
+            changes.append(f"Locked: {before.locked} → {after.locked}")
+        if before.slowmode_delay != after.slowmode_delay:
+            changes.append(f"Slowmode: {before.slowmode_delay}s → {after.slowmode_delay}s")
+        if before.auto_archive_duration != after.auto_archive_duration:
+            changes.append(f"Auto Archive: {before.auto_archive_duration} minutes → {after.auto_archive_duration} minutes")
+        if not changes:
+            return
+        embed = self.create_embed(
+            "thread_update",
+            f"🔄 Thread updated in {getattr(after.parent, 'mention', None)}",
+            thread=after.mention,
+            changes="\n".join(changes)
+        )
+        await self.safe_send(channel, embed=embed)
+
+    @commands.Cog.listener()
+    async def on_thread_member_join(self, member: discord.ThreadMember) -> None:
+        self.log.debug("Listener triggered: on_thread_member_join")
+        if not await self.should_log_event(member.thread.guild, "thread_member_join"):
+            return
+        log_channel = await self.get_log_channel(member.thread.guild, "thread_member_join")
+        self.log.debug(f"About to send to channel: {log_channel}")
+        if not log_channel:
+            return
+        embed = self.create_embed(
+            "thread_member_join",
+            f"➡️ Member joined thread {member.thread.mention}",
+            member=f"{member} ({member.id})",
+            thread=member.thread.name
+        )
+        await self.safe_send(log_channel, embed=embed)
+
+    @commands.Cog.listener()
+    async def on_thread_member_remove(self, member: discord.ThreadMember) -> None:
+        self.log.debug("Listener triggered: on_thread_member_remove")
+        if not await self.should_log_event(member.thread.guild, "thread_member_leave"):
+            return
+        log_channel = await self.get_log_channel(member.thread.guild, "thread_member_leave")
+        self.log.debug(f"About to send to channel: {log_channel}")
+        if not log_channel:
+            return
+        embed = self.create_embed(
+            "thread_member_leave",
+            f"⬅️ Member left thread {member.thread.mention}",
+            member=f"{member} ({member.id})",
+            thread=member.thread.name
+        )
+        await self.safe_send(log_channel, embed=embed)
+
+    @commands.Cog.listener()
+    async def on_role_create(self, role: discord.Role) -> None:
+        self.log.debug("Listener triggered: on_role_create")
+        if not role.guild or not await self.should_log_event(role.guild, "role_create"):
+            return
+        channel = await self.get_log_channel(role.guild, "role_create")
+        self.log.debug(f"About to send to channel: {channel}")
+        if not channel:
+            return
+        embed = self.create_embed(
+            "role_create",
+            f"✨ Role created: {role.mention}",
+            name=role.name,
+            id=role.id
+        )
+        await self.safe_send(channel, embed=embed)
+
+    @commands.Cog.listener()
+    async def on_role_delete(self, role: discord.Role) -> None:
+        self.log.debug("Listener triggered: on_role_delete")
+        if not role.guild or not await self.should_log_event(role.guild, "role_delete"):
+            return
+        channel = await self.get_log_channel(role.guild, "role_delete")
+        self.log.debug(f"About to send to channel: {channel}")
+        if not channel:
+            return
+        embed = self.create_embed(
+            "role_delete",
+            f"🗑️ Role deleted: {role.name}",
+            name=role.name,
+            id=role.id
+        )
+        await self.safe_send(channel, embed=embed)
+
+    @commands.Cog.listener()
+    async def on_role_update(self, before: discord.Role, after: discord.Role) -> None:
+        self.log.debug("Listener triggered: on_role_update")
+        if not before.guild or not await self.should_log_event(before.guild, "role_update"):
+            return
+        channel = await self.get_log_channel(before.guild, "role_update")
+        self.log.debug(f"About to send to channel: {channel}")
+        if not channel:
+            return
+        changes = []
+        if before.name != after.name:
+            changes.append(f"Name: {before.name} → {after.name}")
+        if before.color != after.color:
+            changes.append(f"Color: {before.color} → {after.color}")
+        if before.permissions != after.permissions:
+            changes.append("Permissions changed")
+        if not changes:
+            return
+        embed = self.create_embed(
+            "role_update",
+            f"🔄 Role updated: {after.mention}",
+            changes="\n".join(changes)
+        )
+        await self.safe_send(channel, embed=embed)
+
+    @commands.Cog.listener()
+    async def on_guild_update(self, before: discord.Guild, after: discord.Guild) -> None:
+        self.log.debug("Listener triggered: on_guild_update")
+        if not await self.should_log_event(before, "guild_update"):
+            return
+        channel = await self.get_log_channel(before, "guild_update")
+        self.log.debug(f"About to send to channel: {channel}")
+        if not channel:
+            return
+        changes = []
+        if before.name != after.name:
+            changes.append(f"Name: {before.name} → {after.name}")
+        if before.icon != after.icon:
+            changes.append("Icon changed")
+        if before.owner_id != after.owner_id:
+            changes.append(f"Owner: {before.owner_id} → {after.owner_id}")
+        if not changes:
+            return
+        embed = self.create_embed(
+            "guild_update",
+            f"⚙️ Server updated",
+            changes="\n".join(changes)
+        )
+        await self.safe_send(channel, embed=embed)
+
+    @commands.Cog.listener()
+    async def on_guild_emojis_update(self, guild: discord.Guild, before, after) -> None:
+        self.log.debug("Listener triggered: on_guild_emojis_update")
+        if not await self.should_log_event(guild, "emoji_update"):
+            return
+        channel = await self.get_log_channel(guild, "emoji_update")
+        self.log.debug(f"About to send to channel: {channel}")
+        if not channel:
+            return
+        before_set = set(before)
+        after_set = set(after)
+        added = after_set - before_set
+        removed = before_set - after_set
+        changes = []
+        if added:
+            changes.append(f"Added: {', '.join(str(e) for e in added)}")
+        if removed:
+            changes.append(f"Removed: {', '.join(str(e) for e in removed)}")
+        if not changes:
+            return
+        embed = self.create_embed(
+            "emoji_update",
+            f"😀 Emoji updated",
+            changes="\n".join(changes)
+        )
+        await self.safe_send(channel, embed=embed)
+
+    @commands.Cog.listener()
+    async def on_voice_state_update(self, member: discord.Member, before: discord.VoiceState, after: discord.VoiceState) -> None:
+        self.log.debug("Listener triggered: on_voice_state_update")
+        if not member.guild or not await self.should_log_event(member.guild, "voice_update"):
+            return
+        channel = await self.get_log_channel(member.guild, "voice_update")
+        self.log.debug(f"About to send to channel: {channel}")
+        if not channel:
+            return
+        changes = []
+        if before.channel != after.channel:
+            changes.append(f"Channel: {getattr(before.channel, 'mention', None)} → {getattr(after.channel, 'mention', None)}")
+        if before.mute != after.mute:
+            changes.append(f"Muted: {before.mute} → {after.mute}")
+        if before.deaf != after.deaf:
+            changes.append(f"Deafened: {before.deaf} → {after.deaf}")
+        if before.self_mute != after.self_mute:
+            changes.append(f"Self-muted: {before.self_mute} → {after.self_mute}")
+        if before.self_deaf != after.self_deaf:
+            changes.append(f"Self-deafened: {before.self_deaf} → {after.self_deaf}")
+        if not changes:
+            return
+        embed = self.create_embed(
+            "voice_update",
+            f"🎤 Voice state updated for {member.mention}",
+            changes="\n".join(changes)
+        )
+        await self.safe_send(channel, embed=embed)
