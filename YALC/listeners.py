@@ -1,7 +1,7 @@
 """YALC listeners module - Contains all event listeners for logging."""
 import discord
 from discord import app_commands
-from redbot.core import commands
+from redbot.core import commands, modlog
 from typing import Dict, List, Optional, Union, cast, TYPE_CHECKING
 import datetime
 import asyncio
@@ -20,6 +20,21 @@ class Listeners(commands.Cog):
         self._cached_deletes: Dict[int, discord.Message] = {}
         self._cached_edits: Dict[int, discord.Message] = {}
         
+    async def _safe_send(self, channel: Optional[discord.abc.GuildChannel], embed: discord.Embed, guild: discord.Guild, event_type: str) -> None:
+        """Safely send an embed to a channel with validation and logging."""
+        if not isinstance(channel, discord.TextChannel):
+            self.cog.log.warning(f"[YALC] Channel for event '{event_type}' is not a TextChannel: {channel}")
+            return
+        perms = channel.permissions_for(guild.me)
+        if not (perms.send_messages and perms.embed_links):
+            self.cog.log.warning(f"[YALC] Missing permissions in channel {channel.id} for event '{event_type}' (send_messages: {perms.send_messages}, embed_links: {perms.embed_links})")
+            return
+        try:
+            await channel.send(embed=embed)
+            self.cog.log.debug(f"[YALC] Sent embed to channel {channel.id} for event '{event_type}'")
+        except Exception as e:
+            self.cog.log.error(f"[YALC] Failed to send embed to channel {channel.id} for event '{event_type}': {e}")
+
     @commands.Cog.listener()
     async def on_message_delete(self, message: discord.Message) -> None:
         """Handle message deletion events."""
@@ -27,8 +42,7 @@ class Listeners(commands.Cog):
             return
 
         channel = await self.cog.get_log_channel(message.guild, "message_delete")
-        if not channel:
-            return
+        self.cog.log.debug(f"[YALC] Resolved channel for message_delete: {channel}")
 
         embed = self.cog.create_embed(
             "message_delete",
@@ -39,7 +53,23 @@ class Listeners(commands.Cog):
             embeds=message.embeds
         )
 
-        await self.cog.safe_send(channel, embed=embed)
+        await self._safe_send(channel, embed, message.guild, "message_delete")
+        try:
+            await modlog.create_case(
+                guild=message.guild,
+                case_type="message_delete",
+                user=message.author,
+                moderator=None,
+                reason=None,
+                until=None,
+                extra={
+                    "content": message.content,
+                    "attachments": [a.url for a in message.attachments],
+                    "embeds": message.embeds
+                }
+            )
+        except Exception as e:
+            self.cog.log.error(f"Failed to create modlog case for message_delete: {e}")
 
     @commands.Cog.listener()
     async def on_message_edit(self, before: discord.Message, after: discord.Message) -> None:
@@ -60,37 +90,33 @@ class Listeners(commands.Cog):
             embeds=after.embeds
         )
 
-        await self.cog.safe_send(channel, embed=embed)
+        await self._safe_send(channel, embed, before.guild, "message_edit")
+        try:
+            await modlog.create_case(
+                guild=before.guild,
+                case_type="message_edit",
+                user=before.author,
+                moderator=None,
+                reason=None,
+                until=None,
+                extra={
+                    "before": before.content,
+                    "after": after.content,
+                    "attachments": [a.url for a in after.attachments],
+                    "embeds": after.embeds
+                }
+            )
+        except Exception as e:
+            self.cog.log.error(f"Failed to create modlog case for message_edit: {e}")
 
-    def _get_channel_str(self, channel: Optional[Union[discord.abc.GuildChannel, discord.abc.PrivateChannel, discord.Thread, discord.ForumChannel]]) -> str:
-        """Get a string representation of a channel.
-        
-        Parameters
-        ----------
-        channel: Optional[Union[discord.abc.GuildChannel, discord.abc.PrivateChannel, discord.Thread, discord.ForumChannel]]
-            The channel to get a string for
-            
-        Returns
-        -------
-        str
-            A string representation of the channel
-        """
+    def _get_channel_str(self, channel: object) -> str:
+        """Get a string representation of any channel or messageable object."""
         if channel is None:
             return "Unknown Channel"
-            
-        # Handle guild channels with mentions
-        if isinstance(channel, (discord.TextChannel, discord.VoiceChannel, discord.Thread)):
-            return channel.mention
-            
-        # Handle forum channels
-        if isinstance(channel, discord.ForumChannel):
-            return f"#{channel.name}"
-            
-        # Handle private channels and others
-        if isinstance(channel, discord.abc.PrivateChannel):
-            return "DM Channel"
-            
-        # Fallback for any other types
+        if hasattr(channel, "mention"):
+            return str(getattr(channel, "mention", str(channel)))
+        if hasattr(channel, "name"):
+            return f"#{getattr(channel, 'name', str(channel))}"
         return str(channel)
 
     async def _should_log_event(self, guild: discord.Guild, event_type: str, channel: Optional[discord.abc.GuildChannel] = None) -> bool:
@@ -156,7 +182,19 @@ class Listeners(commands.Cog):
             command=f"`{cmd_str}`"
         )
 
-        await self.cog.safe_send(channel, embed=embed)
+        await self._safe_send(channel, embed, interaction.guild, "application_cmd")
+        try:
+            await modlog.create_case(
+                guild=interaction.guild,
+                case_type="application_cmd",
+                user=interaction.user,
+                moderator=None,
+                reason=None,
+                until=None,
+                extra={"command": cmd_str}
+            )
+        except Exception as e:
+            self.cog.log.error(f"Failed to create modlog case for application_cmd: {e}")
 
     @commands.Cog.listener()
     async def on_application_command_error(self, interaction: discord.Interaction, error: app_commands.AppCommandError) -> None:
@@ -184,7 +222,22 @@ class Listeners(commands.Cog):
             error_type=error.__class__.__name__
         )
 
-        await self.cog.safe_send(channel, embed=embed)
+        await self._safe_send(channel, embed, interaction.guild, "command_error")
+        try:
+            await modlog.create_case(
+                guild=interaction.guild,
+                case_type="command_error",
+                user=interaction.user,
+                moderator=None,
+                reason=str(error),
+                until=None,
+                extra={
+                    "command": cmd_str,
+                    "error_type": error.__class__.__name__
+                }
+            )
+        except Exception as e:
+            self.cog.log.error(f"Failed to create modlog case for command_error: {e}")
 
     @commands.Cog.listener()
     async def on_thread_create(self, thread: discord.Thread) -> None:
@@ -206,7 +259,22 @@ class Listeners(commands.Cog):
             slowmode=f"{thread.slowmode_delay}s" if thread.slowmode_delay else "None"
         )
 
-        await self.cog.safe_send(channel, embed=embed)
+        await self._safe_send(channel, embed, thread.guild, "thread_create")
+        try:
+            await modlog.create_case(
+                guild=thread.guild,
+                case_type="thread_create",
+                user=thread.owner,
+                moderator=None,
+                reason=None,
+                until=None,
+                extra={
+                    "thread": thread.name,
+                    "type": str(thread.type)
+                }
+            )
+        except Exception as e:
+            self.cog.log.error(f"Failed to create modlog case for thread_create: {e}")
 
     @commands.Cog.listener()
     async def on_thread_delete(self, thread: discord.Thread) -> None:
@@ -227,7 +295,24 @@ class Listeners(commands.Cog):
             type=str(thread.type)
         )
 
-        await self.cog.safe_send(channel, embed=embed)
+        await self._safe_send(channel, embed, thread.guild, "thread_delete")
+        try:
+            await modlog.create_case(
+                guild=thread.guild,
+                case_type="thread_delete",
+                user=None,
+                moderator=None,
+                reason=None,
+                until=None,
+                extra={
+                    "thread": thread.name,
+                    "archived": thread.archived,
+                    "locked": thread.locked,
+                    "type": str(thread.type)
+                }
+            )
+        except Exception as e:
+            self.cog.log.error(f"Failed to create modlog case for thread_delete: {e}")
 
     @commands.Cog.listener()
     async def on_thread_update(self, before: discord.Thread, after: discord.Thread) -> None:
@@ -262,7 +347,19 @@ class Listeners(commands.Cog):
             changes="\n".join(changes)
         )
 
-        await self.cog.safe_send(channel, embed=embed)
+        await self._safe_send(channel, embed, before.guild, "thread_update")
+        try:
+            await modlog.create_case(
+                guild=before.guild,
+                case_type="thread_update",
+                user=None,
+                moderator=None,
+                reason=None,
+                until=None,
+                extra={"changes": changes, "thread": after.name}
+            )
+        except Exception as e:
+            self.cog.log.error(f"Failed to create modlog case for thread_update: {e}")
 
     @commands.Cog.listener()
     async def on_thread_member_join(self, member: discord.ThreadMember) -> None:
@@ -281,7 +378,19 @@ class Listeners(commands.Cog):
             thread=member.thread.name
         )
 
-        await self.cog.safe_send(channel, embed=embed)
+        await self._safe_send(channel, embed, member.thread.guild, "thread_member_join")
+        try:
+            await modlog.create_case(
+                guild=member.thread.guild,
+                case_type="thread_member_join",
+                user=member,
+                moderator=None,
+                reason=None,
+                until=None,
+                extra={"thread": member.thread.name}
+            )
+        except Exception as e:
+            self.cog.log.error(f"Failed to create modlog case for thread_member_join: {e}")
 
     @commands.Cog.listener()
     async def on_thread_member_remove(self, member: discord.ThreadMember) -> None:
@@ -300,7 +409,19 @@ class Listeners(commands.Cog):
             thread=member.thread.name
         )
 
-        await self.cog.safe_send(channel, embed=embed)
+        await self._safe_send(channel, embed, member.thread.guild, "thread_member_leave")
+        try:
+            await modlog.create_case(
+                guild=member.thread.guild,
+                case_type="thread_member_leave",
+                user=member,
+                moderator=None,
+                reason=None,
+                until=None,
+                extra={"thread": member.thread.name}
+            )
+        except Exception as e:
+            self.cog.log.error(f"Failed to create modlog case for thread_member_leave: {e}")
 
     @commands.Cog.listener()
     async def on_guild_channel_create(self, channel: discord.abc.GuildChannel) -> None:
@@ -317,7 +438,23 @@ class Listeners(commands.Cog):
             id=channel.id,
             type=type(channel).__name__
         )
-        await self.cog.safe_send(log_channel, embed=embed)
+        await self._safe_send(log_channel, embed, channel.guild, "channel_create")
+        try:
+            await modlog.create_case(
+                guild=channel.guild,
+                case_type="channel_create",
+                user=None,
+                moderator=None,
+                reason=None,
+                until=None,
+                extra={
+                    "name": channel.name,
+                    "id": channel.id,
+                    "type": type(channel).__name__
+                }
+            )
+        except Exception as e:
+            self.cog.log.error(f"Failed to create modlog case for channel_create: {e}")
 
     @commands.Cog.listener()
     async def on_guild_channel_delete(self, channel: discord.abc.GuildChannel) -> None:
@@ -334,7 +471,23 @@ class Listeners(commands.Cog):
             id=channel.id,
             type=type(channel).__name__
         )
-        await self.cog.safe_send(log_channel, embed=embed)
+        await self._safe_send(log_channel, embed, channel.guild, "channel_delete")
+        try:
+            await modlog.create_case(
+                guild=channel.guild,
+                case_type="channel_delete",
+                user=None,
+                moderator=None,
+                reason=None,
+                until=None,
+                extra={
+                    "name": channel.name,
+                    "id": channel.id,
+                    "type": type(channel).__name__
+                }
+            )
+        except Exception as e:
+            self.cog.log.error(f"Failed to create modlog case for channel_delete: {e}")
 
     @commands.Cog.listener()
     async def on_guild_channel_update(self, before: discord.abc.GuildChannel, after: discord.abc.GuildChannel) -> None:
@@ -367,7 +520,19 @@ class Listeners(commands.Cog):
             f"🔄 Channel updated: {self._get_channel_str(after)}",
             changes="\n".join(changes)
         )
-        await self.cog.safe_send(log_channel, embed=embed)
+        await self._safe_send(log_channel, embed, before.guild, "channel_update")
+        try:
+            await modlog.create_case(
+                guild=before.guild,
+                case_type="channel_update",
+                user=None,
+                moderator=None,
+                reason=None,
+                until=None,
+                extra={"changes": changes}
+            )
+        except Exception as e:
+            self.cog.log.error(f"Failed to create modlog case for channel_update: {e}")
 
     @commands.Cog.listener()
     async def on_member_join(self, member: discord.Member) -> None:
@@ -382,7 +547,19 @@ class Listeners(commands.Cog):
             f"👋 Member joined: {member.mention}",
             user=f"{member} ({member.id})"
         )
-        await self.cog.safe_send(log_channel, embed=embed)
+        await self._safe_send(log_channel, embed, member.guild, "member_join")
+        try:
+            await modlog.create_case(
+                guild=member.guild,
+                case_type="member_join",
+                user=member,
+                moderator=None,
+                reason=None,
+                until=None,
+                extra=None
+            )
+        except Exception as e:
+            self.cog.log.error(f"Failed to create modlog case for member_join: {e}")
 
     @commands.Cog.listener()
     async def on_member_remove(self, member: discord.Member) -> None:
@@ -397,7 +574,19 @@ class Listeners(commands.Cog):
             f"👋 Member left: {member.mention}",
             user=f"{member} ({member.id})"
         )
-        await self.cog.safe_send(log_channel, embed=embed)
+        await self._safe_send(log_channel, embed, member.guild, "member_leave")
+        try:
+            await modlog.create_case(
+                guild=member.guild,
+                case_type="member_leave",
+                user=member,
+                moderator=None,
+                reason=None,
+                until=None,
+                extra=None
+            )
+        except Exception as e:
+            self.cog.log.error(f"Failed to create modlog case for member_leave: {e}")
 
     @commands.Cog.listener()
     async def on_member_update(self, before: discord.Member, after: discord.Member) -> None:
@@ -427,7 +616,19 @@ class Listeners(commands.Cog):
             user=f"{after} ({after.id})",
             changes="\n".join(changes)
         )
-        await self.cog.safe_send(log_channel, embed=embed)
+        await self._safe_send(log_channel, embed, after.guild, "member_update")
+        try:
+            await modlog.create_case(
+                guild=before.guild,
+                case_type="member_update",
+                user=after,
+                moderator=None,
+                reason=None,
+                until=None,
+                extra={"changes": changes}
+            )
+        except Exception as e:
+            self.cog.log.error(f"Failed to create modlog case for member_update: {e}")
 
     @commands.Cog.listener()
     async def on_member_ban(self, guild: discord.Guild, user: discord.User) -> None:
@@ -442,7 +643,19 @@ class Listeners(commands.Cog):
             f"🔨 Member banned: {user.mention if hasattr(user, 'mention') else user}",
             user=f"{user} ({user.id})"
         )
-        await self.cog.safe_send(log_channel, embed=embed)
+        await self._safe_send(log_channel, embed, guild, "member_ban")
+        try:
+            await modlog.create_case(
+                guild=guild,
+                case_type="member_ban",
+                user=user,
+                moderator=None,
+                reason=None,
+                until=None,
+                extra=None
+            )
+        except Exception as e:
+            self.cog.log.error(f"Failed to create modlog case for member_ban: {e}")
 
     @commands.Cog.listener()
     async def on_member_unban(self, guild: discord.Guild, user: discord.User) -> None:
@@ -457,7 +670,19 @@ class Listeners(commands.Cog):
             f"🔓 Member unbanned: {user.mention if hasattr(user, 'mention') else user}",
             user=f"{user} ({user.id})"
         )
-        await self.cog.safe_send(log_channel, embed=embed)
+        await self._safe_send(log_channel, embed, guild, "member_unban")
+        try:
+            await modlog.create_case(
+                guild=guild,
+                case_type="member_unban",
+                user=user,
+                moderator=None,
+                reason=None,
+                until=None,
+                extra=None
+            )
+        except Exception as e:
+            self.cog.log.error(f"Failed to create modlog case for member_unban: {e}")
 
     @commands.Cog.listener()
     async def on_guild_role_create(self, role: discord.Role) -> None:
@@ -473,7 +698,19 @@ class Listeners(commands.Cog):
             name=role.name,
             id=role.id
         )
-        await self.cog.safe_send(log_channel, embed=embed)
+        await self._safe_send(log_channel, embed, role.guild, "role_create")
+        try:
+            await modlog.create_case(
+                guild=role.guild,
+                case_type="role_create",
+                user=None,
+                moderator=None,
+                reason=None,
+                until=None,
+                extra={"name": role.name, "id": role.id}
+            )
+        except Exception as e:
+            self.cog.log.error(f"Failed to create modlog case for role_create: {e}")
 
     @commands.Cog.listener()
     async def on_guild_role_delete(self, role: discord.Role) -> None:
@@ -489,7 +726,19 @@ class Listeners(commands.Cog):
             name=role.name,
             id=role.id
         )
-        await self.cog.safe_send(log_channel, embed=embed)
+        await self._safe_send(log_channel, embed, role.guild, "role_delete")
+        try:
+            await modlog.create_case(
+                guild=role.guild,
+                case_type="role_delete",
+                user=None,
+                moderator=None,
+                reason=None,
+                until=None,
+                extra={"name": role.name, "id": role.id}
+            )
+        except Exception as e:
+            self.cog.log.error(f"Failed to create modlog case for role_delete: {e}")
 
     @commands.Cog.listener()
     async def on_guild_role_update(self, before: discord.Role, after: discord.Role) -> None:
@@ -513,7 +762,19 @@ class Listeners(commands.Cog):
             f"🔄 Role updated: {after.mention}",
             changes="\n".join(changes)
         )
-        await self.cog.safe_send(log_channel, embed=embed)
+        await self._safe_send(log_channel, embed, before.guild, "role_update")
+        try:
+            await modlog.create_case(
+                guild=before.guild,
+                case_type="role_update",
+                user=None,
+                moderator=None,
+                reason=None,
+                until=None,
+                extra={"changes": changes, "role": after.name}
+            )
+        except Exception as e:
+            self.cog.log.error(f"Failed to create modlog case for role_update: {e}")
 
     @commands.Cog.listener()
     async def on_guild_emojis_update(self, guild: discord.Guild, before, after) -> None:
@@ -539,7 +800,19 @@ class Listeners(commands.Cog):
             f"😀 Emoji updated",
             changes="\n".join(changes)
         )
-        await self.cog.safe_send(log_channel, embed=embed)
+        await self._safe_send(log_channel, embed, guild, "emoji_update")
+        try:
+            await modlog.create_case(
+                guild=guild,
+                case_type="emoji_update",
+                user=None,
+                moderator=None,
+                reason=None,
+                until=None,
+                extra={"changes": changes}
+            )
+        except Exception as e:
+            self.cog.log.error(f"Failed to create modlog case for emoji_update: {e}")
 
     @commands.Cog.listener()
     async def on_guild_update(self, before: discord.Guild, after: discord.Guild) -> None:
@@ -563,7 +836,19 @@ class Listeners(commands.Cog):
             f"⚙️ Server updated",
             changes="\n".join(changes)
         )
-        await self.cog.safe_send(log_channel, embed=embed)
+        await self._safe_send(log_channel, embed, before, "guild_update")
+        try:
+            await modlog.create_case(
+                guild=before,
+                case_type="guild_update",
+                user=None,
+                moderator=None,
+                reason=None,
+                until=None,
+                extra={"changes": changes}
+            )
+        except Exception as e:
+            self.cog.log.error(f"Failed to create modlog case for guild_update: {e}")
 
     @commands.Cog.listener()
     async def on_voice_state_update(self, member: discord.Member, before: discord.VoiceState, after: discord.VoiceState) -> None:
@@ -591,7 +876,19 @@ class Listeners(commands.Cog):
             f"🎤 Voice state updated for {member.mention}",
             changes="\n".join(changes)
         )
-        await self.cog.safe_send(log_channel, embed=embed)
+        await self._safe_send(log_channel, embed, member.guild, "voice_update")
+        try:
+            await modlog.create_case(
+                guild=member.guild,
+                case_type="voice_update",
+                user=member,
+                moderator=None,
+                reason=None,
+                until=None,
+                extra={"changes": changes}
+            )
+        except Exception as e:
+            self.cog.log.error(f"Failed to create modlog case for voice_update: {e}")
 
     @commands.Cog.listener()
     async def on_member_kick(self, guild: discord.Guild, user: discord.User) -> None:
@@ -606,7 +903,19 @@ class Listeners(commands.Cog):
             f"👢 Member kicked: {user.mention if hasattr(user, 'mention') else user}",
             user=f"{user} ({user.id})"
         )
-        await self.cog.safe_send(log_channel, embed=embed)
+        await self._safe_send(log_channel, embed, guild, "member_kick")
+        try:
+            await modlog.create_case(
+                guild=guild,
+                case_type="member_kick",
+                user=user,
+                moderator=None,
+                reason=None,
+                until=None,
+                extra=None
+            )
+        except Exception as e:
+            self.cog.log.error(f"Failed to create modlog case for member_kick: {e}")
 
     @commands.Cog.listener()
     async def on_command(self, ctx: commands.Context) -> None:
@@ -625,7 +934,19 @@ class Listeners(commands.Cog):
             user=f"{ctx.author} ({ctx.author.id})",
             command=f"{ctx.command.qualified_name if ctx.command else 'Unknown'} {ctx.view.value}"
         )
-        await self.cog.safe_send(log_channel, embed=embed)
+        await self._safe_send(log_channel, embed, ctx.guild, "command_use")
+        try:
+            await modlog.create_case(
+                guild=ctx.guild,
+                case_type="command_use",
+                user=ctx.author,
+                moderator=None,
+                reason=None,
+                until=None,
+                extra={"command": ctx.command.qualified_name if ctx.command else 'Unknown'}
+            )
+        except Exception as e:
+            self.cog.log.error(f"Failed to create modlog case for command_use: {e}")
 
     @commands.Cog.listener()
     async def on_command_error(self, ctx: commands.Context, error: Exception) -> None:
@@ -646,7 +967,22 @@ class Listeners(commands.Cog):
             error=str(error),
             error_type=error.__class__.__name__
         )
-        await self.cog.safe_send(log_channel, embed=embed)
+        await self._safe_send(log_channel, embed, ctx.guild, "command_error")
+        try:
+            await modlog.create_case(
+                guild=ctx.guild,
+                case_type="command_error",
+                user=ctx.author,
+                moderator=None,
+                reason=str(error),
+                until=None,
+                extra={
+                    "command": ctx.command.qualified_name if ctx.command else 'Unknown',
+                    "error_type": error.__class__.__name__
+                }
+            )
+        except Exception as e:
+            self.cog.log.error(f"Failed to create modlog case for command_error: {e}")
 
     @commands.Cog.listener()
     async def on_cog_add(self, cog: commands.Cog) -> None:
@@ -661,7 +997,20 @@ class Listeners(commands.Cog):
                 "cog_load",
                 f"📦 Cog loaded: {getattr(cog, 'qualified_name', str(cog))}"
             )
-            await self.cog.safe_send(log_channel, embed=embed)
+            await self._safe_send(log_channel, embed, guild, "cog_load")
+            try:
+                for guild in self.bot.guilds:
+                    await modlog.create_case(
+                        guild=guild,
+                        case_type="cog_load",
+                        user=None,
+                        moderator=None,
+                        reason=None,
+                        until=None,
+                        extra={"cog": getattr(cog, 'qualified_name', str(cog))}
+                    )
+            except Exception as e:
+                self.cog.log.error(f"Failed to create modlog case for cog_load: {e}")
 
     @commands.Cog.listener()
     async def on_cog_remove(self, cog: commands.Cog) -> None:
@@ -676,4 +1025,17 @@ class Listeners(commands.Cog):
                 "cog_load",
                 f"📦 Cog unloaded: {getattr(cog, 'qualified_name', str(cog))}"
             )
-            await self.cog.safe_send(log_channel, embed=embed)
+            await self._safe_send(log_channel, embed, guild, "cog_load")
+            try:
+                for guild in self.bot.guilds:
+                    await modlog.create_case(
+                        guild=guild,
+                        case_type="cog_load",
+                        user=None,
+                        moderator=None,
+                        reason=None,
+                        until=None,
+                        extra={"cog": getattr(cog, 'qualified_name', str(cog)), "unloaded": True}
+                    )
+            except Exception as e:
+                self.cog.log.error(f"Failed to create modlog case for cog_unload: {e}")

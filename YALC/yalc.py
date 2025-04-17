@@ -9,6 +9,7 @@ from typing import Dict, List, Optional, Union, cast
 import datetime
 import asyncio
 import logging
+from redbot.core import modlog
 
 class YALC(commands.Cog):
     """📝 Yet Another Logging Cog - Log all the things!
@@ -170,6 +171,22 @@ class YALC(commands.Cog):
             self.listeners._cached_deletes.clear()
             self.listeners._cached_edits.clear()
         # No manual sync needed for hybrid commands
+
+    async def cog_load(self) -> None:
+        """Register all YALC events as modlog case types."""
+        case_types = []
+        for event, (emoji, description) in self.event_descriptions.items():
+            case_types.append({
+                "name": event,
+                "default_setting": False,
+                "image": emoji,
+                "case_str": description
+            })
+        try:
+            await modlog.register_casetypes(case_types)
+            self.log.info("Registered all YALC events as modlog case types.")
+        except Exception as e:
+            self.log.error(f"Failed to register YALC case types: {e}")
 
     # Hybrid Commands - work as both classic and slash commands
     @commands.hybrid_group(name="yalc")
