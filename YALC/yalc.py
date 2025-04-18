@@ -25,7 +25,7 @@ class YALC(DashboardIntegration, commands.Cog):
     """
 
     def __init__(self, bot: Red) -> None:
-        """Initialize YALC cog."""
+        super().__init__()  # Ensure DashboardIntegration is initialized
         self.bot = bot
         self.config = Config.get_conf(
             self, identifier=2025041601, force_registration=True
