@@ -70,8 +70,6 @@ class YALC(commands.Cog):
         self.config = Config.get_conf(self, identifier=2394567890, force_registration=True)
         self.config.register_guild(**default_guild)
 
-        # Initialize dashboard integration
-        self.dashboard = DashboardIntegration(self)
 
     async def should_log_event(self, guild: discord.Guild, event_type: str, channel: Optional[discord.abc.GuildChannel] = None) -> bool:
         """Check if an event should be logged based on settings."""
