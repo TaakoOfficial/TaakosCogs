@@ -1,27 +1,9 @@
 from redbot.core import commands
-from redbot.core.bot import Red
+from redbot.core.utils.dashboard import DashboardIntegration, dashboard_page
 import discord
-import typing
 import logging
-import sys
 
-print(f"[YALC DEBUG] sys.path: {sys.path}")
-print("[YALC DEBUG] Attempting to import dashboard_page...")
-try:
-    from dashboard.rpc.thirdparties import dashboard_page
-    print("[YALC DEBUG] dashboard_page import succeeded!")
-except ImportError:
-    print("[YALC DEBUG] dashboard_page import FAILED! Using fallback.")
-    def dashboard_page(*args, **kwargs):
-        def decorator(func):
-            logging.warning(
-                "[YALC] WARNING: dashboard_page decorator fallback is being used. "
-                "Dashboard integration will NOT work. Make sure the Dashboard cog is loaded before YALC."
-            )
-            return func
-        return decorator
-
-class DashboardIntegration:
+class DashboardIntegration(DashboardIntegration):
     """Dashboard integration for YALC."""
 
     def __init__(self, cog):
@@ -29,42 +11,25 @@ class DashboardIntegration:
         self.cog = cog
         self.bot = cog.bot
 
-    @commands.Cog.listener()
-    async def on_dashboard_cog_add(self, dashboard_cog: commands.Cog) -> None:
-        """Register YALC as a third party with the dashboard when Dashboard cog loads."""
-        if hasattr(dashboard_cog, "rpc") and hasattr(dashboard_cog.rpc, "third_parties_handler"):
-            dashboard_cog.rpc.third_parties_handler.add_third_party(self)
-
-    @dashboard_page(name="overview", description="YALC Overview", methods=("GET",))
-    async def dashboard_overview(
-        self,
-        user: typing.Optional[discord.User] = None,
-        guild: typing.Optional[discord.Guild] = None,
-        **kwargs
-    ) -> typing.Dict[str, typing.Any]:
+    @dashboard_page("overview", "YALC Overview")
+    async def dashboard_overview(self, request, guild):
         """Overview page for YALC in the dashboard."""
         html = self._render_overview()
         return {"status": 0, "web_content": {"source": html}}
 
-    @dashboard_page(name="settings", description="YALC Settings", methods=("GET", "POST"))
-    async def dashboard_settings(
-        self,
-        guild: typing.Optional[discord.Guild] = None,
-        data: typing.Optional[dict] = None,
-        **kwargs
-    ) -> typing.Dict[str, typing.Any]:
+    @dashboard_page("settings", "YALC Settings")
+    async def dashboard_settings(self, request, guild):
         """Settings management page for YALC."""
         if not guild:
             return {"status": 1, "message": "This page requires a guild to be selected."}
-
-        if data:
+        if request.method == "POST":
+            data = await request.post()
             try:
                 await self._handle_settings_post(guild, data)
                 return {"status": 0, "message": "Settings updated successfully!", "force_refresh": True}
             except Exception as e:
                 logging.exception("Failed to update YALC settings via dashboard.")
                 return {"status": 1, "message": f"Failed to update settings: {e}"}
-
         try:
             settings = await self.cog.config.guild(guild).all()
             text_channels = [
@@ -133,20 +98,16 @@ class DashboardIntegration:
 
     async def _handle_settings_post(self, guild: discord.Guild, data: dict) -> None:
         """Handle POST data from the dashboard settings form."""
-        # Validate and update event toggles
         events_config = await self.cog.config.guild(guild).events()
         for event in self.cog.event_descriptions:
-            # Checkbox only present if checked
             events_config[event] = data.get(f"event_{event}") == "true"
         await self.cog.config.guild(guild).events.set(events_config)
-        # Validate and update channel mappings
         channel_config = {}
         for event in self.cog.event_descriptions:
             channel_id = data.get(f"channel_{event}")
             if channel_id and channel_id.isdigit():
                 channel_config[event] = int(channel_id)
         await self.cog.config.guild(guild).event_channels.set(channel_config)
-        # Validate and update Tupperbox settings
         ignore_tupperbox = data.get("ignore_tupperbox") == "true"
         await self.cog.config.guild(guild).ignore_tupperbox.set(ignore_tupperbox)
         tupperbox_ids = [id.strip() for id in data.get("tupperbox_ids", "").split(",") if id.strip().isdigit()]
