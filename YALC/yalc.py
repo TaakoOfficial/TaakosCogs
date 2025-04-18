@@ -1777,6 +1777,3 @@ async def setup(bot: Red) -> None:
     cog = YALC(bot)
     await bot.add_cog(cog)
     # Do not add cog.listeners as a cog
-    # If you have slash groups, add them here
-    # bot.tree.add_command(cog.yalc)  # If you have a hybrid group
-```
