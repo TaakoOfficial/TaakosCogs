@@ -12,25 +12,29 @@ import logging
 from redbot.core import modlog
 from .dashboard_integration import DashboardIntegration
 
-class YALC(DashboardIntegration, commands.Cog):
-    """📝 Yet Another Logging Cog - Log all the things!
-    
-    A powerful Discord server logging solution that supports both classic and slash commands.
+class YALC(commands.Cog):
+    """Yet Another Logging Cog for Red-DiscordBot.
+
+    A comprehensive logging solution with both classic and slash commands.
     Features include:
     - Customizable event logging
     - Per-channel configurations
     - Ignore lists for users, roles, and channels
     - Log retention management
     - Rich embed formatting
+    - Dashboard integration for easy configuration
     """
 
     def __init__(self, bot: Red) -> None:
-        super().__init__()  # Ensure DashboardIntegration is initialized
+        """Initialize YALC."""
         self.bot = bot
-        self.config = Config.get_conf(
-            self, identifier=2025041601, force_registration=True
-        )
-        self.log = logging.getLogger(f"red.YALC.{__name__}")
+        self.log = logging.getLogger("red.taako.yalc")
+        
+        # Initialize dashboard integration
+        self.dashboard = DashboardIntegration(self)
+        
+        
+        # Event descriptions with emojis
         self.event_descriptions = {
             "message_delete": ("🗑️", "Message deletions"),
             "message_edit": ("📝", "Message edits"),
@@ -50,63 +54,24 @@ class YALC(DashboardIntegration, commands.Cog):
             "voice_update": ("🎤", "Voice channel updates"),
             "member_kick": ("👢", "Member kicks"),
             "command_use": ("⌨️", "Command usage"),
-            "command_error": ("⚠️", "Command errors"),
-            "cog_load": ("📦", "Cog loads/unloads"),
-            "application_cmd": ("🔷", "Slash command usage"),
-            "thread_create": ("🧵", "Thread creations"),
-            "thread_delete": ("🗑️", "Thread deletions"),
-            "thread_update": ("🔄", "Thread updates"),
-            "thread_member_join": ("➡️", "Thread member joins"),
-            "thread_member_leave": ("⬅️", "Thread member leaves"),
-            # Forum events
-            "forum_post_create": ("📰", "Forum post created"),
-            "forum_post_update": ("📰", "Forum post updated"),
-            "forum_post_delete": ("📰", "Forum post deleted")
         }
-        self.tupperbox_default_ids = ["431544605209788416"]  # Default Tupperbox bot user ID
+
+        # Initialize Config
         default_guild = {
-            "ignored_users": [],
-            "ignored_channels": [],
-            "ignored_categories": [],
-            "event_channels": {},  # Channel overrides for specific events
-            "events": {
-                "message_delete": False,
-                "message_edit": False,
-                "member_join": False,
-                "member_leave": False,
-                "member_ban": False,
-                "member_unban": False,
-                "member_update": False,
-                "channel_create": False,
-                "channel_delete": False,
-                "channel_update": False,
-                "role_create": False,
-                "role_delete": False,
-                "role_update": False,
-                "emoji_update": False,
-                "guild_update": False,
-                "voice_update": False,
-                "member_kick": False,
-                "command_use": False,
-                "command_error": False,
-                "cog_load": False,
-                "application_cmd": False,
-                "thread_create": False,
-                "thread_delete": False,
-                "thread_update": False,
-                "thread_member_join": False,
-                "thread_member_leave": False,
-                # Forum events
-                "forum_post_create": False,
-                "forum_post_update": False,
-                "forum_post_delete": False
-            },
-            "ignored_commands": [],
-            "ignored_cogs": [],
+            "events": {event: False for event in self.event_descriptions},
+            "event_channels": {},
             "ignore_tupperbox": True,
-            "tupperbox_ids": self.tupperbox_default_ids.copy(),
+            "tupperbox_ids": ["239232811662311425"],  # Default Tupperbox bot ID
+            "retention_days": 30,
+            "ignored_channels": [],
+            "ignored_users": [],
+            "ignored_roles": []
         }
+        self.config = Config.get_conf(self, identifier=2394567890, force_registration=True)
         self.config.register_guild(**default_guild)
+
+        # Initialize dashboard integration
+        self.dashboard = DashboardIntegration(self)
 
     async def should_log_event(self, guild: discord.Guild, event_type: str, channel: Optional[discord.abc.GuildChannel] = None) -> bool:
         """Check if an event should be logged based on settings."""
@@ -173,15 +138,17 @@ class YALC(DashboardIntegration, commands.Cog):
         )
 
     async def cog_unload(self) -> None:
-        """Cleanup tasks when the cog is unloaded."""
-        # Optionally remove from dashboard third parties if needed
-        dashboard_cog = self.bot.get_cog("Dashboard")
-        if dashboard_cog and hasattr(dashboard_cog, "rpc") and hasattr(dashboard_cog.rpc, "third_parties_handler"):
+        """Clean up when cog is unloaded."""
+        if hasattr(self, "dashboard"):
             try:
-                dashboard_cog.rpc.third_parties_handler.remove_third_party(self)
-                self.log.info("Unregistered YALC as a dashboard third party.")
+                dashboard_cog = self.bot.get_cog("Dashboard")
+                if dashboard_cog and hasattr(dashboard_cog, "rpc"):
+                    dashboard_cog.rpc.third_parties_handler.remove_third_party(self.dashboard)
             except Exception as e:
-                self.log.error(f"Failed to unregister YALC as dashboard third party: {e}")
+                self.log.error(f"Error removing dashboard integration: {e}", exc_info=True)
+
+        # Clean up any other resources
+        await super().cog_unload()
 
     async def cog_load(self) -> None:
         """Register all YALC events as modlog case types and dashboard third party."""
@@ -1806,9 +1773,12 @@ class YALC(DashboardIntegration, commands.Cog):
             self.log.error(f"safe_send: Failed to send message: {e}")
 
 async def setup(bot: Red) -> None:
+```python
     """Set up the YALC cog."""
     cog = YALC(bot)
     await bot.add_cog(cog)
     # Do not add cog.listeners as a cog
+    #```python
     # If you have slash groups, add them here
     # bot.tree.add_command(cog.yalc)  # If you have a hybrid group
+```

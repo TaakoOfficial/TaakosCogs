@@ -18,7 +18,11 @@ except ImportError:
 
 class DashboardIntegration:
     """Dashboard integration for YALC."""
-    bot: Red
+
+    def __init__(self, cog):
+        """Initialize dashboard integration with reference to main cog."""
+        self.cog = cog
+        self.bot = cog.bot
 
     @commands.Cog.listener()
     async def on_dashboard_cog_add(self, dashboard_cog: commands.Cog) -> None:
@@ -26,7 +30,7 @@ class DashboardIntegration:
         if hasattr(dashboard_cog, "rpc") and hasattr(dashboard_cog.rpc, "third_parties_handler"):
             dashboard_cog.rpc.third_parties_handler.add_third_party(self)
 
-    @dashboard_page(name=None, description="YALC Overview", methods=("GET",))
+    @dashboard_page(name="overview", description="YALC Overview", methods=("GET",))
     async def dashboard_overview(
         self,
         user: typing.Optional[discord.User] = None,
@@ -44,12 +48,139 @@ class DashboardIntegration:
             <li>Log retention management</li>
             <li>Rich embed formatting</li>
         </ul>
-        <p>Use the <b>/yalc</b> commands in Discord to configure logging, or visit the server settings for more options.</p>
+        <p>Visit the settings page to configure logging options, or use <b>/yalc</b> commands in Discord.</p>
         """
         return {
             "status": 0,
             "web_content": {"source": html}
         }
+
+    @dashboard_page(name="settings", description="YALC Settings", methods=("GET", "POST"))
+    async def dashboard_settings(
+        self,
+        guild: typing.Optional[discord.Guild] = None,
+        data: typing.Optional[dict] = None,
+        **kwargs
+    ) -> typing.Dict[str, typing.Any]:
+        """Settings management page for YALC."""
+        if not guild:
+            return {"status": 1, "message": "This page requires a guild to be selected."}
+
+        # Handle POST request to update settings
+        if data:
+            try:
+                # Update events
+                events_config = await self.cog.config.guild(guild).events()
+                for event in self.cog.event_descriptions:
+                    events_config[event] = data.get(f"event_{event}", False)
+                await self.cog.config.guild(guild).events.set(events_config)
+
+                # Update channel mappings
+                channel_config = {}
+                for event in self.cog.event_descriptions:
+                    channel_id = data.get(f"channel_{event}")
+                    if channel_id and channel_id.isdigit():
+                        channel_config[event] = int(channel_id)
+                await self.cog.config.guild(guild).event_channels.set(channel_config)
+
+                # Update Tupperbox settings
+                await self.cog.config.guild(guild).ignore_tupperbox.set(
+                    data.get("ignore_tupperbox", True)
+                )
+                tupperbox_ids = [
+                    id.strip() for id in data.get("tupperbox_ids", "").split(",")
+                    if id.strip().isdigit()
+                ]
+                await self.cog.config.guild(guild).tupperbox_ids.set(tupperbox_ids)
+
+                return {
+                    "status": 0,
+                    "message": "Settings updated successfully!",
+                    "force_refresh": True
+                }
+            except Exception as e:
+                return {"status": 1, "message": f"Failed to update settings: {str(e)}"}
+
+        # Handle GET request to display settings
+        try:
+            settings = await self.cog.config.guild(guild).all()
+            text_channels = [
+                (c.id, c.name) for c in guild.text_channels
+                if c.permissions_for(guild.me).send_messages
+            ]
+
+            html = """
+            <h2>📝 YALC Settings</h2>
+            <form method="POST" class="form-horizontal">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h3>Event Settings</h3>
+                        <div class="card">
+                            <div class="card-body">
+            """
+
+            # Add event toggles and channel selects
+            for event, (emoji, desc) in self.cog.event_descriptions.items():
+                current_channel = settings["event_channels"].get(event, "")
+                is_enabled = settings["events"].get(event, False)
+                html += f"""
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" name="event_{event}" value="true"
+                               {"checked" if is_enabled else ""}>
+                        {emoji} {desc}
+                    </label>
+                    <select name="channel_{event}" class="form-control">
+                        <option value="">Select Channel</option>
+                """
+                for cid, cname in text_channels:
+                    html += f"""
+                        <option value="{cid}" {"selected" if str(cid) == str(current_channel) else ""}>
+                            #{cname}
+                        </option>
+                    """
+                html += """
+                    </select>
+                </div>
+                """
+
+            html += """
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <h3>Tupperbox Settings</h3>
+                        <div class="card">
+                            <div class="card-body">
+                                <div class="form-group">
+                                    <label>
+                                        <input type="checkbox" name="ignore_tupperbox" value="true"
+                                               {"checked" if settings["ignore_tupperbox"] else ""}>
+                                        Ignore Tupperbox Messages
+                                    </label>
+                                </div>
+                                <div class="form-group">
+                                    <label>Tupperbox Bot IDs (comma-separated)</label>
+                                    <input type="text" class="form-control" name="tupperbox_ids"
+                                           value="{','.join(settings['tupperbox_ids'])}">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group mt-3">
+                    <button type="submit" class="btn btn-primary">Save Settings</button>
+                </div>
+            </form>
+            """
+
+            return {
+                "status": 0,
+                "web_content": {"source": html}
+            }
+
+        except Exception as e:
+            return {"status": 1, "message": f"Failed to load settings: {str(e)}"}
 
     @dashboard_page(name="guild", description="YALC Guild Settings", methods=("GET",))
     async def dashboard_guild(
