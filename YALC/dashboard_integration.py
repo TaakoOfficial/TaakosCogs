@@ -9,7 +9,10 @@ try:
 except ImportError:
     def dashboard_page(*args, **kwargs):
         def decorator(func):
-            logging.warning("[YALC] WARNING: dashboard_page decorator fallback is being used. Dashboard integration will NOT work. Make sure the Dashboard cog is loaded before YALC.")
+            logging.warning(
+                "[YALC] WARNING: dashboard_page decorator fallback is being used. "
+                "Dashboard integration will NOT work. Make sure the Dashboard cog is loaded before YALC."
+            )
             return func
         return decorator
 
@@ -24,7 +27,12 @@ class DashboardIntegration:
             dashboard_cog.rpc.third_parties_handler.add_third_party(self)
 
     @dashboard_page(name=None, description="YALC Overview", methods=("GET",))
-    async def dashboard_overview(self, user: discord.User = None, guild: discord.Guild = None, **kwargs) -> typing.Dict[str, typing.Any]:
+    async def dashboard_overview(
+        self,
+        user: typing.Optional[discord.User] = None,
+        guild: typing.Optional[discord.Guild] = None,
+        **kwargs
+    ) -> typing.Dict[str, typing.Any]:
         """Overview page for YALC in the dashboard."""
         html = """
         <h2>📝 YALC - Yet Another Logging Cog</h2>
@@ -44,10 +52,14 @@ class DashboardIntegration:
         }
 
     @dashboard_page(name="guild", description="YALC Guild Settings", methods=("GET",))
-    async def dashboard_guild(self, guild: discord.Guild, **kwargs) -> typing.Dict[str, typing.Any]:
+    async def dashboard_guild(
+        self,
+        guild: typing.Optional[discord.Guild] = None,
+        **kwargs
+    ) -> typing.Dict[str, typing.Any]:
         """Show basic YALC settings for a guild."""
         html = f"""
-        <h3>YALC Settings for: {guild.name}</h3>
+        <h3>YALC Settings for: {guild.name if guild else 'Unknown Guild'}</h3>
         <p>Use <b>/yalc setup</b> in Discord to configure logging channels and events.</p>
         <p>For advanced options, use the Discord bot commands or contact your server admin.</p>
         """
