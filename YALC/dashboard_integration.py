@@ -147,6 +147,10 @@ class DashboardIntegration:
         tupperbox_ids = [id.strip() for id in data.get("tupperbox_ids", "").split(",") if id.strip().isdigit()]
         await self.cog.config.guild(guild).tupperbox_ids.set(tupperbox_ids)
 
+    def get_dashboard_views(self) -> list:
+        """Return dashboard page methods for Red-Dashboard discovery."""
+        return [self.dashboard_overview, self.dashboard_settings]
+
     @property
     def qualified_name(self) -> str:
         """Return the qualified name for dashboard registration."""
