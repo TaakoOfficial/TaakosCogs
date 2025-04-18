@@ -1206,7 +1206,7 @@ class YALC(commands.Cog):
             self.log.error(f"Failed to log forum_post_delete: {e}")
 
     @commands.hybrid_group(name="yalc", invoke_without_command=True, with_app_command=True)
-    async def yalc_group
+    async def yalc_group(self, ctx: commands.Context) -> None:
         """YALC logging configuration commands."""
         await ctx.send_help()
 
