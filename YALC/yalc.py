@@ -1392,51 +1392,131 @@ class YALC(commands.Cog):
                     await ctx.send(f"ID `{user_input}` is already in the ignore list.", ephemeral=True)
         await ctx.send("✅ YALC setup complete! Use `/yalc events` to review your settings.", ephemeral=True)
 
-    @commands.hybrid_command(name="events", with_app_command=True)
-    async def events(self, ctx: commands.Context) -> None:
+    async def yalc_events(self, ctx: commands.Context) -> None:
         """List all loggable events and their status."""
-        await self.yalc_events(ctx)
+        try:
+            settings = await self.config.guild(ctx.guild).all()
+            events = settings.get("events", {})
+            lines = [f"`{k}`: {'✅' if v else '❌'}" for k, v in events.items()]
+            embed = discord.Embed(
+                title="YALC Events",
+                description="\n".join(lines),
+                color=discord.Color.blurple()
+            )
+            await ctx.send(embed=embed, ephemeral=True)
+        except Exception as e:
+            self.log.error(f"Failed to list events: {e}")
+            await ctx.send("Failed to list events.", ephemeral=True)
 
-    @commands.hybrid_command(name="enable", with_app_command=True)
-    async def enable(self, ctx: commands.Context, event: str) -> None:
+    async def yalc_enable(self, ctx: commands.Context, event: str) -> None:
         """Enable logging for an event."""
-        await self.yalc_enable(ctx, event)
+        event = event.lower()
+        if event not in self.event_descriptions:
+            await ctx.send(f"Unknown event: `{event}`.", ephemeral=True)
+            return
+        try:
+            await self.config.guild(ctx.guild).events.set_raw(event, value=True)
+            await ctx.send(f"Enabled logging for `{event}`.", ephemeral=True)
+        except Exception as e:
+            self.log.error(f"Failed to enable event {event}: {e}")
+            await ctx.send(f"Failed to enable event `{event}`.", ephemeral=True)
 
-    @commands.hybrid_command(name="disable", with_app_command=True)
-    async def disable(self, ctx: commands.Context, event: str) -> None:
+    async def yalc_disable(self, ctx: commands.Context, event: str) -> None:
         """Disable logging for an event."""
-        await self.yalc_disable(ctx, event)
+        event = event.lower()
+        if event not in self.event_descriptions:
+            await ctx.send(f"Unknown event: `{event}`.", ephemeral=True)
+            return
+        try:
+            await self.config.guild(ctx.guild).events.set_raw(event, value=False)
+            await ctx.send(f"Disabled logging for `{event}`.", ephemeral=True)
+        except Exception as e:
+            self.log.error(f"Failed to disable event {event}: {e}")
+            await ctx.send(f"Failed to disable event `{event}`.", ephemeral=True)
 
-    @commands.hybrid_command(name="setchannel", with_app_command=True)
-    async def setchannel(self, ctx: commands.Context, event: str, channel: Optional[discord.TextChannel]) -> None:
+    async def yalc_setchannel(self, ctx: commands.Context, event: str, channel: Optional[discord.TextChannel]) -> None:
         """Set the log channel for an event."""
-        await self.yalc_setchannel(ctx, event, channel)
+        event = event.lower()
+        if event not in self.event_descriptions:
+            await ctx.send(f"Unknown event: `{event}`.", ephemeral=True)
+            return
+        if not channel:
+            await ctx.send("You must mention a text channel.", ephemeral=True)
+            return
+        try:
+            await self.config.guild(ctx.guild).event_channels.set_raw(event, value=channel.id)
+            await ctx.send(f"Set log channel for `{event}` to {channel.mention}.", ephemeral=True)
+        except Exception as e:
+            self.log.error(f"Failed to set channel for event {event}: {e}")
+            await ctx.send(f"Failed to set channel for `{event}`.", ephemeral=True)
 
-    @commands.hybrid_command(name="removechannel", with_app_command=True)
-    async def removechannel(self, ctx: commands.Context, event: str) -> None:
+    async def yalc_removechannel(self, ctx: commands.Context, event: str) -> None:
         """Remove the log channel override for an event."""
-        await self.yalc_removechannel(ctx, event)
+        event = event.lower()
+        if event not in self.event_descriptions:
+            await ctx.send(f"Unknown event: `{event}`.", ephemeral=True)
+            return
+        try:
+            await self.config.guild(ctx.guild).event_channels.clear_raw(event)
+            await ctx.send(f"Removed log channel override for `{event}`.", ephemeral=True)
+        except Exception as e:
+            self.log.error(f"Failed to remove channel for event {event}: {e}")
+            await ctx.send(f"Failed to remove channel for `{event}`.", ephemeral=True)
 
-    # --- Tupperbox group ---
-    @commands.hybrid_group(name="tupperbox", invoke_without_command=True, with_app_command=True)
-    async def tupperbox(self, ctx: commands.Context) -> None:
-        """Tupperbox ignore settings."""
-        await ctx.send_help()
-
-    @commands.hybrid_command(name="ignore", with_app_command=True)
-    async def tupperbox_ignore_cmd(self, ctx: commands.Context, enabled: Optional[bool] = None) -> None:
+    @commands.hybrid_command(name="tboxignore", with_app_command=True, description="Enable or disable ignoring Tupperbox messages in logs.")
+    async def tboxignore(self, ctx: commands.Context, enabled: Optional[bool] = None) -> None:
         """Enable or disable ignoring Tupperbox messages in logs."""
         await self.tupperbox_ignore(ctx, enabled)
 
-    @commands.hybrid_command(name="addid", with_app_command=True)
-    async def tupperbox_addid_cmd(self, ctx: commands.Context, bot_id: str) -> None:
-        """Add a bot user ID to ignore as Tupperbox proxy."""
-        await self.tupperbox_addid(ctx, bot_id)
+    async def tupperbox_ignore(self, ctx: commands.Context, enabled: Optional[bool] = None) -> None:
+        """Enable or disable ignoring Tupperbox messages in logs."""
+        try:
+            if enabled is None:
+                enabled = await self.config.guild(ctx.guild).ignore_tupperbox()
+                await ctx.send(f"Tupperbox ignore is currently {'enabled' if enabled else 'disabled'}.", ephemeral=True)
+                return
+            await self.config.guild(ctx.guild).ignore_tupperbox.set(enabled)
+            await ctx.send(f"Tupperbox ignore set to {'enabled' if enabled else 'disabled'}.", ephemeral=True)
+        except Exception as e:
+            self.log.error(f"Failed to set Tupperbox ignore: {e}")
+            await ctx.send("Failed to update Tupperbox ignore setting.", ephemeral=True)
 
-    @commands.hybrid_command(name="removeid", with_app_command=True)
-    async def tupperbox_removeid_cmd(self, ctx: commands.Context, bot_id: str) -> None:
+    async def tupperbox_addid(self, ctx: commands.Context, bot_id: str) -> None:
+        """Add a bot user ID to ignore as Tupperbox proxy."""
+        if not bot_id.isdigit() or len(bot_id) < 17:
+            await ctx.send("Please enter a valid Discord user ID (17+ digits).", ephemeral=True)
+            return
+        try:
+            ids = await self.config.guild(ctx.guild).tupperbox_ids()
+            if bot_id not in ids:
+                ids.append(bot_id)
+                await self.config.guild(ctx.guild).tupperbox_ids.set(ids)
+                await ctx.send(f"Added bot ID `{bot_id}` to Tupperbox ignore list.", ephemeral=True)
+            else:
+                await ctx.send(f"Bot ID `{bot_id}` is already in the ignore list.", ephemeral=True)
+        except Exception as e:
+            self.log.error(f"Failed to add Tupperbox ID: {e}")
+            await ctx.send("Failed to add Tupperbox ID.", ephemeral=True)
+
+    async def tupperbox_removeid(self, ctx: commands.Context, bot_id: str) -> None:
         """Remove a bot user ID from the Tupperbox ignore list."""
-        await self.tupperbox_removeid(ctx, bot_id)
+        try:
+            ids = await self.config.guild(ctx.guild).tupperbox_ids()
+            if bot_id in ids:
+                ids.remove(bot_id)
+                await self.config.guild(ctx.guild).tupperbox_ids.set(ids)
+                await ctx.send(f"Removed bot ID `{bot_id}` from Tupperbox ignore list.", ephemeral=True)
+            else:
+                await ctx.send(f"Bot ID `{bot_id}` is not in the ignore list.", ephemeral=True)
+        except Exception as e:
+            self.log.error(f"Failed to remove Tupperbox ID: {e}")
+            await ctx.send("Failed to remove Tupperbox ID.", ephemeral=True)
+
+    def is_tupperbox_message(self, message: discord.Message, tupperbox_ids: list[str]) -> bool:
+        """Check if a message is from Tupperbox or a configured proxy bot."""
+        if not message.author:
+            return False
+        return str(message.author.id) in tupperbox_ids
 
 async def setup(bot: Red) -> None:
     """Set up the YALC cog."""
