@@ -1205,10 +1205,25 @@ class YALC(commands.Cog):
         except Exception as e:
             self.log.error(f"Failed to log forum_post_delete: {e}")
 
-    @commands.hybrid_group(name="yalc", invoke_without_command=True, with_app_command=True)
+    @commands.hybrid_group(name="yalc", invoke_without_command=True, with_app_command=True, description="YALC logging configuration commands.")
     async def yalc(self, ctx: commands.Context) -> None:
         """YALC logging configuration commands."""
-        await ctx.send_help()
+        embed = discord.Embed(
+            title="YALC Logging Commands",
+            description=(
+                "`/yalc setup` - Start the setup wizard\n"
+                "`/yalc events` - Show current event logging status\n"
+                "`/yalc enable <event>` - Enable logging for an event\n"
+                "`/yalc disable <event>` - Disable logging for an event\n"
+                "`/yalc setchannel <event> <channel>` - Set log channel for an event\n"
+                "`/yalc removechannel <event>` - Remove log channel override for an event\n"
+                "`/tboxignore [enabled]` - Toggle Tupperbox ignore\n"
+                "`/tupperbox_addid <bot_id>` - Add Tupperbox bot ID to ignore\n"
+                "`/tupperbox_removeid <bot_id>` - Remove Tupperbox bot ID from ignore list"
+            ),
+            color=discord.Color.blurple()
+        )
+        await ctx.send(embed=embed, ephemeral=True)
 
     @commands.hybrid_command(name="setup", with_app_command=True)
     async def setup(self, ctx: commands.Context) -> None:
