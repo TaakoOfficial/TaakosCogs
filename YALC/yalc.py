@@ -1456,7 +1456,22 @@ class YALC(DashboardIntegration, commands.Cog):
     @yalc.command(name="tboxignore", with_app_command=True, description="Enable or disable ignoring Tupperbox messages in logs.")
     async def tboxignore(self, ctx: commands.Context, enabled: Optional[bool] = None) -> None:
         """Enable or disable ignoring Tupperbox messages in logs."""
-        await self.tupperbox_ignore(ctx, enabled)
+        try:
+            if enabled is None:
+                current = await self.config.guild(ctx.guild).ignore_tupperbox()
+                await ctx.send(
+                    f"Tupperbox ignore is currently {'enabled' if current else 'disabled'}.",
+                    ephemeral=True
+                )
+                return
+            await self.config.guild(ctx.guild).ignore_tupperbox.set(enabled)
+            await ctx.send(
+                f"Tupperbox ignore set to {'enabled' if enabled else 'disabled'}.",
+                ephemeral=True
+            )
+        except Exception as e:
+            self.log.error(f"Failed to set Tupperbox ignore: {e}")
+            await ctx.send("Failed to update Tupperbox ignore setting.", ephemeral=True)
 
     @yalc.command(name="tupperbox_addid", with_app_command=True, description="Add a bot user ID to ignore as Tupperbox proxy.")
     async def tupperbox_addid_cmd(self, ctx: commands.Context, bot_id: str) -> None:
