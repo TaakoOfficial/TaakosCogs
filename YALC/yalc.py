@@ -1474,6 +1474,16 @@ class YALC(DashboardIntegration, commands.Cog):
             return False
         return str(message.author.id) in tupperbox_ids
 
+    async def safe_send(self, channel: Optional[discord.abc.Messageable], *args, **kwargs) -> None:
+        """Safely send a message or embed to a channel, catching and logging exceptions."""
+        if channel is None:
+            self.log.warning("safe_send: Channel is None, cannot send message.")
+            return
+        try:
+            await channel.send(*args, **kwargs)
+        except Exception as e:
+            self.log.error(f"safe_send: Failed to send message: {e}")
+
 async def setup(bot: Red) -> None:
     """Set up the YALC cog."""
     cog = YALC(bot)
