@@ -1773,12 +1773,10 @@ class YALC(commands.Cog):
             self.log.error(f"safe_send: Failed to send message: {e}")
 
 async def setup(bot: Red) -> None:
-```python
     """Set up the YALC cog."""
     cog = YALC(bot)
     await bot.add_cog(cog)
     # Do not add cog.listeners as a cog
-    #```python
     # If you have slash groups, add them here
     # bot.tree.add_command(cog.yalc)  # If you have a hybrid group
 ```
