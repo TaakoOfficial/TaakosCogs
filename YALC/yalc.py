@@ -1229,232 +1229,51 @@ class YALC(DashboardIntegration, commands.Cog):
     @commands.hybrid_group(name="yalc", invoke_without_command=True, with_app_command=True, description="YALC logging configuration commands.")
     async def yalc(self, ctx: commands.Context) -> None:
         """YALC logging configuration commands."""
+        prefix = ctx.clean_prefix
         embed = discord.Embed(
             title="YALC Logging Commands",
             description=(
-                "`/yalc setup` - Start the setup wizard\n"
-                "`/yalc events` - Show current event logging status\n"
-                "`/yalc enable <event>` - Enable logging for an event\n"
-                "`/yalc disable <event>` - Disable logging for an event\n"
-                "`/yalc setchannel <event> <channel>` - Set log channel for an event\n"
-                "`/yalc removechannel <event>` - Remove log channel override for an event\n"
-                "`/tboxignore [enabled]` - Toggle Tupperbox ignore\n"
-                "`/tupperbox_addid <bot_id>` - Add Tupperbox bot ID to ignore\n"
-                "`/tupperbox_removeid <bot_id>` - Remove Tupperbox bot ID from ignore list"
+                f"`{prefix}yalc setup` - Start the setup wizard\n"
+                f"`{prefix}yalc events` - Show current event logging status\n"
+                f"`{prefix}yalc enable <event>` - Enable logging for an event\n"
+                f"`{prefix}yalc disable <event>` - Disable logging for an event\n"
+                f"`{prefix}yalc setchannel <event> <channel>` - Set log channel for an event\n"
+                f"`{prefix}yalc removechannel <event>` - Remove log channel override for an event\n"
+                f"`{prefix}yalc tboxignore [enabled]` - Toggle Tupperbox ignore\n"
+                f"`{prefix}yalc addtbox <bot_id>` - Add Tupperbox bot ID to ignore\n"
+                f"`{prefix}yalc removetbox <bot_id>` - Remove Tupperbox bot ID from ignore list"
             ),
             color=discord.Color.blurple()
         )
         await ctx.send(embed=embed, ephemeral=True)
 
-    @commands.hybrid_command(name="setup", with_app_command=True)
-    async def setup(self, ctx: commands.Context) -> None:
-        """Simplified interactive setup for YALC logging."""
-        # --- Setup logic restored ---
-        if not ctx.guild:
-            await ctx.send("This command must be used in a server.", ephemeral=True)
-            return
-        if not ctx.channel.permissions_for(ctx.author).manage_guild:
-            await ctx.send("You need the Manage Server permission to run setup.", ephemeral=True)
-            return
-        await ctx.send(
-            "How would you like to set up logging channels?\n"
-            "1️⃣ Create a new category and channels\n"
-            "2️⃣ Use existing channels\n"
-            "3️⃣ Skip (I'll set channels manually)",
-            ephemeral=True
-        )
-        setup_msg = await ctx.send("React with 1️⃣, 2️⃣, or 3️⃣.", ephemeral=True)
-        for emoji in ["1️⃣", "2️⃣", "3️⃣"]:
-            try:
-                await setup_msg.add_reaction(emoji)
-            except Exception:
-                pass
-        def setup_check(reaction, user):
-            return user == ctx.author and reaction.message.id == setup_msg.id and str(reaction.emoji) in ["1️⃣", "2️⃣", "3️⃣"]
-        try:
-            reaction, _ = await ctx.bot.wait_for("reaction_add", timeout=60.0, check=setup_check)
-        except Exception:
-            await ctx.send("Timed out. Please run setup again.", ephemeral=True)
-            return
-        choice = str(reaction.emoji)
-        log_channels = {}
-        use_emojis = False
-        channel_defs = [
-            ("message", "📝 message-logs", "message logs"),
-            ("member", "👤 member-logs", "member logs"),
-            ("channel", "📺 channel-logs", "channel logs"),
-            ("thread", "🧵 thread-logs", "thread logs"),
-            ("role", "✨ role-logs", "role logs"),
-            ("command", "⌨️ command-logs", "command logs"),
-            ("server", "⚙️ server-logs", "server logs"),
-            ("forum", "📰 forum-logs", "forum logs")
-        ]
-        if choice == "1️⃣":
-            emoji_prompt = await ctx.send(
-                "Do you want to include emojis in the category and channel names? React ✅ for yes, ❌ for no.", ephemeral=True)
-            try:
-                await emoji_prompt.add_reaction("✅")
-                await emoji_prompt.add_reaction("❌")
-            except Exception:
-                pass
-            def emoji_check(reaction, user):
-                return user == ctx.author and reaction.message.id == emoji_prompt.id and str(reaction.emoji) in ["✅", "❌"]
-            try:
-                emoji_reaction, _ = await ctx.bot.wait_for("reaction_add", timeout=30.0, check=emoji_check)
-                use_emojis = str(emoji_reaction.emoji) == "✅"
-            except Exception:
-                await ctx.send("Timed out. Using plain names.", ephemeral=True)
-                use_emojis = False
-            cat_name = "📝 YALC Logs" if use_emojis else "YALC Logs"
-            category = await ctx.guild.create_category_channel(cat_name, reason="YALC setup")
-            for key, emoji_name, plain_name in channel_defs:
-                ch_name = emoji_name if use_emojis else plain_name
-                ch = await ctx.guild.create_text_channel(ch_name, category=category, reason="YALC setup")
-                log_channels[key] = ch.id
-            await ctx.send(f"Created category and channels: {', '.join(f'<#{cid}>' for cid in log_channels.values())}", ephemeral=True)
-        elif choice == "2️⃣":
-            await ctx.send("Please mention the channels for: message, member, channel, thread, role, command, server, forum. Type 'skip' to leave any unset.", ephemeral=True)
-            for key, _, plain_name in channel_defs:
-                await ctx.send(f"Mention a channel for `{plain_name}` or type 'skip':", ephemeral=True)
-                def msg_check(m):
-                    return m.author == ctx.author and m.channel == ctx.channel
-                try:
-                    msg = await ctx.bot.wait_for("message", timeout=60.0, check=msg_check)
-                except Exception:
-                    await ctx.send(f"Timed out for `{plain_name}`. Skipping.", ephemeral=True)
-                    continue
-                if msg.content.lower() == "skip":
-                    continue
-                if msg.channel_mentions:
-                    log_channels[key] = msg.channel_mentions[0].id
-        # Step 2: Event enabling
-        await ctx.send(
-            "Which events do you want to enable?\n"
-            "✅ All events\n"
-            "🛡️ Moderation only (bans, kicks, role, channel, member updates)\n"
-            "❌ None (I'll enable manually)",
-            ephemeral=True
-        )
-        events_msg = await ctx.send("React with ✅, 🛡️, or ❌.", ephemeral=True)
-        for emoji in ["✅", "🛡️", "❌"]:
-            try:
-                await events_msg.add_reaction(emoji)
-            except Exception:
-                pass
-        def events_check(reaction, user):
-            return user == ctx.author and reaction.message.id == events_msg.id and str(reaction.emoji) in ["✅", "🛡️", "❌"]
-        try:
-            reaction, _ = await ctx.bot.wait_for("reaction_add", timeout=60.0, check=events_check)
-        except Exception:
-            await ctx.send("Timed out. Please run setup again.", ephemeral=True)
-            return
-        event_choice = str(reaction.emoji)
-        all_events = list(self.event_descriptions.keys())
-        mod_events = [
-            "member_ban", "member_unban", "member_kick", "member_update",
-            "role_create", "role_delete", "role_update",
-            "channel_create", "channel_delete", "channel_update",
-            "message_delete", "message_edit"
-        ]
-        if event_choice == "✅":
-            for event in all_events:
-                await self.config.guild(ctx.guild).events.set_raw(event, value=True)
-        elif event_choice == "🛡️":
-            for event in all_events:
-                await self.config.guild(ctx.guild).events.set_raw(event, value=(event in mod_events))
-        else:
-            for event in all_events:
-                await self.config.guild(ctx.guild).events.set_raw(event, value=False)
-        # Step 3: Assign log channels to events (if any set)
-        if log_channels:
-            event_map = {
-                "message": ["message_delete", "message_edit"],
-                "member": ["member_join", "member_leave", "member_ban", "member_unban", "member_kick", "member_update"],
-                "channel": ["channel_create", "channel_delete", "channel_update"],
-                "thread": ["thread_create", "thread_delete", "thread_update", "thread_member_join", "thread_member_leave"],
-                "role": ["role_create", "role_delete", "role_update"],
-                "command": ["command_use", "command_error", "application_cmd"],
-                "server": ["guild_update", "emoji_update", "cog_load", "voice_update"],
-                "forum": []
-            }
-            for key, events in event_map.items():
-                if key in log_channels:
-                    for event in events:
-                        await self.config.guild(ctx.guild).event_channels.set_raw(event, value=log_channels[key])
-        # --- Tupperbox Setup Step ---
-        await ctx.send(
-            "Do you want to ignore Tupperbox proxy messages in logs? React ✅ for yes, ❌ for no.", ephemeral=True
-        )
-        tupperbox_prompt = await ctx.send("React now.", ephemeral=True)
-        try:
-            await tupperbox_prompt.add_reaction("✅")
-            await tupperbox_prompt.add_reaction("❌")
-        except Exception:
-            pass
-        def tupperbox_check(reaction, user):
-            return user == ctx.author and reaction.message.id == tupperbox_prompt.id and str(reaction.emoji) in ["✅", "❌"]
-        try:
-            tupperbox_reaction, _ = await ctx.bot.wait_for("reaction_add", timeout=30.0, check=tupperbox_check)
-            ignore_tupperbox = str(tupperbox_reaction.emoji) == "✅"
-        except Exception:
-            await ctx.send("Timed out. Defaulting to ignore Tupperbox: True.", ephemeral=True)
-            ignore_tupperbox = True
-        await self.config.guild(ctx.guild).ignore_tupperbox.set(ignore_tupperbox)
-        if ignore_tupperbox:
-            await ctx.send(
-                "Would you like to add additional Tupperbox bot IDs to ignore? Type each ID and send, or type 'done' to finish.",
-                ephemeral=True
-            )
-            ids = await self.config.guild(ctx.guild).tupperbox_ids()
-            while True:
-                def id_check(m):
-                    return m.author == ctx.author and m.channel == ctx.channel
-                try:
-                    msg = await ctx.bot.wait_for("message", timeout=60.0, check=id_check)
-                except Exception:
-                    await ctx.send("Timed out. No more IDs added.", ephemeral=True)
-                    break
-                user_input = msg.content.strip()
-                if user_input.lower() in ("done", "skip"):
-                    break
-                if not user_input.isdigit() or len(user_input) < 17:
-                    await ctx.send("Please enter a valid Discord user ID (17+ digits) or 'done'.", ephemeral=True)
-                    continue
-                if user_input not in ids:
-                    ids.append(user_input)
-                    await self.config.guild(ctx.guild).tupperbox_ids.set(ids)
-                    await ctx.send(f"Added `{user_input}` to Tupperbox ignore list.", ephemeral=True)
-                else:
-                    await ctx.send(f"ID `{user_input}` is already in the ignore list.", ephemeral=True)
-        await ctx.send("✅ YALC setup complete! Use `/yalc events` to review your settings.", ephemeral=True)
-
     @yalc.command(name="events", with_app_command=True, description="List all loggable events and their status.")
-    async def events(self, ctx: commands.Context) -> None:
+    async def yalc_events_cmd(self, ctx: commands.Context) -> None:
         """List all loggable events and their status."""
         await self.yalc_events(ctx)
 
     @yalc.command(name="enable", with_app_command=True, description="Enable logging for an event.")
-    async def enable(self, ctx: commands.Context, event: str) -> None:
+    async def yalc_enable_cmd(self, ctx: commands.Context, event: str) -> None:
         """Enable logging for an event."""
         await self.yalc_enable(ctx, event)
 
     @yalc.command(name="disable", with_app_command=True, description="Disable logging for an event.")
-    async def disable(self, ctx: commands.Context, event: str) -> None:
+    async def yalc_disable_cmd(self, ctx: commands.Context, event: str) -> None:
         """Disable logging for an event."""
         await self.yalc_disable(ctx, event)
 
     @yalc.command(name="setchannel", with_app_command=True, description="Set the log channel for an event.")
-    async def setchannel(self, ctx: commands.Context, event: str, channel: Optional[discord.TextChannel]) -> None:
+    async def yalc_setchannel_cmd(self, ctx: commands.Context, event: str, channel: Optional[discord.TextChannel]) -> None:
         """Set the log channel for an event."""
         await self.yalc_setchannel(ctx, event, channel)
 
     @yalc.command(name="removechannel", with_app_command=True, description="Remove the log channel override for an event.")
-    async def removechannel(self, ctx: commands.Context, event: str) -> None:
+    async def yalc_removechannel_cmd(self, ctx: commands.Context, event: str) -> None:
         """Remove the log channel override for an event."""
         await self.yalc_removechannel(ctx, event)
 
     @yalc.command(name="tboxignore", with_app_command=True, description="Enable or disable ignoring Tupperbox messages in logs.")
-    async def tboxignore(self, ctx: commands.Context, enabled: Optional[bool] = None) -> None:
+    async def yalc_tboxignore_cmd(self, ctx: commands.Context, enabled: Optional[bool] = None) -> None:
         """Enable or disable ignoring Tupperbox messages in logs."""
         try:
             if enabled is None:
@@ -1473,21 +1292,508 @@ class YALC(DashboardIntegration, commands.Cog):
             self.log.error(f"Failed to set Tupperbox ignore: {e}")
             await ctx.send("Failed to update Tupperbox ignore setting.", ephemeral=True)
 
-    @yalc.command(name="tupperbox_addid", with_app_command=True, description="Add a bot user ID to ignore as Tupperbox proxy.")
-    async def tupperbox_addid_cmd(self, ctx: commands.Context, bot_id: str) -> None:
+    @yalc.command(name="addtbox", with_app_command=True, description="Add a bot user ID to ignore as Tupperbox proxy.")
+    async def yalc_tupperbox_add_cmd(self, ctx: commands.Context, bot_id: str) -> None:
         """Add a bot user ID to ignore as Tupperbox proxy."""
         await self.tupperbox_addid(ctx, bot_id)
 
-    @yalc.command(name="tupperbox_removeid", with_app_command=True, description="Remove a bot user ID from the Tupperbox ignore list.")
-    async def tupperbox_removeid_cmd(self, ctx: commands.Context, bot_id: str) -> None:
+    @yalc.command(name="removetbox", with_app_command=True, description="Remove a bot user ID from the Tupperbox ignore list.")
+    async def yalc_tupperbox_remove_cmd(self, ctx: commands.Context, bot_id: str) -> None:
         """Remove a bot user ID from the Tupperbox ignore list."""
         await self.tupperbox_removeid(ctx, bot_id)
 
+    @yalc.command(name="setup", with_app_command=True, description="Start the interactive setup wizard for YALC.")
+    @commands.has_permissions(manage_guild=True)
+    @commands.guild_only()
+    async def yalc_setup_cmd(self, ctx: commands.Context) -> None:
+        """Simplified interactive setup for YALC logging."""
+        if not ctx.guild:
+            await ctx.send("This command must be used in a server.", ephemeral=True)
+            return
+            
+        if not ctx.channel.permissions_for(ctx.author).manage_guild:
+            await ctx.send("You need the Manage Server permission to run setup.", ephemeral=True)
+            return
+
+        # Step 1: Channel setup
+        await ctx.send(
+            "How would you like to set up logging channels?\n"
+            "1️⃣ Create a new category and channels\n"
+            "2️⃣ Use existing channels\n"
+            "3️⃣ Skip (I'll set channels manually)",
+            ephemeral=True
+        )
+        setup_msg = await ctx.send("React with 1️⃣, 2️⃣, or 3️⃣.", ephemeral=True)
+        for emoji in ["1️⃣", "2️⃣", "3️⃣"]:
+            try:
+                await setup_msg.add_reaction(emoji)
+            except Exception:
+                pass
+
+        def setup_check(reaction, user):
+            return (
+                user == ctx.author 
+                and reaction.message.id == setup_msg.id 
+                and str(reaction.emoji) in ["1️⃣", "2️⃣", "3️⃣"]
+            )
+        
+        try:
+            reaction, _ = await ctx.bot.wait_for("reaction_add", timeout=60.0, check=setup_check)
+        except asyncio.TimeoutError:
+            await ctx.send("Setup timed out. Please run setup again.", ephemeral=True)
+            return
+
+        choice = str(reaction.emoji)
+        log_channels = {}
+        use_emojis = False
+        channel_defs = [
+            ("message", "📝 message-logs", "message logs"),
+            ("member", "👤 member-logs", "member logs"),
+            ("channel", "📺 channel-logs", "channel logs"),
+            ("thread", "🧵 thread-logs", "thread logs"),
+            ("role", "✨ role-logs", "role logs"),
+            ("command", "⌨️ command-logs", "command logs"),
+            ("server", "⚙️ server-logs", "server logs"),
+            ("forum", "📰 forum-logs", "forum logs")
+        ]
+
+        if choice == "1️⃣":
+            # Emoji preference
+            emoji_prompt = await ctx.send(
+                "Do you want to include emojis in the category and channel names? React ✅ for yes, ❌ for no.",
+                ephemeral=True
+            )
+            try:
+                await emoji_prompt.add_reaction("✅")
+                await emoji_prompt.add_reaction("❌")
+            except Exception:
+                pass
+
+            def emoji_check(reaction, user):
+                return (
+                    user == ctx.author 
+                    and reaction.message.id == emoji_prompt.id 
+                    and str(reaction.emoji) in ["✅", "❌"]
+                )
+
+            try:
+                emoji_reaction, _ = await ctx.bot.wait_for("reaction_add", timeout=30.0, check=emoji_check)
+                use_emojis = str(emoji_reaction.emoji) == "✅"
+            except asyncio.TimeoutError:
+                await ctx.send("Timed out. Using no emojis by default.", ephemeral=True)
+                use_emojis = False
+
+            # Create category and channels
+            cat_name = "📝 YALC Logs" if use_emojis else "YALC Logs"
+            try:
+                category = await ctx.guild.create_category_channel(cat_name, reason="YALC setup")
+                for key, emoji_name, plain_name in channel_defs:
+                    channel = await ctx.guild.create_text_channel(
+                        emoji_name if use_emojis else plain_name,
+                        category=category,
+                        reason=f"YALC setup - {plain_name}"
+                    )
+                    log_channels[key] = channel
+                await ctx.send("✅ Created all log channels.", ephemeral=True)
+            except Exception as e:
+                self.log.error(f"Failed to create channels: {e}")
+                await ctx.send("❌ Failed to create some channels. Please check permissions.", ephemeral=True)
+                return
+
+        elif choice == "2️⃣":
+            for key, emoji_name, plain_name in channel_defs:
+                await ctx.send(
+                    f"Please mention the channel to use for {plain_name}, or type 'skip' to skip.",
+                    ephemeral=True
+                )
+
+                def msg_check(m):
+                    return m.author == ctx.author and m.channel == ctx.channel
+
+                try:
+                    msg = await ctx.bot.wait_for("message", timeout=30.0, check=msg_check)
+                    if msg.content.lower() != "skip":
+                        if not msg.channel_mentions:
+                            await ctx.send(f"No channel mentioned. Skipping {plain_name}.", ephemeral=True)
+                            continue
+                        log_channels[key] = msg.channel_mentions[0]
+                except asyncio.TimeoutError:
+                    await ctx.send(f"Timed out. Skipping {plain_name}.", ephemeral=True)
+                    continue
+
+        # Step 2: Event enabling
+        await ctx.send(
+            "Which events do you want to enable?\n"
+            "✅ All events\n"
+            "🛡️ Moderation only (bans, kicks, role, channel, member updates)\n"
+            "❌ None (I'll enable manually)",
+            ephemeral=True
+        )
+        events_msg = await ctx.send("React with ✅, 🛡️, or ❌.", ephemeral=True)
+        for emoji in ["✅", "🛡️", "❌"]:
+            try:
+                await events_msg.add_reaction(emoji)
+            except Exception:
+                pass
+
+        def events_check(reaction, user):
+            return (
+                user == ctx.author 
+                and reaction.message.id == events_msg.id 
+                and str(reaction.emoji) in ["✅", "🛡️", "❌"]
+            )
+
+        try:
+            event_reaction, _ = await ctx.bot.wait_for("reaction_add", timeout=30.0, check=events_check)
+        except asyncio.TimeoutError:
+            await ctx.send("Timed out. No events will be enabled by default.", ephemeral=True)
+            event_choice = "❌"
+        else:
+            event_choice = str(event_reaction.emoji)
+
+        all_events = list(self.event_descriptions.keys())
+        mod_events = [
+            "member_ban", "member_unban", "member_kick", "member_update",
+            "role_create", "role_delete", "role_update",
+            "channel_create", "channel_delete", "channel_update",
+            "message_delete", "message_edit"
+        ]
+
+        if event_choice == "✅":
+            # Enable all events
+            events_config = {event: True for event in all_events}
+            await self.config.guild(ctx.guild).events.set(events_config)
+            await ctx.send("✅ Enabled all events.", ephemeral=True)
+        elif event_choice == "🛡️":
+            # Enable moderation events only
+            events_config = {event: (event in mod_events) for event in all_events}
+            await self.config.guild(ctx.guild).events.set(events_config)
+            await ctx.send("✅ Enabled moderation events.", ephemeral=True)
+        else:
+            # Keep all events disabled
+            events_config = {event: False for event in all_events}
+            await self.config.guild(ctx.guild).events.set(events_config)
+            await ctx.send("✅ All events will remain disabled.", ephemeral=True)
+
+        # Step 3: Assign log channels to events (if any set)
+        if log_channels:
+            event_map = {
+                "message": ["message_delete", "message_edit"],
+                "member": [
+                    "member_join", "member_leave", "member_ban",
+                    "member_unban", "member_kick", "member_update"
+                ],
+                "channel": ["channel_create", "channel_delete", "channel_update"],
+                "thread": [
+                    "thread_create", "thread_delete", "thread_update",
+                    "thread_member_join", "thread_member_leave"
+                ],
+                "role": ["role_create", "role_delete", "role_update"],
+                "command": ["command_use", "command_error", "application_cmd"],
+                "server": ["guild_update", "emoji_update", "cog_load", "voice_update"],
+                "forum": ["forum_post_create", "forum_post_update", "forum_post_delete"]
+            }
+
+            event_channels = {}
+            for key, events in event_map.items():
+                if key in log_channels:
+                    for event in events:
+                        event_channels[event] = log_channels[key].id
+
+            await self.config.guild(ctx.guild).event_channels.set(event_channels)
+            await ctx.send("✅ Configured log channels for all events.", ephemeral=True)
+
+        # Step 4: Tupperbox Setup
+        await ctx.send(
+            "Do you want to ignore Tupperbox proxy messages in logs? React ✅ for yes, ❌ for no.",
+            ephemeral=True
+        )
+        tupperbox_prompt = await ctx.send("React now.", ephemeral=True)
+        try:
+            await tupperbox_prompt.add_reaction("✅")
+            await tupperbox_prompt.add_reaction("❌")
+        except Exception:
+            pass
+
+        def tupperbox_check(reaction, user):
+            return (
+                user == ctx.author 
+                and reaction.message.id == tupperbox_prompt.id 
+                and str(reaction.emoji) in ["✅", "❌"]
+            )
+
+        try:
+            tupperbox_reaction, _ = await ctx.bot.wait_for(
+                "reaction_add",
+                timeout=30.0,
+                check=tupperbox_check
+            )
+            ignore_tupperbox = str(tupperbox_reaction.emoji) == "✅"
+        except asyncio.TimeoutError:
+            await ctx.send("Timed out. Defaulting to ignore Tupperbox: True.", ephemeral=True)
+            ignore_tupperbox = True
+
+        await self.config.guild(ctx.guild).ignore_tupperbox.set(ignore_tupperbox)
+
+        if ignore_tupperbox:
+            await ctx.send(
+                "Would you like to add additional Tupperbox bot IDs to ignore? "
+                "Type each ID and send, or type 'done' to finish.",
+                ephemeral=True
+            )
+            ids = await self.config.guild(ctx.guild).tupperbox_ids()
+
+            def id_check(m):
+                return m.author == ctx.author and m.channel == ctx.channel
+
+            while True:
+                try:
+                    msg = await ctx.bot.wait_for("message", timeout=30.0, check=id_check)
+                    if msg.content.lower() == "done":
+                        break
+                    if msg.content.isdigit() and len(msg.content) >= 17:
+                        if msg.content not in ids:
+                            ids.append(msg.content)
+                            await ctx.send(f"Added ID: {msg.content}", ephemeral=True)
+                        else:
+                            await ctx.send("That ID is already in the list.", ephemeral=True)
+                    else:
+                        await ctx.send(
+                            "That doesn't look like a valid Discord user ID. "
+                            "Please enter a valid ID or 'done'.",
+                            ephemeral=True
+                        )
+                except asyncio.TimeoutError:
+                    await ctx.send("Timed out. Saving current IDs.", ephemeral=True)
+                    break
+
+            await self.config.guild(ctx.guild).tupperbox_ids.set(ids)
+
+        await ctx.send(
+            "✅ YALC setup complete! Use `/yalc events` to review your settings.",
+            ephemeral=True
+        )
+
+    async def yalc_events(self, ctx: commands.Context) -> None:
+        """List all loggable events and their status."""
+        if not ctx.guild:
+            await ctx.send("This command must be used in a server.", ephemeral=True)
+            return
+        settings = await self.config.guild(ctx.guild).all()
+        events = settings["events"]
+        event_channels = settings["event_channels"]
+
+        embed = discord.Embed(
+            title="YALC Event Status",
+            description="Current status of all loggable events.",
+            color=discord.Color.blue()
+        )
+        
+        for event in sorted(self.event_descriptions.keys()):
+            emoji, desc = self.event_descriptions[event]
+            status = "✅ Enabled" if events.get(event, False) else "❌ Disabled"
+            channel = ctx.guild.get_channel(event_channels.get(event, 0))
+            channel_text = f" in {channel.mention}" if channel else ""
+            embed.add_field(
+                name=f"{emoji} {event}",
+                value=f"{status}{channel_text}\n{desc}",
+                inline=True
+            )
+        
+        await ctx.send(embed=embed, ephemeral=True)
+
+    async def yalc_enable(self, ctx: commands.Context, event: str) -> None:
+        """Enable logging for an event."""
+        if not ctx.guild:
+            await ctx.send("This command must be used in a server.", ephemeral=True)
+            return
+        
+        if not ctx.channel.permissions_for(ctx.author).manage_guild:
+            await ctx.send("You need the Manage Server permission to enable events.", ephemeral=True)
+            return
+
+        if event not in self.event_descriptions:
+            await ctx.send(
+                f"Invalid event. Use `/yalc events` to see available events.",
+                ephemeral=True
+            )
+            return
+
+        try:
+            await self.config.guild(ctx.guild).events.set_raw(event, value=True)
+            emoji, desc = self.event_descriptions[event]
+            await ctx.send(
+                f"{emoji} Enabled logging for: **{event}** ({desc})",
+                ephemeral=True
+            )
+        except Exception as e:
+            self.log.error(f"Failed to enable event {event}: {e}")
+            await ctx.send("Failed to enable event logging.", ephemeral=True)
+
+    async def yalc_disable(self, ctx: commands.Context, event: str) -> None:
+        """Disable logging for an event."""
+        if not ctx.guild:
+            await ctx.send("This command must be used in a server.", ephemeral=True)
+            return
+        
+        if not ctx.channel.permissions_for(ctx.author).manage_guild:
+            await ctx.send("You need the Manage Server permission to disable events.", ephemeral=True)
+            return
+
+        if event not in self.event_descriptions:
+            await ctx.send(
+                f"Invalid event. Use `/yalc events` to see available events.",
+                ephemeral=True
+            )
+            return
+
+        try:
+            await self.config.guild(ctx.guild).events.set_raw(event, value=False)
+            emoji, desc = self.event_descriptions[event]
+            await ctx.send(
+                f"{emoji} Disabled logging for: **{event}** ({desc})",
+                ephemeral=True
+            )
+        except Exception as e:
+            self.log.error(f"Failed to disable event {event}: {e}")
+            await ctx.send("Failed to disable event logging.", ephemeral=True)
+
+    async def yalc_setchannel(self, ctx: commands.Context, event: str, channel: Optional[discord.TextChannel]) -> None:
+        """Set the log channel for an event."""
+        if not ctx.guild:
+            await ctx.send("This command must be used in a server.", ephemeral=True)
+            return
+        
+        if not ctx.channel.permissions_for(ctx.author).manage_guild:
+            await ctx.send("You need the Manage Server permission to set channels.", ephemeral=True)
+            return
+
+        if event not in self.event_descriptions:
+            await ctx.send(
+                f"Invalid event. Use `/yalc events` to see available events.",
+                ephemeral=True
+            )
+            return
+
+        try:
+            if channel:
+                await self.config.guild(ctx.guild).event_channels.set_raw(event, value=channel.id)
+                emoji, desc = self.event_descriptions[event]
+                await ctx.send(
+                    f"{emoji} Set logging channel for **{event}** to {channel.mention}",
+                    ephemeral=True
+                )
+            else:
+                await ctx.send("Please specify a channel to set.", ephemeral=True)
+        except Exception as e:
+            self.log.error(f"Failed to set channel for event {event}: {e}")
+            await ctx.send("Failed to set logging channel.", ephemeral=True)
+
+    async def yalc_removechannel(self, ctx: commands.Context, event: str) -> None:
+        """Remove the log channel override for an event."""
+        if not ctx.guild:
+            await ctx.send("This command must be used in a server.", ephemeral=True)
+            return
+        
+        if not ctx.channel.permissions_for(ctx.author).manage_guild:
+            await ctx.send("You need the Manage Server permission to remove channels.", ephemeral=True)
+            return
+
+        if event not in self.event_descriptions:
+            await ctx.send(
+                f"Invalid event. Use `/yalc events` to see available events.",
+                ephemeral=True
+            )
+            return
+
+        try:
+            await self.config.guild(ctx.guild).event_channels.clear_raw(event)
+            emoji, desc = self.event_descriptions[event]
+            await ctx.send(
+                f"{emoji} Removed channel override for **{event}**",
+                ephemeral=True
+            )
+        except Exception as e:
+            self.log.error(f"Failed to remove channel for event {event}: {e}")
+            await ctx.send("Failed to remove logging channel.", ephemeral=True)
+
+    async def tupperbox_addid(self, ctx: commands.Context, bot_id: str) -> None:
+        """Add a bot user ID to ignore as Tupperbox proxy."""
+        if not ctx.guild:
+            await ctx.send("This command must be used in a server.", ephemeral=True)
+            return
+        
+        if not ctx.channel.permissions_for(ctx.author).manage_guild:
+            await ctx.send("You need the Manage Server permission to modify Tupperbox settings.", ephemeral=True)
+            return
+
+        if not bot_id.isdigit() or len(bot_id) < 17:
+            await ctx.send("Please provide a valid Discord user ID (17+ digits).", ephemeral=True)
+            return
+
+        try:
+            ids = await self.config.guild(ctx.guild).tupperbox_ids()
+            if bot_id in ids:
+                await ctx.send(f"ID `{bot_id}` is already in the ignore list.", ephemeral=True)
+                return
+            
+            ids.append(bot_id)
+            await self.config.guild(ctx.guild).tupperbox_ids.set(ids)
+            await ctx.send(f"Added `{bot_id}` to Tupperbox ignore list.", ephemeral=True)
+        except Exception as e:
+            self.log.error(f"Failed to add Tupperbox ID {bot_id}: {e}")
+            await ctx.send("Failed to add ID to ignore list.", ephemeral=True)
+
+    async def tupperbox_removeid(self, ctx: commands.Context, bot_id: str) -> None:
+        """Remove a bot user ID from the Tupperbox ignore list."""
+        if not ctx.guild:
+            await ctx.send("This command must be used in a server.", ephemeral=True)
+            return
+        
+        if not ctx.channel.permissions_for(ctx.author).manage_guild:
+            await ctx.send("You need the Manage Server permission to modify Tupperbox settings.", ephemeral=True)
+            return
+
+        try:
+            ids = await self.config.guild(ctx.guild).tupperbox_ids()
+            if bot_id not in ids:
+                await ctx.send(f"ID `{bot_id}` is not in the ignore list.", ephemeral=True)
+                return
+            
+            ids.remove(bot_id)
+            await self.config.guild(ctx.guild).tupperbox_ids.set(ids)
+            await ctx.send(f"Removed `{bot_id}` from Tupperbox ignore list.", ephemeral=True)
+        except Exception as e:
+            self.log.error(f"Failed to remove Tupperbox ID {bot_id}: {e}")
+            await ctx.send("Failed to remove ID from ignore list.", ephemeral=True)
+
     def is_tupperbox_message(self, message: discord.Message, tupperbox_ids: list[str]) -> bool:
-        """Check if a message is from Tupperbox or a configured proxy bot."""
+        """Check if a message is from Tupperbox or a configured proxy bot.
+        
+        This checks both the author's ID against the configured list and
+        verifies if they have a #0000 discriminator (indicating a bot account).
+        """
         if not message.author:
             return False
-        return str(message.author.id) in tupperbox_ids
+        
+        # First check if it's in our configured IDs
+        if str(message.author.id) in tupperbox_ids:
+            return True
+            
+        # Then check if it has a #0000 discriminator (bot account)
+        try:
+            # Get the full user tag (e.g. "User#0000")
+            full_tag = str(message.author)
+            # Only proceed if it contains a #
+            if "#" in full_tag:
+                # Split on # and check if the second part is "0000"
+                if full_tag.split("#")[1] == "0000":
+                    self.log.debug(f"Detected potential Tupperbox message from {full_tag}")
+                    return True
+        except Exception as e:
+            self.log.debug(f"Failed to check discriminator: {e}")
+            
+        return False
 
     async def safe_send(self, channel: Optional[discord.abc.Messageable], *args, **kwargs) -> None:
         """Safely send a message or embed to a channel, catching and logging exceptions."""
