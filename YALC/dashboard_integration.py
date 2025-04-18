@@ -146,3 +146,8 @@ class DashboardIntegration:
         await self.cog.config.guild(guild).ignore_tupperbox.set(ignore_tupperbox)
         tupperbox_ids = [id.strip() for id in data.get("tupperbox_ids", "").split(",") if id.strip().isdigit()]
         await self.cog.config.guild(guild).tupperbox_ids.set(tupperbox_ids)
+
+    @property
+    def qualified_name(self) -> str:
+        """Return the qualified name for dashboard registration."""
+        return "YALC"
