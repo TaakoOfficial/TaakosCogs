@@ -2,12 +2,14 @@ from redbot.core import commands
 from redbot.core.bot import Red
 import discord
 import typing
+import logging
 
 try:
     from dashboard.rpc.thirdparties import dashboard_page
 except ImportError:
     def dashboard_page(*args, **kwargs):
         def decorator(func):
+            logging.warning("[YALC] WARNING: dashboard_page decorator fallback is being used. Dashboard integration will NOT work. Make sure the Dashboard cog is loaded before YALC.")
             return func
         return decorator
 
