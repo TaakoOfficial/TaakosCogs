@@ -62,7 +62,7 @@ class YALC(commands.Cog):
             "forum_post_update": ("📰", "Forum post updated"),
             "forum_post_delete": ("📰", "Forum post deleted")
         }
-        self.tupperbox_default_ids = ["272885620769161216"]  # Default Tupperbox bot user ID
+        self.tupperbox_default_ids = ["431544605209788416"]  # Default Tupperbox bot user ID
         default_guild = {
             "ignored_users": [],
             "ignored_channels": [],
