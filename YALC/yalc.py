@@ -10,8 +10,9 @@ import datetime
 import asyncio
 import logging
 from redbot.core import modlog
+from .dashboard_integration import DashboardIntegration
 
-class YALC(commands.Cog):
+class YALC(DashboardIntegration, commands.Cog):
     """📝 Yet Another Logging Cog - Log all the things!
     
     A powerful Discord server logging solution that supports both classic and slash commands.
