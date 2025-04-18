@@ -173,10 +173,18 @@ class YALC(commands.Cog):
 
     async def cog_unload(self) -> None:
         """Cleanup tasks when the cog is unloaded."""
-        pass
+        # Optionally remove from dashboard third parties if needed
+        dashboard_cog = self.bot.get_cog("Dashboard")
+        if dashboard_cog and hasattr(dashboard_cog, "rpc") and hasattr(dashboard_cog.rpc, "third_parties_handler"):
+            try:
+                dashboard_cog.rpc.third_parties_handler.remove_third_party(self)
+                self.log.info("Unregistered YALC as a dashboard third party.")
+            except Exception as e:
+                self.log.error(f"Failed to unregister YALC as dashboard third party: {e}")
 
     async def cog_load(self) -> None:
-        """Register all YALC events as modlog case types."""
+        """Register all YALC events as modlog case types and dashboard third party."""
+        # Register modlog case types
         case_types = []
         for event, (emoji, description) in self.event_descriptions.items():
             case_types.append({
@@ -190,22 +198,34 @@ class YALC(commands.Cog):
             self.log.info("Registered all YALC events as modlog case types.")
         except Exception as e:
             self.log.error(f"Failed to register YALC case types: {e}")
+        # Register as dashboard third party if dashboard is loaded
+        dashboard_cog = self.bot.get_cog("Dashboard")
+        if dashboard_cog and hasattr(dashboard_cog, "rpc") and hasattr(dashboard_cog.rpc, "third_parties_handler"):
+            try:
+                dashboard_cog.rpc.third_parties_handler.add_third_party(self)
+                self.log.info("Registered YALC as a dashboard third party.")
+            except Exception as e:
+                self.log.error(f"Failed to register YALC as dashboard third party: {e}")
 
-    async def safe_send(
-        self,
-        channel: discord.TextChannel,
-        *,
-        content: Optional[str] = None,
-        embed: Optional[discord.Embed] = None
-    ) -> None:
-        """Safely send a message or embed to a channel, logging any errors."""
-        try:
-            if embed is not None:
-                await channel.send(content=content, embed=embed)
-            else:
-                await channel.send(content=content)
-        except Exception as e:
-            self.log.error(f"Failed to send message to {channel}: {e}")
+    @property
+    def dashboard_third_party_name(self) -> str:
+        """Name for dashboard third party integration."""
+        return "YALC"
+
+    @property
+    def dashboard_third_party_description(self) -> str:
+        """Description for dashboard third party integration."""
+        return "Yet Another Logging Cog - advanced server logging and moderation event tracking."
+
+    @property
+    def dashboard_third_party_icon(self) -> str:
+        """Icon URL for dashboard third party integration."""
+        return "https://cdn-icons-png.flaticon.com/512/928/928797.png"
+
+    @property
+    def dashboard_third_party_routes(self) -> list:
+        """Dashboard routes for third party integration (empty if not using custom pages)."""
+        return []
 
     # --- Event Listeners ---
 
