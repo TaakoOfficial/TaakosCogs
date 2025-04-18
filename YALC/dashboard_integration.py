@@ -3,10 +3,15 @@ from redbot.core.bot import Red
 import discord
 import typing
 import logging
+import sys
 
+print(f"[YALC DEBUG] sys.path: {sys.path}")
+print("[YALC DEBUG] Attempting to import dashboard_page...")
 try:
     from dashboard.rpc.thirdparties import dashboard_page
+    print("[YALC DEBUG] dashboard_page import succeeded!")
 except ImportError:
+    print("[YALC DEBUG] dashboard_page import FAILED! Using fallback.")
     def dashboard_page(*args, **kwargs):
         def decorator(func):
             logging.warning(
