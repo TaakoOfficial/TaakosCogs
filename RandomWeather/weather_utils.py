@@ -175,12 +175,21 @@ def create_weather_embed(weather_data: Dict[str, str], guild_settings: Dict[str,
     if weather_data["condition"] in condition_icons:
         embed.set_thumbnail(url=condition_icons[weather_data["condition"]])
 
-    # Temperature and Feels Like
-    embed.add_field(
-        name="🌡️ Temperature | 🌡️ Feels Like",
-        value=f"{weather_data['temperature_f']} | {weather_data['feels_like']}",
-        inline=False
-    )
+    # Temperature and Feels Like (show both only if different)
+    temp = weather_data["temperature_f"]
+    feels_like = weather_data["feels_like"]
+    if temp != feels_like:
+        embed.add_field(
+            name="🌡️ Temperature | 🌡️ Feels Like",
+            value=f"{temp} | {feels_like}",
+            inline=False
+        )
+    else:
+        embed.add_field(
+            name="🌡️ Temperature",
+            value=f"{temp}",
+            inline=False
+        )
     
     # Conditions
     embed.add_field(
