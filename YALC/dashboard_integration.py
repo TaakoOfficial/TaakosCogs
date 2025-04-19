@@ -7,19 +7,16 @@ class DashboardIntegration:
     """Dashboard integration for YALC."""
 
     def __init__(self, cog):
-        """Initialize dashboard integration with reference to main cog."""
         self.cog = cog
         self.bot = cog.bot
 
     @dashboard_page("overview", "YALC Overview")
     async def dashboard_overview(self, request, guild):
-        """Overview page for YALC in the dashboard."""
         html = self._render_overview()
         return {"status": 0, "web_content": {"source": html}}
 
     @dashboard_page("settings", "YALC Settings")
     async def dashboard_settings(self, request, guild):
-        """Settings management page for YALC."""
         if not guild:
             return {"status": 1, "message": "This page requires a guild to be selected."}
         if request.method == "POST":
@@ -41,6 +38,22 @@ class DashboardIntegration:
         except Exception as e:
             logging.exception("Failed to load YALC settings for dashboard.")
             return {"status": 1, "message": f"Failed to load settings: {e}"}
+
+    @dashboard_page("about", "About YALC")
+    async def dashboard_about(self, request, guild):
+        """About page for YALC in the dashboard."""
+        html = (
+            "<h2>About YALC</h2>"
+            "<p>YALC (Yet Another Logging Cog) is a comprehensive logging solution for Red-DiscordBot servers. "
+            "It provides advanced event logging, moderation tracking, and a user-friendly dashboard for configuration.</p>"
+            "<ul>"
+            "<li>Supports both classic and slash commands</li>"
+            "<li>Customizable event and channel settings</li>"
+            "<li>Integration with AAA3A's Dashboard</li>"
+            "<li>Easy to use and extend</li>"
+            "</ul>"
+        )
+        return {"status": 0, "web_content": {"source": html}}
 
     def _render_overview(self) -> str:
         """Render the overview HTML."""
@@ -114,10 +127,13 @@ class DashboardIntegration:
         await self.cog.config.guild(guild).tupperbox_ids.set(tupperbox_ids)
 
     def get_dashboard_views(self) -> list:
-        """Return dashboard page methods for Red-Dashboard discovery."""
-        return [self.dashboard_overview, self.dashboard_settings]
+        return [self.dashboard_overview, self.dashboard_settings, self.dashboard_about]
 
     @property
     def qualified_name(self) -> str:
-        """Return the qualified name for dashboard registration."""
         return "YALC"
+
+    def on_dashboard_cog_add(self, dashboard_cog) -> None:
+        """Called when the dashboard cog is loaded and this third party is registered."""
+        for view in self.get_dashboard_views():
+            dashboard_cog.rpc.third_parties_handler.add_page(self, view)
