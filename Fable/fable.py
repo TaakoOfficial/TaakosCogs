@@ -574,20 +574,22 @@ class Fable(commands.Cog):
     @commands.hybrid_command(name="log", description="Log an in-character event.")
     @commands.guild_only()
     @commands.cooldown(1, 5, commands.BucketType.guild)
-    async def event_log(self, ctx: commands.Context, *characters: str, description: str, date: Optional[str] = None):
+    async def event_log(self, ctx: commands.Context, characters: str, description: str, date: Optional[str] = None):
         """
         Log an in-character event.
         
         Usage:
-        [p]fable event log Vex Mira "Discovered the ancient tomb together" --date 3023-12-05
+        [p]fable event log "Vex, Mira" "Discovered the ancient tomb together" --date 3023-12-05
         """
         guild = ctx.guild
         user = ctx.author
         all_characters = await self.config.guild(guild).characters() or {}
         logs = await self.config.guild(guild).logs() or []
+        # Split characters by comma and strip whitespace
+        char_names = [c.strip() for c in characters.split(",") if c.strip()]
         involved = []
         missing = []
-        for cname in characters:
+        for cname in char_names:
             if cname in all_characters:
                 involved.append(cname)
             else:
@@ -618,8 +620,6 @@ class Fable(commands.Cog):
         }
         logs.append(event_data)
         await self.config.guild(guild).logs.set(logs)
-        # Optionally increment relationship strength for shared events
-        # (Not implemented here, but can be added)
         embed = discord.Embed(
             title="Event Logged",
             description=description,
@@ -866,53 +866,249 @@ class Fable(commands.Cog):
             await ctx.send_help(ctx.command)
 
     @commands.hybrid_command(name="suggest", description="Suggest a new lore entry.")
+    @commands.guild_only()
+    @commands.cooldown(1, 5, commands.BucketType.user)
     async def lore_suggest(self, ctx: commands.Context, name: str, description: str, type: Optional[str] = None):
         """
         Suggest a new lore entry.
         """
-        await ctx.send("Lore suggest not yet implemented.")
+        guild = ctx.guild
+        user = ctx.author
+        lore = await self.config.guild(guild).lore() or {}
+        suggestions = lore.get("suggestions", {})
+        approved = lore.get("approved", {})
+        # Prevent duplicate names
+        if name in suggestions or name in approved:
+            embed = discord.Embed(
+                title="❌ Lore Entry Exists",
+                description=f"A lore entry named **{name}** already exists or is pending approval.",
+                color=0xF04747
+            )
+            await ctx.send(embed=embed)
+            return
+        entry_id = len(suggestions) + len(approved) + 1
+        suggestions[name] = {
+            "id": entry_id,
+            "name": name,
+            "description": description,
+            "type": type or "Uncategorized",
+            "suggested_by": str(user.id),
+            "status": "pending",
+            "timestamp": discord.utils.utcnow().isoformat()
+        }
+        lore["suggestions"] = suggestions
+        await self.config.guild(guild).lore.set(lore)
+        embed = discord.Embed(
+            title="Lore Entry Suggested",
+            description=f"**{name}** has been suggested and is pending approval.",
+            color=0x43B581
+        )
+        embed.add_field(name="Type", value=type or "Uncategorized", inline=True)
+        embed.add_field(name="Description", value=description, inline=False)
+        embed.set_footer(text=f"Suggested by {ctx.author.display_name} • Fable RP Tracker")
+        await ctx.send(embed=embed)
 
     @commands.hybrid_command(name="approve", description="Approve a suggested lore entry.")
-    async def lore_approve(self, ctx: commands.Context, lore_id: int):
+    @commands.guild_only()
+    @commands.has_permissions(manage_guild=True)
+    async def lore_approve(self, ctx: commands.Context, name: str):
         """
         Approve a suggested lore entry.
         """
-        await ctx.send("Lore approve not yet implemented.")
+        guild = ctx.guild
+        lore = await self.config.guild(guild).lore() or {}
+        suggestions = lore.get("suggestions", {})
+        approved = lore.get("approved", {})
+        entry = suggestions.pop(name, None)
+        if not entry:
+            embed = discord.Embed(
+                title="❌ Suggestion Not Found",
+                description=f"No pending suggestion named **{name}**.",
+                color=0xF04747
+            )
+            await ctx.send(embed=embed)
+            return
+        entry["status"] = "approved"
+        approved[name] = entry
+        lore["suggestions"] = suggestions
+        lore["approved"] = approved
+        await self.config.guild(guild).lore.set(lore)
+        embed = discord.Embed(
+            title="Lore Entry Approved",
+            description=f"**{name}** has been approved and added to the lore.",
+            color=0x43B581
+        )
+        embed.add_field(name="Type", value=entry.get("type", "Uncategorized"), inline=True)
+        embed.add_field(name="Description", value=entry.get("description", "No description."), inline=False)
+        embed.set_footer(text=f"Approved by {ctx.author.display_name} • Fable RP Tracker")
+        await ctx.send(embed=embed)
 
     @commands.hybrid_command(name="deny", description="Deny a suggested lore entry.")
-    async def lore_deny(self, ctx: commands.Context, lore_id: int):
+    @commands.guild_only()
+    @commands.has_permissions(manage_guild=True)
+    async def lore_deny(self, ctx: commands.Context, name: str):
         """
         Deny a suggested lore entry.
         """
-        await ctx.send("Lore deny not yet implemented.")
+        guild = ctx.guild
+        lore = await self.config.guild(guild).lore() or {}
+        suggestions = lore.get("suggestions", {})
+        entry = suggestions.pop(name, None)
+        if not entry:
+            embed = discord.Embed(
+                title="❌ Suggestion Not Found",
+                description=f"No pending suggestion named **{name}**.",
+                color=0xF04747
+            )
+            await ctx.send(embed=embed)
+            return
+        lore["suggestions"] = suggestions
+        await self.config.guild(guild).lore.set(lore)
+        embed = discord.Embed(
+            title="Lore Entry Denied",
+            description=f"The suggestion **{name}** has been denied and removed.",
+            color=0xFAA61A
+        )
+        embed.set_footer(text=f"Denied by {ctx.author.display_name} • Fable RP Tracker")
+        await ctx.send(embed=embed)
 
     @commands.hybrid_command(name="edit", description="Edit a lore entry's description.")
+    @commands.guild_only()
+    @commands.has_permissions(manage_guild=True)
     async def lore_edit(self, ctx: commands.Context, name: str, new_description: str):
         """
         Edit a lore entry's description.
         """
-        await ctx.send("Lore edit not yet implemented.")
+        guild = ctx.guild
+        lore = await self.config.guild(guild).lore() or {}
+        approved = lore.get("approved", {})
+        entry = approved.get(name)
+        if not entry:
+            embed = discord.Embed(
+                title="❌ Lore Entry Not Found",
+                description=f"No approved lore entry named **{name}**.",
+                color=0xF04747
+            )
+            await ctx.send(embed=embed)
+            return
+        entry["description"] = new_description
+        approved[name] = entry
+        lore["approved"] = approved
+        await self.config.guild(guild).lore.set(lore)
+        embed = discord.Embed(
+            title="Lore Entry Updated",
+            description=f"**{name}**'s description has been updated.",
+            color=0x43B581
+        )
+        embed.add_field(name="New Description", value=new_description, inline=False)
+        embed.set_footer(text=f"Edited by {ctx.author.display_name} • Fable RP Tracker")
+        await ctx.send(embed=embed)
 
     @commands.hybrid_command(name="view", description="View a lore entry.")
+    @commands.guild_only()
     async def lore_view(self, ctx: commands.Context, name: str):
         """
         View a lore entry.
         """
-        await ctx.send("Lore view not yet implemented.")
+        guild = ctx.guild
+        lore = await self.config.guild(guild).lore() or {}
+        approved = lore.get("approved", {})
+        entry = approved.get(name)
+        if not entry:
+            embed = discord.Embed(
+                title="❌ Lore Entry Not Found",
+                description=f"No approved lore entry named **{name}**.",
+                color=0xF04747
+            )
+            await ctx.send(embed=embed)
+            return
+        embed = discord.Embed(
+            title=f"Lore: {entry['name']}",
+            description=entry.get("description", "No description."),
+            color=0x7289DA
+        )
+        embed.add_field(name="Type", value=entry.get("type", "Uncategorized"), inline=True)
+        embed.add_field(name="Status", value=entry.get("status", "approved"), inline=True)
+        suggester = ctx.guild.get_member(int(entry.get("suggested_by", 0)))
+        if suggester:
+            embed.set_footer(text=f"Suggested by {suggester.display_name} • Fable RP Tracker")
+        else:
+            embed.set_footer(text="Fable RP Tracker • Lore View")
+        await ctx.send(embed=embed)
 
     @commands.hybrid_command(name="list", description="List all lore entries, optionally filtered by type.")
+    @commands.guild_only()
     async def lore_list(self, ctx: commands.Context, type: Optional[str] = None):
         """
         List all lore entries, optionally filtered by type.
         """
-        await ctx.send("Lore list not yet implemented.")
+        guild = ctx.guild
+        lore = await self.config.guild(guild).lore() or {}
+        approved = lore.get("approved", {})
+        entries = list(approved.values())
+        if type:
+            entries = [e for e in entries if e.get("type", "Uncategorized").lower() == type.lower()]
+        if not entries:
+            embed = discord.Embed(
+                title="No Lore Entries Found",
+                description="No lore entries found for the given filter.",
+                color=0xF04747
+            )
+            await ctx.send(embed=embed)
+            return
+        # Paginate if more than 10 entries
+        pages = [entries[i:i+10] for i in range(0, len(entries), 10)]
+        for idx, page in enumerate(pages, 1):
+            embed = discord.Embed(
+                title=f"Lore Entries (Page {idx}/{len(pages)})",
+                color=0x7289DA
+            )
+            for entry in page:
+                embed.add_field(
+                    name=f"{entry['name']} [{entry.get('type', 'Uncategorized')}]",
+                    value=(entry.get("description", "No description.")[:100] + "..." if len(entry.get("description", "")) > 100 else entry.get("description", "No description.")),
+                    inline=False
+                )
+            embed.set_footer(text="Fable RP Tracker • Lore List")
+            await ctx.send(embed=embed)
 
     @commands.hybrid_command(name="search", description="Search lore entries by keyword.")
+    @commands.guild_only()
+    @commands.cooldown(1, 5, commands.BucketType.guild)
     async def lore_search(self, ctx: commands.Context, keyword: str):
         """
         Search lore entries by keyword.
+        
+        Usage:
+        [p]fable lore search dragon
         """
-        await ctx.send("Lore search not yet implemented.")
+        guild = ctx.guild
+        lore = await self.config.guild(guild).lore() or {}
+        approved = lore.get("approved", {})
+        results = [e for e in approved.values() if keyword.lower() in e.get("description", "").lower()]
+        if not results:
+            embed = discord.Embed(
+                title="No Lore Entries Found",
+                description=f"No lore entries found containing '{keyword}'.",
+                color=0xF04747
+            )
+            await ctx.send(embed=embed)
+            return
+        embed = discord.Embed(
+            title=f"Lore Entries Matching '{keyword}'",
+            color=0x7289DA
+        )
+        for entry in results[:10]:
+            embed.add_field(
+                name=f"{entry['name']} [{entry.get('type', 'Uncategorized')}]",
+                value=(entry.get("description", "No description.")[:100] + "..." if len(entry.get("description", "")) > 100 else entry.get("description", "No description.")),
+                inline=False
+            )
+        if len(results) > 10:
+            embed.set_footer(text=f"Showing first 10 of {len(results)} results • Fable RP Tracker")
+        else:
+            embed.set_footer(text="Fable RP Tracker • Lore Search")
+        await ctx.send(embed=embed)
 
     # IC Mail System
     @commands.hybrid_group(name="mail", description="In-character mail system.")
