@@ -103,28 +103,53 @@ class YALC(commands.Cog):
         return channel if isinstance(channel, discord.TextChannel) else None
 
     def create_embed(self, event_type: str, description: str, **kwargs) -> discord.Embed:
-        """Create a standardized embed for logging."""
+        """Create a standardized, readable embed for logging."""
         color_map = {
             "message_delete": discord.Color.red(),
             "message_edit": discord.Color.blue(),
             "member_join": discord.Color.green(),
             "member_leave": discord.Color.orange(),
             "member_ban": discord.Color.dark_red(),
-            "member_unban": discord.Color.teal()
+            "member_unban": discord.Color.teal(),
+            "member_update": discord.Color.blurple(),
+            "channel_create": discord.Color.green(),
+            "channel_delete": discord.Color.red(),
+            "channel_update": discord.Color.blurple(),
+            "role_create": discord.Color.green(),
+            "role_delete": discord.Color.red(),
+            "role_update": discord.Color.blurple(),
+            "emoji_update": discord.Color.gold(),
+            "guild_update": discord.Color.blurple(),
+            "voice_update": discord.Color.purple(),
+            "member_kick": discord.Color.orange(),
+            "command_use": discord.Color.blurple(),
+            "command_error": discord.Color.red(),
+            "application_cmd": discord.Color.blurple(),
+            "forum_post_create": discord.Color.green(),
+            "forum_post_update": discord.Color.blurple(),
+            "forum_post_delete": discord.Color.red(),
+            "thread_create": discord.Color.green(),
+            "thread_delete": discord.Color.red(),
+            "thread_update": discord.Color.blurple(),
+            "thread_member_join": discord.Color.green(),
+            "thread_member_leave": discord.Color.red(),
         }
-        
         embed = discord.Embed(
             title=f"📝 {event_type.replace('_', ' ').title()}",
-            description=description,
+            description=description + "\n\u200b",  # Add spacing after desc
             color=color_map.get(event_type, discord.Color.blurple()),
             timestamp=datetime.datetime.now(datetime.UTC)
         )
-        
-        # Add any additional fields from kwargs
+        # Add fields with better formatting
         for key, value in kwargs.items():
-            if value:
-                embed.add_field(name=key.replace('_', ' ').title(), value=str(value))
-                
+            if not value:
+                continue
+            # For multi-line or list fields, use block quotes or bullets
+            if isinstance(value, list):
+                value = "\n".join(f"- {v}" for v in value)
+            elif isinstance(value, str) and ("\n" in value or len(value) > 60):
+                value = f"> {value.replace(chr(10), '\n> ')}"
+            embed.add_field(name=key.replace('_', ' ').title(), value=value, inline=False)
         self.set_embed_footer(embed)
         return embed
 
@@ -236,14 +261,15 @@ class YALC(commands.Cog):
             embeds = getattr(message, "embeds", [])
             channel_name = getattr(message.channel, "name", str(message.channel) if message.channel else "Unknown")
             self.log.debug(f"Logging message_delete: author={author}, content={content}, attachments={attachments}, embeds={embeds}, channel_name={channel_name}")
+            user_link = f"[{author}](https://discord.com/users/{author.id})" if author else "Unknown"
             embed = self.create_embed(
                 "message_delete",
-                f"🗑️ Message deleted in {getattr(message.channel, 'mention', str(message.channel))}",
-                user=f"{author} ({getattr(author, 'id', 'N/A')})" if author else "Unknown",
-                content=content,
-                attachments=attachments,
-                embeds=embeds,
-                channel_name=channel_name
+                f"🗑️ Message deleted in {getattr(message.channel, 'mention', str(message.channel))}\n\u200b",
+                user=user_link,
+                channel_name=channel_name,
+                content=content if content else None,
+                attachments=attachments if attachments else None,
+                embeds="Yes" if embeds else None
             )
             await self.safe_send(channel, embed=embed)
         except Exception as e:
@@ -251,7 +277,7 @@ class YALC(commands.Cog):
 
     @commands.Cog.listener()
     async def on_message_edit(self, before: discord.Message, after: discord.Message) -> None:
-        """Log message edit events."""
+        """Log message edit events, skipping Tupperbox proxies if configured."""
         self.log.debug("Listener triggered: on_message_edit")
         if not before.guild:
             self.log.debug("No guild on message.")
@@ -275,8 +301,12 @@ class YALC(commands.Cog):
             return
         try:
             settings = await self.config.guild(before.guild).all()
-            if settings.get("ignore_tupperbox", True) and self.is_tupperbox_message(before, settings.get("tupperbox_ids", self.tupperbox_default_ids)):
-                self.log.debug("Skipping Tupperbox message_edit event.")
+            tupperbox_ids = settings.get("tupperbox_ids", getattr(self, "tupperbox_default_ids", ["239232811662311425"]))
+            ignore_tupperbox = settings.get("ignore_tupperbox", True)
+            if ignore_tupperbox and (
+                self.is_tupperbox_message(before, tupperbox_ids) or self.is_tupperbox_message(after, tupperbox_ids)
+            ):
+                self.log.debug("Skipping Tupperbox message_edit event (matched before or after message).")
                 return
         except Exception as e:
             self.log.error(f"Error checking Tupperbox ignore: {e}")
@@ -286,10 +316,7 @@ class YALC(commands.Cog):
             embeds = getattr(after, "embeds", [])
             channel_name = getattr(before.channel, "name", str(before.channel) if before.channel else "Unknown")
             self.log.debug(f"Logging message_edit: author={author}, before={before.content}, after={after.content}, attachments={attachments}, embeds={embeds}, channel_name={channel_name}")
-            if author:
-                user_link = f"[{author}](https://discord.com/users/{author.id})"
-            else:
-                user_link = "Unknown"
+            user_link = f"[{author}](https://discord.com/users/{author.id})" if author else "Unknown"
             jump_url = getattr(after, "jump_url", None)
             embed = self.create_embed(
                 "message_edit",
@@ -299,7 +326,6 @@ class YALC(commands.Cog):
             )
             before_text = before.content or 'No content'
             after_text = after.content or 'No content'
-            # Use block quote for better readability and avoid code block issues
             embed.add_field(name="Before", value=f"> {before_text}", inline=False)
             embed.add_field(name="After", value=f"> {after_text}", inline=False)
             if jump_url:
@@ -344,7 +370,7 @@ class YALC(commands.Cog):
         try:
             embed = self.create_embed(
                 "member_join",
-                f"👋 {member} has joined the server.",
+                f"👋 {member.mention} has joined the server.\n\u200b",
                 user=f"{member} ({member.id})"
             )
             await self.safe_send(channel, embed=embed)
@@ -378,7 +404,7 @@ class YALC(commands.Cog):
         try:
             embed = self.create_embed(
                 "member_leave",
-                f"👋 {member} has left the server.",
+                f"👋 {member.mention} has left the server.\n\u200b",
                 user=f"{member} ({member.id})"
             )
             await self.safe_send(channel, embed=embed)
@@ -397,7 +423,7 @@ class YALC(commands.Cog):
             return
         embed = self.create_embed(
             "member_ban",
-            f"🔨 {user} has been banned.",
+            f"🔨 {user.mention if hasattr(user, 'mention') else user} has been banned.\n\u200b",
             user=f"{user} ({user.id})",
             channel_name=guild.name if guild else "Unknown"
         )
@@ -415,7 +441,7 @@ class YALC(commands.Cog):
             return
         embed = self.create_embed(
             "member_unban",
-            f"🔓 {user} has been unbanned.",
+            f"🔓 {user.mention if hasattr(user, 'mention') else user} has been unbanned.\n\u200b",
             user=f"{user} ({user.id})",
             channel_name=guild.name if guild else "Unknown"
         )
@@ -498,7 +524,7 @@ class YALC(commands.Cog):
         try:
             embed = self.create_embed(
                 "channel_create",
-                f"📝 Channel created: {getattr(channel, 'mention', str(channel))}",
+                f"📝 Channel created: {getattr(channel, 'mention', str(channel))}\n\u200b",
                 name=channel.name,
                 id=channel.id,
                 type=type(channel).__name__,
@@ -534,7 +560,7 @@ class YALC(commands.Cog):
         try:
             embed = self.create_embed(
                 "channel_delete",
-                f"🗑️ Channel deleted: {getattr(channel, 'mention', str(channel))}",
+                f"🗑️ Channel deleted: {getattr(channel, 'mention', str(channel))}\n\u200b",
                 name=channel.name,
                 id=channel.id,
                 type=type(channel).__name__,
@@ -587,7 +613,7 @@ class YALC(commands.Cog):
                 return
             embed = self.create_embed(
                 "channel_update",
-                f"🔄 Channel updated: {getattr(after, 'mention', str(after))}",
+                f"🔄 Channel updated: {getattr(after, 'mention', str(after))}\n\u200b",
                 changes="\n".join(changes),
                 channel_name=after.name
             )
@@ -621,7 +647,7 @@ class YALC(commands.Cog):
         try:
             embed = self.create_embed(
                 "thread_create",
-                f"🧵 Thread created in {getattr(thread.parent, 'mention', None)}",
+                f"🧵 Thread created in {getattr(thread.parent, 'mention', None)}\n\u200b",
                 thread=thread.mention,
                 name=thread.name,
                 creator=f"{thread.owner} ({thread.owner_id})" if thread.owner else f"ID: {thread.owner_id}",
@@ -658,7 +684,7 @@ class YALC(commands.Cog):
         try:
             embed = self.create_embed(
                 "thread_delete",
-                f"🗑️ Thread deleted from {getattr(thread.parent, 'mention', None)}",
+                f"🗑️ Thread deleted from {getattr(thread.parent, 'mention', None)}\n\u200b",
                 name=thread.name,
                 archived=thread.archived,
                 locked=thread.locked,
@@ -707,7 +733,7 @@ class YALC(commands.Cog):
                 return
             embed = self.create_embed(
                 "thread_update",
-                f"🔄 Thread updated in {getattr(after.parent, 'mention', None)}",
+                f"🔄 Thread updated in {getattr(after.parent, 'mention', None)}\n\u200b",
                 thread=after.mention,
                 changes="\n".join(changes)
             )
@@ -808,7 +834,7 @@ class YALC(commands.Cog):
         try:
             embed = self.create_embed(
                 "role_create",
-                f"✨ Role created: {role.mention}",
+                f"✨ Role created: {role.mention}\n\u200b",
                 name=role.name,
                 id=role.id
             )
@@ -842,7 +868,7 @@ class YALC(commands.Cog):
         try:
             embed = self.create_embed(
                 "role_delete",
-                f"🗑️ Role deleted: {role.name}",
+                f"🗑️ Role deleted: {role.name}\n\u200b",
                 name=role.name,
                 id=role.id
             )
@@ -885,7 +911,7 @@ class YALC(commands.Cog):
                 return
             embed = self.create_embed(
                 "role_update",
-                f"🔄 Role updated: {after.mention}",
+                f"🔄 Role updated: {after.mention}\n\u200b",
                 changes="\n".join(changes)
             )
             await self.safe_send(channel, embed=embed)
@@ -986,6 +1012,7 @@ class YALC(commands.Cog):
 
     @commands.Cog.listener()
     async def on_voice_state_update(self, member: discord.Member, before: discord.VoiceState, after: discord.VoiceState) -> None:
+        """Log simple, readable voice state changes."""
         self.log.debug("Listener triggered: on_voice_state_update")
         if not member.guild:
             self.log.debug("No guild on member.")
@@ -1008,25 +1035,33 @@ class YALC(commands.Cog):
             self.log.warning("No log channel set for voice_update.")
             return
         try:
-            changes = []
+            # Only log the most relevant, simple changes
+            events = []
             if before.channel != after.channel:
-                changes.append(f"Channel: {getattr(before.channel, 'mention', None)} → {getattr(after.channel, 'mention', None)}")
+                if before.channel and not after.channel:
+                    events.append(f"{member.mention} left {before.channel.mention}")
+                elif not before.channel and after.channel:
+                    events.append(f"{member.mention} joined {after.channel.mention}")
+                elif before.channel and after.channel:
+                    events.append(f"{member.mention} moved from {before.channel.mention} to {after.channel.mention}")
             if before.mute != after.mute:
-                changes.append(f"Muted: {before.mute} → {after.mute}")
+                events.append(f"{member.mention} was {'muted' if after.mute else 'unmuted'} by server")
             if before.deaf != after.deaf:
-                changes.append(f"Deafened: {before.deaf} → {after.deaf}")
+                events.append(f"{member.mention} was {'deafened' if after.deaf else 'undeafened'} by server")
             if before.self_mute != after.self_mute:
-                changes.append(f"Self-muted: {before.self_mute} → {after.self_mute}")
+                events.append(f"{member.mention} {'muted themselves' if after.self_mute else 'unmuted themselves'}")
             if before.self_deaf != after.self_deaf:
-                changes.append(f"Self-deafened: {before.self_deaf} → {after.self_deaf}")
-            if not changes:
+                events.append(f"{member.mention} {'deafened themselves' if after.self_deaf else 'undeafened themselves'}")
+            if not events:
                 return
-            embed = self.create_embed(
-                "voice_update",
-                f"🎤 Voice state updated for {member.mention}",
-                changes="\n".join(changes)
-            )
-            await self.safe_send(channel, embed=embed)
+            for event in events:
+                embed = discord.Embed(
+                    description=event,
+                    color=discord.Color.purple(),
+                    timestamp=datetime.datetime.now(datetime.UTC)
+                )
+                self.set_embed_footer(embed, label="YALC Logger • Voice")
+                await self.safe_send(channel, embed=embed)
         except Exception as e:
             self.log.error(f"Failed to log voice_update: {e}")
 
@@ -1678,6 +1713,7 @@ class YALC(commands.Cog):
             await ctx.send("You need the Manage Server permission to set channels.", ephemeral=True)
             return
 
+        if event not```python
         if event not in self.event_descriptions:
             await ctx.send(
                 f"Invalid event. Use `/yalc events` to see available events.",
@@ -1694,7 +1730,7 @@ class YALC(commands.Cog):
                     ephemeral=True
                 )
             else:
-                await ctx.send("Please specify a channel to set.", ephemeral=True)
+                await ctx.send("Please specifya channel to set.", ephemeral=True)
         except Exception as e:
             self.log.error(f"Failed to set channel for event {event}: {e}")
             await ctx.send("Failed to set logging channel.", ephemeral=True)
@@ -1744,7 +1780,7 @@ class YALC(commands.Cog):
         try:
             ids = await self.config.guild(ctx.guild).tupperbox_ids()
             if bot_id in ids:
-                await ctx.send(f"ID `{bot_id}` is alreadyin the ignore list.", ephemeral=True)
+                await ctx.send(f"ID `{bot_id}` is already in the ignore list.", ephemeral=True)
                 return
             ids.append(bot_id)
             await self.config.guild(ctx.guild).tupperbox_ids.set(ids)
@@ -1780,19 +1816,29 @@ class YALC(commands.Cog):
         """Check if a message is from Tupperbox or a configured proxy bot.
         This checks both the author's ID against the configured list and
         verifies if they have a #0000 discriminator (indicating a botaccount).
+        Uses the discriminator attribute directly for robustness.
         """
-        if not message.author:
+        author = getattr(message, "author", None)
+        if not author:
             return False
-        if str(message.author.id) in tupperbox_ids:
+        if str(getattr(author, "id", "")) in tupperbox_ids:
             return True
+        # Prefer attribute access for discriminator
+        discriminator = getattr(author, "discriminator", None)
+        if discriminator is not None:
+            if str(discriminator) == "0" or str(discriminator) == "0000":
+                self.log.debug(f"Detected potential Tupperbox message from {author} (discriminator: {discriminator})")
+                return True
+        # Fallback: parse from string if attribute missing
         try:
-            full_tag = str(message.author)
+            full_tag = str(author)
             if "#" in full_tag:
-                if full_tag.split("#")[1] == "0000":
-                    self.log.debug(f"Detected potential Tupperbox message from {full_tag}")
+                tag_disc = full_tag.split("#", 1)[1]
+                if tag_disc in ("0", "0000"):
+                    self.log.debug(f"Detected potential Tupperbox message from {full_tag} (string fallback)")
                     return True
         except Exception as e:
-            self.log.debug(f"Failed to check discriminator: {e}")
+            self.log.debug(f"Failed to check discriminator robustly: {e}")
         return False
 
     async def safe_send(self, channel: Optional[discord.abc.Messageable], *args, **kwargs) -> None:
@@ -1809,3 +1855,4 @@ async def setup(bot: Red) -> None:
     """Set up the YALC cog."""
     cog = YALC(bot)
     await bot.add_cog(cog)
+
