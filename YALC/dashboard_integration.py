@@ -126,8 +126,13 @@ class DashboardIntegration:
         tupperbox_ids = [id.strip() for id in data.get("tupperbox_ids", "").split(",") if id.strip().isdigit()]
         await self.cog.config.guild(guild).tupperbox_ids.set(tupperbox_ids)
 
+    @dashboard_page("test", "YALC Test Page", methods=("GET", "POST"))
+    async def dashboard_test(self, request, guild):
+        """A simple test page to verify dashboard integration."""
+        return {"status": 0, "web_content": {"source": "<h2>YALC Test Page</h2><p>If you see this, the integration works!</p>"}}
+
     def get_dashboard_views(self) -> list:
-        return [self.dashboard_overview, self.dashboard_settings, self.dashboard_about]
+        return [self.dashboard_overview, self.dashboard_settings, self.dashboard_about, self.dashboard_test]
 
     @property
     def qualified_name(self) -> str:
