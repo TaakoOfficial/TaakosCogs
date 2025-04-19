@@ -1759,33 +1759,23 @@ class YALC(commands.Cog):
             self.log.error(f"Failed to remove Tupperbox ID {bot_id}: {e}")
             await ctx.send("Failed to remove ID from ignore list.", ephemeral=True)
 
-```python
     def is_tupperbox_message(self, message: discord.Message, tupperbox_ids: list[str]) -> bool:
         """Check if a message is from Tupperbox or a configured proxy bot.
-        
         This checks both the author's ID against the configured list and
         verifies if they have a #0000 discriminator (indicating a botaccount).
         """
         if not message.author:
             return False
-        
-        # First check if it's in our configured IDs
         if str(message.author.id) in tupperbox_ids:
             return True
-            
-        # Then check if it has a #0000 discriminator (bot account)
         try:
-            # Get the full user tag (e.g. "User#0000")
             full_tag = str(message.author)
-            # Only proceed if it contains a #
             if "#" in full_tag:
-                # Split on # and check if the second part is "0000"
                 if full_tag.split("#")[1] == "0000":
                     self.log.debug(f"Detected potential Tupperbox message from {full_tag}")
                     return True
         except Exception as e:
             self.log.debug(f"Failed to check discriminator: {e}")
-            
         return False
 
     async def safe_send(self, channel: Optional[discord.abc.Messageable], *args, **kwargs) -> None:
@@ -1802,4 +1792,3 @@ async def setup(bot: Red) -> None:
     """Set up the YALC cog."""
     cog = YALC(bot)
     await bot.add_cog(cog)
-```
