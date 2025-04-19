@@ -285,15 +285,24 @@ class YALC(commands.Cog):
             embeds = getattr(after, "embeds", [])
             channel_name = getattr(before.channel, "name", str(before.channel) if before.channel else "Unknown")
             self.log.debug(f"Logging message_edit: author={author}, before={content_before}, after={content_after}, attachments={attachments}, embeds={embeds}, channel_name={channel_name}")
+            # Create clickable username link
+            if author:
+                user_link = f"[{author}](https://discord.com/users/{author.id})"
+            else:
+                user_link = "Unknown"
             embed = self.create_embed(
                 "message_edit",
                 f"✏️ Message edited in {getattr(before.channel, 'mention', str(before.channel))}",
-                user=f"{author} ({getattr(author, 'id', 'N/A')})" if author else "Unknown",
+                user=user_link,
                 content=f"**Before:** {content_before}\n**After:** {content_after}",
                 attachments=attachments,
                 embeds=embeds,
                 channel_name=channel_name
             )
+            # Set footer to edit time
+            edit_time = after.edited_at or after.created_at or discord.utils.utcnow()
+            if edit_time:
+                embed.set_footer(text=f"Edited: {discord.utils.format_dt(edit_time, 'F')}")
             await self.safe_send(channel, embed=embed)
         except Exception as e:
             self.log.error(f"Failed to log message_edit: {e}")
@@ -891,6 +900,18 @@ class YALC(commands.Cog):
                 changes.append("Icon changed")
             if before.owner_id != after.owner_id:
                 changes.append(f"Owner: {before.owner_id} → {after.owner_id}")
+            if getattr(before, 'banner', None) != getattr(after, 'banner', None):
+                changes.append("Banner changed")
+            if getattr(before, 'splash', None) != getattr(after, 'splash', None):
+                changes.append("Splash image changed")
+            if getattr(before, 'description', None) != getattr(after, 'description', None):
+                changes.append(f"Description: {getattr(before, 'description', None)} → {getattr(after, 'description', None)}")
+            if getattr(before, 'vanity_url_code', None) != getattr(after, 'vanity_url_code', None):
+                changes.append(f"Vanity URL: {getattr(before, 'vanity_url_code', None)} → {getattr(after, 'vanity_url_code', None)}")
+            if getattr(before, 'afk_channel', None) != getattr(after, 'afk_channel', None):
+                changes.append(f"AFK Channel: {getattr(before.afk_channel, 'name', None)} → {getattr(after.afk_channel, 'name', None)}")
+            if getattr(before, 'afk_timeout', None) != getattr(after, 'afk_timeout', None):
+                changes.append(f"AFK Timeout: {getattr(before, 'afk_timeout', None)} → {getattr(after, 'afk_timeout', None)}")
             if not changes:
                 return
             embed = self.create_embed(
@@ -1312,14 +1333,13 @@ class YALC(commands.Cog):
         log_channels = {}
         use_emojis = False
         channel_defs = [
-            ("message", "📝 message-logs", "message logs"),
-            ("member", "👤 member-logs", "member logs"),
-            ("channel", "📺 channel-logs", "channel logs"),
-            ("thread", "🧵 thread-logs", "thread logs"),
-            ("role", "✨ role-logs", "role logs"),
-            ("command", "⌨️ command-logs", "command logs"),
-            ("server", "⚙️ server-logs", "server logs"),
-            ("forum", "📰 forum-logs", "forum logs")
+            ("member", "👤 member-logs", "member-logs"),
+            ("message", "📝 message-logs", "message-logs"),
+            ("channel", "📺 channel-logs", "channel-logs"),
+            ("role", "✨ role-logs", "role-logs"),
+            ("voice", "🎤 voice-logs", "voice-logs"),
+            ("server", "⚙️ server-logs", "server-logs"),
+            ("emoji", "😀 emoji-sticker-logs", "emoji-sticker-logs")
         ]
 
         if choice == "1️⃣":
@@ -1449,22 +1469,16 @@ class YALC(commands.Cog):
                     "member_unban", "member_kick", "member_update"
                 ],
                 "channel": ["channel_create", "channel_delete", "channel_update"],
-                "thread": [
-                    "thread_create", "thread_delete", "thread_update",
-                    "thread_member_join", "thread_member_leave"
-                ],
                 "role": ["role_create", "role_delete", "role_update"],
-                "command": ["command_use", "command_error", "application_cmd"],
-                "server": ["guild_update", "emoji_update", "cog_load", "voice_update"],
-                "forum": ["forum_post_create", "forum_post_update", "forum_post_delete"]
+                "voice": ["voice_update"],
+                "server": ["guild_update", "cog_load"],
+                "emoji": ["emoji_update"]
             }
-
             event_channels = {}
             for key, events in event_map.items():
                 if key in log_channels:
                     for event in events:
                         event_channels[event] = log_channels[key].id
-
             await self.config.guild(ctx.guild).event_channels.set(event_channels)
             await ctx.send("✅ Configured log channels for all events.", ephemeral=True)
 
@@ -1568,13 +1582,26 @@ class YALC(commands.Cog):
         await ctx.send(embed=embed, ephemeral=True)
 
     async def yalc_enable(self, ctx: commands.Context, event: str) -> None:
-        """Enable logging for an event."""
+        """Enable logging for an event or all events."""
         if not ctx.guild:
             await ctx.send("This command must be used in a server.", ephemeral=True)
             return
         
         if not ctx.channel.permissions_for(ctx.author).manage_guild:
             await ctx.send("You need the Manage Server permission to enable events.", ephemeral=True)
+            return
+
+        if event.lower() == "all":
+            try:
+                all_events = {e: True for e in self.event_descriptions}
+                await self.config.guild(ctx.guild).events.set(all_events)
+                await ctx.send(
+                    "✅ Enabled logging for all events.",
+                    ephemeral=True
+                )
+            except Exception as e:
+                self.log.error(f"Failed to enable all events: {e}")
+                await ctx.send("Failed to enable all event logging.", ephemeral=True)
             return
 
         if event not in self.event_descriptions:
@@ -1732,11 +1759,12 @@ class YALC(commands.Cog):
             self.log.error(f"Failed to remove Tupperbox ID {bot_id}: {e}")
             await ctx.send("Failed to remove ID from ignore list.", ephemeral=True)
 
+```python
     def is_tupperbox_message(self, message: discord.Message, tupperbox_ids: list[str]) -> bool:
         """Check if a message is from Tupperbox or a configured proxy bot.
         
         This checks both the author's ID against the configured list and
-        verifies if they have a #0000 discriminator (indicating a bot account).
+        verifies if they have a #0000 discriminator (indicating a botaccount).
         """
         if not message.author:
             return False
@@ -1774,4 +1802,4 @@ async def setup(bot: Red) -> None:
     """Set up the YALC cog."""
     cog = YALC(bot)
     await bot.add_cog(cog)
-   
+```
