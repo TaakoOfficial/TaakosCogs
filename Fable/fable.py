@@ -175,7 +175,7 @@ class Fable(commands.Cog):
         else:
             await ctx.send("No changes made (may already exist).")
 
-    @commands.hybrid_command(name="view", description="View a character profile.")
+    @character.command(name="view", description="View a character profile.")
     @commands.guild_only()
     @commands.cooldown(1, 3, commands.BucketType.user)
     async def character_view(self, ctx: commands.Context, name: str):
@@ -1004,7 +1004,7 @@ class Fable(commands.Cog):
         embed.set_footer(text=f"Edited by {ctx.author.display_name} • Fable RP Tracker")
         await ctx.send(embed=embed)
 
-    @commands.hybrid_command(name="view", description="View a lore entry.")
+    @lore.command(name="view", description="View a lore entry.")
     @commands.guild_only()
     async def lore_view(self, ctx: commands.Context, name: str):
         """
