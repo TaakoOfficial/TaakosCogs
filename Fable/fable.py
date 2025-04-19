@@ -262,7 +262,7 @@ class Fable(commands.Cog):
             embed.set_footer(text="Fable RP Tracker • Character List")
             await ctx.send(embed=embed)
 
-    @commands.hybrid_command(name="delete", description="Delete a character profile.")
+    @character.command(name="delete", description="Delete a character profile.")
     @commands.guild_only()
     @commands.cooldown(1, 10, commands.BucketType.user)
     async def character_delete(self, ctx: commands.Context, name: str):
@@ -674,7 +674,7 @@ class Fable(commands.Cog):
         embed.set_footer(text="Fable RP Tracker • Event Edit")
         await ctx.send(embed=embed)
 
-    @commands.hybrid_command(name="delete", description="Delete an event.")
+    @event.command(name="delete", description="Delete an event.")
     @commands.guild_only()
     @commands.cooldown(1, 5, commands.BucketType.user)
     async def event_delete(self, ctx: commands.Context, event_id: int):
@@ -1133,14 +1133,14 @@ class Fable(commands.Cog):
         """
         await ctx.send("Mail read not yet implemented.")
 
-    @commands.hybrid_command(name="view", description="View a specific mail message.")
+    @mail.command(name="view", description="View a specific mail message.")
     async def mail_view(self, ctx: commands.Context, mail_id: int):
         """
         View a specific mail message.
         """
         await ctx.send("Mail view not yet implemented.")
 
-    @commands.hybrid_command(name="delete", description="Delete a mail message.")
+    @mail.command(name="delete", description="Delete a mail message.")
     async def mail_delete(self, ctx: commands.Context, mail_id: int):
         """
         Delete a mail message.
