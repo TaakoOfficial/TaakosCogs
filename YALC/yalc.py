@@ -450,9 +450,9 @@ class YALC(commands.Cog):
             removed_roles = [r for r in before.roles if r not in after.roles]
             if added_roles or removed_roles:
                 for role in added_roles:
-                    changes.append(f"<:plus:112233445566778899> Added {role.mention}")
+                    changes.append(f"➕ Added {role.mention}")
                 for role in removed_roles:
-                    changes.append(f"<:minus:112233445566778899> Removed {role.mention}")
+                    changes.append(f"➖ Removed {role.mention}")
             if before.nick != after.nick:
                 changes.append(f"📝 Nickname changed: '{before.nick or before.display_name}' → '{after.nick or after.display_name}'")
             if not changes:
