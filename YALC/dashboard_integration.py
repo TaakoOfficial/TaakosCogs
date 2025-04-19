@@ -1,7 +1,12 @@
-from redbot.core import commands
+import typing
 import discord
 import logging
-from dashboard.rpc.third_parties import dashboard_page
+
+def dashboard_page(*args, **kwargs):
+    def decorator(func: typing.Callable):
+        func.__dashboard_decorator_params__ = (args, kwargs)
+        return func
+    return decorator
 
 class DashboardIntegration:
     """Dashboard integration for YALC."""
@@ -39,7 +44,7 @@ class DashboardIntegration:
             logging.exception("Failed to load YALC settings for dashboard.")
             return {"status": 1, "message": f"Failed to load settings: {e}"}
 
-    @dashboard_page("about", "About YALC", methods=("GET", "POST") )
+    @dashboard_page("about", "About YALC", methods=("GET", "POST"))
     async def dashboard_about(self, request, guild):
         """About page for YALC in the dashboard."""
         html = (
@@ -140,5 +145,4 @@ class DashboardIntegration:
 
     def on_dashboard_cog_add(self, dashboard_cog) -> None:
         """Called when the dashboard cog is loaded and this third party is registered."""
-        for view in self.get_dashboard_views():
-            dashboard_cog.rpc.third_parties_handler.add_page(self, view)
+        dashboard_cog.rpc.third_parties_handler.add_third_party(self)
