@@ -10,12 +10,12 @@ class DashboardIntegration:
         self.cog = cog
         self.bot = cog.bot
 
-    @dashboard_page("overview", "YALC Overview")
+    @dashboard_page("overview", "YALC Overview", methods=("GET", "POST"))
     async def dashboard_overview(self, request, guild):
         html = self._render_overview()
         return {"status": 0, "web_content": {"source": html}}
 
-    @dashboard_page("settings", "YALC Settings")
+    @dashboard_page("settings", "YALC Settings", methods=("GET", "POST"))
     async def dashboard_settings(self, request, guild):
         if not guild:
             return {"status": 1, "message": "This page requires a guild to be selected."}
@@ -39,7 +39,7 @@ class DashboardIntegration:
             logging.exception("Failed to load YALC settings for dashboard.")
             return {"status": 1, "message": f"Failed to load settings: {e}"}
 
-    @dashboard_page("about", "About YALC")
+    @dashboard_page("about", "About YALC", methods=("GET", "POST") )
     async def dashboard_about(self, request, guild):
         """About page for YALC in the dashboard."""
         html = (
