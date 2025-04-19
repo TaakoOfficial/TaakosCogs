@@ -148,7 +148,8 @@ class YALC(commands.Cog):
             if isinstance(value, list):
                 value = "\n".join(f"- {v}" for v in value)
             elif isinstance(value, str) and ("\n" in value or len(value) > 60):
-                value = f"> {value.replace(chr(10), '\n> ')}"
+                value = value.replace(chr(10), '\n> ')
+                value = f"> {value}"
             embed.add_field(name=key.replace('_', ' ').title(), value=value, inline=False)
         self.set_embed_footer(embed)
         return embed
@@ -1708,19 +1709,16 @@ class YALC(commands.Cog):
         if not ctx.guild:
             await ctx.send("This command must be used in a server.", ephemeral=True)
             return
-        
         if not ctx.channel.permissions_for(ctx.author).manage_guild:
             await ctx.send("You need the Manage Server permission to set channels.", ephemeral=True)
             return
-
-        if event not```python
+        
         if event not in self.event_descriptions:
             await ctx.send(
                 f"Invalid event. Use `/yalc events` to see available events.",
                 ephemeral=True
             )
             return
-
         try:
             if channel:
                 await self.config.guild(ctx.guild).event_channels.set_raw(event, value=channel.id)
@@ -1730,7 +1728,7 @@ class YALC(commands.Cog):
                     ephemeral=True
                 )
             else:
-                await ctx.send("Please specifya channel to set.", ephemeral=True)
+                await ctx.send("Please specify a channel to set.", ephemeral=True)
         except Exception as e:
             self.log.error(f"Failed to set channel for event {event}: {e}")
             await ctx.send("Failed to set logging channel.", ephemeral=True)
