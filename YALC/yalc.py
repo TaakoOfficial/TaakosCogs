@@ -1425,57 +1425,58 @@ class YALC(commands.Cog):
                 except asyncio.TimeoutError:
                     await ctx.send(f"Timed out. Skipping {plain_name}.", ephemeral=True)
                     continue
-            "Which events do you want to enable?\n"
-            "✅ All events\n"
-            "🛡️ Moderation only (bans, kicks, role, channel, member updates)\n"
-            "❌ None (I'll enable manually)",
-            ephemeral=True
-        )
-        events_msg = await ctx.send("React with ✅, 🛡️, or ❌.", ephemeral=True)
-        for emoji in ["✅", "🛡️", "❌"]:
-            try:
-                await events_msg.add_reaction(emoji)
-            except Exception:
-                pass
-
-        def events_check(reaction, user):
-            return (
-                user == ctx.author 
-                and reaction.message.id == events_msg.id 
-                and str(reaction.emoji) in ["✅", "🛡️", "❌"]
+            await ctx.send(
+                "Which events do you want to enable?\n"
+                "✅ All events\n"
+                "🛡️ Moderation only (bans, kicks, role, channel, member updates)\n"
+                "❌ None (I'll enable manually)",
+                ephemeral=True
             )
+            events_msg = await ctx.send("React with ✅, 🛡️, or ❌.", ephemeral=True)
+            for emoji in ["✅", "🛡️", "❌"]:
+                try:
+                    await events_msg.add_reaction(emoji)
+                except Exception:
+                    pass
 
-        try:
-            event_reaction, _ = await ctx.bot.wait_for("reaction_add", timeout=30.0, check=events_check)
-        except asyncio.TimeoutError:
-            await ctx.send("Timed out. No events will be enabled by default.", ephemeral=True)
-            event_choice = "❌"
-        else:
-            event_choice = str(event_reaction.emoji)
+            def events_check(reaction, user):
+                return (
+                    user == ctx.author 
+                    and reaction.message.id == events_msg.id 
+                    and str(reaction.emoji) in ["✅", "🛡️", "❌"]
+                )
 
-        all_events = list(self.event_descriptions.keys())
-        mod_events = [
-            "member_ban", "member_unban", "member_kick", "member_update",
-            "role_create", "role_delete", "role_update",
-            "channel_create", "channel_delete", "channel_update",
-            "message_delete", "message_edit"
-        ]
+            try:
+                event_reaction, _ = await ctx.bot.wait_for("reaction_add", timeout=30.0, check=events_check)
+            except asyncio.TimeoutError:
+                await ctx.send("Timed out. No events will be enabled by default.", ephemeral=True)
+                event_choice = "❌"
+            else:
+                event_choice = str(event_reaction.emoji)
 
-        if event_choice == "✅":
-            # Enable all events
-            events_config = {event: True for event in all_events}
-            await self.config.guild(ctx.guild).events.set(events_config)
-            await ctx.send("✅ Enabled all events.", ephemeral=True)
-        elif event_choice == "🛡️":
-            # Enable moderation events only
-            events_config = {event: (event in mod_events) for event in all_events}
-            await self.config.guild(ctx.guild).events.set(events_config)
-            await ctx.send("✅ Enabled moderation events.", ephemeral=True)
-        else:
-            # Keep all events disabled
-            events_config = {event: False for event in all_events}
-            await self.config.guild(ctx.guild).events.set(events_config)
-            await ctx.send("✅ All events will remain disabled.", ephemeral=True)
+            all_events = list(self.event_descriptions.keys())
+            mod_events = [
+                "member_ban", "member_unban", "member_kick", "member_update",
+                "role_create", "role_delete", "role_update",
+                "channel_create", "channel_delete", "channel_update",
+                "message_delete", "message_edit"
+            ]
+
+            if event_choice == "✅":
+                # Enable all events
+                events_config = {event: True for event in all_events}
+                await self.config.guild(ctx.guild).events.set(events_config)
+                await ctx.send("✅ Enabled all events.", ephemeral=True)
+            elif event_choice == "🛡️":
+                # Enable moderation events only
+                events_config = {event: (event in mod_events) for event in all_events}
+                await self.config.guild(ctx.guild).events.set(events_config)
+                await ctx.send("✅ Enabled moderation events.", ephemeral=True)
+            else:
+                # Keep all events disabled
+                events_config = {event: False for event in all_events}
+                await self.config.guild(ctx.guild).events.set(events_config)
+                await ctx.send("✅ All events will remain disabled.", ephemeral=True)
 
         # Step 3: Assign log channels to events (if any set)
         if log_channels:
