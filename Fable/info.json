@@ -1,0 +1,13 @@
+{
+  "author": ["Taako"],
+  "install_msg": "Thank you for installing Fable! Use [p]fable for RP world tracking.",
+  "name": "Fable",
+  "short": "Living world tracker for RP groups.",
+  "description": "A living world tracker for character-driven RP groups. Track characters, relationships, events, and lore collaboratively.",
+  "requirements": [],
+  "tags": ["rp", "roleplay", "tracker", "characters", "lore", "timeline"],
+  "min_bot_version": "3.5.0",
+  "hidden": false,
+  "disabled": false,
+  "type": "COG"
+}
