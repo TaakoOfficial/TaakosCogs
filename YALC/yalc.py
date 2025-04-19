@@ -279,30 +279,39 @@ class YALC(commands.Cog):
             self.log.error(f"Error checking Tupperbox ignore: {e}")
         try:
             author = getattr(before, "author", None)
-            content_before = getattr(before, "content", "")
-            content_after = getattr(after, "content", "")
             attachments = [a.url for a in getattr(after, "attachments", [])]
             embeds = getattr(after, "embeds", [])
             channel_name = getattr(before.channel, "name", str(before.channel) if before.channel else "Unknown")
-            self.log.debug(f"Logging message_edit: author={author}, before={content_before}, after={content_after}, attachments={attachments}, embeds={embeds}, channel_name={channel_name}")
+            self.log.debug(f"Logging message_edit: author={author}, before={before.content}, after={after.content}, attachments={attachments}, embeds={embeds}, channel_name={channel_name}")
             # Create clickable username link
             if author:
                 user_link = f"[{author}](https://discord.com/users/{author.id})"
             else:
                 user_link = "Unknown"
+            # Jump link to the edited message if possible
+            jump_url = getattr(after, "jump_url", None)
             embed = self.create_embed(
                 "message_edit",
                 f"✏️ Message edited in {getattr(before.channel, 'mention', str(before.channel))}",
                 user=user_link,
-                content=f"**Before:** {content_before}\n**After:** {content_after}",
-                attachments=attachments,
-                embeds=embeds,
                 channel_name=channel_name
             )
-            # Set footer to edit time
+            embed.add_field(name="Before", value=before.content or "*No content*", inline=False)
+            embed.add_field(name="After", value=after.content or "*No content*", inline=False)
+            if jump_url:
+                embed.add_field(name="Jump to Message", value=f"[Click here to view the message]({jump_url})", inline=False)
+            if attachments:
+                embed.add_field(name="Attachments", value="\n".join(attachments), inline=False)
+            if embeds:
+                embed.add_field(name="Embeds", value="Yes", inline=False)
+            # Always set the footer to include YALC branding and edit time
             edit_time = after.edited_at or after.created_at or discord.utils.utcnow()
             if edit_time:
-                embed.set_footer(text=f"Edited: {discord.utils.format_dt(edit_time, 'F')}")
+                formatted_time = edit_time.strftime('%B %d, %Y, %I:%M %p')
+                embed.set_footer(
+                    text=f"YALC Logger • Edited: {formatted_time}",
+                    icon_url="https://cdn-icons-png.flaticon.com/512/928/928797.png"
+                )
             await self.safe_send(channel, embed=embed)
         except Exception as e:
             self.log.error(f"Failed to log message_edit: {e}")
