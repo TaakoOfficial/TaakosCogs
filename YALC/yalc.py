@@ -453,7 +453,7 @@ class YALC(commands.Cog):
                 for role in removed_roles:
                     changes.append(f"<:minus:112233445566778899> Removed {role.mention}")
             if before.nick != after.nick:
-                changes.append(f"📝 Nickname changed: `{before.nick or before.display_name}` → `{after.nick or after.display_name}`")
+                changes.append(f"📝 Nickname changed: '{before.nick or before.display_name}' → '{after.nick or after.display_name}'")
             if not changes:
                 return
             embed = discord.Embed(
