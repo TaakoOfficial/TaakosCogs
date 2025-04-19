@@ -71,23 +71,27 @@ class YALC(commands.Cog):
         self.config.register_guild(**default_guild)
 
 
-    async def should_log_event(self, guild: discord.Guild, event_type: str, channel: Optional[discord.abc.GuildChannel] = None) -> bool:
-        """Check if an event should be logged based on settings."""
+    async def should_log_event(self, guild: discord.Guild, event_type: str, channel: Optional[discord.abc.GuildChannel] = None, user: Optional[Union[discord.Member, discord.User]] = None) -> bool:
+        """Check if an event should be logged based on settings and ignore lists."""
         if not guild:
             return False
-            
         settings = await self.config.guild(guild).all()
         if not settings["events"].get(event_type, False):
             return False
-
-        # Check channel, category, and user ignore lists
+        # Check channel ignore
         if channel:
             if channel.id in settings["ignored_channels"]:
                 return False
             if isinstance(channel, discord.TextChannel) and channel.category:
-                if channel.category.id in settings["ignored_categories"]:
+                if hasattr(settings, "ignored_categories") and channel.category.id in settings["ignored_categories"]:
                     return False
-
+        # Check user ignore
+        if user and user.id in settings["ignored_users"]:
+            return False
+        # Check role ignore (only for Member, not User)
+        if user and isinstance(user, discord.Member):
+            if any(r.id in settings["ignored_roles"] for r in user.roles):
+                return False
         return True
 
     async def get_log_channel(self, guild: discord.Guild, event_type: str) -> Optional[discord.TextChannel]:
@@ -1761,54 +1765,105 @@ class YALC(commands.Cog):
             self.log.error(f"Failed to remove channel for event {event}: {e}")
             await ctx.send("Failed to remove logging channel.", ephemeral=True)
 
-    async def tupperbox_addid(self, ctx: commands.Context, bot_id: str) -> None:
-        """Add a bot user ID to ignore as Tupperbox proxy."""
-        if not ctx.guild:
-            await ctx.send("This command must be used in a server.", ephemeral=True)
-            return
-        
-        if not ctx.channel.permissions_for(ctx.author).manage_guild:
-            await ctx.send("You need the Manage Server permission to modify Tupperbox settings.", ephemeral=True)
-            return
+    # --- Ignore Commands ---
+    @commands.hybrid_group(name="ignore", with_app_command=True, description="Manage ignore lists for channels, roles, and users.")
+    @commands.has_permissions(manage_guild=True)
+    @commands.guild_only()
+    async def yalc_ignore(self, ctx: commands.Context) -> None:
+        """Group for ignore commands."""
+        if ctx.invoked_subcommand is None:
+            await ctx.send("Use a subcommand: channel, role, user, or list.", ephemeral=True)
 
-        if not bot_id.isdigit() or len(bot_id) < 17:
-            await ctx.send("Please provide a valid Discord user ID (17+ digits).", ephemeral=True)
+    @yalc_ignore.command(name="channel", with_app_command=True, description="Ignore a channel for logging.")
+    async def ignore_channel(self, ctx: commands.Context, channel: discord.TextChannel) -> None:
+        """Ignore a channel for logging."""
+        ignored = await self.config.guild(ctx.guild).ignored_channels()
+        if channel.id in ignored:
+            await ctx.send(f"{channel.mention} is already ignored.", ephemeral=True)
             return
+        ignored.append(channel.id)
+        await self.config.guild(ctx.guild).ignored_channels.set(ignored)
+        await ctx.send(f"Added {channel.mention} to ignored channels.", ephemeral=True)
 
-        try:
-            ids = await self.config.guild(ctx.guild).tupperbox_ids()
-            if bot_id in ids:
-                await ctx.send(f"ID `{bot_id}` is already in the ignore list.", ephemeral=True)
-                return
-            ids.append(bot_id)
-            await self.config.guild(ctx.guild).tupperbox_ids.set(ids)
-            await ctx.send(f"Added `{bot_id}` to Tupperbox ignore list.", ephemeral=True)
-        except Exception as e:
-            self.log.error(f"Failed to add Tupperbox ID {bot_id}: {e}")
-            await ctx.send("Failed to add ID to ignore list.", ephemeral=True)
-
-    async def tupperbox_removeid(self, ctx: commands.Context, bot_id: str) -> None:
-        """Remove a bot user ID from the Tupperbox ignore list."""
-        if not ctx.guild:
-            await ctx.send("This command must be used in a server.", ephemeral=True)
+    @yalc_ignore.command(name="role", with_app_command=True, description="Ignore a role for logging.")
+    async def ignore_role(self, ctx: commands.Context, role: discord.Role) -> None:
+        """Ignore a role for logging."""
+        ignored = await self.config.guild(ctx.guild).ignored_roles()
+        if role.id in ignored:
+            await ctx.send(f"{role.mention} is already ignored.", ephemeral=True)
             return
-        
-        if not ctx.channel.permissions_for(ctx.author).manage_guild:
-            await ctx.send("You need the Manage Server permission to modify Tupperbox settings.", ephemeral=True)
-            return
+        ignored.append(role.id)
+        await self.config.guild(ctx.guild).ignored_roles.set(ignored)
+        await ctx.send(f"Added {role.mention} to ignored roles.", ephemeral=True)
 
-        try:
-            ids = await self.config.guild(ctx.guild).tupperbox_ids()
-            if bot_id not in ids:
-                await ctx.send(f"ID `{bot_id}` is not in the ignore list.", ephemeral=True)
-                return
-            
-            ids.remove(bot_id)
-            await self.config.guild(ctx.guild).tupperbox_ids.set(ids)
-            await ctx.send(f"Removed `{bot_id}` from Tupperbox ignore list.", ephemeral=True)
-        except Exception as e:
-            self.log.error(f"Failed to remove Tupperbox ID {bot_id}: {e}")
-            await ctx.send("Failed to remove ID from ignore list.", ephemeral=True)
+    @yalc_ignore.command(name="user", with_app_command=True, description="Ignore a user for logging.")
+    async def ignore_user(self, ctx: commands.Context, user: discord.User) -> None:
+        """Ignore a user for logging."""
+        ignored = await self.config.guild(ctx.guild).ignored_users()
+        if user.id in ignored:
+            await ctx.send(f"{user.mention} is already ignored.", ephemeral=True)
+            return
+        ignored.append(user.id)
+        await self.config.guild(ctx.guild).ignored_users.set(ignored)
+        await ctx.send(f"Added {user.mention} to ignored users.", ephemeral=True)
+
+    @yalc_ignore.command(name="list", with_app_command=True, description="Show the current ignore lists.")
+    async def ignore_list(self, ctx: commands.Context) -> None:
+        """Show the current ignore lists."""
+        settings = await self.config.guild(ctx.guild).all()
+        channels = [ctx.guild.get_channel(cid) for cid in settings["ignored_channels"]]
+        roles = [ctx.guild.get_role(rid) for rid in settings["ignored_roles"]]
+        users = [ctx.guild.get_member(uid) or await self.bot.fetch_user(uid) for uid in settings["ignored_users"]]
+        embed = discord.Embed(title="YALC Ignore Lists", color=discord.Color.orange())
+        embed.add_field(
+            name="Channels",
+            value=", ".join(c.mention for c in channels if c) or "None",
+            inline=False
+        )
+        embed.add_field(
+            name="Roles",
+            value=", ".join(r.mention for r in roles if r) or "None",
+            inline=False
+        )
+        embed.add_field(
+            name="Users",
+            value=", ".join(u.mention for u in users if u) or "None",
+            inline=False
+        )
+        await ctx.send(embed=embed, ephemeral=True)
+
+    @yalc_ignore.command(name="unignore_channel", with_app_command=True, description="Remove a channel from the ignore list.")
+    async def unignore_channel(self, ctx: commands.Context, channel: discord.TextChannel) -> None:
+        """Remove a channel from the ignore list."""
+        ignored = await self.config.guild(ctx.guild).ignored_channels()
+        if channel.id not in ignored:
+            await ctx.send(f"{channel.mention} is not in the ignore list.", ephemeral=True)
+            return
+        ignored.remove(channel.id)
+        await self.config.guild(ctx.guild).ignored_channels.set(ignored)
+        await ctx.send(f"Removed {channel.mention} from ignored channels.", ephemeral=True)
+
+    @yalc_ignore.command(name="unignore_role", with_app_command=True, description="Remove a role from the ignore list.")
+    async def unignore_role(self, ctx: commands.Context, role: discord.Role) -> None:
+        """Remove a role from the ignore list."""
+        ignored = await self.config.guild(ctx.guild).ignored_roles()
+        if role.id not in ignored:
+            await ctx.send(f"{role.mention} is not in the ignore list.", ephemeral=True)
+            return
+        ignored.remove(role.id)
+        await self.config.guild(ctx.guild).ignored_roles.set(ignored)
+        await ctx.send(f"Removed {role.mention} from ignored roles.", ephemeral=True)
+
+    @yalc_ignore.command(name="unignore_user", with_app_command=True, description="Remove a user from the ignore list.")
+    async def unignore_user(self, ctx: commands.Context, user: discord.User) -> None:
+        """Remove a user from the ignore list."""
+        ignored = await self.config.guild(ctx.guild).ignored_users()
+        if user.id not in ignored:
+            await ctx.send(f"{user.mention} is not in the ignore list.", ephemeral=True)
+            return
+        ignored.remove(user.id)
+        await self.config.guild(ctx.guild).ignored_users.set(ignored)
+        await ctx.send(f"Removed {user.mention} from ignored users.", ephemeral=True)
 
     def is_tupperbox_message(self, message: discord.Message, tupperbox_ids: list[str]) -> bool:
         """Check if a message is from Tupperbox or a configured proxy bot.
