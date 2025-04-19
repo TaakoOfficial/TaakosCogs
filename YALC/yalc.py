@@ -445,18 +445,27 @@ class YALC(commands.Cog):
             return
         try:
             changes = []
-            if before.roles != after.roles:
-                changes.append("roles")
+            added_roles = [r for r in after.roles if r not in before.roles]
+            removed_roles = [r for r in before.roles if r not in after.roles]
+            if added_roles or removed_roles:
+                for role in added_roles:
+                    changes.append(f"<:plus:112233445566778899> Added {role.mention}")
+                for role in removed_roles:
+                    changes.append(f"<:minus:112233445566778899> Removed {role.mention}")
             if before.nick != after.nick:
-                changes.append("nickname")
-            channel_name = before.guild.name if before.guild else "Unknown"
-            embed = self.create_embed(
-                "member_update",
-                f"👤 {after}'s information has been updated: {', '.join(changes)}",
-                user=f"{before} ({before.id})",
-                changes=", ".join(changes),
-                channel_name=channel_name
+                changes.append(f"📝 Nickname changed: `{before.nick or before.display_name}` → `{after.nick or after.display_name}`")
+            if not changes:
+                return
+            embed = discord.Embed(
+                title="👤 Member Role Update",
+                description=f"{after.mention} ({after.display_name})'s roles or nickname were updated.",
+                color=discord.Color.blurple(),
+                timestamp=datetime.datetime.now(datetime.UTC)
             )
+            embed.add_field(name="Changes", value="\n".join(changes), inline=False)
+            if after.display_avatar:
+                embed.set_thumbnail(url=after.display_avatar.url)
+            embed.set_footer(text="YALC Logger • Role/Nick Update", icon_url="https://cdn-icons-png.flaticon.com/512/928/928797.png")
             await self.safe_send(channel, embed=embed)
         except Exception as e:
             self.log.error(f"Failed to log member_update: {e}")
@@ -1739,6 +1748,7 @@ class YALC(commands.Cog):
                 return
             
             ids.append(bot_id)
+           ```python
             await self.config.guild(ctx.guild).tupperbox_ids.set(ids)
             await ctx.send(f"Added `{bot_id}` to Tupperbox ignore list.", ephemeral=True)
         except Exception as e:
@@ -1801,3 +1811,4 @@ async def setup(bot: Red) -> None:
     """Set up the YALC cog."""
     cog = YALC(bot)
     await bot.add_cog(cog)
+```
