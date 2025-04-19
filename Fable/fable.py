@@ -766,7 +766,7 @@ class Fable(commands.Cog):
         embed.set_footer(text="Fable RP Tracker • Timeline")
         await ctx.send(embed=embed)
 
-    @commands.hybrid_command(name="search", description="Search the timeline for a keyword.")
+    @timeline.command(name="search", description="Search the timeline for a keyword.")
     @commands.guild_only()
     @commands.cooldown(1, 5, commands.BucketType.guild)
     async def timeline_search(self, ctx: commands.Context, keyword: str):
@@ -806,55 +806,6 @@ class Fable(commands.Cog):
         else:
             embed.set_footer(text="Fable RP Tracker • Timeline Search")
         await ctx.send(embed=embed)
-
-    @commands.hybrid_command(name="show", description="Show all events, optionally filtered by character or date range.")
-    @commands.guild_only()
-    @commands.cooldown(1, 10, commands.BucketType.guild)
-    async def timeline_show(self, ctx: commands.Context, character: Optional[str] = None, from_date: Optional[str] = None, to_date: Optional[str] = None):
-        """
-        Show all events, optionally filtered by character or date range.
-        
-        Usage:
-        [p]fable timeline show
-        [p]fable timeline show Vex
-        [p]fable timeline show Vex 3023-01-01 3023-12-31
-        """
-        guild = ctx.guild
-        logs = await self.config.guild(guild).logs() or []
-        filtered = logs
-        if character:
-            filtered = [e for e in filtered if character in e.get("characters", [])]
-        if from_date:
-            filtered = [e for e in filtered if e.get("ic_date") and e["ic_date"] >= from_date]
-        if to_date:
-            filtered = [e for e in filtered if e.get("ic_date") and e["ic_date"] <= to_date]
-        if not filtered:
-            embed = discord.Embed(
-                title="No Events Found",
-                description="No events found for the given filters.",
-                color=0xF04747
-            )
-            await ctx.send(embed=embed)
-            return
-        # Paginate if more than 10 events
-        pages = [filtered[i:i+10] for i in range(0, len(filtered), 10)]
-        for idx, page in enumerate(pages, 1):
-            embed = discord.Embed(
-                title=f"Timeline Events (Page {idx}/{len(pages)})",
-                color=0x7289DA
-            )
-            for event in page:
-                chars = ", ".join(event.get("characters", []))
-                desc = event.get("description", "No description.")
-                ic_date = event.get("ic_date", "Unspecified")
-                eid = event.get("id", "?")
-                embed.add_field(
-                    name=f"Event {eid} | {ic_date}",
-                    value=f"**Characters:** {chars}\n{desc}",
-                    inline=False
-                )
-            embed.set_footer(text="Fable RP Tracker • Timeline Show")
-            await ctx.send(embed=embed)
 
     # Collaborative Lore System
     @commands.hybrid_group(name="lore", description="Collaborative worldbuilding commands.")
@@ -1072,7 +1023,7 @@ class Fable(commands.Cog):
             embed.set_footer(text="Fable RP Tracker • Lore List")
             await ctx.send(embed=embed)
 
-    @commands.hybrid_command(name="search", description="Search lore entries by keyword.")
+    @lore.command(name="search", description="Search lore entries by keyword.")
     @commands.guild_only()
     @commands.cooldown(1, 5, commands.BucketType.guild)
     async def lore_search(self, ctx: commands.Context, keyword: str):
