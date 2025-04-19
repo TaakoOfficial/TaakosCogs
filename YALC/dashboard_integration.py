@@ -1,7 +1,7 @@
 from redbot.core import commands
 import discord
 import logging
-from dashboard.third_parties import dashboard_page
+from dashboard.rpc.third_parties import dashboard_page
 
 class DashboardIntegration:
     """Dashboard integration for YALC."""
