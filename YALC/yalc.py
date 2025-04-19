@@ -1708,7 +1708,8 @@ class YALC(commands.Cog):
             self.log.error(f"Failed to disable event {event}: {e}")
             await ctx.send("Failed to disable event logging.", ephemeral=True)
 
-    async def yalc_setchannel(self, ctx: commands.Context, event: str, channel: Optional[discord.TextChannel]) -> None:
+    async def yalc_setchannel(self, ctx: commands.Context, event```python
+: str, channel: Optional[discord.TextChannel]) -> None:
         """Set the log channel for an event."""
         if not ctx.guild:
             await ctx.send("This command must be used in a server.", ephemeral=True)
@@ -1766,7 +1767,7 @@ class YALC(commands.Cog):
             await ctx.send("Failed to remove logging channel.", ephemeral=True)
 
     # --- Ignore Commands ---
-    @commands.hybrid_group(name="ignore", with_app_command=True, description="Manage ignore lists for channels, roles, and users.")
+    @commands.hybrid_group(name="yalcignore", with_app_command=True, description="Manage ignore lists for channels, roles, and users.")
     @commands.has_permissions(manage_guild=True)
     @commands.guild_only()
     async def yalc_ignore(self, ctx: commands.Context) -> None:
@@ -1908,4 +1909,5 @@ async def setup(bot: Red) -> None:
     """Set up the YALC cog."""
     cog = YALC(bot)
     await bot.add_cog(cog)
+```
 
