@@ -33,10 +33,10 @@ class Fable(commands.Cog):
         if ctx.invoked_subcommand is None:
             await ctx.send_help(ctx.command)
 
-    @commands.hybrid_command(name="create", description="Create a new character profile with traits and relationships.")
+    @character.command(name="create", description="Create a new character profile with traits and relationships.")
     @commands.guild_only()
     @commands.cooldown(1, 5, commands.BucketType.user)
-    async def character_create(self, ctx: commands.Context, name: str, *, args: str):
+    async def create(self, ctx: commands.Context, name: str, *, args: str):
         """
         Create a new character profile.
         
@@ -102,7 +102,7 @@ class Fable(commands.Cog):
         embed.set_footer(text="Fable RP Tracker • Character Profile")
         await ctx.send(embed=embed)
 
-    @commands.hybrid_command(name="edit", description="Edit a character's description, trait, or relationship.")
+    @character.command(name="edit", description="Edit a character's description, trait, or relationship.")
     @commands.guild_only()
     @commands.cooldown(1, 5, commands.BucketType.user)
     async def character_edit(self, ctx: commands.Context, name: str, field: str, *, new_value: str):
@@ -415,7 +415,7 @@ class Fable(commands.Cog):
         embed.set_footer(text="Fable RP Tracker • Relationship Added")
         await ctx.send(embed=embed)
 
-    @commands.hybrid_command(name="edit", description="Edit a relationship's type or description.")
+    @relationship.command(name="edit", description="Edit a relationship's type or description.")
     @commands.guild_only()
     @commands.cooldown(1, 5, commands.BucketType.user)
     async def relationship_edit(self, ctx: commands.Context, character1: str, character2: str, field: str, *, new_value: str):
@@ -631,7 +631,7 @@ class Fable(commands.Cog):
         embed.set_footer(text=f"Logged by {ctx.author.display_name} • Fable RP Tracker")
         await ctx.send(embed=embed)
 
-    @commands.hybrid_command(name="edit", description="Edit an event's description.")
+    @event.command(name="edit", description="Edit an event's description.")
     @commands.guild_only()
     @commands.cooldown(1, 5, commands.BucketType.user)
     async def event_edit(self, ctx: commands.Context, event_id: int, *, new_description: str):
@@ -972,7 +972,7 @@ class Fable(commands.Cog):
         embed.set_footer(text=f"Denied by {ctx.author.display_name} • Fable RP Tracker")
         await ctx.send(embed=embed)
 
-    @commands.hybrid_command(name="edit", description="Edit a lore entry's description.")
+    @lore.command(name="edit", description="Edit a lore entry's description.")
     @commands.guild_only()
     @commands.has_permissions(manage_guild=True)
     async def lore_edit(self, ctx: commands.Context, name: str, new_description: str):
