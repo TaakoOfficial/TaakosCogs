@@ -1136,7 +1136,7 @@ class Fable(commands.Cog):
         await ctx.send("Sync status not yet implemented.")
 
     # Administrative Commands
-    @commands.hybrid_command(name="setup", description="Run the Fable setup wizard.")
+    @fable.command(name="setup", description="Run the Fable setup wizard.")
     async def setup_cmd(self, ctx: commands.Context):
         """
         Run the Fable setup wizard.
