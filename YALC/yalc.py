@@ -168,7 +168,7 @@ class YALC(commands.Cog):
         dashboard_cog = self.bot.get_cog("Dashboard")
         if dashboard_cog and hasattr(dashboard_cog, "rpc") and hasattr(dashboard_cog.rpc, "third_parties_handler"):
             try:
-                dashboard_cog.rpc.third_parties_handler.add_third_party(self)
+                dashboard_cog.rpc.third_parties_handler.add_third_party(self.dashboard)
                 self.log.info("Registered YALC as a dashboard third party.")
             except Exception as e:
                 self.log.error(f"Failed to register YALC as dashboard third party: {e}")
@@ -1774,4 +1774,4 @@ async def setup(bot: Red) -> None:
     """Set up the YALC cog."""
     cog = YALC(bot)
     await bot.add_cog(cog)
-    # Do not add cog.listeners as a cog
+   
