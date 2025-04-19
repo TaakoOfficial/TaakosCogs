@@ -1185,35 +1185,35 @@ class Fable(commands.Cog):
         await ctx.send("Sync status not yet implemented.")
 
     # Administrative Commands
-    @fable.hybrid_command(name="setup", description="Run the Fable setup wizard.")
+    @commands.hybrid_command(name="setup", description="Run the Fable setup wizard.")
     async def setup_cmd(self, ctx: commands.Context):
         """
         Run the Fable setup wizard.
         """
         await ctx.send("Setup wizard not yet implemented.")
 
-    @fable.hybrid_command(name="settings", description="View or edit Fable settings.")
+    @commands.hybrid_command(name="settings", description="View or edit Fable settings.")
     async def settings(self, ctx: commands.Context):
         """
         View or edit Fable settings.
         """
         await ctx.send("Settings not yet implemented.")
 
-    @fable.hybrid_command(name="backup", description="Create a backup of Fable data.")
+    @commands.hybrid_command(name="backup", description="Create a backup of Fable data.")
     async def backup(self, ctx: commands.Context):
         """
         Create a backup of Fable data.
         """
         await ctx.send("Backup not yet implemented.")
 
-    @fable.hybrid_command(name="restore", description="Restore Fable data from a backup file.")
+    @commands.hybrid_command(name="restore", description="Restore Fable data from a backup file.")
     async def restore(self, ctx: commands.Context, backup_file: str):
         """
         Restore Fable data from a backup file.
         """
         await ctx.send("Restore not yet implemented.")
 
-    @fable.hybrid_command(name="permissions", description="Set Fable permissions for a role.")
+    @commands.hybrid_command(name="permissions", description="Set Fable permissions for a role.")
     async def permissions(self, ctx: commands.Context, role: discord.Role, permission_level: str):
         """
         Set Fable permissions for a role.
