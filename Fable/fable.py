@@ -304,7 +304,7 @@ class Fable(commands.Cog):
         embed.set_footer(text="Fable RP Tracker • Character Deleted")
         await ctx.send(embed=embed)
 
-    @fable.hybrid_command(name="relations", description="Show all relationships for a character.")
+    @commands.hybrid_command(name="relations", description="Show all relationships for a character.")
     @commands.guild_only()
     @commands.cooldown(1, 5, commands.BucketType.user)
     async def relations(self, ctx: commands.Context, character: str):
@@ -348,6 +348,7 @@ class Fable(commands.Cog):
         embed.set_footer(text="Fable RP Tracker • Character Relationships")
         await ctx.send(embed=embed)
 
+    # Relationship Management
     @commands.hybrid_group(name="relationship", description="Manage character relationships.")
     async def relationship(self, ctx: commands.Context):
         """
@@ -356,7 +357,7 @@ class Fable(commands.Cog):
         if ctx.invoked_subcommand is None:
             await ctx.send_help(ctx.command)
 
-    @relationship.hybrid_command(name="add", description="Add a relationship between two characters.")
+    @commands.hybrid_command(name="add", description="Add a relationship between two characters.")
     @commands.guild_only()
     @commands.cooldown(1, 5, commands.BucketType.user)
     async def relationship_add(self, ctx: commands.Context, character1: str, character2: str, type: str, *, description: Optional[str] = None):
@@ -414,7 +415,7 @@ class Fable(commands.Cog):
         embed.set_footer(text="Fable RP Tracker • Relationship Added")
         await ctx.send(embed=embed)
 
-    @relationship.hybrid_command(name="edit", description="Edit a relationship's type or description.")
+    @commands.hybrid_command(name="edit", description="Edit a relationship's type or description.")
     @commands.guild_only()
     @commands.cooldown(1, 5, commands.BucketType.user)
     async def relationship_edit(self, ctx: commands.Context, character1: str, character2: str, field: str, *, new_value: str):
@@ -496,7 +497,7 @@ class Fable(commands.Cog):
         else:
             await ctx.send("Unknown field. Use 'type' or 'description'.")
 
-    @relationship.hybrid_command(name="remove", description="Remove a relationship between two characters.")
+    @commands.hybrid_command(name="remove", description="Remove a relationship between two characters.")
     @commands.guild_only()
     @commands.cooldown(1, 5, commands.BucketType.user)
     async def relationship_remove(self, ctx: commands.Context, character1: str, character2: str):
@@ -570,7 +571,7 @@ class Fable(commands.Cog):
         if ctx.invoked_subcommand is None:
             await ctx.send_help(ctx.command)
 
-    @event.hybrid_command(name="log", description="Log an in-character event.")
+    @commands.hybrid_command(name="log", description="Log an in-character event.")
     @commands.guild_only()
     @commands.cooldown(1, 5, commands.BucketType.guild)
     async def event_log(self, ctx: commands.Context, *characters: str, description: str, date: Optional[str] = None):
@@ -630,7 +631,7 @@ class Fable(commands.Cog):
         embed.set_footer(text=f"Logged by {ctx.author.display_name} • Fable RP Tracker")
         await ctx.send(embed=embed)
 
-    @event.hybrid_command(name="edit", description="Edit an event's description.")
+    @commands.hybrid_command(name="edit", description="Edit an event's description.")
     @commands.guild_only()
     @commands.cooldown(1, 5, commands.BucketType.user)
     async def event_edit(self, ctx: commands.Context, event_id: int, *, new_description: str):
@@ -673,7 +674,7 @@ class Fable(commands.Cog):
         embed.set_footer(text="Fable RP Tracker • Event Edit")
         await ctx.send(embed=embed)
 
-    @event.hybrid_command(name="delete", description="Delete an event.")
+    @commands.hybrid_command(name="delete", description="Delete an event.")
     @commands.guild_only()
     @commands.cooldown(1, 5, commands.BucketType.user)
     async def event_delete(self, ctx: commands.Context, event_id: int):
@@ -723,26 +724,137 @@ class Fable(commands.Cog):
         if ctx.invoked_subcommand is None:
             await ctx.send_help(ctx.command)
 
-    @timeline.hybrid_command(name="recent", description="Show recent events.")
+    @commands.hybrid_command(name="recent", description="Show recent events.")
+    @commands.guild_only()
+    @commands.cooldown(1, 5, commands.BucketType.guild)
     async def timeline_recent(self, ctx: commands.Context, number: Optional[int] = 5):
         """
-        Show recent events.
+        Show the most recent events in the timeline.
+        
+        Usage:
+        [p]fable timeline recent 5
         """
-        await ctx.send("Timeline recent not yet implemented.")
+        guild = ctx.guild
+        logs = await self.config.guild(guild).logs() or []
+        if not logs:
+            embed = discord.Embed(
+                title="No Events Found",
+                description="There are no events logged yet.",
+                color=0xF04747
+            )
+            await ctx.send(embed=embed)
+            return
+        # Ensure number is an int and not None
+        number = number if number is not None else 5
+        number = max(1, min(int(number), 20))
+        logs_sorted = sorted(logs, key=lambda e: e.get("created_at", ""), reverse=True)
+        events = logs_sorted[:number]
+        embed = discord.Embed(
+            title=f"Recent Events (Last {number})",
+            color=0x7289DA
+        )
+        for event in events:
+            chars = ", ".join(event.get("characters", []))
+            desc = event.get("description", "No description.")
+            ic_date = event.get("ic_date", "Unspecified")
+            eid = event.get("id", "?")
+            embed.add_field(
+                name=f"Event {eid} | {ic_date}",
+                value=f"**Characters:** {chars}\n{desc}",
+                inline=False
+            )
+        embed.set_footer(text="Fable RP Tracker • Timeline")
+        await ctx.send(embed=embed)
 
-    @timeline.hybrid_command(name="search", description="Search the timeline for a keyword.")
+    @commands.hybrid_command(name="search", description="Search the timeline for a keyword.")
+    @commands.guild_only()
+    @commands.cooldown(1, 5, commands.BucketType.guild)
     async def timeline_search(self, ctx: commands.Context, keyword: str):
         """
-        Search the timeline for a keyword.
+        Search the timeline for a keyword in event descriptions.
+        
+        Usage:
+        [p]fable timeline search tomb
         """
-        await ctx.send("Timeline search not yet implemented.")
+        guild = ctx.guild
+        logs = await self.config.guild(guild).logs() or []
+        results = [e for e in logs if keyword.lower() in e.get("description", "").lower()]
+        if not results:
+            embed = discord.Embed(
+                title="No Events Found",
+                description=f"No events found containing '{keyword}'.",
+                color=0xF04747
+            )
+            await ctx.send(embed=embed)
+            return
+        embed = discord.Embed(
+            title=f"Events Matching '{keyword}'",
+            color=0x7289DA
+        )
+        for event in results[:10]:
+            chars = ", ".join(event.get("characters", []))
+            desc = event.get("description", "No description.")
+            ic_date = event.get("ic_date", "Unspecified")
+            eid = event.get("id", "?")
+            embed.add_field(
+                name=f"Event {eid} | {ic_date}",
+                value=f"**Characters:** {chars}\n{desc}",
+                inline=False
+            )
+        if len(results) > 10:
+            embed.set_footer(text=f"Showing first 10 of {len(results)} results • Fable RP Tracker")
+        else:
+            embed.set_footer(text="Fable RP Tracker • Timeline Search")
+        await ctx.send(embed=embed)
 
-    @timeline.hybrid_command(name="show", description="Show all events, optionally filtered by character or date range.")
+    @commands.hybrid_command(name="show", description="Show all events, optionally filtered by character or date range.")
+    @commands.guild_only()
+    @commands.cooldown(1, 10, commands.BucketType.guild)
     async def timeline_show(self, ctx: commands.Context, character: Optional[str] = None, from_date: Optional[str] = None, to_date: Optional[str] = None):
         """
         Show all events, optionally filtered by character or date range.
+        
+        Usage:
+        [p]fable timeline show
+        [p]fable timeline show Vex
+        [p]fable timeline show Vex 3023-01-01 3023-12-31
         """
-        await ctx.send("Timeline show not yet implemented.")
+        guild = ctx.guild
+        logs = await self.config.guild(guild).logs() or []
+        filtered = logs
+        if character:
+            filtered = [e for e in filtered if character in e.get("characters", [])]
+        if from_date:
+            filtered = [e for e in filtered if e.get("ic_date") and e["ic_date"] >= from_date]
+        if to_date:
+            filtered = [e for e in filtered if e.get("ic_date") and e["ic_date"] <= to_date]
+        if not filtered:
+            embed = discord.Embed(
+                title="No Events Found",
+                description="No events found for the given filters.",
+                color=0xF04747
+            )
+            await ctx.send(embed=embed)
+            return
+        # Paginate if more than 10 events
+        pages = [filtered[i:i+10] for i in range(0, len(filtered), 10)]
+        for idx, page in enumerate(pages, 1):
+            embed = discord.Embed(
+                title=f"Timeline Events (Page {idx}/{len(pages)})",
+                color=0x7289DA
+            )
+            for event in page:
+                chars = ", ".join(event.get("characters", []))
+                desc = event.get("description", "No description.")
+                ic_date = event.get("ic_date", "Unspecified")
+                eid = event.get("id", "?")
+                embed.add_field(
+                    name=f"Event {eid} | {ic_date}",
+                    value=f"**Characters:** {chars}\n{desc}",
+                    inline=False
+                )
+            embed.set_footer(text="Fable RP Tracker • Timeline Show")
+            await ctx.send(embed=embed)
 
     # Collaborative Lore System
     @commands.hybrid_group(name="lore", description="Collaborative worldbuilding commands.")
@@ -753,49 +865,49 @@ class Fable(commands.Cog):
         if ctx.invoked_subcommand is None:
             await ctx.send_help(ctx.command)
 
-    @lore.hybrid_command(name="suggest", description="Suggest a new lore entry.")
+    @commands.hybrid_command(name="suggest", description="Suggest a new lore entry.")
     async def lore_suggest(self, ctx: commands.Context, name: str, description: str, type: Optional[str] = None):
         """
         Suggest a new lore entry.
         """
         await ctx.send("Lore suggest not yet implemented.")
 
-    @lore.hybrid_command(name="approve", description="Approve a suggested lore entry.")
+    @commands.hybrid_command(name="approve", description="Approve a suggested lore entry.")
     async def lore_approve(self, ctx: commands.Context, lore_id: int):
         """
         Approve a suggested lore entry.
         """
         await ctx.send("Lore approve not yet implemented.")
 
-    @lore.hybrid_command(name="deny", description="Deny a suggested lore entry.")
+    @commands.hybrid_command(name="deny", description="Deny a suggested lore entry.")
     async def lore_deny(self, ctx: commands.Context, lore_id: int):
         """
         Deny a suggested lore entry.
         """
         await ctx.send("Lore deny not yet implemented.")
 
-    @lore.hybrid_command(name="edit", description="Edit a lore entry's description.")
+    @commands.hybrid_command(name="edit", description="Edit a lore entry's description.")
     async def lore_edit(self, ctx: commands.Context, name: str, new_description: str):
         """
         Edit a lore entry's description.
         """
         await ctx.send("Lore edit not yet implemented.")
 
-    @lore.hybrid_command(name="view", description="View a lore entry.")
+    @commands.hybrid_command(name="view", description="View a lore entry.")
     async def lore_view(self, ctx: commands.Context, name: str):
         """
         View a lore entry.
         """
         await ctx.send("Lore view not yet implemented.")
 
-    @lore.hybrid_command(name="list", description="List all lore entries, optionally filtered by type.")
+    @commands.hybrid_command(name="list", description="List all lore entries, optionally filtered by type.")
     async def lore_list(self, ctx: commands.Context, type: Optional[str] = None):
         """
         List all lore entries, optionally filtered by type.
         """
         await ctx.send("Lore list not yet implemented.")
 
-    @lore.hybrid_command(name="search", description="Search lore entries by keyword.")
+    @commands.hybrid_command(name="search", description="Search lore entries by keyword.")
     async def lore_search(self, ctx: commands.Context, keyword: str):
         """
         Search lore entries by keyword.
@@ -811,28 +923,28 @@ class Fable(commands.Cog):
         if ctx.invoked_subcommand is None:
             await ctx.send_help(ctx.command)
 
-    @mail.hybrid_command(name="send", description="Send IC mail to a recipient.")
+    @commands.hybrid_command(name="send", description="Send IC mail to a recipient.")
     async def mail_send(self, ctx: commands.Context, recipient: str, message: str, from_character: Optional[str] = None):
         """
         Send IC mail to a recipient.
         """
         await ctx.send("Mail send not yet implemented.")
 
-    @mail.hybrid_command(name="read", description="Read IC mail (all or unread).")
+    @commands.hybrid_command(name="read", description="Read IC mail (all or unread).")
     async def mail_read(self, ctx: commands.Context, filter: Optional[str] = "unread"):
         """
         Read IC mail (all or unread).
         """
         await ctx.send("Mail read not yet implemented.")
 
-    @mail.hybrid_command(name="view", description="View a specific mail message.")
+    @commands.hybrid_command(name="view", description="View a specific mail message.")
     async def mail_view(self, ctx: commands.Context, mail_id: int):
         """
         View a specific mail message.
         """
         await ctx.send("Mail view not yet implemented.")
 
-    @mail.hybrid_command(name="delete", description="Delete a mail message.")
+    @commands.hybrid_command(name="delete", description="Delete a mail message.")
     async def mail_delete(self, ctx: commands.Context, mail_id: int):
         """
         Delete a mail message.
@@ -848,28 +960,28 @@ class Fable(commands.Cog):
         if ctx.invoked_subcommand is None:
             await ctx.send_help(ctx.command)
 
-    @sync.hybrid_command(name="setup", description="Set up Google Sheets sync.")
+    @commands.hybrid_command(name="setup", description="Set up Google Sheets sync.")
     async def sync_setup(self, ctx: commands.Context, google_sheet_url: str, api_key: str):
         """
         Set up Google Sheets sync.
         """
         await ctx.send("Sync setup not yet implemented.")
 
-    @sync.hybrid_command(name="export", description="Export data to Google Sheets.")
+    @commands.hybrid_command(name="export", description="Export data to Google Sheets.")
     async def sync_export(self, ctx: commands.Context, data_type: Optional[str] = None):
         """
         Export data to Google Sheets.
         """
         await ctx.send("Sync export not yet implemented.")
 
-    @sync.hybrid_command(name="import", description="Import data from Google Sheets.")
+    @commands.hybrid_command(name="import", description="Import data from Google Sheets.")
     async def sync_import(self, ctx: commands.Context, data_type: Optional[str] = None):
         """
         Import data from Google Sheets.
         """
         await ctx.send("Sync import not yet implemented.")
 
-    @sync.hybrid_command(name="status", description="Show Google Sheets sync status.")
+    @commands.hybrid_command(name="status", description="Show Google Sheets sync status.")
     async def sync_status(self, ctx: commands.Context):
         """
         Show Google Sheets sync status.
