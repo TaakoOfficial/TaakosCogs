@@ -128,10 +128,13 @@ class YALC(commands.Cog):
         self.set_embed_footer(embed)
         return embed
 
-    def set_embed_footer(self, embed: discord.Embed) -> None:
-        """Set a standard footer for all log embeds."""
+    def set_embed_footer(self, embed: discord.Embed, event_time: Optional[datetime.datetime] = None, label: str = "YALC Logger") -> None:
+        """Set a standard footer for all log embeds, including a formatted time."""
+        if event_time is None:
+            event_time = datetime.datetime.now(datetime.UTC)
+        formatted_time = event_time.strftime('%B %d, %Y, %I:%M %p')
         embed.set_footer(
-            text="YALC Logger",
+            text=f"{label} • {formatted_time}",
             icon_url="https://cdn-icons-png.flaticon.com/512/928/928797.png"
         )
 
@@ -307,11 +310,9 @@ class YALC(commands.Cog):
                 embed.add_field(name="Embeds", value="Yes", inline=False)
             edit_time = after.edited_at or after.created_at or discord.utils.utcnow()
             if edit_time:
-                formatted_time = edit_time.strftime('%B %d, %Y, %I:%M %p')
-                embed.set_footer(
-                    text=f"YALC Logger • Edited: {formatted_time}",
-                    icon_url="https://cdn-icons-png.flaticon.com/512/928/928797.png"
-                )
+                self.set_embed_footer(embed, event_time=edit_time, label="YALC Logger • Edited")
+            else:
+                self.set_embed_footer(embed)
             await self.safe_send(channel, embed=embed)
         except Exception as e:
             self.log.error(f"Failed to log message_edit: {e}")
@@ -465,7 +466,8 @@ class YALC(commands.Cog):
             embed.add_field(name="Changes", value="\n".join(changes), inline=False)
             if after.display_avatar:
                 embed.set_thumbnail(url=after.display_avatar.url)
-            embed.set_footer(text="YALC Logger • Role/Nick Update", icon_url="https://cdn-icons-png.flaticon.com/512/928/928797.png")
+            event_time = datetime.datetime.now(datetime.UTC)
+            self.set_embed_footer(embed, event_time=event_time, label="YALC Logger • Role/Nick Update")
             await self.safe_send(channel, embed=embed)
         except Exception as e:
             self.log.error(f"Failed to log member_update: {e}")
@@ -1423,9 +1425,6 @@ class YALC(commands.Cog):
                 except asyncio.TimeoutError:
                     await ctx.send(f"Timed out. Skipping {plain_name}.", ephemeral=True)
                     continue
-
-        # Step 2: Event enabling
-        await ctx.send(
             "Which events do you want to enable?\n"
             "✅ All events\n"
             "🛡️ Moderation only (bans, kicks, role, channel, member updates)\n"
@@ -1744,7 +1743,7 @@ class YALC(commands.Cog):
         try:
             ids = await self.config.guild(ctx.guild).tupperbox_ids()
             if bot_id in ids:
-                await ctx.send(f"ID `{bot_id}` is already in the ignore list.", ephemeral=True)
+                await ctx.send(f"ID `{bot_id}` is alreadyin the ignore list.", ephemeral=True)
                 return
             ids.append(bot_id)
             await self.config.guild(ctx.guild).tupperbox_ids.set(ids)
