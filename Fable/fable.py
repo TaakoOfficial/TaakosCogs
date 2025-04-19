@@ -215,7 +215,7 @@ class Fable(commands.Cog):
         embed.set_footer(text="Fable RP Tracker • Character Profile")
         await ctx.send(embed=embed)
 
-    @commands.hybrid_command(name="list", description="List all characters or those belonging to a user.")
+    @character.command(name="list", description="List all characters or those belonging to a user.")
     @commands.guild_only()
     @commands.cooldown(1, 5, commands.BucketType.guild)
     async def character_list(self, ctx: commands.Context, user: Optional[discord.Member] = None):
@@ -1036,7 +1036,7 @@ class Fable(commands.Cog):
             embed.set_footer(text="Fable RP Tracker • Lore View")
         await ctx.send(embed=embed)
 
-    @commands.hybrid_command(name="list", description="List all lore entries, optionally filtered by type.")
+    @lore.command(name="list", description="List all lore entries, optionally filtered by type.")
     @commands.guild_only()
     async def lore_list(self, ctx: commands.Context, type: Optional[str] = None):
         """
