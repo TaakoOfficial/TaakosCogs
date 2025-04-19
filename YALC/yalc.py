@@ -1746,9 +1746,7 @@ class YALC(commands.Cog):
             if bot_id in ids:
                 await ctx.send(f"ID `{bot_id}` is already in the ignore list.", ephemeral=True)
                 return
-            
             ids.append(bot_id)
-           ```python
             await self.config.guild(ctx.guild).tupperbox_ids.set(ids)
             await ctx.send(f"Added `{bot_id}` to Tupperbox ignore list.", ephemeral=True)
         except Exception as e:
@@ -1811,4 +1809,3 @@ async def setup(bot: Red) -> None:
     """Set up the YALC cog."""
     cog = YALC(bot)
     await bot.add_cog(cog)
-```
