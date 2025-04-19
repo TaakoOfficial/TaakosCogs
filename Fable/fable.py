@@ -33,7 +33,7 @@ class Fable(commands.Cog):
         if ctx.invoked_subcommand is None:
             await ctx.send_help(ctx.command)
 
-    @character.hybrid_command(name="create", description="Create a new character profile with traits and relationships.")
+    @commands.hybrid_command(name="create", description="Create a new character profile with traits and relationships.")
     @commands.guild_only()
     @commands.cooldown(1, 5, commands.BucketType.user)
     async def character_create(self, ctx: commands.Context, name: str, *, args: str):
@@ -102,7 +102,7 @@ class Fable(commands.Cog):
         embed.set_footer(text="Fable RP Tracker • Character Profile")
         await ctx.send(embed=embed)
 
-    @character.hybrid_command(name="edit", description="Edit a character's description, trait, or relationship.")
+    @commands.hybrid_command(name="edit", description="Edit a character's description, trait, or relationship.")
     @commands.guild_only()
     @commands.cooldown(1, 5, commands.BucketType.user)
     async def character_edit(self, ctx: commands.Context, name: str, field: str, *, new_value: str):
@@ -175,7 +175,7 @@ class Fable(commands.Cog):
         else:
             await ctx.send("No changes made (may already exist).")
 
-    @character.hybrid_command(name="view", description="View a character profile.")
+    @commands.hybrid_command(name="view", description="View a character profile.")
     @commands.guild_only()
     @commands.cooldown(1, 3, commands.BucketType.user)
     async def character_view(self, ctx: commands.Context, name: str):
@@ -215,7 +215,7 @@ class Fable(commands.Cog):
         embed.set_footer(text="Fable RP Tracker • Character Profile")
         await ctx.send(embed=embed)
 
-    @character.hybrid_command(name="list", description="List all characters or those belonging to a user.")
+    @commands.hybrid_command(name="list", description="List all characters or those belonging to a user.")
     @commands.guild_only()
     @commands.cooldown(1, 5, commands.BucketType.guild)
     async def character_list(self, ctx: commands.Context, user: Optional[discord.Member] = None):
@@ -262,7 +262,7 @@ class Fable(commands.Cog):
             embed.set_footer(text="Fable RP Tracker • Character List")
             await ctx.send(embed=embed)
 
-    @character.hybrid_command(name="delete", description="Delete a character profile.")
+    @commands.hybrid_command(name="delete", description="Delete a character profile.")
     @commands.guild_only()
     @commands.cooldown(1, 10, commands.BucketType.user)
     async def character_delete(self, ctx: commands.Context, name: str):
@@ -571,25 +571,149 @@ class Fable(commands.Cog):
             await ctx.send_help(ctx.command)
 
     @event.hybrid_command(name="log", description="Log an in-character event.")
+    @commands.guild_only()
+    @commands.cooldown(1, 5, commands.BucketType.guild)
     async def event_log(self, ctx: commands.Context, *characters: str, description: str, date: Optional[str] = None):
         """
         Log an in-character event.
+        
+        Usage:
+        [p]fable event log Vex Mira "Discovered the ancient tomb together" --date 3023-12-05
         """
-        await ctx.send("Event log not yet implemented.")
+        guild = ctx.guild
+        user = ctx.author
+        all_characters = await self.config.guild(guild).characters() or {}
+        logs = await self.config.guild(guild).logs() or []
+        involved = []
+        missing = []
+        for cname in characters:
+            if cname in all_characters:
+                involved.append(cname)
+            else:
+                missing.append(cname)
+        if not involved:
+            embed = discord.Embed(
+                title="❌ No Valid Characters",
+                description="You must specify at least one valid character for the event.",
+                color=0xF04747
+            )
+            await ctx.send(embed=embed)
+            return
+        if missing:
+            embed = discord.Embed(
+                title="⚠️ Some Characters Not Found",
+                description=f"The following characters do not exist and were skipped: {', '.join(missing)}",
+                color=0xFAA61A
+            )
+            await ctx.send(embed=embed)
+        event_id = len(logs) + 1
+        event_data = {
+            "id": event_id,
+            "description": description,
+            "ic_date": date or "Unspecified",
+            "created_at": discord.utils.utcnow().isoformat(),
+            "created_by": str(user.id),
+            "characters": involved
+        }
+        logs.append(event_data)
+        await self.config.guild(guild).logs.set(logs)
+        # Optionally increment relationship strength for shared events
+        # (Not implemented here, but can be added)
+        embed = discord.Embed(
+            title="Event Logged",
+            description=description,
+            color=0x43B581
+        )
+        embed.add_field(name="Characters", value=", ".join(involved), inline=False)
+        embed.add_field(name="IC Date", value=event_data["ic_date"], inline=True)
+        embed.add_field(name="Event ID", value=str(event_id), inline=True)
+        embed.set_footer(text=f"Logged by {ctx.author.display_name} • Fable RP Tracker")
+        await ctx.send(embed=embed)
 
     @event.hybrid_command(name="edit", description="Edit an event's description.")
+    @commands.guild_only()
+    @commands.cooldown(1, 5, commands.BucketType.user)
     async def event_edit(self, ctx: commands.Context, event_id: int, *, new_description: str):
         """
-        Edit an event's description.
+        Edit an event's description by event ID.
+        
+        Usage:
+        [p]fable event edit 3 "New event description"
         """
-        await ctx.send("Event edit not yet implemented.")
+        guild = ctx.guild
+        user = ctx.author
+        logs = await self.config.guild(guild).logs() or []
+        event = next((e for e in logs if e["id"] == event_id), None)
+        if not event:
+            embed = discord.Embed(
+                title="❌ Event Not Found",
+                description=f"No event with ID {event_id} exists.",
+                color=0xF04747
+            )
+            await ctx.send(embed=embed)
+            return
+        is_admin = ctx.author.guild_permissions.administrator
+        is_owner = str(user.id) == event["created_by"]
+        if not (is_owner or is_admin):
+            embed = discord.Embed(
+                title="❌ Permission Denied",
+                description="Only the event creator or a server admin can edit this event.",
+                color=0xF04747
+            )
+            await ctx.send(embed=embed)
+            return
+        event["description"] = new_description
+        await self.config.guild(guild).logs.set(logs)
+        embed = discord.Embed(
+            title="Event Updated",
+            description=f"Event {event_id} description updated.",
+            color=0x43B581
+        )
+        embed.add_field(name="New Description", value=new_description, inline=False)
+        embed.set_footer(text="Fable RP Tracker • Event Edit")
+        await ctx.send(embed=embed)
 
     @event.hybrid_command(name="delete", description="Delete an event.")
+    @commands.guild_only()
+    @commands.cooldown(1, 5, commands.BucketType.user)
     async def event_delete(self, ctx: commands.Context, event_id: int):
         """
-        Delete an event.
+        Delete an event by event ID.
+        
+        Usage:
+        [p]fable event delete 3
         """
-        await ctx.send("Event delete not yet implemented.")
+        guild = ctx.guild
+        user = ctx.author
+        logs = await self.config.guild(guild).logs() or []
+        event = next((e for e in logs if e["id"] == event_id), None)
+        if not event:
+            embed = discord.Embed(
+                title="❌ Event Not Found",
+                description=f"No event with ID {event_id} exists.",
+                color=0xF04747
+            )
+            await ctx.send(embed=embed)
+            return
+        is_admin = ctx.author.guild_permissions.administrator
+        is_owner = str(user.id) == event["created_by"]
+        if not (is_owner or is_admin):
+            embed = discord.Embed(
+                title="❌ Permission Denied",
+                description="Only the event creator or a server admin can delete this event.",
+                color=0xF04747
+            )
+            await ctx.send(embed=embed)
+            return
+        logs = [e for e in logs if e["id"] != event_id]
+        await self.config.guild(guild).logs.set(logs)
+        embed = discord.Embed(
+            title="🗑️ Event Deleted",
+            description=f"Event {event_id} has been deleted.",
+            color=0xFAA61A
+        )
+        embed.set_footer(text="Fable RP Tracker • Event Deleted")
+        await ctx.send(embed=embed)
 
     @commands.hybrid_group(name="timeline", description="View and search the event timeline.")
     async def timeline(self, ctx: commands.Context):
