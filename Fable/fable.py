@@ -27,7 +27,7 @@ class Fable(commands.Cog):
             await ctx.send_help(ctx.command)
 
     # Character Profile System
-    @fable.hybrid_group(name="character", description="Manage RP character profiles.")
+    @commands.hybrid_group(name="character", description="Manage RP character profiles.")
     async def character(self, ctx: commands.Context):
         """Character profile management commands."""
         if ctx.invoked_subcommand is None:
@@ -348,7 +348,7 @@ class Fable(commands.Cog):
         embed.set_footer(text="Fable RP Tracker • Character Relationships")
         await ctx.send(embed=embed)
 
-    @fable.hybrid_group(name="relationship", description="Manage character relationships.")
+    @commands.hybrid_group(name="relationship", description="Manage character relationships.")
     async def relationship(self, ctx: commands.Context):
         """
         Relationship management commands.
@@ -496,8 +496,73 @@ class Fable(commands.Cog):
         else:
             await ctx.send("Unknown field. Use 'type' or 'description'.")
 
+    @relationship.hybrid_command(name="remove", description="Remove a relationship between two characters.")
+    @commands.guild_only()
+    @commands.cooldown(1, 5, commands.BucketType.user)
+    async def relationship_remove(self, ctx: commands.Context, character1: str, character2: str):
+        """
+        Remove a relationship between two characters.
+        
+        Usage:
+        [p]fable relationship remove "Vex" "Mira"
+        """
+        guild = ctx.guild
+        user = ctx.author
+        characters = await self.config.guild(guild).characters() or {}
+        relationships = await self.config.guild(guild).relationships() or {}
+        char1 = characters.get(character1)
+        char2 = characters.get(character2)
+        if not char1 or not char2:
+            embed = discord.Embed(
+                title="❌ Character Not Found",
+                description="Both characters must exist to remove a relationship.",
+                color=0xF04747
+            )
+            await ctx.send(embed=embed)
+            return
+        is_owner = str(user.id) == char1["owner_id"] or ctx.author.guild_permissions.administrator
+        if not is_owner:
+            embed = discord.Embed(
+                title="❌ Permission Denied",
+                description="Only the owner of the first character or an admin can remove relationships.",
+                color=0xF04747
+            )
+            await ctx.send(embed=embed)
+            return
+        found = False
+        # Remove from character1's relationships
+        for rel_type, rel_list in char1["relationships"].items():
+            if character2 in rel_list:
+                rel_list.remove(character2)
+                found = True
+        # Remove from relationships config
+        to_remove = []
+        for k in relationships:
+            if k.startswith(f"{character1}|{character2}|"):
+                to_remove.append(k)
+        for k in to_remove:
+            relationships.pop(k)
+        if found:
+            characters[character1] = char1
+            await self.config.guild(guild).characters.set(characters)
+            await self.config.guild(guild).relationships.set(relationships)
+            embed = discord.Embed(
+                title="Relationship Removed",
+                description=f"Relationship between **{character1}** and **{character2}** has been removed.",
+                color=0xFAA61A
+            )
+            embed.set_footer(text="Fable RP Tracker • Relationship Removed")
+            await ctx.send(embed=embed)
+        else:
+            embed = discord.Embed(
+                title="❌ Relationship Not Found",
+                description=f"No relationship found between **{character1}** and **{character2}**.",
+                color=0xF04747
+            )
+            await ctx.send(embed=embed)
+
     # Event Timeline
-    @fable.hybrid_group(name="event", description="Log and manage in-character events.")
+    @commands.hybrid_group(name="event", description="Log and manage in-character events.")
     async def event(self, ctx: commands.Context):
         """
         Event logging and management commands.
@@ -526,7 +591,7 @@ class Fable(commands.Cog):
         """
         await ctx.send("Event delete not yet implemented.")
 
-    @fable.hybrid_group(name="timeline", description="View and search the event timeline.")
+    @commands.hybrid_group(name="timeline", description="View and search the event timeline.")
     async def timeline(self, ctx: commands.Context):
         """
         Timeline viewing and searching commands.
@@ -556,7 +621,7 @@ class Fable(commands.Cog):
         await ctx.send("Timeline show not yet implemented.")
 
     # Collaborative Lore System
-    @fable.hybrid_group(name="lore", description="Collaborative worldbuilding commands.")
+    @commands.hybrid_group(name="lore", description="Collaborative worldbuilding commands.")
     async def lore(self, ctx: commands.Context):
         """
         Lore collaboration commands.
@@ -614,7 +679,7 @@ class Fable(commands.Cog):
         await ctx.send("Lore search not yet implemented.")
 
     # IC Mail System
-    @fable.hybrid_group(name="mail", description="In-character mail system.")
+    @commands.hybrid_group(name="mail", description="In-character mail system.")
     async def mail(self, ctx: commands.Context):
         """
         In-character mail system commands.
@@ -651,7 +716,7 @@ class Fable(commands.Cog):
         await ctx.send("Mail delete not yet implemented.")
 
     # Google Docs Sync
-    @fable.hybrid_group(name="sync", description="Google Sheets sync commands.")
+    @commands.hybrid_group(name="sync", description="Google Sheets sync commands.")
     async def sync(self, ctx: commands.Context):
         """
         Google Sheets sync commands.
