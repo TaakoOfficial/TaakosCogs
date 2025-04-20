@@ -1771,5 +1771,92 @@ class Fable(commands.Cog):
         embed.set_footer(text="Fable RP Tracker • Sync Status")
         await ctx.send(embed=embed)
 
+    @fable.command(name="googlehelp", description="Show Google API setup instructions for Fable's sync features.")
+    @commands.guild_only()
+    @commands.admin_or_permissions(manage_guild=True)
+    async def googlehelp(self, ctx: commands.Context):
+        """
+        Display a step-by-step guide for setting up Google API credentials for Fable's sync features.
+        """
+        embed = discord.Embed(
+            title="🛠️ Google API Setup Guide",
+            description=(
+                "To use Google Sheets/Docs sync, you must set up a Google Cloud service account and provide its key.\n\n"
+                "**Steps:**\n"
+                "1. Create a Google Cloud Project\n"
+                "2. Enable Google Sheets & Docs APIs\n"
+                "3. Create a Service Account\n"
+                "4. Download a JSON key\n"
+                "5. Add the key to Fable using `/fable setapikey` or the command below.\n\n"
+                "See the full guide in the cog folder: `GOOGLE_API_SETUP.md`"
+            ),
+            color=0x7289DA
+        )
+        embed.add_field(
+            name="Quick Start",
+            value="[Google Cloud Console](https://console.cloud.google.com/)\n[Full Docs](https://cloud.google.com/iam/docs/creating-managing-service-account-keys)",
+            inline=False
+        )
+        embed.set_footer(text="Fable RP Tracker • Google API", icon_url="https://cdn-icons-png.flaticon.com/512/3336/3336643.png")
+        # Show current key status
+        key = await self.config.guild(ctx.guild).settings.get_raw("google_api_key", default=None)
+        if key:
+            embed.add_field(name="Current API Key", value="✅ Set for this server.", inline=False)
+        else:
+            embed.add_field(name="Current API Key", value="❌ Not set. Use `/fable setapikey`.", inline=False)
+        await ctx.send(embed=embed)
+
+    @fable.command(name="setapikey", description="Set or update the Google API service account key for this server.")
+    @commands.guild_only()
+    @commands.admin_or_permissions(manage_guild=True)
+    async def setapikey(self, ctx: commands.Context, *, apikey: str):
+        """
+        Store your Google service account JSON key for this server.
+
+        Parameters
+        ----------
+        apikey : str
+            The full JSON string of your Google service account key.
+        """
+        try:
+            import json
+            json.loads(apikey)
+        except Exception:
+            await ctx.send("❌ That doesn't look like a valid JSON key. Please paste the full JSON string.")
+            return
+        await self.config.guild(ctx.guild).settings.set_raw("google_api_key", value=apikey)
+        embed = discord.Embed(
+            title="✅ Google API Key Set",
+            description="Your Google service account key has been securely saved for this server.",
+            color=0x43B581
+        )
+        embed.set_footer(text="Fable RP Tracker • Google API", icon_url="https://cdn-icons-png.flaticon.com/512/3336/3336643.png")
+        # Show current key status
+        embed.add_field(name="Current API Key", value="✅ Set for this server.", inline=False)
+        await ctx.send(embed=embed)
+
+    @fable.command(name="showapikey", description="Show if a Google API key is set for this server.")
+    @commands.guild_only()
+    @commands.admin_or_permissions(manage_guild=True)
+    async def showapikey(self, ctx: commands.Context):
+        """
+        Show whether a Google API key is configured for this server.
+        """
+        key = await self.config.guild(ctx.guild).settings.get_raw("google_api_key", default=None)
+        if key:
+            msg = "✅ A Google API key is set for this server."
+            color = 0x43B581
+        else:
+            msg = "❌ No Google API key is set. Use `/fable setapikey` to add one."
+            color = 0xF04747
+        embed = discord.Embed(title="Google API Key Status", description=msg, color=color)
+        embed.set_footer(text="Fable RP Tracker • Google API", icon_url="https://cdn-icons-png.flaticon.com/512/3336/3336643.png")
+        # Show current key status
+        if key:
+            embed.add_field(name="Current API Key", value="✅ Set for this server.", inline=False)
+        else:
+            embed.add_field(name="Current API Key", value="❌ Not set. Use `/fable setapikey`.", inline=False)
+        await ctx.send(embed=embed)
+
 async def setup(bot: commands.Bot):
     await bot.add_cog(Fable(bot))
