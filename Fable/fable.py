@@ -27,7 +27,7 @@ class Fable(commands.Cog):
             await ctx.send_help(ctx.command)
 
     # Character Profile System
-    @commands.hybrid_group(name="character", description="Manage RP character profiles.")
+    @fable.group(name="character", description="Manage RP character profiles.")
     async def character(self, ctx: commands.Context):
         """Character profile management commands."""
         if ctx.invoked_subcommand is None:
@@ -304,7 +304,7 @@ class Fable(commands.Cog):
         embed.set_footer(text="Fable RP Tracker • Character Deleted")
         await ctx.send(embed=embed)
 
-    @commands.hybrid_command(name="relations", description="Show all relationships for a character.")
+    @fable.command(name="relations", description="Show all relationships for a character.")
     @commands.guild_only()
     @commands.cooldown(1, 5, commands.BucketType.user)
     async def relations(self, ctx: commands.Context, character: str):
@@ -349,7 +349,7 @@ class Fable(commands.Cog):
         await ctx.send(embed=embed)
 
     # Relationship Management
-    @commands.hybrid_group(name="relationship", description="Manage character relationships.")
+    @fable.group(name="relationship", description="Manage character relationships.")
     async def relationship(self, ctx: commands.Context):
         """
         Relationship management commands.
@@ -357,7 +357,7 @@ class Fable(commands.Cog):
         if ctx.invoked_subcommand is None:
             await ctx.send_help(ctx.command)
 
-    @commands.hybrid_command(name="add", description="Add a relationship between two characters.")
+    @relationship.command(name="add", description="Add a relationship between two characters.")
     @commands.guild_only()
     @commands.cooldown(1, 5, commands.BucketType.user)
     async def relationship_add(self, ctx: commands.Context, character1: str, character2: str, type: str, *, description: Optional[str] = None):
@@ -497,7 +497,7 @@ class Fable(commands.Cog):
         else:
             await ctx.send("Unknown field. Use 'type' or 'description'.")
 
-    @commands.hybrid_command(name="remove", description="Remove a relationship between two characters.")
+    @relationship.command(name="remove", description="Remove a relationship between two characters.")
     @commands.guild_only()
     @commands.cooldown(1, 5, commands.BucketType.user)
     async def relationship_remove(self, ctx: commands.Context, character1: str, character2: str):
@@ -563,7 +563,7 @@ class Fable(commands.Cog):
             await ctx.send(embed=embed)
 
     # Event Timeline
-    @commands.hybrid_group(name="event", description="Log and manage in-character events.")
+    @fable.group(name="event", description="Log and manage in-character events.")
     async def event(self, ctx: commands.Context):
         """
         Event logging and management commands.
@@ -571,7 +571,7 @@ class Fable(commands.Cog):
         if ctx.invoked_subcommand is None:
             await ctx.send_help(ctx.command)
 
-    @commands.hybrid_command(name="log", description="Log an in-character event.")
+    @event.command(name="log", description="Log an in-character event.")
     @commands.guild_only()
     @commands.cooldown(1, 5, commands.BucketType.guild)
     async def event_log(self, ctx: commands.Context, characters: str, description: str, date: Optional[str] = None):
@@ -716,7 +716,7 @@ class Fable(commands.Cog):
         embed.set_footer(text="Fable RP Tracker • Event Deleted")
         await ctx.send(embed=embed)
 
-    @commands.hybrid_group(name="timeline", description="View and search the event timeline.")
+    @fable.group(name="timeline", description="View and search the event timeline.")
     async def timeline(self, ctx: commands.Context):
         """
         Timeline viewing and searching commands.
@@ -724,7 +724,7 @@ class Fable(commands.Cog):
         if ctx.invoked_subcommand is None:
             await ctx.send_help(ctx.command)
 
-    @commands.hybrid_command(name="recent", description="Show recent events.")
+    @timeline.command(name="recent", description="Show recent events.")
     @commands.guild_only()
     @commands.cooldown(1, 5, commands.BucketType.guild)
     async def timeline_recent(self, ctx: commands.Context, number: Optional[int] = 5):
@@ -808,7 +808,7 @@ class Fable(commands.Cog):
         await ctx.send(embed=embed)
 
     # Collaborative Lore System
-    @commands.hybrid_group(name="lore", description="Collaborative worldbuilding commands.")
+    @fable.group(name="lore", description="Collaborative worldbuilding commands.")
     async def lore(self, ctx: commands.Context):
         """
         Lore collaboration commands.
@@ -816,7 +816,7 @@ class Fable(commands.Cog):
         if ctx.invoked_subcommand is None:
             await ctx.send_help(ctx.command)
 
-    @commands.hybrid_command(name="suggest", description="Suggest a new lore entry.")
+    @lore.command(name="suggest", description="Suggest a new lore entry.")
     @commands.guild_only()
     @commands.cooldown(1, 5, commands.BucketType.user)
     async def lore_suggest(self, ctx: commands.Context, name: str, description: str, type: Optional[str] = None):
@@ -859,7 +859,7 @@ class Fable(commands.Cog):
         embed.set_footer(text=f"Suggested by {ctx.author.display_name} • Fable RP Tracker")
         await ctx.send(embed=embed)
 
-    @commands.hybrid_command(name="approve", description="Approve a suggested lore entry.")
+    @lore.command(name="approve", description="Approve a suggested lore entry.")
     @commands.guild_only()
     @commands.has_permissions(manage_guild=True)
     async def lore_approve(self, ctx: commands.Context, name: str):
@@ -894,7 +894,7 @@ class Fable(commands.Cog):
         embed.set_footer(text=f"Approved by {ctx.author.display_name} • Fable RP Tracker")
         await ctx.send(embed=embed)
 
-    @commands.hybrid_command(name="deny", description="Deny a suggested lore entry.")
+    @lore.command(name="deny", description="Deny a suggested lore entry.")
     @commands.guild_only()
     @commands.has_permissions(manage_guild=True)
     async def lore_deny(self, ctx: commands.Context, name: str):
@@ -1062,7 +1062,7 @@ class Fable(commands.Cog):
         await ctx.send(embed=embed)
 
     # IC Mail System
-    @commands.hybrid_group(name="mail", description="In-character mail system.")
+    @fable.group(name="mail", description="In-character mail system.")
     async def mail(self, ctx: commands.Context):
         """
         In-character mail system commands.
@@ -1070,14 +1070,14 @@ class Fable(commands.Cog):
         if ctx.invoked_subcommand is None:
             await ctx.send_help(ctx.command)
 
-    @commands.hybrid_command(name="send", description="Send IC mail to a recipient.")
+    @mail.command(name="send", description="Send IC mail to a recipient.")
     async def mail_send(self, ctx: commands.Context, recipient: str, message: str, from_character: Optional[str] = None):
         """
         Send IC mail to a recipient.
         """
         await ctx.send("Mail send not yet implemented.")
 
-    @commands.hybrid_command(name="read", description="Read IC mail (all or unread).")
+    @mail.command(name="read", description="Read IC mail (all or unread).")
     async def mail_read(self, ctx: commands.Context, filter: Optional[str] = "unread"):
         """
         Read IC mail (all or unread).
@@ -1098,43 +1098,6 @@ class Fable(commands.Cog):
         """
         await ctx.send("Mail delete not yet implemented.")
 
-    # Google Docs Sync
-    @commands.hybrid_group(name="sync", description="Google Sheets sync commands.")
-    async def sync(self, ctx: commands.Context):
-        """
-        Google Sheets sync commands.
-        """
-        if ctx.invoked_subcommand is None:
-            await ctx.send_help(ctx.command)
-
-    @commands.hybrid_command(name="setup", description="Set up Google Sheets sync.")
-    async def sync_setup(self, ctx: commands.Context, google_sheet_url: str, api_key: str):
-        """
-        Set up Google Sheets sync.
-        """
-        await ctx.send("Sync setup not yet implemented.")
-
-    @commands.hybrid_command(name="export", description="Export data to Google Sheets.")
-    async def sync_export(self, ctx: commands.Context, data_type: Optional[str] = None):
-        """
-        Export data to Google Sheets.
-        """
-        await ctx.send("Sync export not yet implemented.")
-
-    @commands.hybrid_command(name="import", description="Import data from Google Sheets.")
-    async def sync_import(self, ctx: commands.Context, data_type: Optional[str] = None):
-        """
-        Import data from Google Sheets.
-        """
-        await ctx.send("Sync import not yet implemented.")
-
-    @commands.hybrid_command(name="status", description="Show Google Sheets sync status.")
-    async def sync_status(self, ctx: commands.Context):
-        """
-        Show Google Sheets sync status.
-        """
-        await ctx.send("Sync status not yet implemented.")
-
     # Administrative Commands
     @fable.command(name="setup", description="Run the Fable setup wizard.")
     async def setup_cmd(self, ctx: commands.Context):
@@ -1143,28 +1106,28 @@ class Fable(commands.Cog):
         """
         await ctx.send("Setup wizard not yet implemented.")
 
-    @commands.hybrid_command(name="settings", description="View or edit Fable settings.")
+    @fable.command(name="settings", description="View or edit Fable settings.")
     async def settings(self, ctx: commands.Context):
         """
         View or edit Fable settings.
         """
         await ctx.send("Settings not yet implemented.")
 
-    @commands.hybrid_command(name="backup", description="Create a backup of Fable data.")
+    @fable.command(name="backup", description="Create a backup of Fable data.")
     async def backup(self, ctx: commands.Context):
         """
         Create a backup of Fable data.
         """
         await ctx.send("Backup not yet implemented.")
 
-    @commands.hybrid_command(name="restore", description="Restore Fable data from a backup file.")
+    @fable.command(name="restore", description="Restore Fable data from a backup file.")
     async def restore(self, ctx: commands.Context, backup_file: str):
         """
         Restore Fable data from a backup file.
         """
         await ctx.send("Restore not yet implemented.")
 
-    @commands.hybrid_command(name="permissions", description="Set Fable permissions for a role.")
+    @fable.command(name="permissions", description="Set Fable permissions for a role.")
     async def permissions(self, ctx: commands.Context, role: discord.Role, permission_level: str):
         """
         Set Fable permissions for a role.
@@ -1174,6 +1137,80 @@ class Fable(commands.Cog):
     async def cog_unload(self):
         """Cleanup tasks when the cog is unloaded."""
         pass
+
+    # Character command aliases for direct access (e.g. [p]fable charlist)
+    @fable.command(name="charlist", description="List all characters or those belonging to a user.")
+    @commands.guild_only()
+    @commands.cooldown(1, 5, commands.BucketType.guild)
+    async def charlist(self, ctx: commands.Context, user: Optional[discord.Member] = None):
+        """
+        Shortcut for [p]fable character list
+        """
+        await ctx.invoke(self.character_list, user=user)
+
+    @fable.command(name="chardelete", description="Delete a character profile.")
+    @commands.guild_only()
+    @commands.cooldown(1, 10, commands.BucketType.user)
+    async def chardelete(self, ctx: commands.Context, name: str):
+        """
+        Shortcut for [p]fable character delete
+        """
+        await ctx.invoke(self.character_delete, name=name)
+
+    @fable.command(name="charview", description="View a character profile.")
+    @commands.guild_only()
+    @commands.cooldown(1, 3, commands.BucketType.user)
+    async def charview(self, ctx: commands.Context, name: str):
+        """
+        Shortcut for [p]fable character view
+        """
+        await ctx.invoke(self.character_view, name=name)
+
+    @fable.command(name="charcreate", description="Create a new character profile with traits and relationships.")
+    @commands.guild_only()
+    @commands.cooldown(1, 5, commands.BucketType.user)
+    async def charcreate(self, ctx: commands.Context, name: str, *, args: str):
+        """
+        Shortcut for [p]fable character create
+        """
+        await ctx.invoke(self.create, name=name, args=args)
+
+    @fable.command(name="charedit", description="Edit a character's description, trait, or relationship.")
+    @commands.guild_only()
+    @commands.cooldown(1, 5, commands.BucketType.user)
+    async def charedit(self, ctx: commands.Context, name: str, field: str, *, new_value: str):
+        """
+        Shortcut for [p]fable character edit
+        """
+        await ctx.invoke(self.character_edit, name=name, field=field, new_value=new_value)
+
+    @fable.command(name="sysetup", description="Set up Google Sheets sync.")
+    async def sysetup(self, ctx: commands.Context, google_sheet_url: str, api_key: str):
+        """
+        Shortcut for [p]fable sync setup
+        """
+        await ctx.invoke(self.sync_setup, google_sheet_url=google_sheet_url, api_key=api_key)
+
+    @fable.command(name="syexport", description="Export data to Google Sheets.")
+    async def syexport(self, ctx: commands.Context, data_type: Optional[str] = None):
+        """
+        Shortcut for [p]fable sync export
+        """
+        await ctx.invoke(self.sync_export, data_type=data_type)
+
+    @fable.command(name="syimport", description="Import data from Google Sheets.")
+    async def syimport(self, ctx: commands.Context, data_type: Optional[str] = None):
+        """
+        Shortcut for [p]fable sync import
+        """
+        await ctx.invoke(self.sync_import, data_type=data_type)
+
+    @fable.command(name="systatus", description="Show Google Sheets sync status.")
+    async def systatus(self, ctx: commands.Context):
+        """
+        Shortcut for [p]fable sync status
+        """
+        await ctx.invoke(self.sync_status)
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(Fable(bot))
