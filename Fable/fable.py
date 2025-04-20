@@ -45,14 +45,14 @@ class Fable(commands.Cog):
     async def fable(self, ctx: commands.Context):
         """Parent command for Fable RP tracker."""
         if ctx.invoked_subcommand is None:
-            await ctx.send_help(ctx.command)
+            await ctx.send_help()
 
     # Character Profile System
     @fable.group(name="character", description="Manage RP character profiles.")
     async def character(self, ctx: commands.Context):
         """Character profile management commands."""
         if ctx.invoked_subcommand is None:
-            await ctx.send_help(ctx.command)
+            await ctx.send_help()
 
     @character.command(name="create", description="Create a new character profile with traits and relationships.")
     @commands.guild_only()
@@ -377,7 +377,7 @@ class Fable(commands.Cog):
         Relationship management commands.
         """
         if ctx.invoked_subcommand is None:
-            await ctx.send_help(ctx.command)
+            await ctx.send_help()
 
     @relationship.command(name="add", description="Add a relationship between two characters.")
     @commands.cooldown(1, 5, commands.BucketType.user)
@@ -579,7 +579,7 @@ class Fable(commands.Cog):
         Event logging and management commands.
         """
         if ctx.invoked_subcommand is None:
-            await ctx.send_help(ctx.command)
+            await ctx.send_help()
 
     @event.command(name="log", description="Log an in-character event.")
     @commands.guild_only()
@@ -732,7 +732,7 @@ class Fable(commands.Cog):
         Timeline viewing and searching commands.
         """
         if ctx.invoked_subcommand is None:
-            await ctx.send_help(ctx.command)
+            await ctx.send_help()
 
     @timeline.command(name="recent", description="Show recent events.")
     @commands.guild_only()
@@ -824,7 +824,7 @@ class Fable(commands.Cog):
         Lore collaboration commands.
         """
         if ctx.invoked_subcommand is None:
-            await ctx.send_help(ctx.command)
+            await ctx.send_help()
 
     @lore.command(name="suggest", description="Suggest a new lore entry.")
     @commands.guild_only()
@@ -1078,7 +1078,7 @@ class Fable(commands.Cog):
         In-character mail system commands.
         """
         if ctx.invoked_subcommand is None:
-            await ctx.send_help(ctx.command)
+            await ctx.send_help()
 
     @mail.command(name="send", description="Send IC mail to a recipient character.")
     @commands.guild_only()
@@ -1698,7 +1698,7 @@ class Fable(commands.Cog):
             await ctx.send("Sync is not set up. Use [p]fable sysetup first.")
             return
         data_type = data_type or "all"
-        data = await self.config.guild(ctx.guild).all()
+        data = awaitself.config.guild(ctx.guild).all()
         if data_type != "all":
             data = data.get(data_type, {})
         try:
