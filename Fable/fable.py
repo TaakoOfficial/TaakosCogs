@@ -1,8 +1,9 @@
 from redbot.core import commands, Config
 import discord
 from typing import Optional, List
+import aiohttp
 from Fable.google_sync_utils import (
-    export_to_sheet, import_from_sheet, export_to_doc, import_from_doc
+    export_to_sheet, import_to_sheet, export_to_doc, import_from_doc
 )
 import importlib.util
 import subprocess
@@ -61,12 +62,23 @@ class Fable(commands.Cog):
         Usage: [p]fable character fields
         """
         fields = [
-            ("name", "The character's name (required)"),
+            ("name", "The character's short name (required)"),
+            ("full_name", "Full legal or known name (optional)"),
             ("description", "A detailed description (required)"),
-            ("traits", "One or more personality traits (optional, use --trait)"),
-            ("age", "The character's age (optional)"),
+            ("image_url", "URL to character's image/avatar (optional)"),
             ("species", "The character's species/race (optional)"),
+            ("gender", "Gender identity (optional)"),
+            ("date_of_birth", "Date of birth (optional)"),
+            ("age_appearance", "Apparent age (optional)"),
+            ("true_age", "True age (optional)"),
+            ("ethnicity", "Ethnic background (optional)"),
             ("occupation", "The character's job or role (optional)"),
+            ("height", "Height (optional)"),
+            ("weight", "Weight (optional)"),
+            ("sexual_orientation", "Sexual orientation (optional)"),
+            ("zodiac", "Zodiac sign (optional)"),
+            ("alignment", "Moral alignment (optional)"),
+            ("traits", "One or more personality traits (optional, use --trait)"),
             ("relationships", "Allies, rivals, and neutrals (optional, use --ally, --rival, --neutral)")
         ]
         embed = discord.Embed(
@@ -74,36 +86,38 @@ class Fable(commands.Cog):
             color=0x7289DA
         )
         for fname, fdesc in fields:
-            embed.add_field(name=fname.capitalize(), value=fdesc, inline=False)
+            embed.add_field(name=fname.replace("_", " ").capitalize(), value=fdesc, inline=False)
         embed.set_footer(text="Fable RP Tracker • Character Fields", icon_url="https://cdn-icons-png.flaticon.com/512/3336/3336643.png")
         await ctx.send(embed=embed)
 
-    @character.command(name="create", description="Create a new character profile with traits and relationships.")
+    @commands.hybrid_command(name="create", description="Create a new character profile with all fields.")
     @commands.guild_only()
     @commands.cooldown(1, 5, commands.BucketType.user)
-    async def create(self, ctx: commands.Context, name: str, *, args: str):
+    async def create(self, ctx: commands.Context,
+        name: str = commands.parameter(description="Short name for the character."),
+        description: str = commands.parameter(description="A detailed description."),
+        image_url: Optional[str] = commands.parameter(default=None, description="URL to character's image/avatar."),
+        full_name: Optional[str] = commands.parameter(default=None, description="Full legal or known name."),
+        species: Optional[str] = commands.parameter(default=None, description="Species or race."),
+        gender: Optional[str] = commands.parameter(default=None, description="Gender identity."),
+        date_of_birth: Optional[str] = commands.parameter(default=None, description="Date of birth."),
+        age_appearance: Optional[str] = commands.parameter(default=None, description="Apparent age."),
+        true_age: Optional[str] = commands.parameter(default=None, description="True age."),
+        ethnicity: Optional[str] = commands.parameter(default=None, description="Ethnic background."),
+        occupation: Optional[str] = commands.parameter(default=None, description="Job or role."),
+        height: Optional[str] = commands.parameter(default=None, description="Height."),
+        weight: Optional[str] = commands.parameter(default=None, description="Weight."),
+        sexual_orientation: Optional[str] = commands.parameter(default=None, description="Sexual orientation."),
+        zodiac: Optional[str] = commands.parameter(default=None, description="Zodiac sign."),
+        alignment: Optional[str] = commands.parameter(default=None, description="Moral alignment."),
+        traits: Optional[str] = commands.parameter(default=None, description="Comma-separated list of traits."),
+        allies: Optional[str] = commands.parameter(default=None, description="Comma-separated list of allies."),
+        rivals: Optional[str] = commands.parameter(default=None, description="Comma-separated list of rivals."),
+        neutrals: Optional[str] = commands.parameter(default=None, description="Comma-separated list of neutrals.")
+    ):
         """
-        Create a new character profile.
-        Usage:
-        [p]fable character create "Vex" "A cynical bard" --trait "Skilled musician" --ally @Mira --age 25 --species Elf --occupation Bard
+        Create a new character profile with all fields. Use the slash command UI for prompts, or text for advanced options.
         """
-        import argparse
-        import shlex
-        parser = argparse.ArgumentParser(prog="character_create", add_help=False)
-        parser.add_argument("description", type=str)
-        parser.add_argument("--trait", action="append", dest="traits", default=[])
-        parser.add_argument("--ally", action="append", dest="allies", default=[])
-        parser.add_argument("--rival", action="append", dest="rivals", default=[])
-        parser.add_argument("--neutral", action="append", dest="neutrals", default=[])
-        parser.add_argument("--age", type=str, default=None)
-        parser.add_argument("--species", type=str, default=None)
-        parser.add_argument("--occupation", type=str, default=None)
-        try:
-            split_args = shlex.split(args)
-            parsed = parser.parse_args(split_args)
-        except Exception:
-            await ctx.send_help(ctx.command)
-            return
         guild = ctx.guild
         user = ctx.author
         user_id = str(user.id)
@@ -116,35 +130,90 @@ class Fable(commands.Cog):
             )
             await ctx.send(embed=embed)
             return
+
+        # Validate image URL if provided
+        if image_url:
+            try:
+                embed = discord.Embed()
+                embed.set_thumbnail(url=image_url)
+                await ctx.send(embed=embed, delete_after=1)
+            except discord.errors.InvalidArgument:
+                await ctx.send("❌ Invalid image URL. Please provide a direct link to an image file.")
+                return
+            except Exception:
+                await ctx.send("❌ Could not validate image URL. Please check the URL and try again.")
+                return
+
+        # Parse comma-separated fields
+        traits_list = [t.strip() for t in traits.split(",") if t.strip()] if traits else []
+        allies_list = [a.strip() for a in allies.split(",") if a.strip()] if allies else []
+        rivals_list = [r.strip() for r in rivals.split(",") if r.strip()] if rivals else []
+        neutrals_list = [n.strip() for n in neutrals.split(",") if n.strip()] if neutrals else []
+        
         character_data = {
             "name": name,
-            "description": parsed.description,
+            "full_name": full_name,
+            "description": description,
+            "image_url": image_url,
             "owner_id": user_id,
-            "traits": parsed.traits,
-            "age": parsed.age,
-            "species": parsed.species,
-            "occupation": parsed.occupation,
+            "species": species,
+            "gender": gender,
+            "date_of_birth": date_of_birth,
+            "age_appearance": age_appearance,
+            "true_age": true_age,
+            "ethnicity": ethnicity,
+            "occupation": occupation,
+            "height": height,
+            "weight": weight,
+            "sexual_orientation": sexual_orientation,
+            "zodiac": zodiac,
+            "alignment": alignment,
+            "traits": traits_list,
             "relationships": {
-                "ally": parsed.allies,
-                "rival": parsed.rivals,
-                "neutral": parsed.neutrals
+                "ally": allies_list,
+                "rival": rivals_list,
+                "neutral": neutrals_list
             }
         }
         await self.config.guild(guild).characters.set_raw(name, value=character_data)
+        
+        # Create response embed
         embed = discord.Embed(
             title=f"Character Created: {name}",
-            description=parsed.description,
+            description=description,
             color=0x43B581
         )
         embed.set_author(name=user.display_name, icon_url=user.display_avatar.url)
-        if parsed.traits:
-            embed.add_field(name="Traits", value="\n".join(f"• {t}" for t in parsed.traits), inline=False)
-        if parsed.age:
-            embed.add_field(name="Age", value=parsed.age, inline=True)
-        if parsed.species:
-            embed.add_field(name="Species", value=parsed.species, inline=True)
-        if parsed.occupation:
-            embed.add_field(name="Occupation", value=parsed.occupation, inline=True)
+        if image_url:
+            embed.set_thumbnail(url=image_url)
+        if full_name:
+            embed.add_field(name="Full Name", value=full_name, inline=False)
+        if species:
+            embed.add_field(name="Species", value=species, inline=True)
+        if gender:
+            embed.add_field(name="Gender", value=gender, inline=True)
+        if date_of_birth:
+            embed.add_field(name="Date of Birth", value=date_of_birth, inline=True)
+        if age_appearance:
+            embed.add_field(name="Age Appearance", value=age_appearance, inline=True)
+        if true_age:
+            embed.add_field(name="True Age", value=true_age, inline=True)
+        if ethnicity:
+            embed.add_field(name="Ethnicity", value=ethnicity, inline=True)
+        if occupation:
+            embed.add_field(name="Occupation", value=occupation, inline=True)
+        if height:
+            embed.add_field(name="Height", value=height, inline=True)
+        if weight:
+            embed.add_field(name="Weight", value=weight, inline=True)
+        if sexual_orientation:
+            embed.add_field(name="Sexual Orientation", value=sexual_orientation, inline=True)
+        if zodiac:
+            embed.add_field(name="Zodiac", value=zodiac, inline=True)
+        if alignment:
+            embed.add_field(name="Alignment", value=alignment, inline=True)
+        if traits_list:
+            embed.add_field(name="Traits", value="\n".join(f"• {t}" for t in traits_list), inline=False)
         rel_lines = []
         for rel_type, rel_list in character_data["relationships"].items():
             if rel_list:
@@ -154,19 +223,29 @@ class Fable(commands.Cog):
         embed.set_footer(text="Fable RP Tracker", icon_url="https://cdn-icons-png.flaticon.com/512/3336/3336643.png")
         await ctx.send(embed=embed)
 
-    @character.command(name="edit", description="Edit a character's description, trait, relationship, age, species, or occupation.")
+    @character.command(name="edit", description="Edit a character field.")
     @commands.guild_only()
     @commands.cooldown(1, 5, commands.BucketType.user)
     async def character_edit(self, ctx: commands.Context, name: str, field: str, *, new_value: str):
         """
-        Edit a character's description, trait, relationship, age, species, or occupation.
+        Edit a character's field.
         Usage:
-        [p]fable character edit "Vex" description "A new description"
-        [p]fable character edit "Vex" trait "New Trait"
-        [p]fable character edit "Vex" relationship "ally:@Mira"
-        [p]fable character edit "Vex" age 30
-        [p]fable character edit "Vex" species Elf
-        [p]fable character edit "Vex" occupation Bard
+        [p]fable character edit "Athena" full_name "Athena Imara Biros"
+        [p]fable character edit "Athena" image_url "https://example.com/image.png"
+        [p]fable character edit "Athena" gender Female
+        [p]fable character edit "Athena" date_of_birth "October 13th, 2084"
+        [p]fable character edit "Athena" age 75
+        [p]fable character edit "Athena" age_appearance 30
+        [p]fable character edit "Athena" true_age 75
+        [p]fable character edit "Athena" ethnicity "Egyptian/Greek"
+        [p]fable character edit "Athena" occupation "Romance Author"
+        [p]fable character edit "Athena" height "5'10 / 178 cm"
+        [p]fable character edit "Athena" weight "155 lbs / 70 kg"
+        [p]fable character edit "Athena" sexual_orientation Bicurious
+        [p]fable character edit "Athena" zodiac Libra
+        [p]fable character edit "Athena" alignment "Neutral Good"
+        [p]fable character edit "Athena" trait "Creative"
+        [p]fable character edit "Athena" relationship "ally:@Mira"
         """
         guild = ctx.guild
         user = ctx.author
@@ -194,6 +273,19 @@ class Fable(commands.Cog):
         if field == "description":
             character["description"] = new_value
             updated = True
+        elif field == "image_url":
+            try:
+                embed = discord.Embed()
+                embed.set_thumbnail(url=new_value)
+                await ctx.send(embed=embed, delete_after=1)
+                character["image_url"] = new_value
+                updated = True
+            except discord.errors.InvalidArgument:
+                await ctx.send("❌ Invalid image URL. Please provide a direct link to an image file.")
+                return
+            except Exception:
+                await ctx.send("❌ Could not validate image URL. Please check the URL and try again.")
+                return
         elif field == "trait":
             if "traits" not in character:
                 character["traits"] = []
@@ -211,17 +303,17 @@ class Fable(commands.Cog):
             if rel_target not in character["relationships"][rel_type]:
                 character["relationships"][rel_type].append(rel_target)
                 updated = True
-        elif field in ("age", "species", "occupation"):
+        elif field in ("full_name", "species", "gender", "date_of_birth", "age", "age_appearance", "true_age", "ethnicity", "occupation", "height", "weight", "sexual_orientation", "zodiac", "alignment"):
             character[field] = new_value
             updated = True
         else:
-            await ctx.send("Unknown field. Use description, trait, relationship, age, species, or occupation.")
+            await ctx.send("Unknown field. Use the fields command to see all options.")
             return
         if updated:
             await self.config.guild(guild).characters.set_raw(name, value=character)
             embed = discord.Embed(
                 title="✅ Character Updated",
-                description=f"**{name}**'s {field} updated.",
+                description=f"**{name}**'s {field.replace('_', ' ')} updated.",
                 color=0x43B581
             )
             embed.set_footer(text="Fable RP Tracker • Character Edit", icon_url="https://cdn-icons-png.flaticon.com/512/3336/3336643.png")
@@ -236,7 +328,7 @@ class Fable(commands.Cog):
         """
         View a character profile by name.
         Usage:
-        [p]fable character view "Vex"
+        [p]fable character view "Athena"
         """
         guild = ctx.guild
         character = await self.config.guild(guild).characters.get_raw(name, default=None)
@@ -258,14 +350,36 @@ class Fable(commands.Cog):
         )
         if owner:
             embed.set_author(name=owner.display_name, icon_url=owner.display_avatar.url)
-        if character.get("traits"):
-            embed.add_field(name="Traits", value="\n".join(f"• {t}" for t in character["traits"]), inline=False)
-        if character.get("age"):
-            embed.add_field(name="Age", value=character["age"], inline=True)
+        if character.get("image_url"):
+            embed.set_thumbnail(url=character["image_url"])
+        if character.get("full_name"):
+            embed.add_field(name="Full Name", value=character["full_name"], inline=False)
         if character.get("species"):
             embed.add_field(name="Species", value=character["species"], inline=True)
+        if character.get("gender"):
+            embed.add_field(name="Gender", value=character["gender"], inline=True)
+        if character.get("date_of_birth"):
+            embed.add_field(name="Date of Birth", value=character["date_of_birth"], inline=True)
+        if character.get("age_appearance"):
+            embed.add_field(name="Age Appearance", value=character["age_appearance"], inline=True)
+        if character.get("true_age"):
+            embed.add_field(name="True Age", value=character["true_age"], inline=True)
+        if character.get("ethnicity"):
+            embed.add_field(name="Ethnicity", value=character["ethnicity"], inline=True)
         if character.get("occupation"):
             embed.add_field(name="Occupation", value=character["occupation"], inline=True)
+        if character.get("height"):
+            embed.add_field(name="Height", value=character["height"], inline=True)
+        if character.get("weight"):
+            embed.add_field(name="Weight", value=character["weight"], inline=True)
+        if character.get("sexual_orientation"):
+            embed.add_field(name="Sexual Orientation", value=character["sexual_orientation"], inline=True)
+        if character.get("zodiac"):
+            embed.add_field(name="Zodiac", value=character["zodiac"], inline=True)
+        if character.get("alignment"):
+            embed.add_field(name="Alignment", value=character["alignment"], inline=True)
+        if character.get("traits"):
+            embed.add_field(name="Traits", value="\n".join(f"• {t}" for t in character["traits"]), inline=False)
         rel_lines = []
         for rel_type, rel_list in character.get("relationships", {}).items():
             if rel_list:
@@ -338,7 +452,7 @@ class Fable(commands.Cog):
         """
         Delete a character profile by name. Only the owner or an admin can delete.
         Usage:
-        [p]fable character delete "Vex"
+        [p]fable character delete "Athena"
         """
         guild = ctx.guild
         user = ctx.author
@@ -396,7 +510,7 @@ class Fable(commands.Cog):
         """
         Show all relationships for a character.
         Usage:
-        [p]fable relations "Vex"
+        [p]fable relations "Athena"
         """
         guild = ctx.guild
         characters = await self.config.guild(guild).characters() or {}
@@ -448,8 +562,8 @@ class Fable(commands.Cog):
         """
         Add a relationship between two characters.
         Usage:
-        [p]fable relationship add "Vex" "Mira" ally
-        [p]fable relationship add "Vex" "Mira" rival "They compete for the same artifact."
+        [p]fable relationship add "Athena" "Mira" ally
+        [p]fable relationship add "Athena" "Mira" rival "They compete for the same artifact."
         """
         guild = ctx.guild
         user = ctx.author
@@ -503,8 +617,8 @@ class Fable(commands.Cog):
         """
         Edit a relationship's type or description.
         Usage:
-        [p]fable relationship edit "Vex" "Mira" type rival
-        [p]fable relationship edit "Vex" "Mira" description "Now they're best friends."
+        [p]fable relationship edit "Athena" "Mira" type rival
+        [p]fable relationship edit "Athena" "Mira" description "Now they're best friends."
         """
         guild = ctx.guild
         user = ctx.author
@@ -580,7 +694,7 @@ class Fable(commands.Cog):
         """
         Remove a relationship between two characters.
         Usage:
-        [p]fable relationship remove "Vex" "Mira"
+        [p]fable relationship remove "Athena" "Mira"
         """
         guild = ctx.guild
         user = ctx.author
@@ -651,7 +765,7 @@ class Fable(commands.Cog):
         """
         Log an in-character event.
         Usage:
-        [p]fable event log "Vex, Mira" "Discovered the ancient tomb together" --date 3023-12-05
+        [p]fable event log "Athena, Mira" "Discovered the ancient tomb together" --date 3023-12-05
         """
         guild = ctx.guild
         user = ctx.author
