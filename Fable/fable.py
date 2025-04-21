@@ -54,36 +54,61 @@ class Fable(commands.Cog):
         if ctx.invoked_subcommand is None:
             await ctx.send_help()
 
+    @character.command(name="fields", description="Show all available character fields you can set.")
+    async def character_fields(self, ctx: commands.Context):
+        """
+        Show all available fields you can set for a character profile.
+        Usage: [p]fable character fields
+        """
+        fields = [
+            ("name", "The character's name (required)"),
+            ("description", "A detailed description (required)"),
+            ("traits", "One or more personality traits (optional, use --trait)"),
+            ("age", "The character's age (optional)"),
+            ("species", "The character's species/race (optional)"),
+            ("occupation", "The character's job or role (optional)"),
+            ("relationships", "Allies, rivals, and neutrals (optional, use --ally, --rival, --neutral)")
+        ]
+        embed = discord.Embed(
+            title="Available Character Fields",
+            color=0x7289DA
+        )
+        for fname, fdesc in fields:
+            embed.add_field(name=fname.capitalize(), value=fdesc, inline=False)
+        embed.set_footer(text="Fable RP Tracker • Character Fields", icon_url="https://cdn-icons-png.flaticon.com/512/3336/3336643.png")
+        await ctx.send(embed=embed)
+
     @character.command(name="create", description="Create a new character profile with traits and relationships.")
     @commands.guild_only()
     @commands.cooldown(1, 5, commands.BucketType.user)
     async def create(self, ctx: commands.Context, name: str, *, args: str):
         """
         Create a new character profile.
-        
         Usage:
-        [p]fable character create "Vex" "A cynical bard" --trait "Skilled musician" --ally @Mira
+        [p]fable character create "Vex" "A cynical bard" --trait "Skilled musician" --ally @Mira --age 25 --species Elf --occupation Bard
         """
         import argparse
         import shlex
-        # Parse arguments for traits and relationships
         parser = argparse.ArgumentParser(prog="character_create", add_help=False)
         parser.add_argument("description", type=str)
         parser.add_argument("--trait", action="append", dest="traits", default=[])
         parser.add_argument("--ally", action="append", dest="allies", default=[])
         parser.add_argument("--rival", action="append", dest="rivals", default=[])
         parser.add_argument("--neutral", action="append", dest="neutrals", default=[])
+        parser.add_argument("--age", type=str, default=None)
+        parser.add_argument("--species", type=str, default=None)
+        parser.add_argument("--occupation", type=str, default=None)
         try:
             split_args = shlex.split(args)
             parsed = parser.parse_args(split_args)
-        except Exception as e:
+        except Exception:
             await ctx.send_help(ctx.command)
             return
         guild = ctx.guild
         user = ctx.author
-        characters = await self.config.guild(guild).characters() or {}
         user_id = str(user.id)
-        if name in characters:
+        existing = await self.config.guild(guild).characters.get_raw(name, default=None)
+        if existing:
             embed = discord.Embed(
                 title="❌ Character Exists",
                 description=f"A character named **{name}** already exists.",
@@ -91,21 +116,21 @@ class Fable(commands.Cog):
             )
             await ctx.send(embed=embed)
             return
-        # Build character profile
         character_data = {
             "name": name,
             "description": parsed.description,
             "owner_id": user_id,
             "traits": parsed.traits,
+            "age": parsed.age,
+            "species": parsed.species,
+            "occupation": parsed.occupation,
             "relationships": {
                 "ally": parsed.allies,
                 "rival": parsed.rivals,
                 "neutral": parsed.neutrals
             }
         }
-        characters[name] = character_data
-        await self.config.guild(guild).characters.set(characters)
-        # Build confirmation embed
+        await self.config.guild(guild).characters.set_raw(name, value=character_data)
         embed = discord.Embed(
             title=f"Character Created: {name}",
             description=parsed.description,
@@ -114,6 +139,12 @@ class Fable(commands.Cog):
         embed.set_author(name=user.display_name, icon_url=user.display_avatar.url)
         if parsed.traits:
             embed.add_field(name="Traits", value="\n".join(f"• {t}" for t in parsed.traits), inline=False)
+        if parsed.age:
+            embed.add_field(name="Age", value=parsed.age, inline=True)
+        if parsed.species:
+            embed.add_field(name="Species", value=parsed.species, inline=True)
+        if parsed.occupation:
+            embed.add_field(name="Occupation", value=parsed.occupation, inline=True)
         rel_lines = []
         for rel_type, rel_list in character_data["relationships"].items():
             if rel_list:
@@ -123,22 +154,23 @@ class Fable(commands.Cog):
         embed.set_footer(text="Fable RP Tracker", icon_url="https://cdn-icons-png.flaticon.com/512/3336/3336643.png")
         await ctx.send(embed=embed)
 
-    @character.command(name="edit", description="Edit a character's description, trait, or relationship.")
+    @character.command(name="edit", description="Edit a character's description, trait, relationship, age, species, or occupation.")
     @commands.guild_only()
     @commands.cooldown(1, 5, commands.BucketType.user)
     async def character_edit(self, ctx: commands.Context, name: str, field: str, *, new_value: str):
         """
-        Edit a character's description, trait, or relationship.
-        
+        Edit a character's description, trait, relationship, age, species, or occupation.
         Usage:
         [p]fable character edit "Vex" description "A new description"
         [p]fable character edit "Vex" trait "New Trait"
         [p]fable character edit "Vex" relationship "ally:@Mira"
+        [p]fable character edit "Vex" age 30
+        [p]fable character edit "Vex" species Elf
+        [p]fable character edit "Vex" occupation Bard
         """
         guild = ctx.guild
         user = ctx.author
-        characters = await self.config.guild(guild).characters() or {}
-        character = characters.get(name)
+        character = await self.config.guild(guild).characters.get_raw(name, default=None)
         if not character:
             embed = discord.Embed(
                 title="❌ Character Not Found",
@@ -169,7 +201,6 @@ class Fable(commands.Cog):
                 character["traits"].append(new_value)
                 updated = True
         elif field == "relationship":
-            # Format: type:@User or type:Name
             if ":" not in new_value:
                 await ctx.send("Please specify relationship as type:target (e.g. ally:@Mira)")
                 return
@@ -180,12 +211,14 @@ class Fable(commands.Cog):
             if rel_target not in character["relationships"][rel_type]:
                 character["relationships"][rel_type].append(rel_target)
                 updated = True
+        elif field in ("age", "species", "occupation"):
+            character[field] = new_value
+            updated = True
         else:
-            await ctx.send("Unknown field. Use description, trait, or relationship.")
+            await ctx.send("Unknown field. Use description, trait, relationship, age, species, or occupation.")
             return
         if updated:
-            characters[name] = character
-            await self.config.guild(guild).characters.set(characters)
+            await self.config.guild(guild).characters.set_raw(name, value=character)
             embed = discord.Embed(
                 title="✅ Character Updated",
                 description=f"**{name}**'s {field} updated.",
@@ -202,13 +235,11 @@ class Fable(commands.Cog):
     async def character_view(self, ctx: commands.Context, name: str):
         """
         View a character profile by name.
-        
         Usage:
         [p]fable character view "Vex"
         """
         guild = ctx.guild
-        characters = await self.config.guild(guild).characters() or {}
-        character = characters.get(name)
+        character = await self.config.guild(guild).characters.get_raw(name, default=None)
         if not character:
             embed = discord.Embed(
                 title="❌ Character Not Found",
@@ -218,15 +249,23 @@ class Fable(commands.Cog):
             await ctx.send(embed=embed)
             return
         owner = guild.get_member(int(character["owner_id"]))
+        description = character["description"]
+        max_length = 4096
         embed = discord.Embed(
             title=f"{character['name']}",
-            description=character["description"],
+            description=description[:max_length],
             color=0x7289DA
         )
         if owner:
             embed.set_author(name=owner.display_name, icon_url=owner.display_avatar.url)
         if character.get("traits"):
             embed.add_field(name="Traits", value="\n".join(f"• {t}" for t in character["traits"]), inline=False)
+        if character.get("age"):
+            embed.add_field(name="Age", value=character["age"], inline=True)
+        if character.get("species"):
+            embed.add_field(name="Species", value=character["species"], inline=True)
+        if character.get("occupation"):
+            embed.add_field(name="Occupation", value=character["occupation"], inline=True)
         rel_lines = []
         for rel_type, rel_list in character.get("relationships", {}).items():
             if rel_list:
@@ -235,6 +274,10 @@ class Fable(commands.Cog):
             embed.add_field(name="Relationships", value="\n".join(rel_lines), inline=False)
         embed.set_footer(text="Fable RP Tracker • Character Profile", icon_url="https://cdn-icons-png.flaticon.com/512/3336/3336643.png")
         await ctx.send(embed=embed)
+        if len(description) > max_length:
+            import io
+            file = discord.File(fp=io.BytesIO(description.encode("utf-8")), filename=f"{name}_description.txt")
+            await ctx.send(content=f"Full description for **{name}** (continued):", file=file)
 
     @character.command(name="list", description="List all characters or those belonging to a user.")
     @commands.guild_only()
@@ -242,19 +285,25 @@ class Fable(commands.Cog):
     async def character_list(self, ctx: commands.Context, user: Optional[discord.Member] = None):
         """
         List all characters in the server, or only those belonging to a specific user.
-        
         Usage:
         [p]fable character list
         [p]fable character list @User
         """
         guild = ctx.guild
-        characters = await self.config.guild(guild).characters() or {}
+        all_names = await self.config.guild(guild).characters.get_attr("").get_raw()
+        filtered = []
         if user:
             user_id = str(user.id)
-            filtered = [c for c in characters.values() if c.get("owner_id") == user_id]
+            for name in all_names:
+                char = await self.config.guild(guild).characters.get_raw(name, default=None)
+                if char and char.get("owner_id") == user_id:
+                    filtered.append(char)
             title = f"Characters for {user.display_name}"
         else:
-            filtered = list(characters.values())
+            for name in all_names:
+                char = await self.config.guild(guild).characters.get_raw(name, default=None)
+                if char:
+                    filtered.append(char)
             title = f"All Characters in {guild.name}"
         if not filtered:
             embed = discord.Embed(
@@ -264,7 +313,6 @@ class Fable(commands.Cog):
             )
             await ctx.send(embed=embed)
             return
-        # Paginate if more than 10 characters
         pages = [filtered[i:i+10] for i in range(0, len(filtered), 10)]
         for idx, page in enumerate(pages, 1):
             embed = discord.Embed(
@@ -289,14 +337,12 @@ class Fable(commands.Cog):
     async def character_delete(self, ctx: commands.Context, name: str):
         """
         Delete a character profile by name. Only the owner or an admin can delete.
-        
         Usage:
         [p]fable character delete "Vex"
         """
         guild = ctx.guild
         user = ctx.author
-        characters = await self.config.guild(guild).characters() or {}
-        character = characters.get(name)
+        character = await self.config.guild(guild).characters.get_raw(name, default=None)
         if not character:
             embed = discord.Embed(
                 title="❌ Character Not Found",
@@ -315,8 +361,7 @@ class Fable(commands.Cog):
             )
             await ctx.send(embed=embed)
             return
-        del characters[name]
-        await self.config.guild(guild).characters.set(characters)
+        await self.config.guild(guild).characters.clear_raw(name)
         embed = discord.Embed(
             title="🗑️ Character Deleted",
             description=f"The character **{name}** has been deleted.",
@@ -325,13 +370,31 @@ class Fable(commands.Cog):
         embed.set_footer(text="Fable RP Tracker • Character Deleted", icon_url="https://cdn-icons-png.flaticon.com/512/3336/3336643.png")
         await ctx.send(embed=embed)
 
+    @character.command(name="migrate", description="Migrate old character storage to per-object storage (admin only)")
+    @commands.guild_only()
+    @commands.has_permissions(administrator=True)
+    async def character_migrate(self, ctx: commands.Context):
+        """
+        Migrate old character storage to per-object storage. Only run once per server.
+        """
+        guild = ctx.guild
+        characters = await self.config.guild(guild).characters()
+        if not isinstance(characters, dict):
+            await ctx.send("No migration needed or already migrated.")
+            return
+        migrated = 0
+        for name, data in characters.items():
+            await self.config.guild(guild).characters.set_raw(name, value=data)
+            migrated += 1
+        await self.config.guild(guild).characters.set({})
+        await ctx.send(f"✅ Migrated {migrated} characters to per-object storage.")
+
     @fable.command(name="relations", description="Show all relationships for a character.")
     @commands.guild_only()
     @commands.cooldown(1, 5, commands.BucketType.user)
     async def relations(self, ctx: commands.Context, character: str):
         """
         Show all relationships for a character.
-        
         Usage:
         [p]fable relations "Vex"
         """
@@ -587,20 +650,18 @@ class Fable(commands.Cog):
     async def event_log(self, ctx: commands.Context, characters: str, description: str, date: Optional[str] = None):
         """
         Log an in-character event.
-        
         Usage:
         [p]fable event log "Vex, Mira" "Discovered the ancient tomb together" --date 3023-12-05
         """
         guild = ctx.guild
         user = ctx.author
-        all_characters = await self.config.guild(guild).characters() or {}
-        logs = await self.config.guild(guild).logs() or []
-        # Split characters by comma and strip whitespace
+        all_characters = await self.config.guild(guild).characters.get_attr("").get_raw()
         char_names = [c.strip() for c in characters.split(",") if c.strip()]
         involved = []
         missing = []
         for cname in char_names:
-            if cname in all_characters:
+            char = await self.config.guild(guild).characters.get_raw(cname, default=None)
+            if char:
                 involved.append(cname)
             else:
                 missing.append(cname)
@@ -619,7 +680,8 @@ class Fable(commands.Cog):
                 color=0xFAA61A
             )
             await ctx.send(embed=embed)
-        event_id = len(logs) + 1
+        all_events = await self.config.guild(guild).events.get_attr("").get_raw()
+        event_id = (max([int(eid) for eid in all_events] or [0]) + 1)
         event_data = {
             "id": event_id,
             "description": description,
@@ -628,8 +690,7 @@ class Fable(commands.Cog):
             "created_by": str(user.id),
             "characters": involved
         }
-        logs.append(event_data)
-        await self.config.guild(guild).logs.set(logs)
+        await self.config.guild(guild).events.set_raw(str(event_id), value=event_data)
         embed = discord.Embed(
             title="Event Logged",
             description=description,
@@ -641,20 +702,38 @@ class Fable(commands.Cog):
         embed.set_footer(text=f"Logged by {ctx.author.display_name} • Fable RP Tracker")
         await ctx.send(embed=embed)
 
+    @event.command(name="migrate", description="Migrate old event logs to per-object storage (admin only)")
+    @commands.guild_only()
+    @commands.has_permissions(administrator=True)
+    async def event_migrate(self, ctx: commands.Context):
+        """
+        Migrate old event logs to per-object storage. Only run once per server.
+        """
+        guild = ctx.guild
+        logs = await self.config.guild(guild).logs()
+        if not isinstance(logs, list):
+            await ctx.send("No migration needed or already migrated.")
+            return
+        migrated = 0
+        for event in logs:
+            eid = str(event["id"])
+            await self.config.guild(guild).events.set_raw(eid, value=event)
+            migrated += 1
+        await self.config.guild(guild).logs.set([])
+        await ctx.send(f"✅ Migrated {migrated} events to per-object storage.")
+
     @event.command(name="edit", description="Edit an event's description.")
     @commands.guild_only()
     @commands.cooldown(1, 5, commands.BucketType.user)
     async def event_edit(self, ctx: commands.Context, event_id: int, *, new_description: str):
         """
         Edit an event's description by event ID.
-        
         Usage:
         [p]fable event edit 3 "New event description"
         """
         guild = ctx.guild
         user = ctx.author
-        logs = await self.config.guild(guild).logs() or []
-        event = next((e for e in logs if e["id"] == event_id), None)
+        event = await self.config.guild(guild).events.get_raw(str(event_id), default=None)
         if not event:
             embed = discord.Embed(
                 title="❌ Event Not Found",
@@ -674,7 +753,7 @@ class Fable(commands.Cog):
             await ctx.send(embed=embed)
             return
         event["description"] = new_description
-        await self.config.guild(guild).logs.set(logs)
+        await self.config.guild(guild).events.set_raw(str(event_id), value=event)
         embed = discord.Embed(
             title="Event Updated",
             description=f"Event {event_id} description updated.",
@@ -690,14 +769,12 @@ class Fable(commands.Cog):
     async def event_delete(self, ctx: commands.Context, event_id: int):
         """
         Delete an event by event ID.
-        
         Usage:
         [p]fable event delete 3
         """
         guild = ctx.guild
         user = ctx.author
-        logs = await self.config.guild(guild).logs() or []
-        event = next((e for e in logs if e["id"] == event_id), None)
+        event = await self.config.guild(guild).events.get_raw(str(event_id), default=None)
         if not event:
             embed = discord.Embed(
                 title="❌ Event Not Found",
@@ -716,8 +793,7 @@ class Fable(commands.Cog):
             )
             await ctx.send(embed=embed)
             return
-        logs = [e for e in logs if e["id"] != event_id]
-        await self.config.guild(guild).logs.set(logs)
+        await self.config.guild(guild).events.clear_raw(str(event_id))
         embed = discord.Embed(
             title="🗑️ Event Deleted",
             description=f"Event {event_id} has been deleted.",
@@ -740,13 +816,17 @@ class Fable(commands.Cog):
     async def timeline_recent(self, ctx: commands.Context, number: Optional[int] = 5):
         """
         Show the most recent events in the timeline.
-        
         Usage:
         [p]fable timeline recent 5
         """
         guild = ctx.guild
-        logs = await self.config.guild(guild).logs() or []
-        if not logs:
+        all_events = await self.config.guild(guild).events.get_attr("").get_raw()
+        events = []
+        for eid in all_events:
+            event = await self.config.guild(guild).events.get_raw(eid, default=None)
+            if event:
+                events.append(event)
+        if not events:
             embed = discord.Embed(
                 title="No Events Found",
                 description="There are no events logged yet.",
@@ -754,16 +834,15 @@ class Fable(commands.Cog):
             )
             await ctx.send(embed=embed)
             return
-        # Ensure number is an int and not None
         number = number if number is not None else 5
         number = max(1, min(int(number), 20))
-        logs_sorted = sorted(logs, key=lambda e: e.get("created_at", ""), reverse=True)
-        events = logs_sorted[:number]
+        events_sorted = sorted(events, key=lambda e: e.get("created_at", ""), reverse=True)
+        selected = events_sorted[:number]
         embed = discord.Embed(
             title=f"Recent Events (Last {number})",
             color=0x7289DA
         )
-        for event in events:
+        for event in selected:
             chars = ", ".join(event.get("characters", []))
             desc = event.get("description", "No description.")
             ic_date = event.get("ic_date", "Unspecified")
@@ -782,13 +861,16 @@ class Fable(commands.Cog):
     async def timeline_search(self, ctx: commands.Context, keyword: str):
         """
         Search the timeline for a keyword in event descriptions.
-        
         Usage:
         [p]fable timeline search tomb
         """
         guild = ctx.guild
-        logs = await self.config.guild(guild).logs() or []
-        results = [e for e in logs if keyword.lower() in e.get("description", "").lower()]
+        all_events = await self.config.guild(guild).events.get_attr("").get_raw()
+        results = []
+        for eid in all_events:
+            event = await self.config.guild(guild).events.get_raw(eid, default=None)
+            if event and keyword.lower() in event.get("description", "").lower():
+                results.append(event)
         if not results:
             embed = discord.Embed(
                 title="No Events Found",
@@ -816,850 +898,6 @@ class Fable(commands.Cog):
         else:
             embed.set_footer(text="Fable RP Tracker • Timeline Search", icon_url="https://cdn-icons-png.flaticon.com/512/3336/3336643.png")
         await ctx.send(embed=embed)
-
-    # Collaborative Lore System
-    @fable.group(name="lore", description="Collaborative worldbuilding commands.")
-    async def lore(self, ctx: commands.Context):
-        """
-        Lore collaboration commands.
-        """
-        if ctx.invoked_subcommand is None:
-            await ctx.send_help()
-
-    @lore.command(name="suggest", description="Suggest a new lore entry.")
-    @commands.guild_only()
-    @commands.cooldown(1, 5, commands.BucketType.user)
-    async def lore_suggest(self, ctx: commands.Context, name: str, description: str, type: Optional[str] = None):
-        """
-        Suggest a new lore entry.
-        """
-        guild = ctx.guild
-        user = ctx.author
-        lore = await self.config.guild(guild).lore() or {}
-        suggestions = lore.get("suggestions", {})
-        approved = lore.get("approved", {})
-        # Prevent duplicate names
-        if name in suggestions or name in approved:
-            embed = discord.Embed(
-                title="❌ Lore Entry Exists",
-                description=f"A lore entry named **{name}** already exists or is pending approval.",
-                color=0xF04747
-            )
-            await ctx.send(embed=embed)
-            return
-        entry_id = len(suggestions) + len(approved) + 1
-        suggestions[name] = {
-            "id": entry_id,
-            "name": name,
-            "description": description,
-            "type": type or "Uncategorized",
-            "suggested_by": str(user.id),
-            "status": "pending",
-            "timestamp": discord.utils.utcnow().isoformat()
-        }
-        lore["suggestions"] = suggestions
-        await self.config.guild(guild).lore.set(lore)
-        embed = discord.Embed(
-            title="Lore Entry Suggested",
-            description=f"**{name}** has been suggested and is pending approval.",
-            color=0x43B581
-        )
-        embed.add_field(name="Type", value=type or "Uncategorized", inline=True)
-        embed.add_field(name="Description", value=description, inline=False)
-        embed.set_footer(text=f"Suggested by {ctx.author.display_name} • Fable RP Tracker")
-        await ctx.send(embed=embed)
-
-    @lore.command(name="approve", description="Approve a suggested lore entry.")
-    @commands.guild_only()
-    @commands.has_permissions(manage_guild=True)
-    async def lore_approve(self, ctx: commands.Context, name: str):
-        """
-        Approve a suggested lore entry.
-        """
-        guild = ctx.guild
-        lore = await self.config.guild(guild).lore() or {}
-        suggestions = lore.get("suggestions", {})
-        approved = lore.get("approved", {})
-        entry = suggestions.pop(name, None)
-        if not entry:
-            embed = discord.Embed(
-                title="❌ Suggestion Not Found",
-                description=f"No pending suggestion named **{name}**.",
-                color=0xF04747
-            )
-            await ctx.send(embed=embed)
-            return
-        entry["status"] = "approved"
-        approved[name] = entry
-        lore["suggestions"] = suggestions
-        lore["approved"] = approved
-        await self.config.guild(guild).lore.set(lore)
-        embed = discord.Embed(
-            title="Lore Entry Approved",
-            description=f"**{name}** has been approved and added to the lore.",
-            color=0x43B581
-        )
-        embed.add_field(name="Type", value=entry.get("type", "Uncategorized"), inline=True)
-        embed.add_field(name="Description", value=entry.get("description", "No description."), inline=False)
-        embed.set_footer(text=f"Approved by {ctx.author.display_name} • Fable RP Tracker")
-        await ctx.send(embed=embed)
-
-    @lore.command(name="deny", description="Deny a suggested lore entry.")
-    @commands.guild_only()
-    @commands.has_permissions(manage_guild=True)
-    async def lore_deny(self, ctx: commands.Context, name: str):
-        """
-        Deny a suggested lore entry.
-        """
-        guild = ctx.guild
-        lore = await self.config.guild(guild).lore() or {}
-        suggestions = lore.get("suggestions", {})
-        entry = suggestions.pop(name, None)
-        if not entry:
-            embed = discord.Embed(
-                title="❌ Suggestion Not Found",
-                description=f"No pending suggestion named **{name}**.",
-                color=0xF04747
-            )
-            await ctx.send(embed=embed)
-            return
-        lore["suggestions"] = suggestions
-        await self.config.guild(guild).lore.set(lore)
-        embed = discord.Embed(
-            title="Lore Entry Denied",
-            description=f"The suggestion **{name}** has been denied and removed.",
-            color=0xFAA61A
-        )
-        embed.set_footer(text=f"Denied by {ctx.author.display_name} • Fable RP Tracker")
-        await ctx.send(embed=embed)
-
-    @lore.command(name="edit", description="Edit a lore entry's description.")
-    @commands.guild_only()
-    @commands.has_permissions(manage_guild=True)
-    async def lore_edit(self, ctx: commands.Context, name: str, new_description: str):
-        """
-        Edit a lore entry's description.
-        """
-        guild = ctx.guild
-        lore = await self.config.guild(guild).lore() or {}
-        approved = lore.get("approved", {})
-        entry = approved.get(name)
-        if not entry:
-            embed = discord.Embed(
-                title="❌ Lore Entry Not Found",
-                description=f"No approved lore entry named **{name}**.",
-                color=0xF04747
-            )
-            await ctx.send(embed=embed)
-            return
-        entry["description"] = new_description
-        approved[name] = entry
-        lore["approved"] = approved
-        await self.config.guild(guild).lore.set(lore)
-        embed = discord.Embed(
-            title="Lore Entry Updated",
-            description=f"**{name}**'s description has been updated.",
-            color=0x43B581
-        )
-        embed.add_field(name="New Description", value=new_description, inline=False)
-        embed.set_footer(text=f"Edited by {ctx.author.display_name} • Fable RP Tracker")
-        await ctx.send(embed=embed)
-
-    @lore.command(name="view", description="View a lore entry.")
-    @commands.guild_only()
-    async def lore_view(self, ctx: commands.Context, name: str):
-        """
-        View a lore entry.
-        """
-        guild = ctx.guild
-        lore = await self.config.guild(guild).lore() or {}
-        approved = lore.get("approved", {})
-        entry = approved.get(name)
-        if not entry:
-            embed = discord.Embed(
-                title="❌ Lore Entry Not Found",
-                description=f"No approved lore entry named **{name}**.",
-                color=0xF04747
-            )
-            await ctx.send(embed=embed)
-            return
-        embed = discord.Embed(
-            title=f"Lore: {entry['name']}",
-            description=entry.get("description", "No description."),
-            color=0x7289DA
-        )
-        embed.add_field(name="Type", value=entry.get("type", "Uncategorized"), inline=True)
-        embed.add_field(name="Status", value=entry.get("status", "approved"), inline=True)
-        suggester = ctx.guild.get_member(int(entry.get("suggested_by", 0)))
-        if suggester:
-            embed.set_footer(text=f"Suggested by {suggester.display_name} • Fable RP Tracker")
-        else:
-            embed.set_footer(text="Fable RP Tracker • Lore View", icon_url="https://cdn-icons-png.flaticon.com/512/3336/3336643.png")
-        await ctx.send(embed=embed)
-
-    @lore.command(name="list", description="List all lore entries, optionally filtered by type.")
-    @commands.guild_only()
-    async def lore_list(self, ctx: commands.Context, type: Optional[str] = None):
-        """
-        List all lore entries, optionally filtered by type.
-        """
-        guild = ctx.guild
-        lore = await self.config.guild(guild).lore() or {}
-        approved = lore.get("approved", {})
-        entries = list(approved.values())
-        if type:
-            entries = [e for e in entries if e.get("type", "Uncategorized").lower() == type.lower()]
-        if not entries:
-            embed = discord.Embed(
-                title="No Lore Entries Found",
-                description="No lore entries found for the given filter.",
-                color=0xF04747
-            )
-            await ctx.send(embed=embed)
-            return
-        # Paginate if more than 10 entries
-        pages = [entries[i:i+10] for i in range(0, len(entries), 10)]
-        for idx, page in enumerate(pages, 1):
-            embed = discord.Embed(
-                title=f"Lore Entries (Page {idx}/{len(pages)})",
-                color=0x7289DA
-            )
-            for entry in page:
-                embed.add_field(
-                    name=f"{entry['name']} [{entry.get('type', 'Uncategorized')}]",
-                    value=(entry.get("description", "No description.")[:100] + "..." if len(entry.get("description", "")) > 100 else entry.get("description", "No description.")),
-                    inline=False
-                )
-            embed.set_footer(text="Fable RP Tracker • Lore List", icon_url="https://cdn-icons-png.flaticon.com/512/3336/3336643.png")
-            await ctx.send(embed=embed)
-
-    @lore.command(name="search", description="Search lore entries by keyword.")
-    @commands.guild_only()
-    @commands.cooldown(1, 5, commands.BucketType.guild)
-    async def lore_search(self, ctx: commands.Context, keyword: str):
-        """
-        Search lore entries by keyword.
-        
-        Usage:
-        [p]fable lore search dragon
-        """
-        guild = ctx.guild
-        lore = await self.config.guild(guild).lore() or {}
-        approved = lore.get("approved", {})
-        results = [e for e in approved.values() if keyword.lower() in e.get("description", "").lower()]
-        if not results:
-            embed = discord.Embed(
-                title="No Lore Entries Found",
-                description=f"No lore entries found containing '{keyword}'.",
-                color=0xF04747
-            )
-            await ctx.send(embed=embed)
-            return
-        embed = discord.Embed(
-            title=f"Lore Entries Matching '{keyword}'",
-            color=0x7289DA
-        )
-        for entry in results[:10]:
-            embed.add_field(
-                name=f"{entry['name']} [{entry.get('type', 'Uncategorized')}]",
-                value=(entry.get("description", "No description.")[:100] + "..." if len(entry.get("description", "")) > 100 else entry.get("description", "No description.")),
-                inline=False
-            )
-        if len(results) > 10:
-            embed.set_footer(text=f"Showing first 10 of {len(results)} results • Fable RP Tracker")
-        else:
-            embed.set_footer(text="Fable RP Tracker • Lore Search", icon_url="https://cdn-icons-png.flaticon.com/512/3336/3336643.png")
-        await ctx.send(embed=embed)
-
-    # IC Mail System
-    @fable.group(name="mail", description="In-character mail system.")
-    async def mail(self, ctx: commands.Context):
-        """
-        In-character mail system commands.
-        """
-        if ctx.invoked_subcommand is None:
-            await ctx.send_help()
-
-    @mail.command(name="send", description="Send IC mail to a recipient character.")
-    @commands.guild_only()
-    @commands.cooldown(1, 5, commands.BucketType.user)
-    async def mail_send(self, ctx: commands.Context, recipient: str, message: str, from_character: Optional[str] = None):
-        """
-        Send IC mail to a recipient character. Supports file attachments.
-        Notifies the character's owner via DM if possible.
-        Usage:
-        [p]fable mail send "Vex" "Hello!" --from_character "Mira"
-        """
-        await self._prune_expired_mail(ctx.guild)
-        guild = ctx.guild
-        user = ctx.author
-        characters = await self.config.guild(guild).characters() or {}
-        mail = await self.config.guild(guild).mail() or {}
-        allowed_types = await self.config.guild(guild).mail_allowed_attachment_types() or ["png", "jpg", "jpeg", "gif", "pdf"]
-        # Validate recipient
-        if recipient not in characters:
-            embed = discord.Embed(
-                title="❌ Character Not Found",
-                description=f"No character named **{recipient}** exists in this server.",
-                color=0xF04747
-            )
-            await ctx.send(embed=embed)
-            return
-        # Validate sender character if provided
-        if from_character and from_character not in characters:
-            embed = discord.Embed(
-                title="❌ Sender Character Not Found",
-                description=f"No character named **{from_character}** exists in this server.",
-                color=0xF04747
-            )
-            await ctx.send(embed=embed)
-            return
-        # Handle attachments with type restrictions
-        attachment_urls = []
-        if ctx.message.attachments:
-            for attachment in ctx.message.attachments:
-                ext = attachment.filename.split(".")[-1].lower()
-                if ext not in allowed_types:
-                    embed = discord.Embed(
-                        title="❌ Attachment Type Not Allowed",
-                        description=f"Attachment `{attachment.filename}` is not an allowed type. Allowed: {', '.join(allowed_types)}",
-                        color=0xF04747
-                    )
-                    await ctx.send(embed=embed)
-                    return
-                attachment_urls.append(attachment.url)
-        # Prepare mail entry
-        recipient_mail = mail.get(recipient, [])
-        mail_id = len(recipient_mail) + 1
-        mail_entry = {
-            "id": mail_id,
-            "from": from_character or user.display_name,
-            "from_user_id": str(user.id),
-            "message": message,
-            "timestamp": discord.utils.utcnow().isoformat(),
-            "read": False,
-            "attachments": attachment_urls
-        }
-        recipient_mail.append(mail_entry)
-        mail[recipient] = recipient_mail
-        await self.config.guild(guild).mail.set(mail)
-        embed = discord.Embed(
-            title="📨 Mail Sent",
-            description=f"Mail sent to **{recipient}**.",
-            color=0x43B581
-        )
-        embed.add_field(name="From", value=mail_entry["from"], inline=True)
-        embed.add_field(name="Message", value=message, inline=False)
-        if attachment_urls:
-            embed.add_field(name="Attachments", value="\n".join(attachment_urls), inline=False)
-        embed.set_footer(text="Fable RP Tracker • Mail System", icon_url="https://cdn-icons-png.flaticon.com/512/3336/3336643.png")
-        await ctx.send(embed=embed)
-        # Notify recipient owner via DM
-        owner_id = characters[recipient]["owner_id"]
-        owner = guild.get_member(int(owner_id))
-        if owner:
-            try:
-                notify_embed = discord.Embed(
-                    title=f"📬 New Mail for {recipient}",
-                    description=message,
-                    color=0x43B581
-                )
-                notify_embed.add_field(name="From", value=mail_entry["from"], inline=True)
-                if attachment_urls:
-                    notify_embed.add_field(name="Attachments", value="\n".join(attachment_urls), inline=False)
-                notify_embed.set_footer(text=f"Sent in {guild.name}")
-                await owner.send(embed=notify_embed)
-            except Exception:
-                # DM failed, fallback to notifying in server or configured channel
-                channel_id = await self.config.guild(guild).mail_notification_channel()
-                channel = guild.get_channel(channel_id) if channel_id else ctx.channel
-                fallback_embed = discord.Embed(
-                    title=f"📬 {recipient} received new mail!",
-                    description=f"{recipient} has new mail from {mail_entry['from']}.",
-                    color=0xFAA61A
-                )
-                await channel.send(embed=fallback_embed)
-
-    @mail.command(name="read", description="Read IC mail (all or unread) for a character.")
-    @commands.guild_only()
-    @commands.cooldown(1, 5, commands.BucketType.user)
-    async def mail_read(self, ctx: commands.Context, character: str, filter: Optional[str] = "unread"):
-        """
-        Read IC mail (all or unread) for a character. Shows attachments if present.
-        Usage:
-        [p]fable mail read "Vex" unread
-        [p]fable mail read "Vex" all
-        """
-        await self._prune_expired_mail(ctx.guild)
-        guild = ctx.guild
-        user = ctx.author
-        characters = await self.config.guild(guild).characters() or {}
-        mail = await self.config.guild(guild).mail() or {}
-        # Validate character
-        if character not in characters:
-            embed = discord.Embed(
-                title="❌ Character Not Found",
-                description=f"No character named **{character}** exists in this server.",
-                color=0xF04747
-            )
-            await ctx.send(embed=embed)
-            return
-        # Only allow owner or admin to read
-        is_owner = str(user.id) == characters[character]["owner_id"]
-        is_admin = ctx.author.guild_permissions.administrator
-        if not (is_owner or is_admin):
-            embed = discord.Embed(
-                title="❌ Permission Denied",
-                description="Only the character's owner or a server admin can read this mail.",
-                color=0xF04747
-            )
-            await ctx.send(embed=embed)
-            return
-        char_mail = mail.get(character, [])
-        if filter == "unread":
-            filtered_mail = [m for m in char_mail if not m.get("read", False)]
-        else:
-            filtered_mail = char_mail
-        if not filtered_mail:
-            embed = discord.Embed(
-                title="No Mail Found",
-                description=f"No {'unread' if filter == 'unread' else ''} mail found for **{character}**.",
-                color=0xFAA61A
-            )
-            await ctx.send(embed=embed)
-            return
-        # Paginate if more than 5
-        pages = [filtered_mail[i:i+5] for i in range(0, len(filtered_mail), 5)]
-        for idx, page in enumerate(pages, 1):
-            embed = discord.Embed(
-                title=f"Mail for {character} (Page {idx}/{len(pages)})",
-                color=0x7289DA
-            )
-            for mail_entry in page:
-                value = (mail_entry['message'][:100] + "..." if len(mail_entry['message']) > 100 else mail_entry['message'])
-                if mail_entry.get("attachments"):
-                    value += f"\n[Attachments] " + " | ".join(mail_entry["attachments"])
-                embed.add_field(
-                    name=f"Mail #{mail_entry['id']} from {mail_entry['from']}",
-                    value=value,
-                    inline=False
-                )
-            embed.set_footer(text="Fable RP Tracker • Mail System", icon_url="https://cdn-icons-png.flaticon.com/512/3336/3336643.png")
-            await ctx.send(embed=embed)
-
-    @mail.command(name="view", description="View a specific mail message by ID.")
-    @commands.guild_only()
-    @commands.cooldown(1, 3, commands.BucketType.user)
-    async def mail_view(self, ctx: commands.Context, character: str, mail_id: int):
-        """
-        View a specific mail message by ID (marks as read). Shows attachments if present.
-        Usage:
-        [p]fable mail view "Vex" 2
-        """
-        await self._prune_expired_mail(ctx.guild)
-        guild = ctx.guild
-        user = ctx.author
-        characters = await self.config.guild(guild).characters() or {}
-        mail = await self.config.guild(guild).mail() or {}
-        if character not in characters:
-            embed = discord.Embed(
-                title="❌ Character Not Found",
-                description=f"No character named **{character}** exists in this server.",
-                color=0xF04747
-            )
-            await ctx.send(embed=embed)
-            return
-        is_owner = str(user.id) == characters[character]["owner_id"]
-        is_admin = ctx.author.guild_permissions.administrator
-        if not (is_owner or is_admin):
-            embed = discord.Embed(
-                title="❌ Permission Denied",
-                description="Only the character's owner or a server admin can view this mail.",
-                color=0xF04747
-            )
-            await ctx.send(embed=embed)
-            return
-        char_mail = mail.get(character, [])
-        mail_entry = next((m for m in char_mail if m["id"] == mail_id), None)
-        if not mail_entry:
-            embed = discord.Embed(
-                title="Mail Not Found",
-                description=f"No mail with ID {mail_id} found for **{character}**.",
-                color=0xFAA61A
-            )
-            await ctx.send(embed=embed)
-            return
-        mail_entry["read"] = True
-        await self.config.guild(guild).mail.set(mail)
-        embed = discord.Embed(
-            title=f"Mail #{mail_id} for {character}",
-            description=mail_entry["message"],
-            color=0x7289DA
-        )
-        embed.add_field(name="From", value=mail_entry["from"], inline=True)
-        embed.add_field(name="Sent", value=mail_entry["timestamp"], inline=True)
-        if mail_entry.get("attachments"):
-            embed.add_field(name="Attachments", value="\n".join(mail_entry["attachments"]), inline=False)
-        embed.set_footer(text="Fable RP Tracker • Mail System", icon_url="https://cdn-icons-png.flaticon.com/512/3336/3336643.png")
-        await ctx.send(embed=embed)
-
-    @mail.command(name="delete", description="Delete a mail message by ID.")
-    @commands.guild_only()
-    @commands.cooldown(1, 5, commands.BucketType.user)
-    async def mail_delete(self, ctx: commands.Context, character: str, mail_id: int):
-        """
-        Delete a mail message by ID.
-        
-        Usage:
-        [p]fable mail delete "Vex" 2
-        """
-        await self._prune_expired_mail(ctx.guild)
-        guild = ctx.guild
-        user = ctx.author
-        characters = await self.config.guild(guild).characters() or {}
-        mail = await self.config.guild(guild).mail() or {}
-        if character not in characters:
-            embed = discord.Embed(
-                title="❌ Character Not Found",
-                description=f"No character named **{character}** exists in this server.",
-                color=0xF04747
-            )
-            await ctx.send(embed=embed)
-            return
-        is_owner = str(user.id) == characters[character]["owner_id"]
-        is_admin = ctx.author.guild_permissions.administrator
-        if not (is_owner or is_admin):
-            embed = discord.Embed(
-                title="❌ Permission Denied",
-                description="Only the character's owner or a server admin can delete this mail.",
-                color=0xF04747
-            )
-            await ctx.send(embed=embed)
-            return
-        char_mail = mail.get(character, [])
-        mail_entry = next((m for m in char_mail if m["id"] == mail_id), None)
-        if not mail_entry:
-            embed = discord.Embed(
-                title="Mail Not Found",
-                description=f"No mail with ID {mail_id} found for **{character}**.",
-                color=0xFAA61A
-            )
-            await ctx.send(embed=embed)
-            return
-        char_mail = [m for m in char_mail if m["id"] != mail_id]
-        # Re-number mail IDs for this character
-        for idx, m in enumerate(char_mail, 1):
-            m["id"] = idx
-        mail[character] = char_mail
-        await self.config.guild(guild).mail.set(mail)
-        embed = discord.Embed(
-            title="🗑️ Mail Deleted",
-            description=f"Mail #{mail_id} for **{character}** has been deleted.",
-            color=0xFAA61A
-        )
-        embed.set_footer(text="Fable RP Tracker • Mail System", icon_url="https://cdn-icons-png.flaticon.com/512/3336/3336643.png")
-        await ctx.send(embed=embed)
-
-    @mail.command(name="setexpiry", description="Set mail auto-delete time in days (server owner/admin only)")
-    @commands.guild_only()
-    @commands.has_permissions(administrator=True)
-    async def mail_setexpiry(self, ctx: commands.Context, days: int):
-        """
-        Set the number of days after which mail is auto-deleted.
-        Only server owner or admins can use this.
-        Usage: [p]fable mail setexpiry 14
-        """
-        if days < 1 or days > 365:
-            embed = discord.Embed(
-                title="❌ Invalid Expiry",
-                description="Please choose a value between 1 and 365 days.",
-                color=0xF04747
-            )
-            await ctx.send(embed=embed)
-            return
-        await self.config.guild(ctx.guild).mail_expiry_days.set(days)
-        embed = discord.Embed(
-            title="Mail Expiry Updated",
-            description=f"Mail will now be auto-deleted after {days} days.",
-            color=0x43B581
-        )
-        embed.set_footer(text="Fable RP Tracker • Mail System", icon_url="https://cdn-icons-png.flaticon.com/512/3336/3336643.png")
-        await ctx.send(embed=embed)
-
-    @mail.command(name="setnotifychannel", description="Set the fallback channel for mail notifications (admin only)")
-    @commands.guild_only()
-    @commands.has_permissions(administrator=True)
-    async def mail_setnotifychannel(self, ctx: commands.Context, channel: discord.TextChannel):
-        """
-        Set the fallback channel for mail notifications if DMs fail.
-        Only server admins can use this.
-        Usage: [p]fable mail setnotifychannel #channel
-        """
-        await self.config.guild(ctx.guild).mail_notification_channel.set(channel.id)
-        embed = discord.Embed(
-            title="Mail Notification Channel Set",
-            description=f"Mail notifications will be sent to {channel.mention} if DMs fail.",
-            color=0x43B581
-        )
-        embed.set_footer(text="Fable RP Tracker • Mail System", icon_url="https://cdn-icons-png.flaticon.com/512/3336/3336643.png")
-        await ctx.send(embed=embed)
-
-    @mail.command(name="setallowedtypes", description="Set allowed attachment types for mail (admin only)")
-    @commands.guild_only()
-    @commands.has_permissions(administrator=True)
-    async def mail_setallowedtypes(self, ctx: commands.Context, *, types: str):
-        """
-        Set allowed attachment file extensions for mail (comma-separated, e.g. png,jpg,pdf).
-        Only server admins can use this.
-        Usage: [p]fable mail setallowedtypes png,jpg,pdf
-        """
-        allowed = [t.strip().lower() for t in types.split(",") if t.strip()]
-        if not allowed:
-            embed = discord.Embed(
-                title="❌ Invalid Types",
-                description="You must specify at least one file extension.",
-                color=0xF04747
-            )
-            await ctx.send(embed=embed)
-            return
-        await self.config.guild(ctx.guild).mail_allowed_attachment_types.set(allowed)
-        embed = discord.Embed(
-            title="Allowed Attachment Types Set",
-            description=f"Mail attachments are now limited to: {', '.join(allowed)}",
-            color=0x43B581
-        )
-        embed.set_footer(text="Fable RP Tracker • Mail System", icon_url="https://cdn-icons-png.flaticon.com/512/3336/3336643.png")
-        await ctx.send(embed=embed)
-
-    async def _prune_expired_mail(self, guild: discord.Guild) -> None:
-        """
-        Remove expired mail for all characters in the guild based on mail_expiry_days setting.
-        """
-        import datetime
-        mail = await self.config.guild(guild).mail() or {}
-        expiry_days = await self.config.guild(guild).mail_expiry_days()
-        if not expiry_days or expiry_days <= 0:
-            return
-        now = discord.utils.utcnow()
-        changed = False
-        for character, char_mail in mail.items():
-            filtered = [m for m in char_mail if (now - datetime.datetime.fromisoformat(m["timestamp"])) < datetime.timedelta(days=expiry_days)]
-            if len(filtered) != len(char_mail):
-                # Re-number mail IDs
-                for idx, m in enumerate(filtered, 1):
-                    m["id"] = idx
-                mail[character] = filtered
-                changed = True
-        if changed:
-            await self.config.guild(guild).mail.set(mail)
-
-    # Administrative Commands
-    @fable.command(name="setup", description="Run the Fable setup wizard.")
-    async def setup_cmd(self, ctx: commands.Context):
-        """
-        Run the Fable setup wizard.
-        """
-        await ctx.send("Setup wizard not yet implemented.")
-
-    @fable.command(name="settings", description="View Fable settings for this server.")
-    @commands.guild_only()
-    async def settings(self, ctx: commands.Context):
-        """
-        View all Fable settings for this server in a detailed embed.
-        """
-        guild = ctx.guild
-        config = await self.config.guild(guild).all()
-        mail_expiry = config.get("mail_expiry_days", 30)
-        allowed_types = config.get("mail_allowed_attachment_types", ["png", "jpg", "jpeg", "gif", "pdf"])
-        notify_channel_id = config.get("mail_notification_channel")
-        notify_channel = guild.get_channel(notify_channel_id) if notify_channel_id else None
-        embed = discord.Embed(
-            title=f"Fable Settings for {guild.name}",
-            color=0x7289DA
-        )
-        embed.add_field(name="Mail Expiry (days)", value=str(mail_expiry), inline=True)
-        embed.add_field(name="Allowed Attachment Types", value=", ".join(allowed_types), inline=True)
-        embed.add_field(name="Notification Channel", value=notify_channel.mention if notify_channel else "Not set", inline=True)
-        embed.add_field(name="Character Count", value=str(len(config.get("characters", {}))), inline=True)
-        embed.add_field(name="Lore Entries", value=str(len(config.get("lore", {}).get("approved", {}))), inline=True)
-        embed.add_field(name="Event Logs", value=str(len(config.get("logs", []))), inline=True)
-        embed.set_footer(text="Fable RP Tracker • Settings", icon_url="https://cdn-icons-png.flaticon.com/512/3336/3336643.png")
-        await ctx.send(embed=embed)
-
-    @fable.command(name="backup", description="Create a backup of Fable data.")
-    @commands.guild_only()
-    @commands.has_permissions(administrator=True)
-    async def backup(self, ctx: commands.Context):
-        """
-        Create a backup of all Fable data for this server as a downloadable JSON file.
-        Only server admins can use this command.
-        """
-        import io
-        import json
-        guild = ctx.guild
-        config = await self.config.guild(guild).all()
-        data = json.dumps(config, indent=2)
-        file = discord.File(io.BytesIO(data.encode()), filename=f"fable-backup-{guild.id}.json")
-        embed = discord.Embed(
-            title="Fable Backup Created",
-            description="Your Fable data has been exported. Keep this file safe!",
-            color=0x43B581
-        )
-        embed.set_footer(text="Fable RP Tracker • Backup", icon_url="https://cdn-icons-png.flaticon.com/512/3336/3336643.png")
-        await ctx.send(embed=embed, file=file)
-
-    @fable.command(name="restore", description="Restore Fable data from a backup file.")
-    @commands.guild_only()
-    @commands.has_permissions(administrator=True)
-    async def restore(self, ctx: commands.Context):
-        """
-        Restore Fable data from a backup JSON file. Only server admins can use this command.
-        Upload the backup file as an attachment when running this command.
-        """
-        import json
-        if not ctx.message.attachments:
-            embed = discord.Embed(
-                title="❌ No File Provided",
-                description="Please upload a backup JSON file as an attachment.",
-                color=0xF04747
-            )
-            await ctx.send(embed=embed)
-            return
-        attachment = ctx.message.attachments[0]
-        try:
-            data = await attachment.read()
-            config = json.loads(data.decode())
-        except Exception:
-            embed = discord.Embed(
-                title="❌ Invalid File",
-                description="Could not read or parse the backup file. Ensure it is a valid Fable backup JSON.",
-                color=0xF04747
-            )
-            await ctx.send(embed=embed)
-            return
-        # Confirm overwrite
-        confirm_embed = discord.Embed(
-            title="Restore Confirmation",
-            description="This will overwrite all current Fable data for this server. Type `confirm` to proceed.",
-            color=0xFAA61A
-        )
-        await ctx.send(embed=confirm_embed)
-        def check(m):
-            return m.author == ctx.author and m.channel == ctx.channel and m.content.lower() == "confirm"
-        try:
-            reply = await ctx.bot.wait_for("message", check=check, timeout=30)
-        except Exception:
-            await ctx.send("Restore cancelled (no confirmation received).")
-            return
-        await self.config.guild(ctx.guild).set(config)
-        embed = discord.Embed(
-            title="Fable Data Restored",
-            description="Fable data has been restored from the backup.",
-            color=0x43B581
-        )
-        embed.set_footer(text="Fable RP Tracker • Restore", icon_url="https://cdn-icons-png.flaticon.com/512/3336/3336643.png")
-        await ctx.send(embed=embed)
-
-    @fable.command(name="permissions", description="Set Fable permissions for a role.")
-    @commands.guild_only()
-    @commands.has_permissions(administrator=True)
-    async def permissions(self, ctx: commands.Context, role: discord.Role, permission_level: str):
-        """
-        Set Fable permissions for a role.
-
-        Parameters
-        ----------
-        role : discord.Role
-            The Discord role to set permissions for
-        permission_level : str
-            The permission level (e.g. 'admin', 'mod', 'user')
-        """
-        valid_levels = ["admin", "mod", "user"]
-        level = permission_level.lower()
-        if level not in valid_levels:
-            embed = discord.Embed(
-                title="❌ Invalid Permission Level",
-                description=f"Permission level must be one of: {', '.join(valid_levels)}.",
-                color=0xF04747
-            )
-            embed.set_footer(text="Fable RP Tracker • Permissions", icon_url="https://cdn-icons-png.flaticon.com/512/3336/3336643.png")
-            await ctx.send(embed=embed)
-            return
-        permissions = await self.config.guild(ctx.guild).settings() or {}
-        if "role_permissions" not in permissions:
-            permissions["role_permissions"] = {}
-        permissions["role_permissions"][str(role.id)] = level
-        await self.config.guild(ctx.guild).settings.set(permissions)
-        embed = discord.Embed(
-            title="Permissions Updated",
-            description=f"Role {role.mention} set to **{level}** permissions.",
-            color=0x43B581
-        )
-        embed.set_footer(text="Fable RP Tracker • Permissions", icon_url="https://cdn-icons-png.flaticon.com/512/3336/3336643.png")
-        await ctx.send(embed=embed)
-
-    async def cog_unload(self):
-        """Cleanup tasks when the cog is unloaded."""
-        pass
-
-    # Character command aliases for direct access (e.g. [p]fable charlist)
-    @commands.hybrid_command(name="charlist", description="List all characters or those belonging to a user.")
-    @commands.guild_only()
-    @commands.cooldown(1, 5, commands.BucketType.guild)
-    async def charlist(self, ctx: commands.Context, user: Optional[discord.Member] = None):
-        """
-        List all characters in the server, or only those belonging to a specific user.
-        Usage:
-        [p]fable charlist
-        [p]fable charlist @User
-        """
-        await ctx.invoke(self.character_list, user=user)
-
-    @commands.hybrid_command(name="chardelete", description="Delete a character profile.")
-    @commands.guild_only()
-    @commands.cooldown(1, 10, commands.BucketType.user)
-    async def chardelete(self, ctx: commands.Context, name: str):
-        """
-        Delete a character profile by name. Only the owner or an admin can delete.
-        Usage:
-        [p]fable chardelete "Vex"
-        """
-        await ctx.invoke(self.character_delete, name=name)
-
-    @commands.hybrid_command(name="charview", description="View a character profile.")
-    @commands.guild_only()
-    @commands.cooldown(1, 3, commands.BucketType.user)
-    async def charview(self, ctx: commands.Context, name: str):
-        """
-        View a character profile by name.
-        Usage:
-        [p]fable charview "Vex"
-        """
-        await ctx.invoke(self.character_view, name=name)
-
-    @commands.hybrid_command(name="charcreate", description="Create a new character profile with traits and relationships.")
-    @commands.guild_only()
-    @commands.cooldown(1, 5, commands.BucketType.user)
-    async def charcreate(self, ctx: commands.Context, name: str, *, args: str):
-        """
-        Create a new character profile.
-        Usage:
-        [p]fable charcreate "Vex" "A cynical bard" --trait "Skilled musician" --ally @Mira
-        """
-        await ctx.invoke(self.create, name=name, args=args)
-
-    @commands.hybrid_command(name="charedit", description="Edit a character's description, trait, or relationship.")
-    @commands.guild_only()
-    @commands.cooldown(1, 5, commands.BucketType.user)
-    async def charedit(self, ctx: commands.Context, name: str, field: str, *, new_value: str):
-        """
-        Edit a character's description, trait, or relationship.
-        Usage:
-        [p]fable charedit "Vex" description "A new description"
-        [p]fable charedit "Vex" trait "New Trait"
-        [p]fable charedit "Vex" relationship "ally:@Mira"
-        """
-        await ctx.invoke(self.character_edit, name=name, field=field, new_value=new_value)
 
     @fable.command(name="sysetup", description="Set up Google sync (Sheet or Doc).")
     async def sysetup(self, ctx: commands.Context, source_type: str, url_or_id: str, api_key: str):
@@ -1698,7 +936,7 @@ class Fable(commands.Cog):
             await ctx.send("Sync is not set up. Use [p]fable sysetup first.")
             return
         data_type = data_type or "all"
-        data = awaitself.config.guild(ctx.guild).all()
+        data = await self.config.guild(ctx.guild).all()
         if data_type != "all":
             data = data.get(data_type, {})
         try:
