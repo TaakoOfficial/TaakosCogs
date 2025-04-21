@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="800" height="600" xmlns="http://www.w3.org/2000/svg">
+  <!-- Example Location Map SVG -->
+  <style>
+    .location-tavern { fill: #C19A6B; }
+    .location-castle { fill: #808080; }
+    .location-house { fill: #43B581; }
+    .location-shop { fill: #FAA61A; }
+    .location-dungeon { fill: #F04747; }
+    .location-other { fill: #7289DA; }
+    .location-node { stroke: #2F3136; stroke-width: 2; }
+    .location-text { fill: #FFFFFF; font-family: 'Arial'; font-size: 12px; }
+    .connection { stroke: #B9BBBE; stroke-width: 1; stroke-dasharray: 4; }
+  </style>
+  
+  <!-- Locations -->
+  <g transform="translate(400,300)">
+    <circle class="location-castle location-node" r="40"/>
+    <text class="location-text" text-anchor="middle">Castle</text>
+  </g>
+  
+  <g transform="translate(200,200)">
+    <circle class="location-tavern location-node" r="30"/>
+    <text class="location-text" text-anchor="middle">Tavern</text>
+  </g>
+  
+  <g transform="translate(600,200)">
+    <circle class="location-shop location-node" r="25"/>
+    <text class="location-text" text-anchor="middle">Market</text>
+  </g>
+  
+  <g transform="translate(300,400)">
+    <circle class="location-house location-node" r="20"/>
+    <text class="location-text" text-anchor="middle">House</text>
+  </g>
+  
+  <g transform="translate(500,400)">
+    <circle class="location-dungeon location-node" r="35"/>
+    <text class="location-text" text-anchor="middle">Dungeon</text>
+  </g>
+  
+  <!-- Connections -->
+  <path class="connection" d="M 400,300 L 200,200"/>
+  <path class="connection" d="M 400,300 L 600,200"/>
+  <path class="connection" d="M 400,300 L 300,400"/>
+  <path class="connection" d="M 400,300 L 500,400"/>
+</svg>

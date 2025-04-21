@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="800" height="600" xmlns="http://www.w3.org/2000/svg">
+  <!-- Example Relationship Graph SVG -->
+  <style>
+    .node { fill: #2F3136; stroke: #7289DA; stroke-width: 2; }
+    .node-text { fill: #FFFFFF; font-family: 'Arial'; }
+    .edge { stroke-width: 2; }
+    .edge-ally { stroke: #43B581; }
+    .edge-rival { stroke: #F04747; }
+    .edge-family { stroke: #7289DA; }
+  </style>
+  
+  <!-- Nodes -->
+  <circle class="node" cx="400" cy="300" r="40"/>
+  <text class="node-text" x="400" y="300" text-anchor="middle">Aria</text>
+  
+  <!-- Example connections -->
+  <path class="edge edge-ally" d="M 400,300 L 500,200"/>
+  <path class="edge edge-rival" d="M 400,300 L 300,400"/>
+  <path class="edge edge-family" d="M 400,300 L 500,400"/>
+</svg>

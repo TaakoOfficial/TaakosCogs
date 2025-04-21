@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="800" height="400" xmlns="http://www.w3.org/2000/svg">
+  <!-- Example Character Timeline SVG -->
+  <style>
+    .timeline-line { stroke: #7289DA; stroke-width: 2; }
+    .milestone { fill: #43B581; }
+    .event-text { fill: #FFFFFF; font-family: 'Arial'; font-size: 12px; }
+    .date-text { fill: #B9BBBE; font-family: 'Arial'; font-size: 10px; }
+  </style>
+  
+  <!-- Timeline base -->
+  <line class="timeline-line" x1="50" y1="200" x2="750" y2="200"/>
+  
+  <!-- Milestones -->
+  <g transform="translate(100,200)">
+    <circle class="milestone" r="8"/>
+    <text class="event-text" y="-20">Joined the Academy</text>
+    <text class="date-text" y="25">2025-01-15</text>
+  </g>
+  
+  <g transform="translate(300,200)">
+    <circle class="milestone" r="8"/>
+    <text class="event-text" y="-20">First Spell Mastered</text>
+    <text class="date-text" y="25">2025-02-28</text>
+  </g>
+  
+  <g transform="translate(500,200)">
+    <circle class="milestone" r="8"/>
+    <text class="event-text" y="-20">Magical Discovery</text>
+    <text class="date-text" y="25">2025-03-21</text>
+  </g>
+  
+  <g transform="translate(700,200)">
+    <circle class="milestone" r="8"/>
+    <text class="event-text" y="-20">Council Recognition</text>
+    <text class="date-text" y="25">2025-04-15</text>
+  </g>
+</svg>
