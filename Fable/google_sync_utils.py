@@ -47,19 +47,60 @@ def import_from_sheet(sheet_id: str, api_key: str, range_: str = "A1") -> Option
             return None
     return None
 
-# Docs: Export data to a doc (overwrite entire doc)
-def export_to_doc(doc_id: str, api_key: str, data: Dict[str, Any]) -> None:
-    service = get_docs_service(api_key)
-    # Clear the document
-    requests = [
-        {"deleteContentRange": {"range": {"startIndex": 1, "endIndex": 1_000_000}}}
-    ]
-    service.documents().batchUpdate(documentId=doc_id, body={"requests": requests}).execute()
-    # Insert new content
-    requests = [
-        {"insertText": {"location": {"index": 1}, "text": json.dumps(data, indent=2)}}
-    ]
-    service.documents().batchUpdate(documentId=doc_id, body={"requests": requests}).execute()
+from .doc_templates import get_character_template, get_timeline_template
+
+def export_to_doc(doc_id: str, api_key: str, data: dict):
+    """Export Fable data to a Google Doc with proper formatting."""
+    try:
+        from googleapiclient.discovery import build
+        from google.oauth2 import service_account
+        import json
+    except ImportError:
+        raise ImportError("Required Google packages not found. Run [p]fable googlehelp for setup instructions.")
+
+    credentials = service_account.Credentials.from_service_account_info(
+        json.loads(api_key),
+        scopes=['https://www.googleapis.com/auth/documents']
+    )
+    service = build('docs', 'v1', credentials=credentials)
+
+    # Start with a title
+    content = "『 FABLE CHARACTER PROFILES 』\n\n"
+    
+    # Add each character with proper formatting
+    if "characters" in data:
+        for char_name, char_data in data["characters"].items():
+            content += get_character_template(char_data)
+            content += "\n\n" + "═" * 50 + "\n\n"  # Separator between characters
+
+    # Add timeline if events exist
+    if "events" in data and data["events"]:
+        content += "\n\n『 CHARACTER TIMELINE 』\n\n"
+        content += get_timeline_template(data["events"].values())
+
+    # Update the document
+    document = service.documents().get(documentId=doc_id).execute()
+    service.documents().batchUpdate(
+        documentId=doc_id,
+        body={
+            'requests': [
+                {
+                    'deleteContentRange': {
+                        'range': {
+                            'startIndex': 1,
+                            'endIndex': len(document.get('body', {}).get('content', '')) - 1
+                        }
+                    }
+                },
+                {
+                    'insertText': {
+                        'location': {'index': 1},
+                        'text': content
+                    }
+                }
+            ]
+        }
+    ).execute()
 
 # Docs: Import data from a doc (read all text)
 def import_from_doc(doc_id: str, api_key: str) -> Optional[Dict[str, Any]]:
