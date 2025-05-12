@@ -25,6 +25,7 @@ Welcome to **RandomWeather** - your server's very own weather system! Whether yo
 | `[p]rweather setcolor <color>`      | Customize embed colors              |
 | `[p]rweather togglefooter`          | Show/hide the embed footer          |
 | `[p]rweather info`                  | See your current settings           |
+| `[p]rweather extreme`               | Force an extreme weather event      |
 
 ## 🎮 Quick Start
 
@@ -71,6 +72,13 @@ Weather conditions and temperatures adapt to match the current season in your ti
 - Toggle footer visibility
 - Configure update intervals
 - Choose where updates appear
+
+### 🌪️ Extreme Weather Events
+
+- Rare, dramatic weather events can occur naturally or be triggered manually
+- Includes typhoons, tornados, hurricanes, flash floods, and more
+- Special alert embeds with danger levels and safety recommendations
+- Use `[p]rweather extreme` to force an extreme weather event
 
 ## 🔗 Helpful Links
 

@@ -9,7 +9,7 @@ import pytz
 from redbot.core import Config, commands
 from redbot.core import app_commands
 from redbot.core.bot import Red
-from .weather_utils import generate_weather, create_weather_embed
+from .weather_utils import generate_weather, generate_extreme_weather, create_weather_embed
 from .time_utils import calculate_next_refresh_time, should_post_now, validate_timezone
 from .file_utils import write_last_posted
 
@@ -215,6 +215,27 @@ class WeatherGroup(app_commands.Group):
         except Exception as e:
             logging.error(f"Error in slash force weather update: {e}")
             await interaction.followup.send(f"Failed to post weather update: {e}", ephemeral=True)
+            
+    @app_commands.command(name="extreme", description="Force an extreme weather event to be posted.")
+    async def extreme(self, interaction: discord.Interaction) -> None:
+        """Force an extreme weather alert to be posted."""
+        if not await self._is_admin(interaction):
+            await interaction.response.send_message("You need administrator permissions to use this command.", ephemeral=True)
+            return
+        
+        await interaction.response.defer(ephemeral=True)
+        guild_settings = await self.cog.config.guild(interaction.guild).all()
+        channel_id = guild_settings.get("channel_id")
+        if not channel_id:
+            await interaction.followup.send("No channel configured for weather updates.", ephemeral=True)
+            return
+            
+        try:
+            await self.cog._post_extreme_weather_update(interaction.guild.id, guild_settings)
+            await interaction.followup.send("⚠️ Extreme weather alert posted! Take cover!", ephemeral=True)
+        except Exception as e:
+            logging.error(f"Error in slash force extreme weather update: {e}")
+            await interaction.followup.send(f"Failed to post extreme weather update: {e}", ephemeral=True)
 
 class WeatherCog(commands.Cog):
     """A cog for generating random daily weather updates."""
@@ -328,6 +349,37 @@ class WeatherCog(commands.Cog):
             
         except Exception as e:
             logging.error(f"Error posting weather update for guild {guild_id}: {e}")
+
+    async def _post_extreme_weather_update(
+        self,
+        guild_id: int,
+        guild_settings: Dict[str, Any]
+    ) -> None:
+        """Post an extreme weather update."""
+        try:
+            time_zone = cast(str, guild_settings.get("time_zone", "UTC"))
+            weather_data = generate_extreme_weather(time_zone)
+            embed = create_weather_embed(weather_data, guild_settings)
+            
+            channel = self.bot.get_channel(guild_settings["channel_id"])
+            if not isinstance(channel, discord.TextChannel):
+                return
+                
+            content = None
+            if guild_settings.get("tag_role"):
+                role_id = guild_settings.get("role_id")
+                if role_id:
+                    content = f"<@&{role_id}>"
+                    
+            await channel.send(content=content, embed=embed)
+            current_time = datetime.now(pytz.timezone(time_zone))
+            guild = self.bot.get_guild(guild_id)
+            if guild:
+                await self.config.guild(guild).last_refresh.set(current_time.timestamp())
+            write_last_posted()
+            
+        except Exception as e:
+            logging.error(f"Error posting extreme weather update for guild {guild_id}: {e}")
 
     @commands.group(name="rweather", invoke_without_command=True)
     @commands.guild_only()
@@ -509,6 +561,20 @@ class WeatherCog(commands.Cog):
         except Exception as e:
             logging.error(f"Error in classic force weather update: {e}")
             await ctx.send(f"Failed to post weather update: {e}")
+
+    @rweather.command(name="extreme")
+    @commands.guild_only()
+    @commands.admin_or_permissions(administrator=True)
+    async def extreme_weather(self, ctx: commands.Context) -> None:
+        """Force an extreme weather event to be posted."""
+        guild_settings = await self.config.guild(ctx.guild).all()
+        channel_id = guild_settings.get("channel_id")
+        if not channel_id:
+            await ctx.send("No channel configured for weather updates.")
+            return
+            
+        await self._post_extreme_weather_update(ctx.guild.id, guild_settings)
+        await ctx.send("⚠️ Extreme weather alert posted! Take cover!")
 
 async def setup(bot: Red) -> None:
     """Load WeatherCog."""    

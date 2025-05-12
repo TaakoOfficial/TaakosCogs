@@ -8,6 +8,7 @@
 - Implemented danger level indicators for different extreme conditions
 - Added safety recommendations tailored to each extreme weather type
 - Created visual distinction between normal and extreme weather alerts
+- Added admin command to force extreme weather events (`/rweather extreme` or `[p]rweather extreme`)
 
 ### 🎨 Visual Improvements
 
