@@ -1,5 +1,49 @@
 # 🌦️ RandomWeather Changelog
 
+## [v2.2.2] - 2025-05-12
+
+### ✨ New Features
+
+- Added "Flash Freeze 🥶" extreme weather event for winter
+- Added "Light Snow ❄️" normal weather condition to increase winter snow variety
+- Enhanced winter weather diversity with more snow-related conditions
+
+### 🎨 Visual Improvements
+
+- Updated all extreme weather icons with higher quality versions
+- Added distinct icon for Light Snow
+- Improved visual distinction between weather types
+
+## [v2.2.1] - 2025-05-12
+
+### 🛠️ Improvements
+
+- Enhanced extreme weather with seasonal patterns:
+  - Tornadoes occur more frequently in spring
+  - Hurricanes and typhoons peak in summer and early fall
+  - Lightning storms more common in spring and summer
+  - Ice storms appear primarily in winter
+- Renamed "Colored Fog" to "Heavy Smog" for clarity
+- Base extreme events (Acid Rain, Heavy Smog, Blood Fog, Noxious Gas) can appear in any season
+
+## [v2.2.0] - 2025-05-12
+
+### ✨ New Features
+
+- Added 10 rare extreme weather events:
+  - Typhoon 🌀
+  - Flash Flooding 🌊
+  - Acid Rain ☢️
+  - Hurricane 🌀
+  - Tornado 🌪️
+  - Ice Storm 🧊
+  - Heavy Smog 🟣
+  - Blood Fog 🔴
+  - Lightning Storm ⚡
+  - Noxious Gas ☁️
+- Customized wind speeds and visibility for extreme conditions
+- Added unique icons for all new weather types
+
 ## [v2.1.1] - 2025-04-15
 
 ### 🛠️ Improvements
