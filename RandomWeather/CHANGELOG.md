@@ -1,5 +1,21 @@
 # 🌦️ RandomWeather Changelog
 
+## [v2.3.0] - 2025-05-12
+
+### ✨ New Features
+
+- Added dramatic emergency alert embeds for extreme weather events
+- Implemented danger level indicators for different extreme conditions
+- Added safety recommendations tailored to each extreme weather type
+- Created visual distinction between normal and extreme weather alerts
+
+### 🎨 Visual Improvements
+
+- Added eye-catching warning elements to extreme weather alerts
+- Included alert banners and warning icons for extreme conditions
+- Used condition-specific colors for alert embeds
+- Enhanced visual impact with bold formatting and emergency styling
+
 ## [v2.2.2] - 2025-05-12
 
 ### ✨ New Features

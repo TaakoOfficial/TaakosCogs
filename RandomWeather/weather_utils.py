@@ -218,7 +218,12 @@ def generate_weather(time_zone: str) -> Dict[str, str]:
     }
 
 def create_weather_embed(weather_data: Dict[str, str], guild_settings: Dict[str, any]) -> discord.Embed:
-    """Create a Discord embed for weather data."""
+    """Create a Discord embed for weather data. Uses special alert embed for extreme weather."""
+    
+    # Check if this is extreme weather - if so, use the alert embed instead
+    if is_extreme_weather(weather_data["condition"]):
+        return create_extreme_weather_alert(weather_data, guild_settings)
+    
     # Define weather condition icons
     condition_icons = {
         # Normal weather conditions
@@ -296,3 +301,149 @@ def create_weather_embed(weather_data: Dict[str, str], guild_settings: Dict[str,
         embed.set_footer(text="🎲 Weather conditions are randomly generated")
     
     return embed
+
+def create_extreme_weather_alert(weather_data: Dict[str, str], guild_settings: Dict[str, any]) -> discord.Embed:
+    """Create a dramatic and eye-catching alert embed for extreme weather conditions."""
+    # Define weather condition icons - same as regular weather
+    condition_icons = {
+        # Extreme weather conditions
+        "Typhoon 🌀": "https://cdn-icons-png.flaticon.com/512/3104/3104619.png",
+        "Flash Flooding 🌊": "https://cdn-icons-png.flaticon.com/512/4371/4371476.png",
+        "Acid Rain ☢️": "https://cdn-icons-png.flaticon.com/512/3105/3105221.png",
+        "Hurricane 🌀": "https://cdn-icons-png.flaticon.com/512/2675/2675783.png",
+        "Tornado 🌪️": "https://cdn-icons-png.flaticon.com/512/2938/2938153.png",
+        "Ice Storm 🧊": "https://cdn-icons-png.flaticon.com/512/2204/2204345.png",
+        "Flash Freeze 🥶": "https://cdn-icons-png.flaticon.com/512/3093/3093460.png",
+        "Heavy Smog 🟣": "https://cdn-icons-png.flaticon.com/512/4380/4380458.png",
+        "Blood Fog 🔴": "https://cdn-icons-png.flaticon.com/512/9373/9373979.png",
+        "Lightning Storm ⚡": "https://cdn-icons-png.flaticon.com/512/1959/1959338.png",
+        "Noxious Gas ☁️": "https://cdn-icons-png.flaticon.com/512/4380/4380320.png"
+    }
+    
+    # Determine color based on condition type (bright warning colors)
+    condition_colors = {
+        "Typhoon 🌀": 0x651FFF,       # Deep purple
+        "Hurricane 🌀": 0x651FFF,      # Deep purple
+        "Flash Flooding 🌊": 0x0D47A1, # Deep blue
+        "Acid Rain ☢️": 0xAA00FF,      # Purple
+        "Tornado 🌪️": 0xD50000,        # Deep red
+        "Ice Storm 🧊": 0x00B0FF,      # Light blue
+        "Flash Freeze 🥶": 0x00B0FF,   # Light blue
+        "Heavy Smog 🟣": 0x6200EA,     # Deep purple
+        "Blood Fog 🔴": 0xD50000,      # Deep red
+        "Lightning Storm ⚡": 0xFFD600,# Amber
+        "Noxious Gas ☁️": 0x33691E     # Dark green
+    }
+    
+    condition = weather_data["condition"]
+    color = condition_colors.get(condition, 0xFF3D00) # Default to orange-red
+    
+    embed = discord.Embed(
+        title=f"⚠️ EXTREME WEATHER ALERT ⚠️",
+        description=f"**{condition.upper()}** has been detected in your area!\nTake necessary precautions!",
+        color=discord.Color(color)
+    )
+    
+    # Add a timestamp for urgency
+    embed.timestamp = datetime.datetime.utcnow()
+    
+    # Set thumbnail based on condition
+    if condition in condition_icons:
+        embed.set_thumbnail(url=condition_icons[condition])
+    
+    # Add an image for visual impact - dramatic severe weather warning banner
+    embed.set_image(url="https://file.taako.org/api/file/share.php?token=2bc05c04ade85792546ff265bd6c345d")
+    
+    # Temperature with alert formatting
+    temp = weather_data["temperature_f"]
+    feels_like = weather_data["feels_like"]
+    if temp != feels_like:
+        embed.add_field(
+            name="🌡️ Current Temperature | 🌡️ Feels Like",
+            value=f"**{temp}** | **{feels_like}**",
+            inline=False
+        )
+    else:
+        embed.add_field(
+            name="🌡️ Current Temperature",
+            value=f"**{temp}**",
+            inline=False
+        )
+    
+    # Add danger level based on condition
+    danger_levels = {
+        "Typhoon 🌀": "SEVERE",
+        "Hurricane 🌀": "SEVERE",
+        "Tornado 🌪️": "EXTREME",
+        "Flash Flooding 🌊": "HIGH",
+        "Ice Storm 🧊": "HIGH",
+        "Flash Freeze 🥶": "HIGH",
+        "Acid Rain ☢️": "MODERATE",
+        "Heavy Smog 🟣": "MODERATE",
+        "Blood Fog 🔴": "UNKNOWN",
+        "Lightning Storm ⚡": "HIGH",
+        "Noxious Gas ☁️": "HIGH"
+    }
+    
+    danger = danger_levels.get(condition, "HIGH")
+    embed.add_field(
+        name="⚠️ DANGER LEVEL",
+        value=f"**{danger}**",
+        inline=True
+    )
+    
+    # Wind, Humidity, and Visibility with alert formatting
+    embed.add_field(
+        name="🌬️ Wind Speed",
+        value=f"**{weather_data['wind_speed']}**",
+        inline=True
+    )
+    
+    embed.add_field(
+        name="👀 Visibility",
+        value=f"**{weather_data['visibility']}**",
+        inline=True
+    )
+    
+    # Add special recommendations based on condition
+    recommendations = {
+        "Typhoon 🌀": "Seek sturdy shelter immediately. Stay away from windows.",
+        "Hurricane 🌀": "Evacuate low-lying areas. Secure property and seek stable shelter.",
+        "Tornado 🌪️": "Go to basement or interior room. Stay away from windows.",
+        "Flash Flooding 🌊": "Move to higher ground. Do not walk or drive through floodwaters.",
+        "Ice Storm 🧊": "Stay indoors. Roads are extremely hazardous.",
+        "Flash Freeze 🥶": "Seek warm shelter. Protect exposed skin from frostbite.",
+        "Acid Rain ☢️": "Stay indoors. Cover vehicles and sensitive equipment.",
+        "Heavy Smog 🟣": "Wear respiratory protection. Limit outdoor activities.",
+        "Blood Fog 🔴": "Unknown phenomenon. Stay indoors until cleared.",
+        "Lightning Storm ⚡": "Stay indoors. Avoid open areas and tall structures.",
+        "Noxious Gas ☁️": "Evacuate area immediately. Use breathing protection."
+    }
+    
+    embed.add_field(
+        name="🚨 SAFETY RECOMMENDATIONS",
+        value=recommendations.get(condition, "Seek shelter and await further instructions."),
+        inline=False
+    )
+    
+    # Footer with warning
+    embed.set_footer(text="⚠️ This is a simulated weather alert! ⚠️")
+    
+    return embed
+
+def is_extreme_weather(condition: str) -> bool:
+    """Check if the weather condition is considered extreme/severe weather."""
+    extreme_conditions = [
+        "Typhoon 🌀", 
+        "Flash Flooding 🌊", 
+        "Acid Rain ☢️", 
+        "Hurricane 🌀", 
+        "Tornado 🌪️", 
+        "Ice Storm 🧊", 
+        "Flash Freeze 🥶", 
+        "Heavy Smog 🟣", 
+        "Blood Fog 🔴", 
+        "Lightning Storm ⚡", 
+        "Noxious Gas ☁️"
+    ]
+    return condition in extreme_conditions
