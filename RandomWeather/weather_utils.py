@@ -328,28 +328,13 @@ def create_extreme_weather_alert(weather_data: Dict[str, str], guild_settings: D
         "Noxious Gas ☁️": "https://cdn-icons-png.flaticon.com/512/13748/13748288.png"       # Toxic gas icon
     }
     
-    # Determine color based on condition type (bright warning colors)
-    condition_colors = {
-        "Typhoon 🌀": 0x651FFF,       # Deep purple
-        "Hurricane 🌀": 0x651FFF,      # Deep purple
-        "Flash Flooding 🌊": 0x0D47A1, # Deep blue
-        "Acid Rain ☢️": 0xAA00FF,      # Purple
-        "Tornado 🌪️": 0xD50000,        # Deep red
-        "Ice Storm 🧊": 0x00B0FF,      # Light blue
-        "Flash Freeze 🥶": 0x00B0FF,   # Light blue
-        "Heavy Smog 🟣": 0x6200EA,     # Deep purple
-        "Blood Fog 🔴": 0xD50000,      # Deep red
-        "Lightning Storm ⚡": 0xFFD600,# Amber
-        "Noxious Gas ☁️": 0x33691E     # Dark green
-    }
-    
+    # Use the guild's configured embed color instead of condition-specific colors
     condition = weather_data["condition"]
-    color = condition_colors.get(condition, 0xFF3D00) # Default to orange-red
     
     embed = discord.Embed(
         title=f"⚠️ EXTREME WEATHER ALERT ⚠️",
         description=f"**{condition.upper()}** has been detected in your area!\nTake necessary precautions!",
-        color=discord.Color(color)
+        color=discord.Color(guild_settings.get("embed_color", 0xFF0000))
     )
     
     # Add a timestamp for urgency
@@ -435,7 +420,7 @@ def create_extreme_weather_alert(weather_data: Dict[str, str], guild_settings: D
     )
     
     # Footer with warning
-    embed.set_footer(text="⚠️ This is a simulated weather alert! ⚠️")
+    embed.set_footer(text="⚠️ This is a extreme weather alert! ⚠️")
     
     return embed
 
