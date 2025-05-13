@@ -368,6 +368,8 @@ class RPCalander(commands.Cog, DashboardIntegration):
         }
         self._config.register_guild(**self._default_guild)
         self.rpca_group = RPCAGroup(self)
+        # No need to initialize _daily_update_loop here as it's already decorated with @tasks.loop
+
     async def cog_unload(self) -> None:
         if hasattr(self, 'bot'):
             self.bot.tree.remove_command(self.rpca_group.name)
@@ -419,7 +421,7 @@ class RPCalander(commands.Cog, DashboardIntegration):
         """Format a datetime object into our standard format."""
         return date_obj.strftime("%A %m-%d-%Y")
 
-    def _parse_date(self, date_str: str, tz: datetime.tzinfo) -> datetime:
+    def _parse_date(self, date_str: str, tz: pytz.tzinfo.DstTzInfo) -> datetime:
         """Parse a date string into a datetime object."""
         return datetime.strptime(date_str, "%m-%d-%Y").replace(tzinfo=tz)
 
