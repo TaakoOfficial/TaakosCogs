@@ -1,5 +1,26 @@
 # 📝 YALC Changelog
 
+## [v3.1.0] - 2025-05-12
+
+### ✨ New Features
+
+- Added comprehensive guild scheduled event logging (creation, updates, deletion)
+- Added missing command error event logging
+
+### 🛠️ Improvements
+
+- Enhanced Tupperbox message detection with multiple identification methods
+- Expanded Tupperbox filtering to handle more proxy bot types
+- Enhanced visual formatting of embeds for better readability
+- More detailed message deletion and bulk deletion logs
+- Extended configuration options for advanced filtering
+- Added webhook name filtering capabilities
+
+### 🐛 Bug Fixes
+
+- Fixed potential issue with proxy detection in message events
+- Improved handling of Discord system messages
+
 ## [v3.0.0] - 2025-04-17
 
 ### ✨ New Features

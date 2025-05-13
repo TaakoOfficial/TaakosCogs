@@ -34,65 +34,240 @@ class YALC(commands.Cog):
         self.dashboard = DashboardIntegration(self)
         
         
-        # Event descriptions with emojis
+        # Comprehensive event descriptions with emojis
         self.event_descriptions = {
+            # Message events
             "message_delete": ("🗑️", "Message deletions"),
             "message_edit": ("📝", "Message edits"),
-            "member_join": ("👋", "Member joins"),
+            "message_bulk_delete": ("♻️", "Bulk message deletions"),
+            "message_pin": ("📌", "Message pins"),
+            "message_unpin": ("📍", "Message unpins"),
+            
+            # Member events
+            "member_join": ("🚪", "Member joins"),
             "member_leave": ("👋", "Member leaves"),
             "member_ban": ("🔨", "Member bans"),
             "member_unban": ("🔓", "Member unbans"),
+            "member_kick": ("👢", "Member kicks"),
             "member_update": ("👤", "Member updates (roles, nickname)"),
-            "channel_create": ("📝", "Channel creations"),
+            "member_timeout": ("⏱️", "Member timeout (added/removed)"),
+            
+            # Channel events
+            "channel_create": ("🆕", "Channel creations"),
             "channel_delete": ("🗑️", "Channel deletions"),
             "channel_update": ("🔄", "Channel updates"),
+            "thread_create": ("🧵", "Thread creations"),
+            "thread_delete": ("🗑️", "Thread deletions"),
+            "thread_update": ("🔄", "Thread updates"),
+            "thread_member_join": ("➡️", "Thread member joins"),
+            "thread_member_leave": ("⬅️", "Thread member leaves"),
+            "forum_post_create": ("📰", "Forum post creations"),
+            "forum_post_delete": ("🗑️", "Forum post deletions"),
+            "forum_post_update": ("🔄", "Forum post updates"),
+            
+            # Role events
             "role_create": ("✨", "Role creations"),
             "role_delete": ("🗑️", "Role deletions"),
             "role_update": ("🔄", "Role updates"),
-            "emoji_update": ("😀", "Emoji updates"),
+            
+            # Guild events
             "guild_update": ("⚙️", "Server setting updates"),
+            "emoji_update": ("😀", "Emoji updates"),
+            "sticker_update": ("🏷️", "Sticker updates"),
+            "invite_create": ("📨", "Invite creations"),
+            "invite_delete": ("🗑️", "Invite deletions"),
+            "guild_scheduled_event_create": ("📅", "Server event creations"),
+            "guild_scheduled_event_update": ("🔄", "Server event updates"),
+            "guild_scheduled_event_delete": ("🗑️", "Server event deletions"),
+            "stage_instance_create": ("🎭", "Stage instance creations"),
+            "stage_instance_delete": ("🗑️", "Stage instance deletions"),
+            "stage_instance_update": ("🔄", "Stage instance updates"),
+            
+            # Voice events
             "voice_update": ("🎤", "Voice channel updates"),
-            "member_kick": ("👢", "Member kicks"),
+            "voice_state_update": ("🔊", "Voice state changes"),
+            
+            # Command and interaction events
             "command_use": ("⌨️", "Command usage"),
+            "command_error": ("⚠️", "Command errors"),
+            "application_cmd": ("🔷", "Application command usage"),
+            
+            # Reaction events
+            "reaction_add": ("👍", "Reaction additions"),
+            "reaction_remove": ("👎", "Reaction removals"),
+            "reaction_clear": ("🧹", "Reaction clears"),
+            
+            # Integration events
+            "integration_create": ("🔌", "Integration creations"),
+            "integration_update": ("🔄", "Integration updates"),
+            "integration_delete": ("🗑️", "Integration deletions"),
+            
+            # Webhook events
+            "webhook_update": ("🪝", "Webhook updates"),
+            
+            # AutoMod events
+            "automod_rule_create": ("🛡️", "AutoMod rule creations"),
+            "automod_rule_update": ("🔄", "AutoMod rule updates"),
+            "automod_rule_delete": ("🗑️", "AutoMod rule deletions"),
+            "automod_action": ("🚫", "AutoMod actions executed")
         }
 
-        # Initialize Config
+        # Initialize Config with comprehensive defaults
         default_guild = {
+            # Event enablement status - all disabled by default
             "events": {event: False for event in self.event_descriptions},
+            
+            # Channel mapping for each event type
             "event_channels": {},
+            
+            # Tupperbox and Discord app filtering settings
             "ignore_tupperbox": True,
-            "tupperbox_ids": ["239232811662311425"],  # Default Tupperbox bot ID
-            "retention_days": 30,
-            "ignored_channels": [],
-            "ignored_users": [],
-            "ignored_roles": []
+            "tupperbox_ids": [
+                "239232811662311425",  # Default Tupperbox bot ID
+                "431544605209788416",  # Tupper.io
+                "508808937294331904",  # PluralKit
+                "466378653216014359",  # Tupperbox fork
+                "798482360910127104",  # PluralKit webhook service
+                "782749873194696734",  # Another proxy bot
+                "689490322539159592",  # Yet another proxy bot
+                "765338157961879563"   # TupperBox Beta
+            ],
+            
+            # Advanced filtering options
+            "ignore_apps": True,           # Ignore all Discord app messages
+            "ignore_webhooks": False,      # Option to ignore webhook messages
+            "detect_proxy_deletes": True,  # Detect and ignore Tupperbox proxy message patterns
+            "ignore_proxy_patterns": True, # Detect proxy message patterns in normal messages
+            "webhook_name_filter": [],     # Custom webhook names to ignore
+            "message_prefix_filter": [],   # Custom message prefixes to ignore
+            
+            # Log management
+            "retention_days": 30,         # How long to keep logs
+            "log_by_category": False,     # Option to organize logs by category
+            "auto_archive_threads": True, # Auto-archive log threads after retention period
+            "max_embed_count": 25,        # Maximum number of embeds per log entry
+            
+            # Ignore lists
+            "ignored_channels": [],       # Channels to ignore for all events
+            "ignored_users": [],          # Users to ignore for all events
+            "ignored_roles": [],          # Roles to ignore for all events
+            "ignored_categories": [],     # Channel categories to ignore
+            
+            # Appearance settings
+            "use_embeds": True,           # Use rich embeds (vs. plain text)
+            "embed_color": None,          # Custom embed color override
+            "include_timestamps": True,   # Include timestamps in logs
+            "include_thumbnails": True,   # Include user avatars as thumbnails
+            "use_markdown": True,         # Format text with markdown
+            "compact_mode": False         # Use more compact embed layouts for busier servers
         }
         self.config = Config.get_conf(self, identifier=2394567890, force_registration=True)
         self.config.register_guild(**default_guild)
 
 
-    async def should_log_event(self, guild: discord.Guild, event_type: str, channel: Optional[discord.abc.GuildChannel] = None, user: Optional[Union[discord.Member, discord.User]] = None) -> bool:
-        """Check if an event should be logged based on settings and ignore lists."""
-        if not guild:
-            return False
-        settings = await self.config.guild(guild).all()
-        if not settings["events"].get(event_type, False):
-            return False
-        # Check channel ignore
-        if channel:
-            if channel.id in settings["ignored_channels"]:
+    async def should_log_event(self, guild: discord.Guild, event_type: str, 
+                         channel: Optional[discord.abc.GuildChannel] = None, 
+                         user: Optional[Union[discord.Member, discord.User]] = None,
+                         message: Optional[discord.Message] = None) -> bool:
+        """
+        Check if an event should be logged based on settings and ignore lists.
+        
+        Parameters
+        ----------
+        guild: discord.Guild
+            The guild where the event occurred
+        event_type: str
+            The type of event being checked
+        channel: Optional[discord.abc.GuildChannel]
+            The channel where the event occurred, if applicable
+        user: Optional[Union[discord.Member, discord.User]]
+            The user who triggered the event, if applicable
+        message: Optional[discord.Message]
+            The message involved in the event, if applicable
+            
+        Returns
+        -------
+        bool
+            True if the event should be logged, False if it should be ignored
+        """
+        try:
+            # If no guild, we can't get settings, so don't log
+            if not guild:
                 return False
-            if isinstance(channel, discord.TextChannel) and channel.category:
-                if hasattr(settings, "ignored_categories") and channel.category.id in settings["ignored_categories"]:
+                
+            # Get all settings at once to minimize database calls
+            settings = await self.config.guild(guild).all()
+            
+            # 1. Check if this event type is enabled at all
+            if not settings["events"].get(event_type, False):
+                self.log.debug(f"Event type {event_type} is disabled in settings")
+                return False
+                
+            # 2. Channel-based ignore checks
+            if channel:
+                # Direct channel ignore
+                if channel.id in settings["ignored_channels"]:
+                    self.log.debug(f"Channel {channel.id} is in the ignored channels list")
                     return False
-        # Check user ignore
-        if user and user.id in settings["ignored_users"]:
-            return False
-        # Check role ignore (only for Member, not User)
-        if user and isinstance(user, discord.Member):
-            if any(r.id in settings["ignored_roles"] for r in user.roles):
-                return False
-        return True
+                
+                # Category ignore
+                if isinstance(channel, discord.TextChannel) and channel.category:
+                    ignored_categories = settings.get("ignored_categories", [])
+                    if channel.category.id in ignored_categories:
+                        self.log.debug(f"Category {channel.category.id} is in the ignored categories list")
+                        return False
+                        
+                # Thread parent ignore (if this is a thread and parent is ignored)
+                if isinstance(channel, discord.Thread) and channel.parent:
+                    if channel.parent.id in settings["ignored_channels"]:
+                        self.log.debug(f"Thread parent {channel.parent.id} is in the ignored channels list")
+                        return False
+            
+            # 3. User-based ignore checks
+            if user:
+                # Direct user ignore
+                if user.id in settings["ignored_users"]:
+                    self.log.debug(f"User {user.id} is in the ignored users list")
+                    return False
+                
+                # Role-based ignore (only for Members)
+                if isinstance(user, discord.Member):
+                    ignored_roles = settings["ignored_roles"]
+                    if any(r.id in ignored_roles for r in user.roles):
+                        self.log.debug(f"User {user.id} has a role that is in the ignored roles list")
+                        return False
+                        
+                # Bot ignore (optionally ignore all bot users)
+                if getattr(user, "bot", False) and settings.get("ignore_bots", False):
+                    self.log.debug(f"User {user.id} is a bot and bot messages are ignored")
+                    return False
+            
+            # 4. Message-specific ignore checks
+            if message:
+                # Tupperbox ignore
+                if settings.get("ignore_tupperbox", True):
+                    tupperbox_ids = settings.get("tupperbox_ids", ["239232811662311425"])
+                    if self.is_tupperbox_message(message, tupperbox_ids):
+                        self.log.debug(f"Message {message.id} detected as Tupperbox message")
+                        return False
+                
+                # Webhook ignore
+                if settings.get("ignore_webhooks", False) and getattr(message, "webhook_id", None):
+                    self.log.debug(f"Message {message.id} is from webhook {message.webhook_id} and webhooks are ignored")
+                    return False
+                    
+                # App message ignore
+                if settings.get("ignore_apps", True) and getattr(message, "application", None):
+                    self.log.debug(f"Message {message.id} is from app {message.application.id} and apps are ignored")
+                    return False
+            
+            # If we've passed all ignore checks, we should log this event
+            return True
+            
+        except Exception as e:
+            self.log.error(f"Error in should_log_event: {e}", exc_info=True)
+            # Default to True if an error occurred (better to log in case of doubt)
+            return True
 
     async def get_log_channel(self, guild: discord.Guild, event_type: str) -> Optional[discord.TextChannel]:
         """Get the appropriate logging channel for an event. Only event_channels is used."""
@@ -107,65 +282,195 @@ class YALC(commands.Cog):
         return channel if isinstance(channel, discord.TextChannel) else None
 
     def create_embed(self, event_type: str, description: str, **kwargs) -> discord.Embed:
-        """Create a standardized, readable embed for logging."""
+        """
+        Create a standardized, visually appealing embed for logging.
+        
+        Parameters
+        ----------
+        event_type: str
+            The type of event being logged
+        description: str
+            Primary description for the embed
+        **kwargs
+            Additional fields to include in the embed
+            
+        Returns
+        -------
+        discord.Embed
+            A formatted embed ready for sending
+        """
+        # Comprehensive color coding for visual differentiation of event types
         color_map = {
-            "message_delete": discord.Color.red(),
-            "message_edit": discord.Color.blue(),
-            "member_join": discord.Color.green(),
-            "member_leave": discord.Color.orange(),
-            "member_ban": discord.Color.dark_red(),
-            "member_unban": discord.Color.teal(),
-            "member_update": discord.Color.blurple(),
-            "channel_create": discord.Color.green(),
-            "channel_delete": discord.Color.red(),
-            "channel_update": discord.Color.blurple(),
-            "role_create": discord.Color.green(),
-            "role_delete": discord.Color.red(),
-            "role_update": discord.Color.blurple(),
-            "emoji_update": discord.Color.gold(),
-            "guild_update": discord.Color.blurple(),
-            "voice_update": discord.Color.purple(),
-            "member_kick": discord.Color.orange(),
-            "command_use": discord.Color.blurple(),
-            "command_error": discord.Color.red(),
-            "application_cmd": discord.Color.blurple(),
-            "forum_post_create": discord.Color.green(),
-            "forum_post_update": discord.Color.blurple(),
-            "forum_post_delete": discord.Color.red(),
-            "thread_create": discord.Color.green(),
-            "thread_delete": discord.Color.red(),
-            "thread_update": discord.Color.blurple(),
-            "thread_member_join": discord.Color.green(),
-            "thread_member_leave": discord.Color.red(),
+            # Message events - Blues
+            "message_delete": discord.Color(0xE74C3C),      # Red
+            "message_edit": discord.Color(0x3498DB),        # Blue
+            "message_bulk_delete": discord.Color(0xC0392B), # Dark Red
+            "message_pin": discord.Color(0x1ABC9C),         # Teal
+            "message_unpin": discord.Color(0x16A085),       # Dark Teal
+            
+            # Member events - Greens and oranges
+            "member_join": discord.Color(0x2ECC71),         # Green
+            "member_leave": discord.Color(0xF39C12),        # Orange
+            "member_ban": discord.Color(0xC0392B),          # Dark Red
+            "member_unban": discord.Color(0x27AE60),        # Dark Green
+            "member_update": discord.Color(0x3498DB),       # Blue
+            "member_kick": discord.Color(0xE67E22),         # Dark Orange
+            "member_timeout": discord.Color(0xD35400),      # Very Dark Orange
+            
+            # Channel events - Purples
+            "channel_create": discord.Color(0x9B59B6),      # Purple
+            "channel_delete": discord.Color(0x8E44AD),      # Dark Purple
+            "channel_update": discord.Color(0x9B59B6),      # Purple
+            "thread_create": discord.Color(0x9B59B6),       # Purple
+            "thread_delete": discord.Color(0x8E44AD),       # Dark Purple
+            "thread_update": discord.Color(0x9B59B6),       # Purple
+            "thread_member_join": discord.Color(0xAF7AC5),  # Light Purple
+            "thread_member_leave": discord.Color(0x884EA0), # Medium Purple
+            "forum_post_create": discord.Color(0x9B59B6),   # Purple
+            "forum_post_delete": discord.Color(0x8E44AD),   # Dark Purple
+            "forum_post_update": discord.Color(0x9B59B6),   # Purple
+            
+            # Role events - Yellows
+            "role_create": discord.Color(0xF1C40F),         # Yellow
+            "role_delete": discord.Color(0xF39C12),         # Orange
+            "role_update": discord.Color(0xF1C40F),         # Yellow
+            
+            # Guild events - Blues
+            "guild_update": discord.Color(0x3498DB),        # Blue
+            "emoji_update": discord.Color(0xF1C40F),        # Yellow
+            "sticker_update": discord.Color(0xF1C40F),      # Yellow
+            "invite_create": discord.Color(0x2ECC71),       # Green
+            "invite_delete": discord.Color(0xE74C3C),       # Red
+            
+            # Event management - Teals
+            "guild_scheduled_event_create": discord.Color(0x1ABC9C),  # Teal
+            "guild_scheduled_event_update": discord.Color(0x16A085),  # Dark Teal
+            "guild_scheduled_event_delete": discord.Color(0xE74C3C),  # Red
+            "stage_instance_create": discord.Color(0x1ABC9C),         # Teal
+            "stage_instance_update": discord.Color(0x16A085),         # Dark Teal
+            "stage_instance_delete": discord.Color(0xE74C3C),         # Red
+            
+            # Voice events - Blues
+            "voice_update": discord.Color(0x3498DB),        # Blue
+            "voice_state_update": discord.Color(0x2980B9),  # Dark Blue
+            
+            # Command events - Grays
+            "command_use": discord.Color(0x95A5A6),         # Light Gray
+            "command_error": discord.Color(0xE74C3C),       # Red
+            "application_cmd": discord.Color(0x7F8C8D),     # Gray
+            
+            # Reaction events - Yellows
+            "reaction_add": discord.Color(0xF1C40F),        # Yellow
+            "reaction_remove": discord.Color(0xF39C12),     # Orange
+            "reaction_clear": discord.Color(0xE67E22),      # Dark Orange
+            
+            # Integration events - Teals
+            "integration_create": discord.Color(0x1ABC9C),  # Teal
+            "integration_update": discord.Color(0x16A085),  # Dark Teal
+            "integration_delete": discord.Color(0xE74C3C),  # Red
+            
+            # Webhook/AutoMod - Grays and Reds
+            "webhook_update": discord.Color(0x7F8C8D),      # Gray
+            "automod_rule_create": discord.Color(0x2ECC71), # Green
+            "automod_rule_update": discord.Color(0x27AE60), # Dark Green
+            "automod_rule_delete": discord.Color(0xE74C3C), # Red
+            "automod_action": discord.Color(0xE67E22),      # Dark Orange
         }
+        
+        # Get appropriate emoji for the event type
+        emoji, _ = self.event_descriptions.get(event_type, ("📝", "Event"))
+        
+        # Format the title with a cleaner presentation
+        title = f"{emoji} {event_type.replace('_', ' ').title()}"
+        
+        # Create the base embed with appropriate styling
         embed = discord.Embed(
-            title=f"📝 {event_type.replace('_', ' ').title()}",
-            description=description + "\n\u200b",  # Add spacing after desc
+            title=title,
+            description=description + "\n\u200b",  # Add spacing after description
             color=color_map.get(event_type, discord.Color.blurple()),
             timestamp=datetime.datetime.now(datetime.UTC)
         )
-        # Add fields with better formatting
+        
+        # Add fields with improved formatting for better readability
         for key, value in kwargs.items():
-            if not value:
+            if value is None:
                 continue
-            # For multi-line or list fields, use block quotes or bullets
+                
+            field_name = key.replace('_', ' ').title()
+            
+            # Format field values based on content type
             if isinstance(value, list):
-                value = "\n".join(f"- {v}" for v in value)
-            elif isinstance(value, str) and ("\n" in value or len(value) > 60):
-                value = value.replace(chr(10), '\n> ')
-                value = f"> {value}"
-            embed.add_field(name=key.replace('_', ' ').title(), value=value, inline=False)
+                # Format lists as bulleted items
+                if not value:  # Empty list
+                    continue
+                if len(value) == 1:
+                    formatted_value = value[0]
+                else:
+                    formatted_value = "\n".join(f"• {v}" for v in value)
+                    
+            elif isinstance(value, (int, float, bool)):
+                # Simple representation for primitives
+                formatted_value = str(value)
+                
+            elif isinstance(value, str):
+                if not value.strip():  # Empty or whitespace-only string
+                    continue
+                    
+                # Format long or multi-line strings appropriately
+                if "\n" in value or len(value) > 60:
+                    # For code blocks or already formatted text, preserve formatting
+                    if value.startswith("```") and value.endswith("```"):
+                        formatted_value = value
+                    # For long text that isn't a code block, use blockquotes for readability
+                    else:
+                        formatted_value = value.replace("\n", "\n> ")
+                        formatted_value = f"> {formatted_value}"
+                else:
+                    formatted_value = value
+            else:
+                # For any other types, convert to string
+                formatted_value = str(value)
+                
+            # Truncate extremely long values to avoid hitting Discord limits
+            if isinstance(formatted_value, str) and len(formatted_value) > 1024:
+                formatted_value = formatted_value[:1021] + "..."
+                
+            # Add the formatted field to the embed
+            embed.add_field(name=field_name, value=formatted_value, inline=False)
+            
+        # Set the footer with the YALC branding
         self.set_embed_footer(embed)
+        
         return embed
 
     def set_embed_footer(self, embed: discord.Embed, event_time: Optional[datetime.datetime] = None, label: str = "YALC Logger") -> None:
-        """Set a standard footer for all log embeds, including a formatted time."""
+        """
+        Set a standard footer for all log embeds, including a formatted time and logo.
+        
+        Parameters
+        ----------
+        embed: discord.Embed
+            The embed to modify
+        event_time: Optional[datetime.datetime]
+            The timestamp to show in the footer
+        label: str
+            Text label to show in the footer
+            
+        Notes
+        -----
+        This preserves the existing embed logo URL as requested.
+        """
+        # Use current time if not specified
         if event_time is None:
             event_time = datetime.datetime.now(datetime.UTC)
-        formatted_time = event_time.strftime('%B %d, %Y, %I:%M %p')
+            
+        # Format time in a readable manner
+        formatted_time = event_time.strftime('%B %d, %Y, %I:%M %p UTC')
+        
+        # Set footer with the existing logo URL
         embed.set_footer(
             text=f"{label} • {formatted_time}",
-            icon_url="https://cdn-icons-png.flaticon.com/512/928/928797.png"
+            icon_url="https://cdn-icons-png.flaticon.com/512/928/928797.png"  # Preserved existing logo
         )
 
     async def cog_unload(self) -> None:
@@ -230,124 +535,603 @@ class YALC(commands.Cog):
 
     @commands.Cog.listener()
     async def on_message_delete(self, message: discord.Message) -> None:
-        """Log message deletion events."""
+        """Log message deletion events, with enhanced Tupperbot filtering."""
         self.log.debug("Listener triggered: on_message_delete")
+        
+        # Skip processing if message has no guild or is in DM
         if not message.guild:
             self.log.debug("No guild on message.")
             return
+            
+        # Check early if we should process this message
         try:
-            should_log = await self.should_log_event(message.guild, "message_delete")
-        except Exception as e:
-            self.log.error(f"Error in should_log_event: {e}")
-            return
-        if not should_log:
-            self.log.debug("should_log_event returned False for message_delete.")
-            return
-        try:
-            channel = await self.get_log_channel(message.guild, "message_delete")
-        except Exception as e:
-            self.log.error(f"Error in get_log_channel: {e}")
-            return
-        self.log.debug(f"About to send to channel: {channel}")
-        if not channel:
-            self.log.warning("No log channel set for message_delete.")
-            return
-        try:
+            # Fetch settings first to avoid redundant DB calls
             settings = await self.config.guild(message.guild).all()
-            if settings.get("ignore_tupperbox", True) and self.is_tupperbox_message(message, settings.get("tupperbox_ids", self.tupperbox_default_ids)):
-                self.log.debug("Skipping Tupperbox message_delete event.")
+            
+            # 1. Check if the event type is enabled at all
+            if not settings["events"].get("message_delete", False):
+                self.log.debug("message_delete event is disabled in settings.")
                 return
+            
+            # 2. Enhanced Tupperbox message detection
+            tupperbox_ids = settings.get("tupperbox_ids", ["239232811662311425"])
+            ignore_tupperbox = settings.get("ignore_tupperbox", True)
+            
+            if ignore_tupperbox:
+                # Check if this specific message is a Tupperbox message
+                if self.is_tupperbox_message(message, tupperbox_ids):
+                    self.log.debug("Skipping Tupperbox message_delete event - direct detection.")
+                    return
+                
+                # Check for proxy deletion patterns
+                if settings.get("detect_proxy_deletes", True):
+                    # Time-based proxy deletion detection
+                    # (Tupperbox often deletes the original command message after proxying)
+                    now = datetime.datetime.now(datetime.UTC)
+                    msg_age = now - message.created_at
+                    
+                    # Check if message is very new (typical for proxy command deletion)
+                    if msg_age.total_seconds() < 3.0:
+                        content = getattr(message, "content", "").lower()
+                        
+                        # Common proxy message command patterns
+                        proxy_commands = [";", "!", "//", "pk;", "tb:", "$", "t!"]
+                        
+                        if any(content.startswith(cmd) for cmd in proxy_commands):
+                            self.log.debug("Skipping likely proxy command deletion.")
+                            return
+                        
+                        # Check for message prefix patterns from settings
+                        custom_prefixes = settings.get("message_prefix_filter", [])
+                        if any(content.startswith(prefix) for prefix in custom_prefixes):
+                            self.log.debug("Skipping deletion due to custom prefix match.")
+                            return
+                
+            # 3. Check webhook ignore setting
+            if settings.get("ignore_webhooks", False) and getattr(message, "webhook_id", None):
+                # Additional filtering for specific webhook names
+                webhook_name_filters = settings.get("webhook_name_filter", [])
+                webhook = getattr(message, "webhook", None)
+                
+                if webhook and webhook_name_filters:
+                    webhook_name = getattr(webhook, "name", "").lower()
+                    if any(filter_term.lower() in webhook_name for filter_term in webhook_name_filters):
+                        self.log.debug(f"Skipping webhook message from filtered name: {webhook_name}")
+                        return
+                else:
+                    self.log.debug("Skipping webhook message (all webhooks ignored).")
+                    return
+                
+            # 4. Check app message ignore setting
+            if settings.get("ignore_apps", True) and getattr(message, "application", None):
+                self.log.debug("Skipping application message deletion.")
+                return
+                
+            # 5. Check if we should ignore based on channel, user, or roles
+            if not await self.should_log_event(message.guild, "message_delete", 
+                                              channel=message.channel, 
+                                              user=message.author,
+                                              message=message):
+                self.log.debug("should_log_event returned False - channel/user/role is ignored.")
+                return
+                
+            # 6. Get the appropriate log channel
+            channel = await self.get_log_channel(message.guild, "message_delete")
+            if not channel:
+                self.log.warning("No log channel set for message_delete.")
+                return
+                
         except Exception as e:
-            self.log.error(f"Error checking Tupperbox ignore: {e}")
+            self.log.error(f"Error in pre-processing message_delete event: {e}", exc_info=True)
+            return
+            
+        # Process and log the event
         try:
             author = getattr(message, "author", None)
             content = getattr(message, "content", "")
             attachments = [a.url for a in getattr(message, "attachments", [])]
             embeds = getattr(message, "embeds", [])
             channel_name = getattr(message.channel, "name", str(message.channel) if message.channel else "Unknown")
-            self.log.debug(f"Logging message_delete: author={author}, content={content}, attachments={attachments}, embeds={embeds}, channel_name={channel_name}")
-            user_link = f"[{author}](https://discord.com/users/{author.id})" if author else "Unknown"
+            
+            # Additional context for debugging
+            self.log.debug(f"Logging message_delete: {author} in #{channel_name}")
+            
+            # Rich message metadata for comprehensive logging
+            metadata = {}
+            
+            # Format timestamps consistently with Discord native formatting
+            if hasattr(message, "created_at") and message.created_at:
+                formatted_time = discord.utils.format_dt(message.created_at, style="F")
+                relative_time = discord.utils.format_dt(message.created_at, style="R")
+                metadata["Created"] = f"{formatted_time} ({relative_time})"
+            
+            # User information with clickable link
+            if author and hasattr(author, "id"):
+                user_link = f"[{author}](https://discord.com/users/{author.id})"
+                metadata["Author"] = f"{user_link} ({author.id})"
+                
+                # Add role info if author is a member (not a webhook or system user)
+                if isinstance(author, discord.Member) and author.roles:
+                    top_role = author.roles[-1] if len(author.roles) > 1 else None
+                    if top_role and top_role.name != "@everyone":
+                        metadata["Top Role"] = f"{top_role.mention} ({top_role.id})"
+            else:
+                metadata["Author"] = "Unknown User"
+            
+            # Initialize the embed with base information
+            description = f"🗑️ Message deleted in {getattr(message.channel, 'mention', str(message.channel))}\n\u200b"
+            
+            # Add jump URL if available (useful for context)
+            message_id = getattr(message, "id", None)
+            channel_id = getattr(message.channel, "id", None)
+            if message_id and channel_id:
+                description += f"\nMessage ID: `{message_id}`"
+            
+            # Build a comprehensive and visually appealing embed
             embed = self.create_embed(
                 "message_delete",
-                f"🗑️ Message deleted in {getattr(message.channel, 'mention', str(message.channel))}\n\u200b",
-                user=user_link,
-                channel_name=channel_name,
-                content=content if content else None,
-                attachments=attachments if attachments else None,
-                embeds="Yes" if embeds else None
+                description,
+                **metadata
             )
+            
+            # Format content with proper code blocks for different content types
+            if content:
+                # Use syntax highlighting for code blocks if detected
+                if content.startswith("```") and content.endswith("```"):
+                    # Preserve the code block as-is
+                    embed.add_field(name="Content", value=content[:1024] if len(content) <= 1024 
+                                   else content[:1021] + "...", inline=False)
+                else:
+                    # Format regular text with multi-line support and proper escaping
+                    formatted_content = content
+                    if len(formatted_content) > 1024:
+                        formatted_content = formatted_content[:1021] + "..."
+                    
+                    embed.add_field(name="Content", value=f"```\n{formatted_content}\n```", inline=False)
+            else:
+                embed.add_field(name="Content", value="*No text content*", inline=False)
+            
+            # Handle attachments with better formatting
+            if attachments:
+                attachment_list = []
+                for i, url in enumerate(attachments):
+                    file_name = url.split("/")[-1]
+                    attachment_list.append(f"[{file_name}]({url})")
+                
+                embed.add_field(
+                    name=f"Attachments ({len(attachments)})",
+                    value="\n".join(attachment_list) if len(attachment_list) <= 5 
+                          else "\n".join(attachment_list[:5]) + f"\n*...and {len(attachment_list) - 5} more*",
+                    inline=False
+                )
+            
+            # Add embed information if message contained embeds
+            if embeds:
+                embed_info = []
+                for i, msg_embed in enumerate(embeds[:3]):  # Show details for first 3 embeds
+                    embed_title = getattr(msg_embed, "title", "*No title*")
+                    embed_desc = getattr(msg_embed, "description", "*No description*")
+                    if embed_desc and len(embed_desc) > 50:
+                        embed_desc = embed_desc[:47] + "..."
+                    
+                    embed_info.append(f"**Embed {i+1}**: {embed_title}\n{embed_desc}")
+                
+                if len(embeds) > 3:
+                    embed_info.append(f"*...and {len(embeds) - 3} more embeds*")
+                
+                embed.add_field(
+                    name=f"Embeds ({len(embeds)})",
+                    value="\n".join(embed_info),
+                    inline=False
+                )
+            
+            # Channel information
+            embed.add_field(
+                name="Channel",
+                value=f"{getattr(message.channel, 'mention', '#' + channel_name)} (`{channel_name}`)",
+                inline=True
+            )
+            
+            # Include user thumbnail for better visual identification
+            if settings.get("include_thumbnails", True) and author and hasattr(author, "display_avatar") and author.display_avatar:
+                embed.set_thumbnail(url=author.display_avatar.url)
+            
+            # Send the log message to the configured channel
             await self.safe_send(channel, embed=embed)
+            
         except Exception as e:
-            self.log.error(f"Failed to log message_delete: {e}")
+            self.log.error(f"Failed to log message_delete: {e}", exc_info=True)
 
     @commands.Cog.listener()
     async def on_message_edit(self, before: discord.Message, after: discord.Message) -> None:
-        """Log message edit events, skipping Tupperbox proxies if configured."""
+        """Log message edit events, with enhanced Tupperbot filtering."""
         self.log.debug("Listener triggered: on_message_edit")
+        
+        # Skip processing if no guild (DM message or other non-guild context)
         if not before.guild:
             self.log.debug("No guild on message.")
             return
+            
+        # Early processing checks
         try:
-            should_log = await self.should_log_event(before.guild, "message_edit")
-        except Exception as e:
-            self.log.error(f"Error in should_log_event: {e}")
-            return
-        if not should_log:
-            self.log.debug("should_log_event returned False for message_edit.")
-            return
-        try:
-            channel = await self.get_log_channel(before.guild, "message_edit")
-        except Exception as e:
-            self.log.error(f"Error in get_log_channel: {e}")
-            return
-        self.log.debug(f"About to send to channel: {channel}")
-        if not channel:
-            self.log.warning("No log channel set for message_edit.")
-            return
-        try:
+            # Get settings once to avoid redundant database calls
             settings = await self.config.guild(before.guild).all()
-            tupperbox_ids = settings.get("tupperbox_ids", getattr(self, "tupperbox_default_ids", ["239232811662311425"]))
-            ignore_tupperbox = settings.get("ignore_tupperbox", True)
-            if ignore_tupperbox and (
-                self.is_tupperbox_message(before, tupperbox_ids) or self.is_tupperbox_message(after, tupperbox_ids)
-            ):
-                self.log.debug("Skipping Tupperbox message_edit event (matched before or after message).")
+            
+            # 1. Check if the message_edit event is enabled
+            if not settings["events"].get("message_edit", False):
+                self.log.debug("message_edit event is disabled in settings.")
                 return
+                
+            # 2. Enhanced Tupperbot filtering
+            tupperbox_ids = settings.get("tupperbox_ids", ["239232811662311425"])
+            ignore_tupperbox = settings.get("ignore_tupperbox", True)
+            
+            if ignore_tupperbox:
+                # Check both the before and after states of the message
+                is_before_tupperbox = self.is_tupperbox_message(before, tupperbox_ids)
+                is_after_tupperbox = self.is_tupperbox_message(after, tupperbox_ids)
+                
+                if is_before_tupperbox or is_after_tupperbox:
+                    self.log.debug(
+                        f"Skipping Tupperbox message_edit event - Before:{is_before_tupperbox}, After:{is_after_tupperbox}"
+                    )
+                    return
+                    
+            # 3. Check ignore lists (channel, user, role)
+            if not await self.should_log_event(before.guild, "message_edit", 
+                                              channel=before.channel, 
+                                              user=before.author):
+                self.log.debug("should_log_event returned False - channel/user/role is ignored.")
+                return
+                
+            # 4. Get the appropriate log channel
+            channel = await self.get_log_channel(before.guild, "message_edit")
+            if not channel:
+                self.log.warning("No log channel set for message_edit.")
+                return
+                
         except Exception as e:
-            self.log.error(f"Error checking Tupperbox ignore: {e}")
+            self.log.error(f"Error in pre-processing message_edit event: {e}", exc_info=True)
+            return
+        
+        # Process and log the event
         try:
+            # Gather comprehensive message metadata
             author = getattr(before, "author", None)
             attachments = [a.url for a in getattr(after, "attachments", [])]
             embeds = getattr(after, "embeds", [])
             channel_name = getattr(before.channel, "name", str(before.channel) if before.channel else "Unknown")
-            self.log.debug(f"Logging message_edit: author={author}, before={before.content}, after={after.content}, attachments={attachments}, embeds={embeds}, channel_name={channel_name}")
-            user_link = f"[{author}](https://discord.com/users/{author.id})" if author else "Unknown"
+            
+            # Additional context for debugging
+            self.log.debug(f"Logging message_edit in #{channel_name} by {author}")
+            
+            # Prepare user identification with link
+            user_link = f"[{author}](https://discord.com/users/{author.id})" if author and hasattr(author, "id") else "Unknown"
+            
+            # Include jump URL if available
             jump_url = getattr(after, "jump_url", None)
+            
+            # Rich message metadata for comprehensive logging
+            metadata = {
+                "Author": f"{user_link} ({author.id})" if author and hasattr(author, "id") else "Unknown",
+                "Channel": f"#{channel_name}"
+            }
+            
+            # Add creation and edit timestamps if available
+            if hasattr(after, "created_at") and after.created_at:
+                metadata["Created"] = discord.utils.format_dt(after.created_at, style="F")
+            if hasattr(after, "edited_at") and after.edited_at:
+                metadata["Edited"] = discord.utils.format_dt(after.edited_at, style="R")
+            
+            # Create a visually appealing and comprehensive embed
             embed = self.create_embed(
                 "message_edit",
-                f"✏️ Message edited in {getattr(before.channel, 'mention', str(before.channel))}\n\u200b",
-                user=user_link,
-                channel_name=channel_name
+                f"✏️ Message edited in {getattr(before.channel, 'mention', str(before.channel))}\n\u200b"
             )
+            
+            # Add fields for metadata
+            for key, value in metadata.items():
+                embed.add_field(name=key, value=value, inline=True)
+            
+            # Add message content comparison (before/after)
             before_text = before.content or 'No content'
             after_text = after.content or 'No content'
-            embed.add_field(name="Before", value=f"> {before_text}", inline=False)
-            embed.add_field(name="After", value=f"> {after_text}", inline=False)
+            
+            # Format content with proper quoting for better readability
+            if len(before_text) > 1024:
+                before_text = before_text[:1021] + "..."
+            if len(after_text) > 1024:
+                after_text = after_text[:1021] + "..."
+                
+            embed.add_field(name="Before", value=f"```\n{before_text}\n```", inline=False)
+            embed.add_field(name="After", value=f"```\n{after_text}\n```", inline=False)
+            
+            # Add jump link to original message
             if jump_url:
-                embed.add_field(name="Jump to Message", value=f"[Click here to view the message]({jump_url})", inline=False)
+                embed.add_field(
+                    name="Jump to Message", 
+                    value=f"[Click here to view the message]({jump_url})", 
+                    inline=False
+                )
+                
+            # Add attachment and embed information
             if attachments:
-                embed.add_field(name="Attachments", value="\n".join(attachments), inline=False)
+                attachment_text = "\n".join([f"[Attachment {i+1}]({url})" for i, url in enumerate(attachments)])
+                embed.add_field(name="Attachments", value=attachment_text, inline=False)
+                
             if embeds:
-                embed.add_field(name="Embeds", value="Yes", inline=False)
-            edit_time = after.edited_at or after.created_at or discord.utils.utcnow()
-            if edit_time:
-                self.set_embed_footer(embed, event_time=edit_time, label="YALC Logger • Edited")
-            else:
-                self.set_embed_footer(embed)
+                embed.add_field(
+                    name="Embeds", 
+                    value=f"Message contains {len(embeds)} embed{'s' if len(embeds) != 1 else ''}", 
+                    inline=False
+                )
+                
+            # Include user thumbnail for better visual identification
+            if author and hasattr(author, "display_avatar") and author.display_avatar:
+                embed.set_thumbnail(url=author.display_avatar.url)
+                
+            # Set appropriate footer with timestamp
+            edit_time = after.edited_at or after.created_at or datetime.datetime.now(datetime.UTC)
+            self.set_embed_footer(embed, event_time=edit_time, label="YALC Logger • Message Edit")
+            
+            # Send the log embed
             await self.safe_send(channel, embed=embed)
+            
         except Exception as e:
-            self.log.error(f"Failed to log message_edit: {e}")
+            self.log.error(f"Failed to log message_edit: {e}", exc_info=True)
 
+    @commands.Cog.listener()
+    async def on_bulk_message_delete(self, messages: List[discord.Message]) -> None:
+        """
+        Log bulk message deletion events with enhanced Tupperbot filtering.
+        
+        This handler processes bulk message deletions (purges) and generates
+        a comprehensive log entry with user statistics and message samples.
+        
+        Parameters
+        ----------
+        messages: List[discord.Message]
+            The list of deleted messages
+        """
+        # Skip if no messages were provided
+        if not messages:
+            self.log.debug("Empty message list for bulk_message_delete.")
+            return
+            
+        # Use the first message to get guild and channel info
+        first_msg = messages[0]
+        guild = first_msg.guild
+        channel = first_msg.channel
+        
+        if not guild:
+            self.log.debug("No guild on bulk message delete.")
+            return
+            
+        # Check if we should log this event
+        try:
+            settings = await self.config.guild(guild).all()
+            
+            # Skip if event is disabled
+            if not settings["events"].get("message_bulk_delete", False):
+                self.log.debug("message_bulk_delete event is disabled.")
+                return
+                
+            # Check if channel is in ignore list
+            if channel.id in settings.get("ignored_channels", []):
+                self.log.debug(f"Channel {channel.id} is in the ignored channels list.")
+                return
+                
+            # Check if channel category is ignored
+            if isinstance(channel, discord.TextChannel) and channel.category:
+                if channel.category.id in settings.get("ignored_categories", []):
+                    self.log.debug(f"Category {channel.category.id} is in the ignored categories list.")
+                    return
+                
+            # Get the appropriate log channel
+            log_channel = await self.get_log_channel(guild, "message_bulk_delete")
+            if not log_channel:
+                self.log.debug("No log channel configured for message_bulk_delete.")
+                return
+                
+            # Apply enhanced filtering
+            filtered_messages = messages
+            filtered_out_count = 0
+            
+            # Filter out Tupperbot messages if configured
+            if settings.get("ignore_tupperbox", True):
+                tupperbox_ids = settings.get("tupperbox_ids", ["239232811662311425"])
+                
+                original_count = len(filtered_messages)
+                filtered_messages = [
+                    msg for msg in filtered_messages 
+                    if not self.is_tupperbox_message(msg, tupperbox_ids)
+                ]
+                filtered_out_count += original_count - len(filtered_messages)
+                
+            # Filter out webhook messages if configured
+            if settings.get("ignore_webhooks", False):
+                original_count = len(filtered_messages)
+                filtered_messages = [
+                    msg for msg in filtered_messages 
+                    if not getattr(msg, "webhook_id", None)
+                ]
+                filtered_out_count += original_count - len(filtered_messages)
+                
+            # Filter out app messages if configured
+            if settings.get("ignore_apps", True):
+                original_count = len(filtered_messages)
+                filtered_messages = [
+                    msg for msg in filtered_messages 
+                    if not getattr(msg, "application", None)
+                ]
+                filtered_out_count += original_count - len(filtered_messages)
+            
+            # Skip logging if all messages were filtered out
+            if len(filtered_messages) == 0:
+                self.log.debug(f"All {len(messages)} bulk deleted messages were filtered out.")
+                return
+            
+            # Sort messages by timestamp for chronological order
+            filtered_messages.sort(key=lambda m: m.created_at)
+            
+            # Create a comprehensive log embed
+            embed = self.create_embed(
+                "message_bulk_delete",
+                f"♻️ **{len(filtered_messages)}** messages were bulk deleted in {channel.mention}\n\u200b"
+            )
+            
+            # Add metadata about the deletion
+            embed.add_field(
+                name="Channel", 
+                value=f"{channel.mention} (`{channel.name}`, ID: {channel.id})",
+                inline=True
+            )
+            
+            # Add thread info if applicable
+            if isinstance(channel, discord.Thread):
+                parent_channel = getattr(channel, "parent", None)
+                if parent_channel:
+                    embed.add_field(
+                        name="Parent Channel",
+                        value=f"{parent_channel.mention} (`{parent_channel.name}`)",
+                        inline=True
+                    )
+            
+            # Add time range info
+            oldest_msg = filtered_messages[0]
+            newest_msg = filtered_messages[-1]
+            
+            time_range = (
+                f"From {discord.utils.format_dt(oldest_msg.created_at, 'F')} "
+                f"to {discord.utils.format_dt(newest_msg.created_at, 'F')}"
+            )
+            embed.add_field(name="Time Range", value=time_range, inline=False)
+            
+            # Add message count information with filter details
+            message_count_text = f"{len(filtered_messages)} messages deleted"
+            if filtered_out_count > 0:
+                message_count_text += f" ({filtered_out_count} filtered out)"
+                
+            embed.add_field(name="Message Count", value=message_count_text, inline=True)
+            
+            # Add moderation data if available
+            audit_entry = None
+            try:
+                if guild.me.guild_permissions.view_audit_log:
+                    async for entry in guild.audit_logs(limit=5, action=discord.AuditLogAction.message_bulk_delete):
+                        # Match the entry with our channel
+                        target_channel = getattr(entry, "target", None)
+                        if target_channel and target_channel.id == channel.id:
+                            audit_entry = entry
+                            break
+            except Exception as e:
+                self.log.debug(f"Could not fetch audit logs: {e}")
+                
+            if audit_entry:
+                embed.add_field(
+                    name="Deleted By",
+                    value=f"{audit_entry.user.mention} ({audit_entry.user})",
+                    inline=True
+                )
+                
+                if hasattr(audit_entry, "reason") and audit_entry.reason:
+                    embed.add_field(name="Reason", value=audit_entry.reason, inline=True)
+            
+            # Add authors summary (who sent the deleted messages)
+            authors = {}
+            for msg in filtered_messages:
+                if msg.author:
+                    author_id = msg.author.id
+                    if author_id in authors:
+                        authors[author_id]["count"] += 1
+                    else:
+                        authors[author_id] = {
+                            "name": str(msg.author),
+                            "id": author_id,
+                            "count": 1,
+                            "mention": msg.author.mention,
+                            "avatar": getattr(msg.author, "display_avatar", None)
+                        }
+            
+            if authors:
+                # Sort by message count (most active users first)
+                sorted_authors = sorted(
+                    authors.items(), 
+                    key=lambda x: x[1]["count"],
+                    reverse=True
+                )
+                
+                authors_text = []
+                for author_id, data in sorted_authors[:10]:  # Limit to top 10 authors
+                    authors_text.append(
+                        f"• {data['mention']} (`{data['name']}`, ID: `{data['id']}`): **{data['count']} message(s)**"
+                    )
+                    
+                if len(sorted_authors) > 10:
+                    authors_text.append(f"*...and {len(sorted_authors) - 10} more users*")
+                    
+                embed.add_field(
+                    name="Message Authors", 
+                    value="\n".join(authors_text), 
+                    inline=False
+                )
+                
+                # Set thumbnail to the user with most messages
+                if sorted_authors and settings.get("include_thumbnails", True):
+                    top_author = sorted_authors[0][1]
+                    if "avatar" in top_author and top_author["avatar"]:
+                        embed.set_thumbnail(url=top_author["avatar"].url)
+                
+            # Add content preview (first few and last few messages)
+            preview_count = min(5, len(filtered_messages))
+            if preview_count > 0:
+                # First messages
+                first_msgs = filtered_messages[:preview_count]
+                
+                preview_text = []
+                for msg in first_msgs:
+                    author_name = str(msg.author) if msg.author else "Unknown"
+                    content = msg.content if msg.content else "[No text content]"
+                    if len(content) > 60:
+                        content = content[:57] + "..."
+                    timestamp = discord.utils.format_dt(msg.created_at, style="R")
+                    preview_text.append(f"• **{author_name}** ({timestamp}): {content}")
+                    
+                embed.add_field(
+                    name=f"First {preview_count} Messages" if len(filtered_messages) > preview_count 
+                         else "Messages",
+                    value="\n".join(preview_text) or "*No preview available*",
+                    inline=False
+                )
+                
+                # Last messages (if we have more than 2*preview_count)
+                if len(filtered_messages) > preview_count * 2:
+                    last_msgs = filtered_messages[-preview_count:]
+                    
+                    preview_text = []
+                    for msg in last_msgs:
+                        author_name = str(msg.author) if msg.author else "Unknown"
+                        content = msg.content if msg.content else "[No text content]"
+                        if len(content) > 60:
+                            content = content[:57] + "..."
+                        timestamp = discord.utils.format_dt(msg.created_at, style="R")
+                        preview_text.append(f"• **{author_name}** ({timestamp}): {content}")
+                        
+                    embed.add_field(
+                        name=f"Last {preview_count} Messages",
+                        value="\n".join(preview_text) or "*No preview available*",
+                        inline=False
+                    )
+            
+            # Add timestamp for when deletion occurred
+            self.set_embed_footer(embed, label="YALC Logger • Bulk Message Delete")
+            
+            # Send the log entry
+            await self.safe_send(log_channel, embed=embed)
+            
+        except Exception as e:
+            self.log.error(f"Error logging bulk message delete: {e}", exc_info=True)
+    
     @commands.Cog.listener()
     async def on_member_join(self, member: discord.Member) -> None:
         """Log member join events."""
@@ -1016,896 +1800,436 @@ class YALC(commands.Cog):
             self.log.error(f"Failed to log emoji_update: {e}")
 
     @commands.Cog.listener()
-    async def on_voice_state_update(self, member: discord.Member, before: discord.VoiceState, after: discord.VoiceState) -> None:
-        """Log simple, readable voice state changes."""
-        self.log.debug("Listener triggered: on_voice_state_update")
-        if not member.guild:
-            self.log.debug("No guild on member.")
-            return
-        try:
-            should_log = await self.should_log_event(member.guild, "voice_update")
-        except Exception as e:
-            self.log.error(f"Error in should_log_event: {e}")
-            return
-        if not should_log:
-            self.log.debug("should_log_event returned False for voice_update.")
-            return
-        try:
-            channel = await self.get_log_channel(member.guild, "voice_update")
-        except Exception as e:
-            self.log.error(f"Error in get_log_channel: {e}")
-            return
-        self.log.debug(f"About to send to channel: {channel}")
-        if not channel:
-            self.log.warning("No log channel set for voice_update.")
-            return
-        try:
-            # Only log the most relevant, simple changes
-            events = []
-            if before.channel != after.channel:
-                if before.channel and not after.channel:
-                    events.append(f"{member.mention} left {before.channel.mention}")
-                elif not before.channel and after.channel:
-                    events.append(f"{member.mention} joined {after.channel.mention}")
-                elif before.channel and after.channel:
-                    events.append(f"{member.mention} moved from {before.channel.mention} to {after.channel.mention}")
-            if before.mute != after.mute:
-                events.append(f"{member.mention} was {'muted' if after.mute else 'unmuted'} by server")
-            if before.deaf != after.deaf:
-                events.append(f"{member.mention} was {'deafened' if after.deaf else 'undeafened'} by server")
-            if before.self_mute != after.self_mute:
-                events.append(f"{member.mention} {'muted themselves' if after.self_mute else 'unmuted themselves'}")
-            if before.self_deaf != after.self_deaf:
-                events.append(f"{member.mention} {'deafened themselves' if after.self_deaf else 'undeafened themselves'}")
-            if not events:
-                return
-            for event in events:
-                embed = discord.Embed(
-                    description=event,
-                    color=discord.Color.purple(),
-                    timestamp=datetime.datetime.now(datetime.UTC)
-                )
-                self.set_embed_footer(embed, label="YALC Logger • Voice")
-                await self.safe_send(channel, embed=embed)
-        except Exception as e:
-            self.log.error(f"Failed to log voice_update: {e}")
-
-    @commands.Cog.listener()
-    async def on_member_kick(self, guild: discord.Guild, user: discord.User) -> None:
-        self.log.debug("Listener triggered: on_member_kick")
-        if not guild or not await self.should_log_event(guild, "member_kick"):
-            return
-        channel = await self.get_log_channel(guild, "member_kick")
-        self.log.debug(f"About to send to channel: {channel}")
-        if not channel:
-            return
-        embed = self.create_embed(
-            "member_kick",
-            f"👢 {user} has been kicked.",
-            user=f"{user} ({user.id})"
-        )
-        await self.safe_send(channel, embed=embed)
-
-    @commands.Cog.listener()
-    async def on_command(self, ctx: commands.Context) -> None:
-        self.log.debug("Listener triggered: on_command")
-        if not ctx.guild or not await self.should_log_event(ctx.guild, "command_use"):
-            return
-        channel = await self.get_log_channel(ctx.guild, "command_use")
-        self.log.debug(f"About to send to channel: {channel}")
-        if not channel:
-            return
-        channel_name = getattr(ctx.channel, "name", str(ctx.channel) if ctx.channel else "Unknown")
-        embed = self.create_embed(
-            "command_use",
-            f"⌨️ Command used: `{ctx.command}`",
-            user=f"{ctx.author} ({ctx.author.id})",
-            channel=channel_name
-        )
-        await self.safe_send(channel, embed=embed)
-
-    @commands.Cog.listener()
-    async def on_command_error(self, ctx: commands.Context, error: Exception) -> None:
-        self.log.debug("Listener triggered: on_command_error")
-        if not ctx.guild or not await self.should_log_event(ctx.guild, "command_error"):
-            return
-        channel = await self.get_log_channel(ctx.guild, "command_error")
-        self.log.debug(f"About to send to channel: {channel}")
-        if not channel:
-            return
-        channel_name = getattr(ctx.channel, "name", str(ctx.channel) if ctx.channel else "Unknown")
-        embed = self.create_embed(
-            "command_error",
-            f"⚠️ Error in command `{ctx.command}`",
-            user=f"{ctx.author} ({ctx.author.id})",
-            error=str(error),
-            channel=channel_name
-        )
-        await self.safe_send(channel, embed=embed)
-
-    @commands.Cog.listener()
-    async def on_application_command(self, interaction: discord.Interaction) -> None:
-        self.log.debug("Listener triggered: on_application_command")
-        if not interaction.guild or not await self.should_log_event(interaction.guild, "application_cmd"):
-            return
-        channel = await self.get_log_channel(interaction.guild, "application_cmd")
-        self.log.debug(f"About to send to channel: {channel}")
-        if not channel:
-            return
-        channel_name = getattr(interaction.channel, "name", str(interaction.channel) if interaction.channel else "Unknown")
-        embed = self.create_embed(
-            "application_cmd",
-            f"🔷 Slash command used: `{interaction.command}`",
-            user=f"{interaction.user} ({interaction.user.id})",
-            channel=channel_name
-        )
-        await self.safe_send(channel, embed=embed)
-
-    # --- Forum Event Listeners ---
-
-    @commands.Cog.listener()
-    async def on_forum_post_create(self, post) -> None:
-        """Log forum post creation events."""
-        self.log.debug("Listener triggered: on_forum_post_create")
-        guild = getattr(post, "guild", None)
-        if not guild:
-            self.log.debug("No guild on forum post.")
-            return
-        try:
-            should_log = await self.should_log_event(guild, "forum_post_create")
-        except Exception as e:
-            self.log.error(f"Error in should_log_event: {e}")
-            return
-        if not should_log:
-            self.log.debug("should_log_event returned False for forum_post_create.")
-            return
-        try:
-            channel = await self.get_log_channel(guild, "forum_post_create")
-        except Exception as e:
-            self.log.error(f"Error in get_log_channel: {e}")
-            return
-        self.log.debug(f"About to send to channel: {channel}")
-        if not channel:
-            self.log.warning("No log channel set for forum_post_create.")
-            return
-        try:
-            author = getattr(post, "author", None)
-            title = getattr(post, "title", "Unknown")
-            content = getattr(post, "content", "")
-            forum_name = getattr(getattr(post, "parent", None), "name", "Unknown Forum")
-            embed = self.create_embed(
-                "forum_post_create",
-                f"📰 Forum post created in {forum_name}",
-                user=f"{author} ({getattr(author, 'id', 'N/A')})" if author else "Unknown",
-                title=title,
-                content=content
-            )
-            await self.safe_send(channel, embed=embed)
-        except Exception as e:
-            self.log.error(f"Failed to log forum_post_create: {e}")
-
-    @commands.Cog.listener()
-    async def on_forum_post_update(self, before, after) -> None:
-        """Log forum post update events."""
-        self.log.debug("Listener triggered: on_forum_post_update")
-        guild = getattr(after, "guild", None)
-        if not guild:
-            self.log.debug("No guild on forum post.")
-            return
-        try:
-            should_log = await self.should_log_event(guild, "forum_post_update")
-        except Exception as e:
-            self.log.error(f"Error in should_log_event: {e}")
-            return
-        if not should_log:
-            self.log.debug("should_log_event returned False for forum_post_update.")
-            return
-        try:
-            channel = await self.get_log_channel(guild, "forum_post_update")
-        except Exception as e:
-            self.log.error(f"Error in get_log_channel: {e}")
-            return
-        self.log.debug(f"About to send to channel: {channel}")
-        if not channel:
-            self.log.warning("No log channel set for forum_post_update.")
-            return
-        try:
-            author = getattr(after, "author", None)
-            title_before = getattr(before, "title", "Unknown")
-            title_after = getattr(after, "title", "Unknown")
-            content_before = getattr(before, "content", "")
-            content_after = getattr(after, "content", "")
-            forum_name = getattr(getattr(after, "parent", None), "name", "Unknown Forum")
-            changes = []
-            if title_before != title_after:
-                changes.append(f"Title: {title_before} → {title_after}")
-            if content_before != content_after:
-                changes.append("Content updated")
-            if not changes:
-                return
-            embed = self.create_embed(
-                "forum_post_update",
-                f"📰 Forum post updated in {forum_name}",
-                user=f"{author} ({getattr(author, 'id', 'N/A')})" if author else "Unknown",
-                changes="\n".join(changes)
-            )
-            await self.safe_send(channel, embed=embed)
-        except Exception as e:
-            self.log.error(f"Failed to log forum_post_update: {e}")
-
-    @commands.Cog.listener()
-    async def on_forum_post_delete(self, post) -> None:
-        """Log forum post deletion events."""
-        self.log.debug("Listener triggered: on_forum_post_delete")
-        guild = getattr(post, "guild", None)
-        if not guild:
-            self.log.debug("No guild on forum post.")
-            return
-        try:
-            should_log = await self.should_log_event(guild, "forum_post_delete")
-        except Exception as e:
-            self.log.error(f"Error in should_log_event: {e}")
-            return
-        if not should_log:
-            self.log.debug("should_log_event returned False for forum_post_delete.")
-            return
-        try:
-            channel = await self.get_log_channel(guild, "forum_post_delete")
-        except Exception as e:
-            self.log.error(f"Error in get_log_channel: {e}")
-            return
-        self.log.debug(f"About to send to channel: {channel}")
-        if not channel:
-            self.log.warning("No log channel set for forum_post_delete.")
-            return
-        try:
-            author = getattr(post, "author", None)
-            title = getattr(post, "title", "Unknown")
-            forum_name = getattr(getattr(post, "parent", None), "name", "Unknown Forum")
-            embed = self.create_embed(
-                "forum_post_delete",
-                f"📰 Forum post deleted in {forum_name}",
-                user=f"{author} ({getattr(author, 'id', 'N/A')})" if author else "Unknown",
-                title=title
-            )
-            await self.safe_send(channel, embed=embed)
-        except Exception as e:
-            self.log.error(f"Failed to log forum_post_delete: {e}")
-
-    @commands.hybrid_group(name="yalc", invoke_without_command=True, with_app_command=True, description="YALC logging configuration commands.")
-    async def yalc(self, ctx: commands.Context) -> None:
-        """YALC logging configuration commands."""
-        prefix = ctx.clean_prefix
-        embed = discord.Embed(
-            title="YALC Logging Commands",
-            description=(
-                f"`{prefix}yalc setup` - Start the setup wizard\n"
-                f"`{prefix}yalc events` - Show current event logging status\n"
-                f"`{prefix}yalc enable <event>` - Enable logging for an event\n"
-                f"`{prefix}yalc disable <event>` - Disable logging for an event\n"
-                f"`{prefix}yalc setchannel <event> <channel>` - Set log channel for an event\n"
-                f"`{prefix}yalc removechannel <event>` - Remove log channel override for an event\n"
-                f"`{prefix}yalc tboxignore [enabled]` - Toggle Tupperbox ignore\n"
-                f"`{prefix}yalc addtbox <bot_id>` - Add Tupperbox bot ID to ignore\n"
-                f"`{prefix}yalc removetbox <bot_id>` - Remove Tupperbox bot ID from ignore list"
-            ),
-            color=discord.Color.blurple()
-        )
-        await ctx.send(embed=embed, ephemeral=True)
-
-    @yalc.command(name="events", with_app_command=True, description="List all loggable events and their status.")
-    async def yalc_events_cmd(self, ctx: commands.Context) -> None:
-        """List all loggable events and their status."""
-        await self.yalc_events(ctx)
-
-    @yalc.command(name="enable", with_app_command=True, description="Enable logging for an event.")
-    async def yalc_enable_cmd(self, ctx: commands.Context, event: str) -> None:
-        """Enable logging for an event."""
-        await self.yalc_enable(ctx, event)
-
-    @yalc.command(name="disable", with_app_command=True, description="Disable logging for an event.")
-    async def yalc_disable_cmd(self, ctx: commands.Context, event: str) -> None:
-        """Disable logging for an event."""
-        await self.yalc_disable(ctx, event)
-
-    @yalc.command(name="setchannel", with_app_command=True, description="Set the log channel for an event.")
-    async def yalc_setchannel_cmd(self, ctx: commands.Context, event: str, channel: Optional[discord.TextChannel]) -> None:
-        """Set the log channel for an event."""
-        await self.yalc_setchannel(ctx, event, channel)
-
-    @yalc.command(name="removechannel", with_app_command=True, description="Remove the log channel override for an event.")
-    async def yalc_removechannel_cmd(self, ctx: commands.Context, event: str) -> None:
-        """Remove the log channel override for an event."""
-        await self.yalc_removechannel(ctx, event)
-
-    @yalc.command(name="tboxignore", with_app_command=True, description="Enable or disable ignoring Tupperbox messages in logs.")
-    async def yalc_tboxignore_cmd(self, ctx: commands.Context, enabled: Optional[bool] = None) -> None:
-        """Enable or disable ignoring Tupperbox messages in logs."""
-        try:
-            if enabled is None:
-                current = await self.config.guild(ctx.guild).ignore_tupperbox()
-                await ctx.send(
-                    f"Tupperbox ignore is currently {'enabled' if current else 'disabled'}.",
-                    ephemeral=True
-                )
-                return
-            await self.config.guild(ctx.guild).ignore_tupperbox.set(enabled)
-            await ctx.send(
-                f"Tupperbox ignore set to {'enabled' if enabled else 'disabled'}.",
-                ephemeral=True
-            )
-        except Exception as e:
-            self.log.error(f"Failed to set Tupperbox ignore: {e}")
-            await ctx.send("Failed to update Tupperbox ignore setting.", ephemeral=True)
-
-    @yalc.command(name="addtbox", with_app_command=True, description="Add a bot user ID to ignore as Tupperbox proxy.")
-    async def yalc_tupperbox_add_cmd(self, ctx: commands.Context, bot_id: str) -> None:
-        """Add a bot user ID to ignore as Tupperbox proxy."""
-        await self.tupperbox_addid(ctx, bot_id)
-
-    @yalc.command(name="removetbox", with_app_command=True, description="Remove a bot user ID from the Tupperbox ignore list.")
-    async def yalc_tupperbox_remove_cmd(self, ctx: commands.Context, bot_id: str) -> None:
-        """Remove a bot user ID from the Tupperbox ignore list."""
-        await self.tupperbox_removeid(ctx, bot_id)
-
-    @yalc.command(name="setup", with_app_command=True, description="Start the interactive setup wizard for YALC.")
-    @commands.has_permissions(manage_guild=True)
-    @commands.guild_only()
-    async def yalc_setup_cmd(self, ctx: commands.Context) -> None:
-        """Simplified interactive setup for YALC logging."""
+    async def on_command_error(self, ctx: commands.Context, error: commands.CommandError) -> None:
+        """
+        Log command error events.
+        
+        Parameters
+        ----------
+        ctx: commands.Context
+            The context of the command
+        error: commands.CommandError
+            The error that occurred
+        """
+        # Skip if not in a guild
         if not ctx.guild:
-            await ctx.send("This command must be used in a server.", ephemeral=True)
             return
             
-        if not ctx.channel.permissions_for(ctx.author).manage_guild:
-            await ctx.send("You need the Manage Server permission to run setup.", ephemeral=True)
-            return
-
-        # Step 1: Channel setup
-        await ctx.send(
-            "How would you like to set up logging channels?\n"
-            "1️⃣ Create a new category and channels\n"
-            "2️⃣ Use existing channels\n"
-            "3️⃣ Skip (I'll set channels manually)",
-            ephemeral=True
-        )
-        setup_msg = await ctx.send("React with 1️⃣, 2️⃣, or 3️⃣.", ephemeral=True)
-        for emoji in ["1️⃣", "2️⃣", "3️⃣"]:
-            try:
-                await setup_msg.add_reaction(emoji)
-            except Exception:
-                pass
-
-        def setup_check(reaction, user):
-            return (
-                user == ctx.author 
-                and reaction.message.id == setup_msg.id 
-                and str(reaction.emoji) in ["1️⃣", "2️⃣", "3️⃣"]
-            )
-        
         try:
-            reaction, _ = await ctx.bot.wait_for("reaction_add", timeout=60.0, check=setup_check)
-        except asyncio.TimeoutError:
-            await ctx.send("Setup timed out. Please run setup again.", ephemeral=True)
-            return
-
-        choice = str(reaction.emoji)
-        log_channels = {}
-        use_emojis = False
-        channel_defs = [
-            ("member", "👤 member-logs", "member-logs"),
-            ("message", "📝 message-logs", "message-logs"),
-            ("channel", "📺 channel-logs", "channel-logs"),
-            ("role", "✨ role-logs", "role-logs"),
-            ("voice", "🎤 voice-logs", "voice-logs"),
-            ("server", "⚙️ server-logs", "server-logs"),
-            ("emoji", "😀 emoji-sticker-logs", "emoji-sticker-logs")
-        ]
-
-        if choice == "1️⃣":
-            # Emoji preference
-            emoji_prompt = await ctx.send(
-                "Do you want to include emojis in the category and channel names? React ✅ for yes, ❌ for no.",
-                ephemeral=True
-            )
-            try:
-                await emoji_prompt.add_reaction("✅")
-                await emoji_prompt.add_reaction("❌")
-            except Exception:
-                pass
-
-            def emoji_check(reaction, user):
-                return (
-                    user == ctx.author 
-                    and reaction.message.id == emoji_prompt.id 
-                    and str(reaction.emoji) in ["✅", "❌"]
-                )
-
-            try:
-                emoji_reaction, _ = await ctx.bot.wait_for("reaction_add", timeout=30.0, check=emoji_check)
-                use_emojis = str(emoji_reaction.emoji) == "✅"
-            except asyncio.TimeoutError:
-                await ctx.send("Timed out. Using no emojis by default.", ephemeral=True)
-                use_emojis = False
-
-            # Create category and channels
-            cat_name = "📝 YALC Logs" if use_emojis else "YALC Logs"
-            try:
-                category = await ctx.guild.create_category_channel(cat_name, reason="YALC setup")
-                for key, emoji_name, plain_name in channel_defs:
-                    channel = await ctx.guild.create_text_channel(
-                        emoji_name if use_emojis else plain_name,
-                        category=category,
-                        reason=f"YALC setup - {plain_name}"
-                    )
-                    log_channels[key] = channel
-                await ctx.send("✅ Created all log channels.", ephemeral=True)
-            except Exception as e:
-                self.log.error(f"Failed to create channels: {e}")
-                await ctx.send("❌ Failed to create some channels. Please check permissions.", ephemeral=True)
+            # Get settings
+            settings = await self.config.guild(ctx.guild).all()
+            
+            # Skip if event is disabled
+            if not settings["events"].get("command_error", False):
                 return
-
-        elif choice == "2️⃣":
-            for key, emoji_name, plain_name in channel_defs:
-                await ctx.send(
-                    f"Please mention the channel to use for {plain_name}, or type 'skip' to skip.",
-                    ephemeral=True
-                )
-
-                def msg_check(m):
-                    return m.author == ctx.author and m.channel == ctx.channel
-
-                try:
-                    msg = await ctx.bot.wait_for("message", timeout=30.0, check=msg_check)
-                    if msg.content.lower() != "skip":
-                        if not msg.channel_mentions:
-                            await ctx.send(f"No channel mentioned. Skipping {plain_name}.", ephemeral=True)
-                            continue
-                        log_channels[key] = msg.channel_mentions[0]
-                except asyncio.TimeoutError:
-                    await ctx.send(f"Timed out. Skipping {plain_name}.", ephemeral=True)
-                    continue
-            await ctx.send(
-                "Which events do you want to enable?\n"
-                "✅ All events\n"
-                "🛡️ Moderation only (bans, kicks, role, channel, member updates)\n"
-                "❌ None (I'll enable manually)",
-                ephemeral=True
+                
+            # Skip if in ignored channel or category
+            if not await self.should_log_event(ctx.guild, "command_error", 
+                                             channel=ctx.channel, user=ctx.author):
+                return
+                
+            # Get the log channel
+            log_channel = await self.get_log_channel(ctx.guild, "command_error")
+            if not log_channel:
+                return
+                
+            # Create the log embed
+            command_name = ctx.command.qualified_name if ctx.command else "Unknown command"
+            
+            # Create embed description
+            description = f"⚠️ Error occurred while executing command `{command_name}`"
+            
+            # Create embed with proper metadata
+            embed = self.create_embed(
+                "command_error",
+                description
             )
-            events_msg = await ctx.send("React with ✅, 🛡️, or ❌.", ephemeral=True)
-            for emoji in ["✅", "🛡️", "❌"]:
-                try:
-                    await events_msg.add_reaction(emoji)
-                except Exception:
-                    pass
-
-            def events_check(reaction, user):
-                return (
-                    user == ctx.author 
-                    and reaction.message.id == events_msg.id 
-                    and str(reaction.emoji) in ["✅", "🛡️", "❌"]
-                )
-
-            try:
-                event_reaction, _ = await ctx.bot.wait_for("reaction_add", timeout=30.0, check=events_check)
-            except asyncio.TimeoutError:
-                await ctx.send("Timed out. No events will be enabled by default.", ephemeral=True)
-                event_choice = "❌"
-            else:
-                event_choice = str(event_reaction.emoji)
-
-            all_events = list(self.event_descriptions.keys())
-            mod_events = [
-                "member_ban", "member_unban", "member_kick", "member_update",
-                "role_create", "role_delete", "role_update",
-                "channel_create", "channel_delete", "channel_update",
-                "message_delete", "message_edit"
-            ]
-
-            if event_choice == "✅":
-                # Enable all events
-                events_config = {event: True for event in all_events}
-                await self.config.guild(ctx.guild).events.set(events_config)
-                await ctx.send("✅ Enabled all events.", ephemeral=True)
-            elif event_choice == "🛡️":
-                # Enable moderation events only
-                events_config = {event: (event in mod_events) for event in all_events}
-                await self.config.guild(ctx.guild).events.set(events_config)
-                await ctx.send("✅ Enabled moderation events.", ephemeral=True)
-            else:
-                # Keep all events disabled
-                events_config = {event: False for event in all_events}
-                await self.config.guild(ctx.guild).events.set(events_config)
-                await ctx.send("✅ All events will remain disabled.", ephemeral=True)
-
-        # Step 3: Assign log channels to events (if any set)
-        if log_channels:
-            event_map = {
-                "message": ["message_delete", "message_edit"],
-                "member": [
-                    "member_join", "member_leave", "member_ban",
-                    "member_unban", "member_kick", "member_update"
-                ],
-                "channel": ["channel_create", "channel_delete", "channel_update"],
-                "role": ["role_create", "role_delete", "role_update"],
-                "voice": ["voice_update"],
-                "server": ["guild_update", "cog_load"],
-                "emoji": ["emoji_update"]
-            }
-            event_channels = {}
-            for key, events in event_map.items():
-                if key in log_channels:
-                    for event in events:
-                        event_channels[event] = log_channels[key].id
-            await self.config.guild(ctx.guild).event_channels.set(event_channels)
-            await ctx.send("✅ Configured log channels for all events.", ephemeral=True)
-
-        # Step 4: Tupperbox Setup
-        await ctx.send(
-            "Do you want to ignore Tupperbox proxy messages in logs? React ✅ for yes, ❌ for no.",
-            ephemeral=True
-        )
-        tupperbox_prompt = await ctx.send("React now.", ephemeral=True)
-        try:
-            await tupperbox_prompt.add_reaction("✅")
-            await tupperbox_prompt.add_reaction("❌")
-        except Exception:
-            pass
-
-        def tupperbox_check(reaction, user):
-            return (
-                user == ctx.author 
-                and reaction.message.id == tupperbox_prompt.id 
-                and str(reaction.emoji) in ["✅", "❌"]
-            )
-
-        try:
-            tupperbox_reaction, _ = await ctx.bot.wait_for(
-                "reaction_add",
-                timeout=30.0,
-                check=tupperbox_check
-            )
-            ignore_tupperbox = str(tupperbox_reaction.emoji) == "✅"
-        except asyncio.TimeoutError:
-            await ctx.send("Timed out. Defaulting to ignore Tupperbox: True.", ephemeral=True)
-            ignore_tupperbox = True
-
-        await self.config.guild(ctx.guild).ignore_tupperbox.set(ignore_tupperbox)
-
-        if ignore_tupperbox:
-            await ctx.send(
-                "Would you like to add additional Tupperbox bot IDs to ignore? "
-                "Type each ID and send, or type 'done' to finish.",
-                ephemeral=True
-            )
-            ids = await self.config.guild(ctx.guild).tupperbox_ids()
-
-            def id_check(m):
-                return m.author == ctx.author and m.channel == ctx.channel
-
-            while True:
-                try:
-                    msg = await ctx.bot.wait_for("message", timeout=30.0, check=id_check)
-                    if msg.content.lower() == "done":
-                        break
-                    if msg.content.isdigit() and len(msg.content) >= 17:
-                        if msg.content not in ids:
-                            ids.append(msg.content)
-                            await ctx.send(f"Added ID: {msg.content}", ephemeral=True)
-                        else:
-                            await ctx.send("That ID is already in the list.", ephemeral=True)
-                    else:
-                        await ctx.send(
-                            "That doesn't look like a valid Discord user ID. "
-                            "Please enter a valid ID or 'done'.",
-                            ephemeral=True
-                        )
-                except asyncio.TimeoutError:
-                    await ctx.send("Timed out. Saving current IDs.", ephemeral=True)
-                    break
-
-            await self.config.guild(ctx.guild).tupperbox_ids.set(ids)
-
-        await ctx.send(
-            "✅ YALC setup complete! Use `/yalc events` to review your settings.",
-            ephemeral=True
-        )
-
-    async def yalc_events(self, ctx: commands.Context) -> None:
-        """List all loggable events and their status."""
-        if not ctx.guild:
-            await ctx.send("This command must be used in a server.", ephemeral=True)
-            return
-        settings = await self.config.guild(ctx.guild).all()
-        events = settings["events"]
-        event_channels = settings["event_channels"]
-
-        embed = discord.Embed(
-            title="YALC Event Status",
-            description="Current status of all loggable events.",
-            color=discord.Color.blue()
-        )
-        
-        for event in sorted(self.event_descriptions.keys()):
-            emoji, desc = self.event_descriptions[event]
-            status = "✅ Enabled" if events.get(event, False) else "❌ Disabled"
-            channel = ctx.guild.get_channel(event_channels.get(event, 0))
-            channel_text = f" in {channel.mention}" if channel else ""
+            
+            # Add user info
             embed.add_field(
-                name=f"{emoji} {event}",
-                value=f"{status}{channel_text}\n{desc}",
+                name="User",
+                value=f"{ctx.author.mention} (`{ctx.author}`, ID: `{ctx.author.id}`)",
                 inline=True
             )
-        
-        await ctx.send(embed=embed, ephemeral=True)
-
-    async def yalc_enable(self, ctx: commands.Context, event: str) -> None:
-        """Enable logging for an event or all events."""
-        if not ctx.guild:
-            await ctx.send("This command must be used in a server.", ephemeral=True)
-            return
-        
-        if not ctx.channel.permissions_for(ctx.author).manage_guild:
-            await ctx.send("You need the Manage Server permission to enable events.", ephemeral=True)
-            return
-
-        if event.lower() == "all":
-            try:
-                all_events = {e: True for e in self.event_descriptions}
-                await self.config.guild(ctx.guild).events.set(all_events)
-                await ctx.send(
-                    "✅ Enabled logging for all events.",
-                    ephemeral=True
-                )
-            except Exception as e:
-                self.log.error(f"Failed to enable all events: {e}")
-                await ctx.send("Failed to enable all event logging.", ephemeral=True)
-            return
-
-        if event not in self.event_descriptions:
-            await ctx.send(
-                f"Invalid event. Use `/yalc events` to see available events.",
-                ephemeral=True
+            
+            # Add command info
+            embed.add_field(
+                name="Command",
+                value=f"`{ctx.message.content[:1000]}`" if len(ctx.message.content) <= 1000 
+                      else f"`{ctx.message.content[:997]}...`",
+                inline=False
             )
-            return
-
-        try:
-            await self.config.guild(ctx.guild).events.set_raw(event, value=True)
-            emoji, desc = self.event_descriptions[event]
-            await ctx.send(
-                f"{emoji} Enabled logging for: **{event}** ({desc})",
-                ephemeral=True
+            
+            # Add channel info
+            embed.add_field(
+                name="Channel",
+                value=f"{ctx.channel.mention} (`{ctx.channel.name}`)",
+                inline=True
             )
+            
+            # Add error info
+            embed.add_field(
+                name="Error Type",
+                value=f"`{type(error).__name__}`",
+                inline=True
+            )
+            
+            # Format error message
+            error_message = str(error)
+            if len(error_message) > 1024:
+                error_message = error_message[:1021] + "..."
+                
+            embed.add_field(
+                name="Error Message",
+                value=f"```\n{error_message}\n```",
+                inline=False
+            )
+            
+            # Add timestamp
+            embed.add_field(
+                name="Timestamp",
+                value=discord.utils.format_dt(datetime.datetime.now(datetime.UTC), style="F"),
+                inline=True
+            )
+            
+            # Set thumbnail if appropriate
+            if settings.get("include_thumbnails", True) and hasattr(ctx.author, "display_avatar"):
+                embed.set_thumbnail(url=ctx.author.display_avatar.url)
+                
+            # Set footer
+            self.set_embed_footer(embed, label="YALC Logger • Command Error")
+            
+            # Send the log
+            await self.safe_send(log_channel, embed=embed)
+            
         except Exception as e:
-            self.log.error(f"Failed to enable event {event}: {e}")
-            await ctx.send("Failed to enable event logging.", ephemeral=True)
+            self.log.error(f"Error logging command_error: {e}", exc_info=True)
 
-    async def yalc_disable(self, ctx: commands.Context, event: str) -> None:
-        """Disable logging for an event."""
-        if not ctx.guild:
-            await ctx.send("This command must be used in a server.", ephemeral=True)
-            return
-        
-        if not ctx.channel.permissions_for(ctx.author).manage_guild:
-            await ctx.send("You need the Manage Server permission to disable events.", ephemeral=True)
-            return
-
-        if event not in self.event_descriptions:
-            await ctx.send(
-                f"Invalid event. Use `/yalc events` to see available events.",
-                ephemeral=True
-            )
-            return
-
-        try:
-            await self.config.guild(ctx.guild).events.set_raw(event, value=False)
-            emoji, desc = self.event_descriptions[event]
-            await ctx.send(
-                f"{emoji} Disabled logging for: **{event}** ({desc})",
-                ephemeral=True
-            )
-        except Exception as e:
-            self.log.error(f"Failed to disable event {event}: {e}")
-            await ctx.send("Failed to disable event logging.", ephemeral=True)
-
-    async def yalc_setchannel(self, ctx: commands.Context, event: str, channel: Optional[discord.TextChannel]) -> None:
-        """Set the log channel for an event."""
-        if not ctx.guild:
-            await ctx.send("This command must be used in a server.", ephemeral=True)
-            return
-        if not ctx.channel.permissions_for(ctx.author).manage_guild:
-            await ctx.send("You need the Manage Server permission to set channels.", ephemeral=True)
-            return
-        
-        if event not in self.event_descriptions:
-            await ctx.send(
-                f"Invalid event. Use `/yalc events` to see available events.",
-                ephemeral=True
-            )
-            return
-        try:
-            if channel:
-                await self.config.guild(ctx.guild).event_channels.set_raw(event, value=channel.id)
-                emoji, desc = self.event_descriptions[event]
-                await ctx.send(
-                    f"{emoji} Set logging channel for **{event}** to {channel.mention}",
-                    ephemeral=True
-                )
-            else:
-                await ctx.send("Please specify a channel to set.", ephemeral=True)
-        except Exception as e:
-            self.log.error(f"Failed to set channel for event {event}: {e}")
-            await ctx.send("Failed to set logging channel.", ephemeral=True)
-
-    async def yalc_removechannel(self, ctx: commands.Context, event: str) -> None:
-        """Remove the log channel override for an event."""
-        if not ctx.guild:
-            await ctx.send("This command must be used in a server.", ephemeral=True)
-            return
-        
-        if not ctx.channel.permissions_for(ctx.author).manage_guild:
-            await ctx.send("You need the Manage Server permission to remove channels.", ephemeral=True)
-            return
-
-        if event not in self.event_descriptions:
-            await ctx.send(
-                f"Invalid event. Use `/yalc events` to see available events.",
-                ephemeral=True
-            )
-            return
-
-        try:
-            await self.config.guild(ctx.guild).event_channels.clear_raw(event)
-            emoji, desc = self.event_descriptions[event]
-            await ctx.send(
-                f"{emoji} Removed channel override for **{event}**",
-                ephemeral=True
-            )
-        except Exception as e:
-            self.log.error(f"Failed to remove channel for event {event}: {e}")
-            await ctx.send("Failed to remove logging channel.", ephemeral=True)
-
-    # --- Ignore Commands ---
-    @commands.hybrid_group(name="yalcignore", with_app_command=True, description="Manage ignore lists for channels, roles, and users.")
-    @commands.has_permissions(manage_guild=True)
-    @commands.guild_only()
-    async def yalc_ignore(self, ctx: commands.Context) -> None:
-        """Group for ignore commands."""
-        if ctx.invoked_subcommand is None:
-            await ctx.send("Use a subcommand: channel, role, user, or list.", ephemeral=True)
-
-    @yalc_ignore.command(name="channel", with_app_command=True, description="Ignore a channel for logging.")
-    async def ignore_channel(self, ctx: commands.Context, channel: discord.TextChannel) -> None:
-        """Ignore a channel for logging."""
-        ignored = await self.config.guild(ctx.guild).ignored_channels()
-        if channel.id in ignored:
-            await ctx.send(f"{channel.mention} is already ignored.", ephemeral=True)
-            return
-        ignored.append(channel.id)
-        await self.config.guild(ctx.guild).ignored_channels.set(ignored)
-        await ctx.send(f"Added {channel.mention} to ignored channels.", ephemeral=True)
-
-    @yalc_ignore.command(name="role", with_app_command=True, description="Ignore a role for logging.")
-    async def ignore_role(self, ctx: commands.Context, role: discord.Role) -> None:
-        """Ignore a role for logging."""
-        ignored = await self.config.guild(ctx.guild).ignored_roles()
-        if role.id in ignored:
-            await ctx.send(f"{role.mention} is already ignored.", ephemeral=True)
-            return
-        ignored.append(role.id)
-        await self.config.guild(ctx.guild).ignored_roles.set(ignored)
-        await ctx.send(f"Added {role.mention} to ignored roles.", ephemeral=True)
-
-    @yalc_ignore.command(name="user", with_app_command=True, description="Ignore a user for logging.")
-    async def ignore_user(self, ctx: commands.Context, user: discord.User) -> None:
-        """Ignore a user for logging."""
-        ignored = await self.config.guild(ctx.guild).ignored_users()
-        if user.id in ignored:
-            await ctx.send(f"{user.mention} is already ignored.", ephemeral=True)
-            return
-        ignored.append(user.id)
-        await self.config.guild(ctx.guild).ignored_users.set(ignored)
-        await ctx.send(f"Added {user.mention} to ignored users.", ephemeral=True)
-
-    @yalc_ignore.command(name="list", with_app_command=True, description="Show the current ignore lists.")
-    async def ignore_list(self, ctx: commands.Context) -> None:
-        """Show the current ignore lists."""
-        settings = await self.config.guild(ctx.guild).all()
-        channels = [ctx.guild.get_channel(cid) for cid in settings["ignored_channels"]]
-        roles = [ctx.guild.get_role(rid) for rid in settings["ignored_roles"]]
-        users = [ctx.guild.get_member(uid) or await self.bot.fetch_user(uid) for uid in settings["ignored_users"]]
-        embed = discord.Embed(title="YALC Ignore Lists", color=discord.Color.orange())
-        embed.add_field(
-            name="Channels",
-            value=", ".join(c.mention for c in channels if c) or "None",
-            inline=False
-        )
-        embed.add_field(
-            name="Roles",
-            value=", ".join(r.mention for r in roles if r) or "None",
-            inline=False
-        )
-        embed.add_field(
-            name="Users",
-            value=", ".join(u.mention for u in users if u) or "None",
-            inline=False
-        )
-        await ctx.send(embed=embed, ephemeral=True)
-
-    @yalc_ignore.command(name="unignore_channel", with_app_command=True, description="Remove a channel from the ignore list.")
-    async def unignore_channel(self, ctx: commands.Context, channel: discord.TextChannel) -> None:
-        """Remove a channel from the ignore list."""
-        ignored = await self.config.guild(ctx.guild).ignored_channels()
-        if channel.id not in ignored:
-            await ctx.send(f"{channel.mention} is not in the ignore list.", ephemeral=True)
-            return
-        ignored.remove(channel.id)
-        await self.config.guild(ctx.guild).ignored_channels.set(ignored)
-        await ctx.send(f"Removed {channel.mention} from ignored channels.", ephemeral=True)
-
-    @yalc_ignore.command(name="unignore_role", with_app_command=True, description="Remove a role from the ignore list.")
-    async def unignore_role(self, ctx: commands.Context, role: discord.Role) -> None:
-        """Remove a role from the ignore list."""
-        ignored = await self.config.guild(ctx.guild).ignored_roles()
-        if role.id not in ignored:
-            await ctx.send(f"{role.mention} is not in the ignore list.", ephemeral=True)
-            return
-        ignored.remove(role.id)
-        await self.config.guild(ctx.guild).ignored_roles.set(ignored)
-        await ctx.send(f"Removed {role.mention} from ignored roles.", ephemeral=True)
-
-    @yalc_ignore.command(name="unignore_user", with_app_command=True, description="Remove a user from the ignore list.")
-    async def unignore_user(self, ctx: commands.Context, user: discord.User) -> None:
-        """Remove a user from the ignore list."""
-        ignored = await self.config.guild(ctx.guild).ignored_users()
-        if user.id not in ignored:
-            await ctx.send(f"{user.mention} is not in the ignore list.", ephemeral=True)
-            return
-        ignored.remove(user.id)
-        await self.config.guild(ctx.guild).ignored_users.set(ignored)
-        await ctx.send(f"Removed {user.mention} from ignored users.", ephemeral=True)
-
-    def is_tupperbox_message(self, message: discord.Message, tupperbox_ids: list[str]) -> bool:
-        """Check if a message is from Tupperbox or a configured proxy bot.
-        This checks both the author's ID against the configured list and
-        verifies if they have a #0000 discriminator (indicating a botaccount).
-        Uses the discriminator attribute directly for robustness.
+    @commands.Cog.listener()
+    async def on_guild_scheduled_event_create(self, event: discord.ScheduledEvent) -> None:
         """
-        author = getattr(message, "author", None)
-        if not author:
-            return False
-        if str(getattr(author, "id", "")) in tupperbox_ids:
-            return True
-        # Prefer attribute access for discriminator
-        discriminator = getattr(author, "discriminator", None)
-        if discriminator is not None:
-            if str(discriminator) == "0" or str(discriminator) == "0000":
-                self.log.debug(f"Detected potential Tupperbox message from {author} (discriminator: {discriminator})")
-                return True
-        # Fallback: parse from string if attribute missing
-        try:
-            full_tag = str(author)
-            if "#" in full_tag:
-                tag_disc = full_tag.split("#", 1)[1]
-                if tag_disc in ("0", "0000"):
-                    self.log.debug(f"Detected potential Tupperbox message from {full_tag} (string fallback)")
-                    return True
-        except Exception as e:
-            self.log.debug(f"Failed to check discriminator robustly: {e}")
-        return False
-
-    async def safe_send(self, channel: Optional[discord.abc.Messageable], *args, **kwargs) -> None:
-        """Safely send a message or embed to a channel, catching and logging exceptions."""
-        if channel is None:
-            self.log.warning("safe_send: Channel is None, cannot send message.")
+        Log guild scheduled event creation.
+        
+        Parameters
+        ----------
+        event: discord.ScheduledEvent
+            The scheduled event that was created
+        """
+        self.log.debug("Listener triggered: on_guild_scheduled_event_create")
+        
+        # Skip if event has no guild
+        guild = event.guild
+        if not guild:
             return
+            
         try:
-            await channel.send(*args, **kwargs)
+            # Get settings
+            settings = await self.config.guild(guild).all()
+            
+            # Skip if event is disabled
+            if not settings["events"].get("guild_scheduled_event_create", False):
+                return
+                
+            # Skip if we should ignore based on channel, user, or roles
+            if not await self.should_log_event(guild, "guild_scheduled_event_create"):
+                return
+                
+            # Get the log channel
+            log_channel = await self.get_log_channel(guild, "guild_scheduled_event_create")
+            if not log_channel:
+                return
+                
+            # Get creator if available
+            creator = None
+            try:
+                if event.creator_id:
+                    creator = guild.get_member(event.creator_id) or await self.bot.fetch_user(event.creator_id)
+            except Exception:
+                pass
+                
+            # Create the log embed
+            description = f"📅 Server event created: **{event.name}**"
+            
+            embed = self.create_embed(
+                "guild_scheduled_event_create",
+                description
+            )
+            
+            # Add event details
+            embed.add_field(name="Name", value=event.name, inline=True)
+            
+            if event.description:
+                embed.add_field(
+                    name="Description", 
+                    value=event.description if len(event.description) <= 1024 
+                          else f"{event.description[:1021]}...",
+                    inline=False
+                )
+                
+            # Add location info
+            if hasattr(event, "location") and event.location:
+                embed.add_field(name="Location", value=event.location, inline=True)
+            elif hasattr(event, "channel") and event.channel:
+                embed.add_field(name="Channel", value=event.channel.mention, inline=True)
+                
+            # Add timing info
+            if hasattr(event, "start_time") and event.start_time:
+                embed.add_field(
+                    name="Start Time",
+                    value=discord.utils.format_dt(event.start_time, "F"),
+                    inline=True
+                )
+                
+            if hasattr(event, "end_time") and event.end_time:
+                embed.add_field(
+                    name="End Time",
+                    value=discord.utils.format_dt(event.end_time, "F"),
+                    inline=True
+                )
+                
+            # Add creator info
+            if creator:
+                embed.add_field(
+                    name="Created By",
+                    value=f"{creator.mention} (`{creator}`, ID: `{creator.id}`)",
+                    inline=True
+                )
+                
+                # Set thumbnail to creator's avatar
+                if settings.get("include_thumbnails", True) and hasattr(creator, "display_avatar"):
+                    embed.set_thumbnail(url=creator.display_avatar.url)
+            
+            # Add event URL
+            if hasattr(event, "url") and event.url:
+                embed.add_field(
+                    name="Event Link",
+                    value=f"[Click to view]({event.url})",
+                    inline=False
+                )
+                
+            # Set event image if available
+            if hasattr(event, "image") and event.image:
+                embed.set_image(url=event.image.url)
+                
+            # Set footer
+            self.set_embed_footer(embed, label="YALC Logger • Event Created")
+            
+            # Send the log
+            await self.safe_send(log_channel, embed=embed)
+            
         except Exception as e:
-            self.log.error(f"safe_send: Failed to send message: {e}")
-
-async def setup(bot: Red) -> None:
-    """Set up the YALC cog."""
-    cog = YALC(bot)
-    await bot.add_cog(cog)
-
+            self.log.error(f"Error logging guild_scheduled_event_create: {e}", exc_info=True)
+            
+    @commands.Cog.listener()
+    async def on_guild_scheduled_event_update(self, before: discord.ScheduledEvent, after: discord.ScheduledEvent) -> None:
+        """
+        Log guild scheduled event updates.
+        
+        Parameters
+        ----------
+        before: discord.ScheduledEvent
+            The scheduled event before the update
+        after: discord.ScheduledEvent
+            The scheduled event after the update
+        """
+        self.log.debug("Listener triggered: on_guild_scheduled_event_update")
+        
+        # Skip if event has no guild
+        guild = after.guild
+        if not guild:
+            return
+            
+        try:
+            # Get settings
+            settings = await self.config.guild(guild).all()
+            
+            # Skip if event is disabled
+            if not settings["events"].get("guild_scheduled_event_update", False):
+                return
+                
+            # Skip if we should ignore based on channel, user, or roles
+            if not await self.should_log_event(guild, "guild_scheduled_event_update"):
+                return
+                
+            # Get the log channel
+            log_channel = await self.get_log_channel(guild, "guild_scheduled_event_update")
+            if not log_channel:
+                return
+                
+            # Collect all the changes
+            changes = []
+            
+            if before.name != after.name:
+                changes.append(f"**Name:** `{before.name}` → `{after.name}`")
+                
+            if before.description != after.description:
+                before_desc = before.description or "None"
+                after_desc = after.description or "None"
+                if len(before_desc) > 100:
+                    before_desc = before_desc[:97] + "..."
+                if len(after_desc) > 100:
+                    after_desc = after_desc[:97] + "..."
+                changes.append(f"**Description:** Changed")
+                
+            if hasattr(before, "location") and hasattr(after, "location") and before.location != after.location:
+                changes.append(f"**Location:** `{before.location or 'None'}` → `{after.location or 'None'}`")
+                
+            if hasattr(before, "channel_id") and hasattr(after, "channel_id") and before.channel_id != after.channel_id:
+                changes.append(f"**Channel:** <#{before.channel_id or 'None'}> → <#{after.channel_id or 'None'}>")
+                
+            if before.start_time != after.start_time:
+                before_time = discord.utils.format_dt(before.start_time, "F") if before.start_time else "None"
+                after_time = discord.utils.format_dt(after.start_time, "F") if after.start_time else "None"
+                changes.append(f"**Start Time:** {before_time} → {after_time}")
+                
+            if hasattr(before, "end_time") and hasattr(after, "end_time") and before.end_time != after.end_time:
+                before_time = discord.utils.format_dt(before.end_time, "F") if before.end_time else "None"
+                after_time = discord.utils.format_dt(after.end_time, "F") if after.end_time else "None"
+                changes.append(f"**End Time:** {before_time} → {after_time}")
+                
+            if hasattr(before, "status") and hasattr(after, "status") and before.status != after.status:
+                changes.append(f"**Status:** `{before.status}` → `{after.status}`")
+                
+            # Skip if no changes (shouldn't happen, but just in case)
+            if not changes:
+                return
+                
+            # Create the log embed
+            description = f"🔄 Server event updated: **{after.name}**"
+            
+            embed = self.create_embed(
+                "guild_scheduled_event_update",
+                description
+            )
+            
+            # Add changes
+            embed.add_field(
+                name="Changes",
+                value="\n".join(changes),
+                inline=False
+            )
+            
+            # Add event details
+            embed.add_field(name="Event ID", value=f"`{after.id}`", inline=True)
+            
+            # Add event URL
+            if hasattr(after, "url") and after.url:
+                embed.add_field(
+                    name="Event Link",
+                    value=f"[Click to view]({after.url})",
+                    inline=False
+                )
+                
+            # Set event image if available
+            if hasattr(after, "image") and after.image:
+                embed.set_image(url=after.image.url)
+                
+            # Set footer
+            self.set_embed_footer(embed, label="YALC Logger • Event Updated")
+            
+            # Send the log
+            await self.safe_send(log_channel, embed=embed)
+            
+        except Exception as e:
+            self.log.error(f"Error logging guild_scheduled_event_update: {e}", exc_info=True)
+            
+    @commands.Cog.listener()
+    async def on_guild_scheduled_event_delete(self, event: discord.ScheduledEvent) -> None:
+        """
+        Log guild scheduled event deletion.
+        
+        Parameters
+        ----------
+        event: discord.ScheduledEvent
+            The scheduled event that was deleted
+        """
+        self.log.debug("Listener triggered: on_guild_scheduled_event_delete")
+        
+        # Skip if event has no guild
+        guild = event.guild
+        if not guild:
+            return
+            
+        try:
+            # Get settings
+            settings = await self.config.guild(guild).all()
+            
+            # Skip if event is disabled
+            if not settings["events"].get("guild_scheduled_event_delete", False):
+                return
+                
+            # Skip if we should ignore based on channel, user, or roles
+            if not await self.should_log_event(guild, "guild_scheduled_event_delete"):
+                return
+                
+            # Get the log channel
+            log_channel = await self.get_log_channel(guild, "guild_scheduled_event_delete")
+            if not log_channel:
+                return
+                
+            # Get creator if available
+            creator = None
+            try:
+                if event.creator_id:
+                    creator = guild.get_member(event.creator_id) or await self.bot.fetch_user(event.creator_id)
+            except Exception:
+                pass
+                
+            # Create the log embed
+            description = f"🗑️ Server event deleted: **{event.name}**"
+            
+            embed = self.create_embed(
+                "guild_scheduled_event_delete",
+                description
+            )
+            
+            # Add event details
+            embed.add_field(name="Name", value=event.name, inline=True)
+            embed.add_field(name="Event ID", value=f"`{event.id}`", inline=True)
+            
+            if event.description:
+                embed.add_field(
+                    name="Description", 
+                    value=event.description if len(event.description) <= 1024 
+                          else f"{event.description[:1021]}...",
+                    inline=False
+                )
+                
+            # Add location info
+            if hasattr(event, "location") and event.location:
+                embed.add_field(name="Location", value=event.location, inline=True)
+            elif hasattr(event, "channel") and event.channel:
+                embed.add_field(name="Channel", value=event.channel.mention, inline=True)
+                
+            # Add timing info
+            if hasattr(event, "start_time") and event.start_time:
+                embed.add_field(
+                    name="Scheduled Start",
+                    value=discord.utils.format_dt(event.start_time, "F"),
+                    inline=True
+                )
+                
+            # Add creator info
+            if creator:
+                embed.add_field(
+                    name="Created By",
+                    value=f"{creator.mention} (`{creator}`, ID: `{creator.id}`)",
+                    inline=True
+                )
+                
+                # Set thumbnail to creator's avatar
+                if settings.get("include_thumbnails", True) and hasattr(creator, "display_avatar"):
+                    embed.set_thumbnail(url=creator.display_avatar.url)
+            
+            # Set event image if available
+            if hasattr(event, "image") and event.image:
+                embed.set_image(url=event.image.url)
+                
+            # Set footer
+            self.set_embed_footer(embed, label="YALC Logger • Event Deleted")
+            
+            # Send the log
+            await self.safe_send(log_channel, embed=embed)
+            
+        except Exception as e:
+            self.log.error(f"Error logging guild_scheduled_event_delete: {e}", exc_info=True)

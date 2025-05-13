@@ -1,4 +1,4 @@
-# 📝 YALC - Yet Another Logging Cog v3.0.0
+# 📝 YALC - Yet Another Logging Cog v3.1.0
 
 A powerful, feature-rich logging solution for Red-DiscordBot that just works! ✨
 
@@ -25,6 +25,13 @@ A powerful, feature-rich logging solution for Red-DiscordBot that just works! �
   - ⏱️ Customizable retention periods
   - 🎯 Event filtering system
   - 🚫 Ignore lists for users/channels
+
+- 🤖 **Smart Bot Integration**
+
+  - 🎭 Advanced Tupperbox/PluralKit filtering
+  - 🔍 Multiple proxy detection methods
+  - 🪝 Webhook and app message handling
+  - 🔧 Customizable bot ID filters
 
 - 🛡️ **Server Safety**
   - 🔒 Proper permission handling
