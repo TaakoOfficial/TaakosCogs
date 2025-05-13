@@ -2,7 +2,7 @@
   "$schema": "https://raw.githubusercontent.com/Cog-Creators/Red-DiscordBot/V3/develop/schema/red_cog.schema.json",
   "author": ["Taako"],
   "name": "YALC",
-  "version": "3.1.0",
+  "version": "3.1.1",
   "install_msg": "Thanks for installing YALC (Yet Another Logging Cog)! Use `[p]help YALC` or `/yalc` to get started. For full documentation, visit the repo.",
   "short": "Comprehensive server logging with style!",
   "description": "📝 A powerful Discord server logging cog with customizable events, channels, and filters. Supports both classic and slash commands.",

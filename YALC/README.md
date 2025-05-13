@@ -1,4 +1,4 @@
-# 📝 YALC - Yet Another Logging Cog v3.1.0
+# 📝 YALC - Yet Another Logging Cog v3.1.1
 
 A powerful, feature-rich logging solution for Red-DiscordBot that just works! ✨
 

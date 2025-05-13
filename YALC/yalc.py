@@ -2233,3 +2233,155 @@ class YALC(commands.Cog):
             
         except Exception as e:
             self.log.error(f"Error logging guild_scheduled_event_delete: {e}", exc_info=True)
+
+    def is_tupperbox_message(self, message: discord.Message, tupperbox_ids: list) -> bool:
+        """Check if a message is from Tupperbox or a configured proxy bot.
+        
+        This enhanced detection method checks multiple indicators to accurately identify
+        messages from Tupperbox, PluralKit, and other proxy bots:
+
+        1. Direct ID match with known proxy bot IDs
+        2. Webhook detection (with proxy pattern analysis)
+        3. Application/integration detection
+        4. Discord system account indicators (#0 discriminator)
+        5. Message content and embed pattern analysis
+        6. Metadata signatures in embeds or message components
+        7. Proxy deletion pattern detection
+
+        Parameters
+        ----------
+        message: discord.Message
+            The message to check
+        tupperbox_ids: list
+            List of known Tupperbox or proxy bot IDs
+
+        Returns
+        -------
+        bool
+            True if message appears to be Tupperbox-related, False otherwise
+        """
+        author = getattr(message, "author", None)
+        if not author:
+            return False
+        
+        # Extract key message properties for analysis
+        content = getattr(message, "content", "")
+        author_id = str(getattr(author, "id", ""))
+        webhook_id = getattr(message, "webhook_id", None)
+        application = getattr(message, "application", None)
+        embeds = getattr(message, "embeds", [])
+        
+        # === PRIMARY INDICATORS ===
+        
+        # Check 1: Direct ID match with known Tupperbox/proxy bots
+        if author_id in tupperbox_ids:
+            self.log.debug(f"Detected Tupperbox message: ID match {author_id}")
+            return True
+            
+        # Check 2: Author has bot flag set
+        if hasattr(author, "bot") and author.bot:
+            # For direct bot messages, only match if from a proxy system
+            if any(proxy_term in str(author).lower() for proxy_term in 
+                  ["tupper", "plural", "proxy", "pk", "system"]):
+                self.log.debug(f"Detected proxy system bot: {author}")
+                return True
+                
+        # === WEBHOOK & INTEGRATION CHECKS ===
+        
+        # Check 3: Enhanced webhook detection
+        if webhook_id:
+            # Check for common webhook naming patterns used by proxy systems
+            if hasattr(message, "webhook") and getattr(message, "webhook", None):
+                webhook_name = getattr(message.webhook, "name", "").lower()
+                
+                # Known proxy webhook patterns
+                proxy_patterns = ["proxy", "tupper", "pk", "system", "tulpa", "alter"]
+                
+                if any(pattern in webhook_name for pattern in proxy_patterns):
+                    self.log.debug(f"Detected proxy webhook: {webhook_name}")
+                    return True
+                    
+            # If message has very specific structural elements common in proxies
+            if content and not embeds:
+                # Look for proxy tag patterns like [Name] or {Name:} at the start
+                if (content.startswith("[") or content.startswith("{") or 
+                    content.startswith("<") or content.startswith("\"")):
+                    self.log.debug(f"Detected potential proxy message pattern via webhook")
+                    return True
+        
+        # Check 4: Application-based proxying
+        if application:
+            app_name = getattr(application, "name", "").lower()
+            proxy_app_terms = ["proxy", "plural", "tupper", "system", "pk"]
+            
+            if any(term in app_name for term in proxy_app_terms):
+                self.log.debug(f"Detected proxy application: {app_name}")
+                return True
+        
+        # === SYSTEM ACCOUNT & METADATA CHECKS ===
+        
+        # Check 5: Enhanced #0 discriminator check (system accounts)
+        # Modern Discord API
+        if hasattr(author, "discriminator"):
+            discriminator = getattr(author, "discriminator", None)
+            if discriminator is not None:
+                if str(discriminator) == "0" or str(discriminator) == "0000":
+                    self.log.debug(f"Detected system account: discriminator {discriminator}")
+                    return True
+        
+        # Fallback for string representation
+        try:
+            full_tag = str(author)
+            if "#" in full_tag:
+                tag_disc = full_tag.split("#", 1)[1]
+                if tag_disc in ("0", "0000"):
+                    self.log.debug(f"Detected system account via string parsing: {full_tag}")
+                    return True
+        except Exception:
+            pass
+            
+        # === CONTENT & EMBED ANALYSIS ===
+        
+        # Check 6: Enhanced embed pattern detection
+        for embed in embeds:
+            # Check embed footer for proxy signatures
+            footer = getattr(embed, "footer", None)
+            if footer:
+                footer_text = getattr(footer, "text", "").lower()
+                footer_icon = getattr(footer, "icon_url", "")
+                
+                # Check for proxy terms in footer text
+                proxy_terms = ["tupper", "proxy", "proxied", "system", "by", "via", "pluralkit", "pk"]
+                if any(term in footer_text for term in proxy_terms):
+                    self.log.debug(f"Detected proxy embed footer: {footer_text}")
+                    return True
+                    
+                # Check for known proxy system URLs in footer icons
+                proxy_domains = ["pluralkit", "tupperbox", "tupper.io", "discord.com/api/webhooks"]
+                if any(domain in footer_icon for domain in proxy_domains):
+                    self.log.debug(f"Detected proxy footer icon: {footer_icon}")
+                    return True
+            
+            # Check embed author for proxy patterns
+            author_field = getattr(embed, "author", None)
+            if author_field:
+                author_name = getattr(author_field, "name", "").lower()
+                
+                # System identifiers in author field
+                if any(f"[{term}]" in author_name for term in ["system", "proxy", "pk"]):
+                    self.log.debug(f"Detected proxy embed author: {author_name}")
+                    return True
+                    
+        # Check 7: Advanced content pattern analysis
+        if content:
+            # Look for message edit signatures commonly used by proxy systems
+            edit_signatures = [
+                "(edited)", "[edited]", "• edited", 
+                "proxied by", "proxy by", "via proxy"
+            ]
+            
+            if any(signature in content.lower() for signature in edit_signatures):
+                self.log.debug(f"Detected proxy edit signature in content")
+                return True
+                
+        return False

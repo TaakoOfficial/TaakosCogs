@@ -1,5 +1,13 @@
 # 📝 YALC Changelog
 
+## [v3.1.1] - 2025-05-12
+
+### 🐛 Bug Fixes
+
+- Fixed critical error with missing `is_tupperbox_message` method
+- Resolved AttributeError in message event processing
+- Enhanced method implementation with better debugging information
+
 ## [v3.1.0] - 2025-05-12
 
 ### ✨ New Features
