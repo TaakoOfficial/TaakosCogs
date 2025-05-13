@@ -6,21 +6,21 @@ import discord
 
 # Moon phase definitions
 MOON_PHASES = {
-    0: {"name": "New Moon 🌑", "emoji": "🌑", "icon": "https://www.flaticon.com/free-icon/moon_616465?related_id=616465&origin=pack"},
-    1: {"name": "Waxing Crescent 🌒", "emoji": "🌒", "icon": "https://www.flaticon.com/free-icon/moon_616467?related_id=616467&origin=pack"},
-    2: {"name": "First Quarter 🌓", "emoji": "🌓", "icon": "https://www.flaticon.com/free-icon/moon_616469?related_id=616469&origin=pack"},
-    3: {"name": "Waxing Gibbous 🌔", "emoji": "🌔", "icon": "https://www.flaticon.com/free-icon/moon_616471?related_id=616471&origin=pack"},
-    4: {"name": "Full Moon 🌕", "emoji": "🌕", "icon": "https://www.flaticon.com/free-icon/full-moon_616456?related_id=616456&origin=pack"},
-    5: {"name": "Waning Gibbous 🌖", "emoji": "🌖", "icon": "https://www.flaticon.com/free-icon/moon_616459?related_id=616459&origin=pack"},
-    6: {"name": "Last Quarter 🌗", "emoji": "🌗", "icon": "https://www.flaticon.com/free-icon/moon_616461?related_id=616461&origin=pack"},
-    7: {"name": "Waning Crescent 🌘", "emoji": "🌘", "icon": "https://www.flaticon.com/free-icon/moon_616463?related_id=616463&origin=pack"}
+    0: {"name": "New Moon 🌑", "emoji": "🌑", "icon": "https://cdn-icons-png.flaticon.com/512/616/616465.png"},
+    1: {"name": "Waxing Crescent 🌒", "emoji": "🌒", "icon": "https://cdn-icons-png.flaticon.com/512/616/616467.png"},
+    2: {"name": "First Quarter 🌓", "emoji": "🌓", "icon": "https://cdn-icons-png.flaticon.com/512/616/616469.png"},
+    3: {"name": "Waxing Gibbous 🌔", "emoji": "🌔", "icon": "https://cdn-icons-png.flaticon.com/512/616/616471.png"},
+    4: {"name": "Full Moon 🌕", "emoji": "🌕", "icon": "https://cdn-icons-png.flaticon.com/512/616/616456.png"},
+    5: {"name": "Waning Gibbous 🌖", "emoji": "🌖", "icon": "https://cdn-icons-png.flaticon.com/512/616/616459.png"},
+    6: {"name": "Last Quarter 🌗", "emoji": "🌗", "icon": "https://cdn-icons-png.flaticon.com/512/616/616461.png"},
+    7: {"name": "Waning Crescent 🌘", "emoji": "🌘", "icon": "https://cdn-icons-png.flaticon.com/512/616/616463.png"}
 }
 
 # Blood moon details
 BLOOD_MOON = {
     "name": "Blood Moon 🔴", 
     "emoji": "🔴", 
-    "icon": "https://i.imgur.com/3hNNgLw.png",
+    "icon": "https://img.freepik.com/free-psd/red-planet-mars-surface-texture-space-exploration_84443-38546.jpg?semt=ais_hybrid&w=740",
     "description": "A rare Blood Moon has appeared in the night sky! Such events are often associated with mystical occurrences and heightened magical energies."
 }
 
