@@ -1,5 +1,5 @@
 import discord  # Import from the actual discord.py package
-from typing import Optional
+from typing import Optional, List, Union
 
 # Optional Red-Dashboard integration
 try:
@@ -30,6 +30,7 @@ class RPCAGroup(app_commands.Group):
 
     @app_commands.command(name="info", description="View the current settings for the RP calendar.")
     async def info(self, interaction: discord.Interaction) -> None:
+        """View the current settings for the RP calendar including moon phase information if enabled."""
         if not interaction.guild:
             await interaction.response.send_message("This command can only be used in a server.", ephemeral=True)
             return
@@ -77,6 +78,38 @@ class RPCAGroup(app_commands.Group):
         embed.add_field(name="Time Zone", value=time_zone, inline=False)
         embed.add_field(name="Embed Color", value=str(embed_color), inline=False)
         embed.add_field(name="Embed Title", value=embed_title, inline=False)
+        
+        # Add moon phase settings
+        show_moon_phase = guild_settings.get("show_moon_phase", False)
+        blood_moon_enabled = guild_settings.get("blood_moon_enabled", False)
+        moon_channel_id = guild_settings.get("moon_channel_id")
+        
+        moon_status = "Enabled" if show_moon_phase else "Disabled"
+        blood_moon_status = "Enabled" if blood_moon_enabled else "Disabled"
+        moon_channel = f"<#{moon_channel_id}>" if moon_channel_id else "Same as calendar"
+        
+        embed.add_field(
+            name="🌙 Moon Phase Settings",
+            value=f"**Status:** {moon_status}\n"
+                  f"**Blood Moon:** {blood_moon_status}\n"
+                  f"**Moon Channel:** {moon_channel}",
+            inline=False
+        )
+        
+        # Get current moon phase if enabled
+        if show_moon_phase and current_date != "Not set":
+            try:
+                from .moon_utils import get_moon_data
+                current_date_obj = datetime.strptime(current_date, "%m-%d-%Y")
+                moon_data = get_moon_data(current_date_obj, blood_moon_enabled)
+                embed.add_field(
+                    name="🌙 Current Moon Phase",
+                    value=f"{moon_data['emoji']} {moon_data['name']}",
+                    inline=False
+                )
+            except Exception as e:
+                logging.error(f"Error getting moon phase: {e}")
+        
         embed.set_footer(text="RP Calendar by Taako", icon_url="https://cdn-icons-png.flaticon.com/512/869/869869.png")
         await interaction.followup.send(embed=embed, ephemeral=True)
 
@@ -160,8 +193,163 @@ class RPCAGroup(app_commands.Group):
         state = "enabled" if not current else "disabled"
         await interaction.followup.send(f"Footer has been {state}.", ephemeral=True)
 
+    @app_commands.command(name="moonphase", description="View the current moon phase for the RP calendar date.")
+    async def moonphase(self, interaction: discord.Interaction) -> None:
+        """View the current moon phase for the RP calendar date."""
+        if not interaction.guild:
+            await interaction.response.send_message("This command can only be used in a server.", ephemeral=True)
+            return
+        
+        await interaction.response.defer(ephemeral=True)
+        guild_settings = await self.cog._config.guild(interaction.guild).all()
+        
+        # Check if moon phases are enabled
+        if not guild_settings.get("show_moon_phase", False):
+            await interaction.followup.send("Moon phase tracking is not enabled. An administrator can enable it with `/rpca moonconfig enable`.", ephemeral=True)
+            return
+        
+        # Get the current RP date
+        current_date_str = guild_settings.get("current_date")
+        if not current_date_str:
+            await interaction.followup.send("The RP calendar has not been set up yet. Please set a start date first.", ephemeral=True)
+            return
+        
+        try:
+            # Parse the current date string to a datetime object
+            current_date = datetime.strptime(current_date_str, "%m-%d-%Y")
+            
+            # Get moon data and create embed
+            from .moon_utils import get_moon_data, create_moon_embed
+            moon_data = get_moon_data(current_date, guild_settings.get("blood_moon_enabled", False))
+            embed = create_moon_embed(moon_data, guild_settings)
+            
+            await interaction.followup.send(embed=embed, ephemeral=False)
+        except Exception as e:
+            await interaction.followup.send(f"Error displaying moon phase: {str(e)}", ephemeral=True)
+
+    @app_commands.command(name="forcemoonupdate", description="Force post a moon phase update to the configured channel.")
+    @app_commands.default_permissions(administrator=True)
+    async def forcemoonupdate(self, interaction: discord.Interaction) -> None:
+        """Force post a moon phase update to the configured channel."""
+        if not interaction.guild:
+            await interaction.response.send_message("This command can only be used in a server.", ephemeral=True)
+            return
+        
+        await interaction.response.defer(ephemeral=True)
+        guild_settings = await self.cog._config.guild(interaction.guild).all()
+        
+        # Check if moon phases are enabled
+        if not guild_settings.get("show_moon_phase", False):
+            await interaction.followup.send("Moon phase tracking is not enabled. Enable it with `/rpca moonconfig enable`.", ephemeral=True)
+            return
+        
+        # Get the current RP date
+        current_date_str = guild_settings.get("current_date")
+        if not current_date_str:
+            await interaction.followup.send("The RP calendar has not been set up yet. Please set a start date first.", ephemeral=True)
+            return
+        
+        try:
+            # Post moon update
+            await self.cog._post_moon_update(interaction.guild)
+            await interaction.followup.send("Moon phase update has been posted.", ephemeral=True)
+        except Exception as e:
+            await interaction.followup.send(f"Error posting moon phase update: {str(e)}", ephemeral=True)
+
+    @app_commands.command(name="moonconfig", description="Configure moon phase settings for the RP calendar.")
+    @app_commands.default_permissions(administrator=True)
+    @app_commands.describe(
+        action="Action to perform",
+        channel="Channel for moon phase updates (optional)",
+        required_approvals="Number of admin approvals required for blood moon mode (1-10)"
+    )
+    @app_commands.choices(action=[
+        app_commands.Choice(name="enable", value="enable"),
+        app_commands.Choice(name="disable", value="disable"),
+        app_commands.Choice(name="bloodmoon", value="bloodmoon"),
+        app_commands.Choice(name="setchannel", value="setchannel")
+    ])
+    async def moonconfig(
+        self, 
+        interaction: discord.Interaction, 
+        action: str,
+        channel: Optional[discord.TextChannel] = None,
+        required_approvals: Optional[int] = None
+    ) -> None:
+        """
+        Configure moon phase settings for the RP calendar.
+        
+        Parameters
+        ----------
+        action: str
+            The action to perform (enable, disable, bloodmoon, setchannel)
+        channel: Optional[discord.TextChannel]
+            The channel for moon phase updates (required for setchannel action)
+        required_approvals: Optional[int]
+            Parameter kept for backward compatibility but no longer used
+        """
+        if not interaction.guild:
+            await interaction.response.send_message("This command can only be used in a server.", ephemeral=True)
+            return
+        
+        await interaction.response.defer(ephemeral=True)
+        guild_settings = await self.cog._config.guild(interaction.guild).all()
+        
+        if action == "enable":
+            await self.cog._config.guild(interaction.guild).show_moon_phase.set(True)
+            await interaction.followup.send("Moon phase tracking has been enabled.", ephemeral=True)
+        
+        elif action == "disable":
+            await self.cog._config.guild(interaction.guild).show_moon_phase.set(False)
+            await interaction.followup.send("Moon phase tracking has been disabled.", ephemeral=True)
+        
+        elif action == "bloodmoon":
+            # Simply toggle blood moon mode on/off
+            blood_moon_enabled = guild_settings.get("blood_moon_enabled", False)
+            
+            # Toggle the setting
+            new_setting = not blood_moon_enabled
+            await self.cog._config.guild(interaction.guild).blood_moon_enabled.set(new_setting)
+            
+            if new_setting:
+                await interaction.followup.send("🔴 **BLOOD MOON MODE ACTIVATED!** The moon may now occasionally turn blood red during full moons!", ephemeral=False)
+            else:
+                await interaction.followup.send("Blood moon mode has been disabled.", ephemeral=True)
+        
+        elif action == "setchannel":
+            if not channel:
+                await interaction.followup.send("Please specify a channel for moon phase updates.", ephemeral=True)
+                return
+            
+            await self.cog._config.guild(interaction.guild).moon_channel_id.set(channel.id)
+            await interaction.followup.send(f"Moon phase updates will now be sent to: {channel.mention}", ephemeral=True)
+            
+        # Removed setrequired action as we no longer need approvals for blood moon mode
+    
+    @app_commands.command(name="resetbloodmoon", description="Disable blood moon mode.")
+    @app_commands.default_permissions(administrator=True)
+    async def resetbloodmoon(self, interaction: discord.Interaction) -> None:
+        """Disable blood moon mode."""
+        if not interaction.guild:
+            await interaction.response.send_message("This command can only be used in a server.", ephemeral=True)
+            return
+        
+        await interaction.response.defer(ephemeral=True)
+        
+        # Reset blood moon settings
+        await self.cog._config.guild(interaction.guild).blood_moon_enabled.set(False)
+        
+        await interaction.followup.send("Blood moon mode has been disabled.", ephemeral=True)
+
 class RPCalander(commands.Cog, DashboardIntegration):
-    """A cog for managing an RP calendar with daily updates."""
+    """
+    A cog for managing an RP calendar with daily updates.
+    
+    Features:
+    - Daily calendar updates based on a custom RP timeline
+    - Configurable time zone, channel, and embed styling
+    - Moon phase tracking with blood moon events
+    """
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
         self._config = Config.get_conf(self, identifier=9876543210, force_registration=True)
@@ -173,7 +361,10 @@ class RPCalander(commands.Cog, DashboardIntegration):
             "embed_color": 0x0000FF,
             "show_footer": True,
             "embed_title": "📅 RP Calendar Update",
-            "last_posted": None
+            "last_posted": None,
+            "show_moon_phase": False,  # Whether to show moon phase info
+            "blood_moon_enabled": False,  # Whether blood moons can occur
+            "moon_channel_id": None  # Separate channel for moon phase updates (defaults to same as calendar)
         }
         self._config.register_guild(**self._default_guild)
         self.rpca_group = RPCAGroup(self)
@@ -285,6 +476,12 @@ class RPCalander(commands.Cog, DashboardIntegration):
                 if channel:
                     try:
                         await channel.send(embed=embed)
+                        
+                        # Post moon phase update if enabled
+                        if guild_settings.get("show_moon_phase", False):
+                            guild = self.bot.get_guild(guild_id)
+                            if guild:
+                                await self._post_moon_update(guild)
                     except Exception as e:
                         logging.error(f"Failed to send daily calendar update: {e}")
 
@@ -356,6 +553,62 @@ class RPCalander(commands.Cog, DashboardIntegration):
         """Wrapper for slash command force post, returns (success, message)."""
         return await self.force_post(guild)
 
+    async def _post_moon_update(self, guild) -> None:
+        """
+        Post a moon phase update to the configured channel.
+        
+        Parameters
+        ----------
+        guild : discord.Guild
+            The guild to post the update for
+        """
+        try:
+            guild_settings = await self._config.guild(guild).all()
+            
+            # Check if moon phase updates are enabled
+            if not guild_settings.get("show_moon_phase", False):
+                return
+            
+            # Get the channel to post to
+            moon_channel_id = guild_settings.get("moon_channel_id") or guild_settings.get("channel_id")
+            if not moon_channel_id:
+                logging.error(f"No channel set for moon phase updates in guild {guild.name} ({guild.id})")
+                return
+            
+            channel = guild.get_channel(moon_channel_id)
+            if not channel:
+                logging.error(f"Could not find channel {moon_channel_id} for moon phase updates in guild {guild.name} ({guild.id})")
+                return
+            
+            # Get the current date
+            current_date_str = guild_settings.get("current_date")
+            if not current_date_str:
+                logging.error(f"No current date set for guild {guild.name} ({guild.id})")
+                return
+            
+            current_date = datetime.strptime(current_date_str, "%m-%d-%Y")
+            
+            # Import moon phase utilities
+            from .moon_utils import get_moon_data, create_moon_embed
+            
+            # Get moon data and create embed
+            moon_data = get_moon_data(
+                current_date, 
+                guild_settings.get("blood_moon_enabled", False)
+            )
+            
+            embed = create_moon_embed(moon_data, guild_settings)
+            
+            # Send the embed
+            await channel.send(embed=embed)
+            
+            # If this is a blood moon, add an extra mention to draw attention
+            if moon_data.get("is_blood_moon", False):
+                await channel.send("@everyone **A Blood Moon has risen! Strange energies fill the air...**")
+                
+        except Exception as e:
+            logging.error(f"Error posting moon phase update for guild {guild.name}: {str(e)}")
+
     if _dashboard_available:
         @dashboard_page("test", "RP Calendar Dashboard Test")
         async def dashboard_test(self, request, guild):
@@ -372,16 +625,22 @@ class RPCalander(commands.Cog, DashboardIntegration):
                 time_zone = data.get("time_zone", settings["time_zone"])
                 embed_color = int(data.get("embed_color", settings["embed_color"]))
                 show_footer = data.get("show_footer", "off") == "on"
+                show_moon_phase = data.get("show_moon_phase", "off") == "on"
+                
                 await self._config.guild(guild).embed_title.set(embed_title)
                 await self._config.guild(guild).time_zone.set(time_zone)
                 await self._config.guild(guild).embed_color.set(embed_color)
                 await self._config.guild(guild).show_footer.set(show_footer)
+                await self._config.guild(guild).show_moon_phase.set(show_moon_phase)
+                
                 settings = await self._config.guild(guild).all()
             return {
                 "embed_title": settings["embed_title"],
                 "time_zone": settings["time_zone"],
                 "embed_color": settings["embed_color"],
                 "show_footer": settings["show_footer"],
+                "show_moon_phase": settings.get("show_moon_phase", False),
+                "blood_moon_enabled": settings.get("blood_moon_enabled", False),
             }
 
         def get_dashboard_views(self):

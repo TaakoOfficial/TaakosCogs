@@ -13,6 +13,9 @@ Welcome to **RP Calendar**, your trusty companion for managing in-game time in y
 - **Footer Toggle**: Show or hide the cog footer as you like. 👀
 - **Persistent Settings**: Remembers your configuration even after bot restarts. 💾
 - **Force Post**: Need an immediate update? Use the force command! 💪
+- **Moon Phase Tracking** 🌙: Display accurate moon phases based on your RP calendar date!
+- **Blood Moon Events** 🔴: Enable special blood moon events that occur randomly during full moons!
+- **Simple Blood Moon Toggle**: Admins can easily enable or disable the blood moon feature for special events.
 
 ---
 
@@ -51,6 +54,12 @@ Here are the commands to control your RP calendar:
 | `[p]rpca togglefooter`                  | Turn the embed footer on or off.                              |
 | `[p]rpca info`                          | Show the current calendar settings.                           |
 | `[p]rpca force`                         | Manually trigger a calendar update post.                      |
+| `[p]rpca moonphase`                     | Display the current moon phase for your RP date.              |
+| `[p]rpca forcemoonupdate`               | Manually trigger a moon phase update post. (Admin only)       |
+| `[p]rpca moonconfig enable/disable`     | Enable or disable moon phase tracking. (Admin only)           |
+| `[p]rpca moonconfig bloodmoon`          | Toggle blood moon mode on/off. (Admin only)                   |
+| `[p]rpca moonconfig setchannel`         | Set a separate channel for moon phase updates. (Admin only)   |
+| `[p]rpca resetbloodmoon`                | Disable blood moon mode. (Admin only)                         |
 
 ---
 
@@ -61,6 +70,24 @@ Imagine this popping up in your channel every day:
 ```
 📅 RP Calendar Update
 Today's date: **Sunday 10-01-1450**
+```
+
+And with moon phase tracking enabled:
+
+```
+🌙 Full Moon 🌕
+The moon is currently in its Full Moon 🌕 phase.
+
+Date: Sunday 10-01-1450
+```
+
+Or on special occasions:
+
+```
+🌙 Blood Moon 🔴
+A rare Blood Moon has appeared in the night sky! Such events are often associated with mystical occurrences and heightened magical energies.
+
+Date: Sunday 10-01-1450
 ```
 
 _(Date format: DayOfWeek MM-DD-YYYY)_

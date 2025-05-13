@@ -1,5 +1,37 @@
 # 📅 rpcalander Changelog
 
+## [v1.3.1] - 2025-05-12
+
+### 🔄 Changes
+
+- Simplified blood moon functionality to be a direct toggle instead of requiring admin approvals
+- Updated moon phase icons with better quality images
+- Improved user experience for managing moon phase settings
+
+## [v1.3.0] - 2025-05-10
+
+### ✨ New Features
+
+- Added moon phase tracking to display accurate moon phases based on the RP calendar date
+- Implemented blood moon functionality for rare special events
+- Added separate moon phase embeds with custom styling
+- Added the ability to configure a separate channel for moon phase updates
+
+### 🛠️ Commands
+
+- Added `/rpca moonphase` to display the current moon phase
+- Added `/rpca forcemoonupdate` to manually trigger a moon phase post
+- Added `/rpca moonconfig` to configure moon phase settings:
+  - `enable/disable`: Toggle moon phase tracking
+  - `bloodmoon`: Toggle blood moon mode on/off
+  - `setchannel`: Set a separate channel for moon updates
+- Added `/rpca resetbloodmoon` to disable blood moon mode
+
+### 📚 Documentation
+
+- Updated help documentation for all commands
+- Added moon phase information to the `/rpca info` command
+
 ## [v1.2.2] - 2025-04-15
 
 ### 🛠️ Improvements
