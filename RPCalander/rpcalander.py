@@ -341,6 +341,39 @@ class RPCAGroup(app_commands.Group):
         
         await interaction.followup.send("Blood moon mode has been disabled.", ephemeral=True)
 
+    @app_commands.command(name="setdate", description="Set the current RP calendar date.")
+    @app_commands.default_permissions(administrator=True)
+    async def setdate(self, interaction: discord.Interaction, date: str = "") -> None:
+        """
+        Set the current RP calendar date.
+        
+        Format: MM-DD-YYYY (e.g., 05-15-2023)
+        If no date is provided, today's date will be used.
+        """
+        if not date:
+            # Use today's date if none provided
+            time_zone = await self.cog._config.guild(interaction.guild).time_zone()
+            tz = pytz.timezone(time_zone or "America/Chicago")
+            today = datetime.now(tz)
+            date = today.strftime("%m-%d-%Y")
+        else:
+            # Validate date format
+            try:
+                datetime.strptime(date, "%m-%d-%Y")
+            except ValueError:
+                await interaction.response.send_message("Invalid date format. Please use MM-DD-YYYY (e.g., 05-15-2023)", ephemeral=True)
+                return
+        
+        # Set both start and current date if they're not yet set
+        if not await self.cog._config.guild(interaction.guild).start_date():
+            await self.cog._config.guild(interaction.guild).start_date.set(date)
+        
+        await self.cog._config.guild(interaction.guild).current_date.set(date)
+        
+        # Format for display
+        display_date = datetime.strptime(date, "%m-%d-%Y").strftime("%A %m-%d-%Y")
+        await interaction.response.send_message(f"RP Calendar date set to: **{display_date}**", ephemeral=True)
+
 class RPCalander(commands.Cog, DashboardIntegration):
     """
     A cog for managing an RP calendar with daily updates.
@@ -369,6 +402,11 @@ class RPCalander(commands.Cog, DashboardIntegration):
         self._config.register_guild(**self._default_guild)
         self.rpca_group = RPCAGroup(self)
         # No need to initialize _daily_update_loop here as it's already decorated with @tasks.loop
+        
+    @commands.group(name="rpca", invoke_without_command=True)
+    async def rpca_group_command(self, ctx: commands.Context):
+        """RP Calendar management commands."""
+        await ctx.send_help(ctx.command)
 
     async def cog_unload(self) -> None:
         if hasattr(self, 'bot'):
@@ -495,9 +533,9 @@ class RPCalander(commands.Cog, DashboardIntegration):
             logging.debug("Restarting daily update loop after error.")
             self._daily_update_loop.start()
 
-    @commands.command(name="force")
+    @rpca_group_command.command(name="force")
     @commands.admin_or_permissions(administrator=True)
-    async def force_post_command(self, ctx: commands.Context) -> None:
+    async def rpca_force(self, ctx: commands.Context) -> None:
         """Force post a calendar update to the configured channel immediately."""
         status, message = await self.force_post(ctx.guild)
         await ctx.send(message)
@@ -648,3 +686,300 @@ class RPCalander(commands.Cog, DashboardIntegration):
         def get_dashboard_views(self):
             """Return dashboard page methods for Red-Dashboard discovery."""
             return [self.dashboard_test, self.dashboard_settings]
+
+    @rpca_group_command.command(name="info")
+    @commands.guild_only()
+    async def rpca_info(self, ctx: commands.Context) -> None:
+        """View the current settings for the RP calendar including moon phase information if enabled."""
+        guild_settings = await self._config.guild(ctx.guild).all()
+        embed_color = discord.Color(guild_settings.get("embed_color", 0x0000FF))
+        embed = discord.Embed(title="RP Calendar Settings", color=embed_color)
+        start_date = guild_settings["start_date"] or "Not set"
+        current_date = guild_settings["current_date"] or "Not set"
+        channel_id = guild_settings["channel_id"]
+        channel = f"<#{channel_id}>" if channel_id else "Not set"
+        time_zone = guild_settings["time_zone"] or "America/Chicago"
+        embed_title = guild_settings["embed_title"] or "📅 RP Calendar Update"
+        tz = pytz.timezone(time_zone)
+        now = datetime.now(tz)
+        try:
+            tomorrow_obj = now + timedelta(days=1)
+            if current_date != "Not set":
+                current_date_obj = datetime.strptime(current_date, "%m-%d-%Y")
+                tomorrow_obj = tomorrow_obj.replace(year=current_date_obj.year)
+            tomorrow_str = tomorrow_obj.strftime("%A %m-%d-%Y")
+        except Exception as e:
+            logging.error(f"Error calculating tomorrow's date: {e}")
+            tomorrow_str = "Error"
+        embed.add_field(name="Start Date", value=start_date, inline=False)
+        embed.add_field(name="Current Date", value=current_date, inline=False)
+        embed.add_field(name="Tomorrow's Date", value=tomorrow_str, inline=False)
+        next_post_time = now.replace(hour=0, minute=0, second=0) + timedelta(days=1)
+        time_until_next_post = next_post_time - now
+        days, seconds = divmod(time_until_next_post.total_seconds(), 86400)
+        hours, remainder = divmod(seconds, 3600)
+        minutes, seconds = divmod(remainder, 60)
+        time_components = []
+        if days > 0:
+            time_components.append(f"{int(days)}d")
+        if hours > 0:
+            time_components.append(f"{int(hours)}h")
+        time_components.append(f"{int(minutes):02}m")
+        time_components.append(f"{int(seconds):02}s")
+        time_until_next_post_str = " ".join(time_components)
+        if not time_components:
+            time_until_next_post_str = "Not scheduled"
+        embed.add_field(name="Time Until Next Post", value=time_until_next_post_str, inline=False)
+        embed.add_field(name="Update Channel", value=channel, inline=False)
+        embed.add_field(name="Time Zone", value=time_zone, inline=False)
+        embed.add_field(name="Embed Color", value=str(embed_color), inline=False)
+        embed.add_field(name="Embed Title", value=embed_title, inline=False)
+        
+        # Add moon phase settings
+        show_moon_phase = guild_settings.get("show_moon_phase", False)
+        blood_moon_enabled = guild_settings.get("blood_moon_enabled", False)
+        moon_channel_id = guild_settings.get("moon_channel_id")
+        
+        moon_status = "Enabled" if show_moon_phase else "Disabled"
+        blood_moon_status = "Enabled" if blood_moon_enabled else "Disabled"
+        moon_channel = f"<#{moon_channel_id}>" if moon_channel_id else "Same as calendar"
+        
+        embed.add_field(
+            name="🌙 Moon Phase Settings",
+            value=f"**Status:** {moon_status}\n"
+                  f"**Blood Moon:** {blood_moon_status}\n"
+                  f"**Moon Channel:** {moon_channel}",
+            inline=False
+        )
+        
+        # Get current moon phase if enabled
+        if show_moon_phase and current_date != "Not set":
+            try:
+                from .moon_utils import get_moon_data
+                current_date_obj = datetime.strptime(current_date, "%m-%d-%Y")
+                moon_data = get_moon_data(current_date_obj, blood_moon_enabled)
+                embed.add_field(
+                    name="🌙 Current Moon Phase",
+                    value=f"{moon_data['emoji']} {moon_data['name']}",
+                    inline=False
+                )
+            except Exception as e:
+                logging.error(f"Error getting moon phase: {e}")
+        
+        embed.set_footer(text="RP Calendar by Taako", icon_url="https://cdn-icons-png.flaticon.com/512/869/869869.png")
+        await ctx.send(embed=embed)
+
+    @rpca_group_command.command(name="settitle")
+    @commands.guild_only()
+    @commands.admin_or_permissions(administrator=True)
+    async def rpca_settitle(self, ctx: commands.Context, *, title: str) -> None:
+        """Set a custom title for the main embed."""
+        if not title:
+            await ctx.send("Title cannot be empty.")
+            return
+        await self._config.guild(ctx.guild).embed_title.set(title)
+        await ctx.send(f"Embed title set to: {title}")
+
+    @rpca_group_command.command(name="setcolor")
+    @commands.guild_only()
+    @commands.admin_or_permissions(administrator=True)
+    async def rpca_setcolor(self, ctx: commands.Context, color: str) -> None:
+        """Set the embed color for calendar updates."""
+        if not color:
+            await ctx.send("Color value is required.")
+            return
+        color_str = color.strip().lower().replace("#", "").replace("0x", "")
+        try:
+            color_value = int(color_str, 16)
+            if not (0x000000 <= color_value <= 0xFFFFFF):
+                raise ValueError
+        except Exception:
+            await ctx.send("Invalid color. Please provide a valid hex code (e.g. #00ff00).")
+            return
+        await self._config.guild(ctx.guild).embed_color.set(color_value)
+        await ctx.send(f"Embed color set to: #{color_str.zfill(6)}")
+
+    @rpca_group_command.command(name="settimezone")
+    @commands.guild_only()
+    @commands.admin_or_permissions(administrator=True)
+    async def rpca_settimezone(self, ctx: commands.Context, timezone: str) -> None:
+        """Set the timezone for the calendar."""
+        if not timezone:
+            await ctx.send("Timezone is required.")
+            return
+        if timezone not in pytz.all_timezones:
+            await ctx.send("Invalid timezone. See: https://en.wikipedia.org/wiki/List_of_tz_database_time_zones")
+            return
+        await self._config.guild(ctx.guild).time_zone.set(timezone)
+        await ctx.send(f"Timezone set to: {timezone}")
+
+    @rpca_group_command.command(name="setchannel")
+    @commands.guild_only()
+    @commands.admin_or_permissions(administrator=True)
+    async def rpca_setchannel(self, ctx: commands.Context, channel: discord.TextChannel) -> None:
+        """Set the channel for daily calendar updates."""
+        if not channel:
+            await ctx.send("Channel is required.")
+            return
+        await self._config.guild(ctx.guild).channel_id.set(channel.id)
+        await ctx.send(f"Calendar updates will now be sent to: {channel.mention}")
+
+    @rpca_group_command.command(name="togglefooter")
+    @commands.guild_only()
+    @commands.admin_or_permissions(administrator=True)
+    async def rpca_togglefooter(self, ctx: commands.Context) -> None:
+        """Toggle the footer on/off for calendar embeds."""
+        current = await self._config.guild(ctx.guild).show_footer()
+        await self._config.guild(ctx.guild).show_footer.set(not current)
+        state = "enabled" if not current else "disabled"
+        await ctx.send(f"Footer has been {state}.")
+
+    @rpca_group_command.command(name="moonphase")
+    @commands.guild_only()
+    async def rpca_moonphase(self, ctx: commands.Context) -> None:
+        """View the current moon phase for the RP calendar date."""
+        guild_settings = await self._config.guild(ctx.guild).all()
+        
+        # Check if moon phases are enabled
+        if not guild_settings.get("show_moon_phase", False):
+            await ctx.send("Moon phase tracking is not enabled. An administrator can enable it with `!rpca moonconfig enable`.")
+            return
+        
+        # Get the current RP date
+        current_date_str = guild_settings.get("current_date")
+        if not current_date_str:
+            await ctx.send("The RP calendar has not been set up yet. Please set a start date first.")
+            return
+        
+        try:
+            # Parse the current date string to a datetime object
+            current_date = datetime.strptime(current_date_str, "%m-%d-%Y")
+            
+            # Get moon data and create embed
+            from .moon_utils import get_moon_data, create_moon_embed
+            moon_data = get_moon_data(current_date, guild_settings.get("blood_moon_enabled", False))
+            embed = create_moon_embed(moon_data, guild_settings)
+            
+            await ctx.send(embed=embed)
+        except Exception as e:
+            await ctx.send(f"Error displaying moon phase: {str(e)}")
+
+    @rpca_group_command.command(name="forcemoonupdate")
+    @commands.guild_only()
+    @commands.admin_or_permissions(administrator=True)
+    async def rpca_forcemoonupdate(self, ctx: commands.Context) -> None:
+        """Force post a moon phase update to the configured channel."""
+        guild_settings = await self._config.guild(ctx.guild).all()
+        
+        # Check if moon phases are enabled
+        if not guild_settings.get("show_moon_phase", False):
+            await ctx.send("Moon phase tracking is not enabled. Enable it with `!rpca moonconfig enable`.")
+            return
+        
+        # Get the current RP date
+        current_date_str = guild_settings.get("current_date")
+        if not current_date_str:
+            await ctx.send("The RP calendar has not been set up yet. Please set a start date first.")
+            return
+        
+        try:
+            # Post moon update
+            await self._post_moon_update(ctx.guild)
+            await ctx.send("Moon phase update has been posted.")
+        except Exception as e:
+            await ctx.send(f"Error posting moon phase update: {str(e)}")
+
+    @rpca_group_command.group(name="moonconfig", invoke_without_command=True)
+    @commands.guild_only()
+    @commands.admin_or_permissions(administrator=True)
+    async def rpca_moonconfig(self, ctx: commands.Context):
+        """Configure moon phase settings for the RP calendar."""
+        await ctx.send_help(ctx.command)
+
+    @rpca_moonconfig.command(name="enable")
+    @commands.guild_only()
+    @commands.admin_or_permissions(administrator=True)
+    async def rpca_moonconfig_enable(self, ctx: commands.Context) -> None:
+        """Enable moon phase tracking."""
+        await self._config.guild(ctx.guild).show_moon_phase.set(True)
+        await ctx.send("Moon phase tracking has been enabled.")
+
+    @rpca_moonconfig.command(name="disable")
+    @commands.guild_only()
+    @commands.admin_or_permissions(administrator=True)
+    async def rpca_moonconfig_disable(self, ctx: commands.Context) -> None:
+        """Disable moon phase tracking."""
+        await self._config.guild(ctx.guild).show_moon_phase.set(False)
+        await ctx.send("Moon phase tracking has been disabled.")
+
+    @rpca_moonconfig.command(name="bloodmoon")
+    @commands.guild_only()
+    @commands.admin_or_permissions(administrator=True)
+    async def rpca_moonconfig_bloodmoon(self, ctx: commands.Context) -> None:
+        """Toggle blood moon mode on/off."""
+        guild_settings = await self._config.guild(ctx.guild).all()
+        blood_moon_enabled = guild_settings.get("blood_moon_enabled", False)
+            
+        # Toggle the setting
+        new_setting = not blood_moon_enabled
+        await self._config.guild(ctx.guild).blood_moon_enabled.set(new_setting)
+            
+        if new_setting:
+            await ctx.send("🔴 **BLOOD MOON MODE ACTIVATED!** The moon may now occasionally turn blood red during full moons!")
+        else:
+            await ctx.send("Blood moon mode has been disabled.")
+
+    @rpca_moonconfig.command(name="setchannel")
+    @commands.guild_only()
+    @commands.admin_or_permissions(administrator=True)
+    async def rpca_moonconfig_setchannel(self, ctx: commands.Context, channel: discord.TextChannel = None) -> None:
+        """Set the channel for moon phase updates."""
+        if not channel:
+            await ctx.send("Please specify a channel for moon phase updates.")
+            return
+            
+        await self._config.guild(ctx.guild).moon_channel_id.set(channel.id)
+        await ctx.send(f"Moon phase updates will now be sent to: {channel.mention}")
+
+    @rpca_group_command.command(name="resetbloodmoon")
+    @commands.guild_only()
+    @commands.admin_or_permissions(administrator=True)
+    async def rpca_resetbloodmoon(self, ctx: commands.Context) -> None:
+        """Disable blood moon mode."""
+        # Reset blood moon settings
+        await self._config.guild(ctx.guild).blood_moon_enabled.set(False)
+        await ctx.send("Blood moon mode has been disabled.")
+
+    @rpca_group_command.command(name="setdate")
+    @commands.guild_only()
+    @commands.admin_or_permissions(administrator=True)
+    async def rpca_setdate(self, ctx: commands.Context, date: str = "") -> None:
+        """
+        Set the current RP calendar date.
+        
+        Format: MM-DD-YYYY (e.g., 05-15-2023)
+        If no date is provided, today's date will be used.
+        """
+        if not date:
+            # Use today's date if none provided
+            time_zone = await self._config.guild(ctx.guild).time_zone()
+            tz = pytz.timezone(time_zone or "America/Chicago")
+            today = datetime.now(tz)
+            date = today.strftime("%m-%d-%Y")
+        else:
+            # Validate date format
+            try:
+                datetime.strptime(date, "%m-%d-%Y")
+            except ValueError:
+                await ctx.send("Invalid date format. Please use MM-DD-YYYY (e.g., 05-15-2023)")
+                return
+        
+        # Set both start and current date if they're not yet set
+        if not await self._config.guild(ctx.guild).start_date():
+            await self._config.guild(ctx.guild).start_date.set(date)
+        
+        await self._config.guild(ctx.guild).current_date.set(date)
+        
+        # Format for display
+        display_date = datetime.strptime(date, "%m-%d-%Y").strftime("%A %m-%d-%Y")
+        await ctx.send(f"RP Calendar date set to: **{display_date}**")
