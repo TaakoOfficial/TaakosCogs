@@ -6,14 +6,14 @@ import discord
 
 # Moon phase definitions
 MOON_PHASES = {
-    0: {"name": "New Moon 🌑", "emoji": "🌑", "icon": "https://i.imgur.com/IbwtxLh.png"},
-    1: {"name": "Waxing Crescent 🌒", "emoji": "🌒", "icon": "https://i.imgur.com/Xs8vbGT.png"},
-    2: {"name": "First Quarter 🌓", "emoji": "🌓", "icon": "https://i.imgur.com/ARbAVWy.png"},
-    3: {"name": "Waxing Gibbous 🌔", "emoji": "🌔", "icon": "https://i.imgur.com/FSFq4Ox.png"},
-    4: {"name": "Full Moon 🌕", "emoji": "🌕", "icon": "https://i.imgur.com/vvJ90Qj.png"},
-    5: {"name": "Waning Gibbous 🌖", "emoji": "🌖", "icon": "https://i.imgur.com/bH74BuF.png"},
-    6: {"name": "Last Quarter 🌗", "emoji": "🌗", "icon": "https://i.imgur.com/iqwr1Jl.png"},
-    7: {"name": "Waning Crescent 🌘", "emoji": "🌘", "icon": "https://i.imgur.com/BJk57WN.png"}
+    0: {"name": "New Moon 🌑", "emoji": "🌑", "icon": "https://www.flaticon.com/free-icon/moon_616465?related_id=616465&origin=pack"},
+    1: {"name": "Waxing Crescent 🌒", "emoji": "🌒", "icon": "https://www.flaticon.com/free-icon/moon_616467?related_id=616467&origin=pack"},
+    2: {"name": "First Quarter 🌓", "emoji": "🌓", "icon": "https://www.flaticon.com/free-icon/moon_616469?related_id=616469&origin=pack"},
+    3: {"name": "Waxing Gibbous 🌔", "emoji": "🌔", "icon": "https://www.flaticon.com/free-icon/moon_616471?related_id=616471&origin=pack"},
+    4: {"name": "Full Moon 🌕", "emoji": "🌕", "icon": "https://www.flaticon.com/free-icon/full-moon_616456?related_id=616456&origin=pack"},
+    5: {"name": "Waning Gibbous 🌖", "emoji": "🌖", "icon": "https://www.flaticon.com/free-icon/moon_616459?related_id=616459&origin=pack"},
+    6: {"name": "Last Quarter 🌗", "emoji": "🌗", "icon": "https://www.flaticon.com/free-icon/moon_616461?related_id=616461&origin=pack"},
+    7: {"name": "Waning Crescent 🌘", "emoji": "🌘", "icon": "https://www.flaticon.com/free-icon/moon_616463?related_id=616463&origin=pack"}
 }
 
 # Blood moon details
