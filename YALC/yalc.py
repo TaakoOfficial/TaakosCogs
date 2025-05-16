@@ -2234,6 +2234,39 @@ class YALC(commands.Cog):
         except Exception as e:
             self.log.error(f"Error logging guild_scheduled_event_delete: {e}", exc_info=True)
 
+    async def safe_send(self, channel: discord.TextChannel, **kwargs) -> Optional[discord.Message]:
+        """
+        Send a message to a channel safely, handling common exceptions.
+        
+        This method attempts to send a message to a channel and handles common exceptions
+        such as missing permissions, invalid channel state, etc.
+        
+        Parameters
+        ----------
+        channel : discord.TextChannel
+            The channel to send the message to
+        **kwargs
+            Additional arguments to pass to channel.send()
+            
+        Returns
+        -------
+        Optional[discord.Message]
+            The sent message if successful, None otherwise
+        """
+        if not channel:
+            self.log.warning("Attempted to send a message to a nonexistent channel")
+            return None
+            
+        try:
+            return await channel.send(**kwargs)
+        except discord.Forbidden:
+            self.log.warning(f"Missing permissions to send message to channel {channel.id} in guild {channel.guild.id}")
+        except discord.HTTPException as e:
+            self.log.error(f"Failed to send message to channel {channel.id}: {e}")
+        except Exception as e:
+            self.log.error(f"Unexpected error when sending to channel {channel.id}: {e}", exc_info=True)
+        return None
+
     def is_tupperbox_message(self, message: discord.Message, tupperbox_ids: list) -> bool:
         """Check if a message is from Tupperbox or a configured proxy bot.
         
