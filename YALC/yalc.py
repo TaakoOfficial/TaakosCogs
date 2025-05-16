@@ -247,7 +247,7 @@ class YALC(commands.Cog):
                 # Tupperbox ignore
                 if settings.get("ignore_tupperbox", True):
                     tupperbox_ids = settings.get("tupperbox_ids", ["239232811662311425"])
-                    if self.is_tupperbox_message(message, tupperbox_ids):
+                    if await self.is_tupperbox_message(message, tupperbox_ids):
                         self.log.debug(f"Message {message.id} detected as Tupperbox message")
                         return False
                 
@@ -559,7 +559,7 @@ class YALC(commands.Cog):
             
             if ignore_tupperbox:
                 # Check if this specific message is a Tupperbox message
-                if self.is_tupperbox_message(message, tupperbox_ids):
+                if await self.is_tupperbox_message(message, tupperbox_ids):
                     self.log.debug("Skipping Tupperbox message_delete event - direct detection.")
                     return
                 
@@ -768,8 +768,8 @@ class YALC(commands.Cog):
             
             if ignore_tupperbox:
                 # Check both the before and after states of the message
-                is_before_tupperbox = self.is_tupperbox_message(before, tupperbox_ids)
-                is_after_tupperbox = self.is_tupperbox_message(after, tupperbox_ids)
+                is_before_tupperbox = await self.is_tupperbox_message(before, tupperbox_ids)
+                is_after_tupperbox = await self.is_tupperbox_message(after, tupperbox_ids)
                 
                 if is_before_tupperbox or is_after_tupperbox:
                     self.log.debug(
@@ -942,10 +942,14 @@ class YALC(commands.Cog):
                 tupperbox_ids = settings.get("tupperbox_ids", ["239232811662311425"])
                 
                 original_count = len(filtered_messages)
-                filtered_messages = [
-                    msg for msg in filtered_messages 
-                    if not self.is_tupperbox_message(msg, tupperbox_ids)
-                ]
+                
+                # We need to use a loop instead of a list comprehension for async calls
+                new_filtered_messages = []
+                for msg in filtered_messages:
+                    if not await self.is_tupperbox_message(msg, tupperbox_ids):
+                        new_filtered_messages.append(msg)
+                
+                filtered_messages = new_filtered_messages
                 filtered_out_count += original_count - len(filtered_messages)
                 
             # Filter out webhook messages if configured
@@ -2662,6 +2666,8 @@ class YALC(commands.Cog):
                         return True
                 except discord.NotFound:
                     pass  # Referenced message not found, ignore
+                except Exception as e:
+                    self.log.debug(f"Error checking referenced message: {e}")
                 
         return False
         
