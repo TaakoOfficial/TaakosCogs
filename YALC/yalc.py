@@ -2234,6 +2234,437 @@ class YALC(commands.Cog):
         except Exception as e:
             self.log.error(f"Error logging guild_scheduled_event_delete: {e}", exc_info=True)
 
+    @commands.group(name="yalc", aliases=["logger"], invoke_without_command=True)
+    @commands.guild_only()
+    async def yalc_group(self, ctx: commands.Context):
+        """
+        Yet Another Logging Cog - Main commands.
+        
+        This command group provides access to all YALC logging configuration commands.
+        Run a subcommand to perform a specific action.
+        """
+        await ctx.send_help(ctx.command)
+
+    @yalc_group.command(name="enable")
+    @commands.admin_or_permissions(manage_guild=True)
+    async def yalc_enable(self, ctx: commands.Context, event_type: Optional[str] = None):
+        """
+        Enable logging for a specific event type.
+        
+        If no event type is specified, lists all available event types.
+        
+        Parameters
+        ----------
+        event_type: str, optional
+            The event type to enable logging for
+        """
+        if event_type is None:
+            # List all available event types
+            embed = discord.Embed(
+                title="YALC Available Event Types",
+                description="Here are all the event types you can enable:",
+                color=discord.Color.blue()
+            )
+            
+            # Group events by category
+            categories = {
+                "Message Events": [k for k in self.event_descriptions.keys() if k.startswith("message_")],
+                "Member Events": [k for k in self.event_descriptions.keys() if k.startswith("member_")],
+                "Channel Events": [k for k in self.event_descriptions.keys() if k.startswith(("channel_", "thread_", "forum_"))],
+                "Role Events": [k for k in self.event_descriptions.keys() if k.startswith("role_")],
+                "Guild Events": [k for k in self.event_descriptions.keys() if k.startswith(("guild_", "emoji_"))],
+                "Other Events": [k for k in self.event_descriptions.keys() if not any(k.startswith(p) for p in 
+                                 ["message_", "member_", "channel_", "thread_", "forum_", "role_", "guild_", "emoji_"])]
+            }
+            
+            # Add fields for each category
+            for category, events in categories.items():
+                if events:
+                    event_list = "\n".join([f"{self.event_descriptions[e][0]} `{e}` - {self.event_descriptions[e][1]}" 
+                                          for e in events])
+                    embed.add_field(name=category, value=event_list, inline=False)
+            
+            embed.set_footer(text=f"Use {ctx.prefix}yalc enable <event_type> to enable a specific event type")
+            await ctx.send(embed=embed)
+            return
+            
+        # Check if the event type exists
+        if event_type not in self.event_descriptions:
+            await ctx.send(f"❌ Unknown event type: `{event_type}`. Use `{ctx.prefix}yalc enable` to see all available event types.")
+            return
+            
+        # Enable the event
+        async with self.config.guild(ctx.guild).events() as events:
+            events[event_type] = True
+            
+        # Get description for confirmation message
+        emoji, description = self.event_descriptions[event_type]
+        await ctx.send(f"✅ {emoji} Enabled logging for **{description}** (`{event_type}`).")
+
+    @yalc_group.command(name="disable")
+    @commands.admin_or_permissions(manage_guild=True)
+    async def yalc_disable(self, ctx: commands.Context, event_type: str):
+        """
+        Disable logging for a specific event type.
+        
+        Parameters
+        ----------
+        event_type: str
+            The event type to disable logging for
+        """
+        # Check if the event type exists
+        if event_type not in self.event_descriptions:
+            await ctx.send(f"❌ Unknown event type: `{event_type}`. Use `{ctx.prefix}yalc enable` to see all available event types.")
+            return
+            
+        # Disable the event
+        async with self.config.guild(ctx.guild).events() as events:
+            events[event_type] = False
+            
+        # Get description for confirmation message
+        emoji, description = self.event_descriptions[event_type]
+        await ctx.send(f"✅ {emoji} Disabled logging for **{description}** (`{event_type}`).")
+
+    @yalc_group.command(name="setchannel")
+    @commands.admin_or_permissions(manage_guild=True)
+    async def yalc_setchannel(self, ctx: commands.Context, event_type: str, channel: discord.TextChannel = None):
+        """
+        Set the logging channel for a specific event type.
+        
+        Parameters
+        ----------
+        event_type: str
+            The event type to set the channel for
+        channel: discord.TextChannel, optional
+            The channel to log the events to. If not specified, uses the current channel.
+        """
+        # Use current channel if none specified
+        if channel is None:
+            channel = ctx.channel
+            
+        # Check if the event type exists
+        if event_type not in self.event_descriptions and event_type != "all":
+            await ctx.send(f"❌ Unknown event type: `{event_type}`. Use `{ctx.prefix}yalc enable` to see all available event types.")
+            return
+            
+        # Set the channel
+        if event_type == "all":
+            # Set for all event types
+            async with self.config.guild(ctx.guild).event_channels() as event_channels:
+                for et in self.event_descriptions.keys():
+                    event_channels[et] = channel.id
+            await ctx.send(f"✅ Set {channel.mention} as the logging channel for **all** event types.")
+        else:
+            # Set for a specific event type
+            async with self.config.guild(ctx.guild).event_channels() as event_channels:
+                event_channels[event_type] = channel.id
+                
+            # Get description for confirmation message
+            emoji, description = self.event_descriptions[event_type]
+            await ctx.send(f"✅ {emoji} Set {channel.mention} as the logging channel for **{description}** (`{event_type}`).")
+
+    @yalc_group.command(name="settings")
+    @commands.guild_only()
+    async def yalc_settings(self, ctx: commands.Context):
+        """View the current YALC settings for this server."""
+        settings = await self.config.guild(ctx.guild).all()
+        
+        embed = discord.Embed(
+            title="YALC Logger Settings",
+            description="Current logging configuration for this server",
+            color=discord.Color.blue()
+        )
+        
+        # Add enabled events
+        enabled_events = [f"{self.event_descriptions[event][0]} `{event}` - {self.event_descriptions[event][1]}" 
+                         for event, enabled in settings["events"].items() if enabled]
+        
+        if enabled_events:
+            embed.add_field(
+                name="📋 Enabled Events",
+                value="\n".join(enabled_events[:15]) + 
+                      (f"\n*...and {len(enabled_events) - 15} more*" if len(enabled_events) > 15 else ""),
+                inline=False
+            )
+        else:
+            embed.add_field(
+                name="📋 Enabled Events",
+                value="No events enabled",
+                inline=False
+            )
+            
+        # Add channel mappings
+        channel_mappings = []
+        for event, channel_id in settings["event_channels"].items():
+            if channel_id:
+                channel = ctx.guild.get_channel(channel_id)
+                if channel and event in self.event_descriptions:
+                    channel_mappings.append(f"{self.event_descriptions[event][0]} `{event}` → {channel.mention}")
+        
+        if channel_mappings:
+            embed.add_field(
+                name="📢 Event Channels",
+                value="\n".join(channel_mappings[:10]) + 
+                      (f"\n*...and {len(channel_mappings) - 10} more*" if len(channel_mappings) > 10 else ""),
+                inline=False
+            )
+        else:
+            embed.add_field(
+                name="📢 Event Channels",
+                value="No channels configured",
+                inline=False
+            )
+            
+        # Add ignore settings
+        ignore_settings = []
+        
+        if settings.get("ignore_bots", False):
+            ignore_settings.append("🤖 Ignoring bot messages")
+        
+        if settings.get("ignore_webhooks", False):
+            ignore_settings.append("🔗 Ignoring webhook messages")
+            
+        if settings.get("ignore_tupperbox", True):
+            ignore_settings.append("👥 Ignoring Tupperbox/proxy messages")
+            
+        # Add ignored roles, users, channels counts
+        ignored_roles = settings.get("ignored_roles", [])
+        if ignored_roles:
+            role_names = [f"<@&{role_id}>" for role_id in ignored_roles[:3]]
+            ignore_settings.append(f"🚫 Ignored Roles: {', '.join(role_names)}" + 
+                                 (f" *and {len(ignored_roles) - 3} more*" if len(ignored_roles) > 3 else ""))
+            
+        ignored_users = settings.get("ignored_users", [])
+        if ignored_users:
+            ignore_settings.append(f"🚫 Ignored Users: {len(ignored_users)}")
+            
+        ignored_channels = settings.get("ignored_channels", [])
+        if ignored_channels:
+            channel_names = [f"<#{channel_id}>" for channel_id in ignored_channels[:3]]
+            ignore_settings.append(f"🚫 Ignored Channels: {', '.join(channel_names)}" + 
+                                 (f" *and {len(ignored_channels) - 3} more*" if len(ignored_channels) > 3 else ""))
+            
+        if ignore_settings:
+            embed.add_field(
+                name="⚙️ Ignore Settings",
+                value="\n".join(ignore_settings),
+                inline=False
+            )
+        
+        embed.set_footer(text=f"YALC • Server ID: {ctx.guild.id}")
+        await ctx.send(embed=embed)
+
+    @yalc_group.group(name="ignore", invoke_without_command=True)
+    @commands.admin_or_permissions(manage_guild=True)
+    async def yalc_ignore(self, ctx: commands.Context):
+        """
+        Ignore a user, channel, role, or category from logging.
+        
+        Use subcommands to specify what type of entity to ignore.
+        """
+        await ctx.send_help(ctx.command)
+
+    @yalc_ignore.command(name="user")
+    async def yalc_ignore_user(self, ctx: commands.Context, user: discord.Member):
+        """
+        Ignore a user from logging events.
+        
+        Parameters
+        ----------
+        user: discord.Member
+            The user to ignore
+        """
+        async with self.config.guild(ctx.guild).ignored_users() as ignored_users:
+            if user.id in ignored_users:
+                await ctx.send(f"❌ User {user.mention} is already being ignored.")
+                return
+                
+            ignored_users.append(user.id)
+            
+        await ctx.send(f"✅ Now ignoring events from user {user.mention}.")
+
+    @yalc_ignore.command(name="channel")
+    async def yalc_ignore_channel(self, ctx: commands.Context, channel: discord.TextChannel):
+        """
+        Ignore a channel from logging events.
+        
+        Parameters
+        ----------
+        channel: discord.TextChannel
+            The channel to ignore
+        """
+        async with self.config.guild(ctx.guild).ignored_channels() as ignored_channels:
+            if channel.id in ignored_channels:
+                await ctx.send(f"❌ Channel {channel.mention} is already being ignored.")
+                return
+                
+            ignored_channels.append(channel.id)
+            
+        await ctx.send(f"✅ Now ignoring events from channel {channel.mention}.")
+
+    @yalc_ignore.command(name="role")
+    async def yalc_ignore_role(self, ctx: commands.Context, role: discord.Role):
+        """
+        Ignore users with a specific role from logging events.
+        
+        Parameters
+        ----------
+        role: discord.Role
+            The role to ignore
+        """
+        async with self.config.guild(ctx.guild).ignored_roles() as ignored_roles:
+            if role.id in ignored_roles:
+                await ctx.send(f"❌ Role {role.mention} is already being ignored.")
+                return
+                
+            ignored_roles.append(role.id)
+            
+        await ctx.send(f"✅ Now ignoring events from users with the role {role.mention}.")
+
+    @yalc_ignore.command(name="category")
+    async def yalc_ignore_category(self, ctx: commands.Context, category: discord.CategoryChannel):
+        """
+        Ignore an entire category from logging events.
+        
+        Parameters
+        ----------
+        category: discord.CategoryChannel
+            The category to ignore
+        """
+        async with self.config.guild(ctx.guild).ignored_categories() as ignored_categories:
+            if category.id in ignored_categories:
+                await ctx.send(f"❌ Category '{category.name}' is already being ignored.")
+                return
+                
+            ignored_categories.append(category.id)
+            
+        await ctx.send(f"✅ Now ignoring events from all channels in the '{category.name}' category.")
+
+    @yalc_group.group(name="unignore", invoke_without_command=True)
+    @commands.admin_or_permissions(manage_guild=True)
+    async def yalc_unignore(self, ctx: commands.Context):
+        """
+        Unignore a previously ignored user, channel, role, or category.
+        
+        Use subcommands to specify what type of entity to unignore.
+        """
+        await ctx.send_help(ctx.command)
+
+    @yalc_unignore.command(name="user")
+    async def yalc_unignore_user(self, ctx: commands.Context, user: discord.Member):
+        """
+        Unignore a previously ignored user.
+        
+        Parameters
+        ----------
+        user: discord.Member
+            The user to stop ignoring
+        """
+        async with self.config.guild(ctx.guild).ignored_users() as ignored_users:
+            if user.id not in ignored_users:
+                await ctx.send(f"❌ User {user.mention} is not being ignored.")
+                return
+                
+            ignored_users.remove(user.id)
+            
+        await ctx.send(f"✅ No longer ignoring events from user {user.mention}.")
+
+    @yalc_unignore.command(name="channel")
+    async def yalc_unignore_channel(self, ctx: commands.Context, channel: discord.TextChannel):
+        """
+        Unignore a previously ignored channel.
+        
+        Parameters
+        ----------
+        channel: discord.TextChannel
+            The channel to stop ignoring
+        """
+        async with self.config.guild(ctx.guild).ignored_channels() as ignored_channels:
+            if channel.id not in ignored_channels:
+                await ctx.send(f"❌ Channel {channel.mention} is not being ignored.")
+                return
+                
+            ignored_channels.remove(channel.id)
+            
+        await ctx.send(f"✅ No longer ignoring events from channel {channel.mention}.")
+
+    @yalc_unignore.command(name="role")
+    async def yalc_unignore_role(self, ctx: commands.Context, role: discord.Role):
+        """
+        Unignore a previously ignored role.
+        
+        Parameters
+        ----------
+        role: discord.Role
+            The role to stop ignoring
+        """
+        async with self.config.guild(ctx.guild).ignored_roles() as ignored_roles:
+            if role.id not in ignored_roles:
+                await ctx.send(f"❌ Role {role.mention} is not being ignored.")
+                return
+                
+            ignored_roles.remove(role.id)
+            
+        await ctx.send(f"✅ No longer ignoring events from users with the role {role.mention}.")
+
+    @yalc_unignore.command(name="category")
+    async def yalc_unignore_category(self, ctx: commands.Context, category: discord.CategoryChannel):
+        """
+        Unignore a previously ignored category.
+        
+        Parameters
+        ----------
+        category: discord.CategoryChannel
+            The category to stop ignoring
+        """
+        async with self.config.guild(ctx.guild).ignored_categories() as ignored_categories:
+            if category.id not in ignored_categories:
+                await ctx.send(f"❌ Category '{category.name}' is not being ignored.")
+                return
+                
+            ignored_categories.remove(category.id)
+            
+        await ctx.send(f"✅ No longer ignoring events from channels in the '{category.name}' category.")
+    
+    async def is_tupperbox_message(self, message: discord.Message, tupperbox_ids: list) -> bool:
+        """Check if a message is from Tupperbox or a configured proxy bot.
+        
+        This method checks if a message is from the Tupperbox bot or any other bot
+        configured as a Tupperbox proxy in the guild settings.
+        
+        Parameters
+        ----------
+        message: discord.Message
+            The message to check
+        tupperbox_ids: list
+            List of Tupperbox bot IDs configured for the guild
+            
+        Returns
+        -------
+        bool
+            True if the message is from Tupperbox or a proxy bot, False otherwise
+        """
+        if message.author.bot:
+            # Check if the bot is in the configured Tupperbox IDs
+            if message.author.id in tupperbox_ids:
+                return True
+            
+            # Check for common proxy patterns in the message content
+            content = message.content or ""
+            if any(pattern in content for pattern in ["|", "‖", "⧸", "⧹"]):
+                return True
+            
+            # Check if the message is a reply to a Tupperbox message
+            if message.reference and message.reference.message_id:
+                try:
+                    referenced_message = await message.channel.fetch_message(message.reference.message_id)
+                    if referenced_message and referenced_message.author.id in tupperbox_ids:
+                        return True
+                except discord.NotFound:
+                    pass  # Referenced message not found, ignore
+                
+        return False
+        
     async def safe_send(self, channel: discord.TextChannel, **kwargs) -> Optional[discord.Message]:
         """
         Send a message to a channel safely, handling common exceptions.
@@ -2266,155 +2697,3 @@ class YALC(commands.Cog):
         except Exception as e:
             self.log.error(f"Unexpected error when sending to channel {channel.id}: {e}", exc_info=True)
         return None
-
-    def is_tupperbox_message(self, message: discord.Message, tupperbox_ids: list) -> bool:
-        """Check if a message is from Tupperbox or a configured proxy bot.
-        
-        This enhanced detection method checks multiple indicators to accurately identify
-        messages from Tupperbox, PluralKit, and other proxy bots:
-
-        1. Direct ID match with known proxy bot IDs
-        2. Webhook detection (with proxy pattern analysis)
-        3. Application/integration detection
-        4. Discord system account indicators (#0 discriminator)
-        5. Message content and embed pattern analysis
-        6. Metadata signatures in embeds or message components
-        7. Proxy deletion pattern detection
-
-        Parameters
-        ----------
-        message: discord.Message
-            The message to check
-        tupperbox_ids: list
-            List of known Tupperbox or proxy bot IDs
-
-        Returns
-        -------
-        bool
-            True if message appears to be Tupperbox-related, False otherwise
-        """
-        author = getattr(message, "author", None)
-        if not author:
-            return False
-        
-        # Extract key message properties for analysis
-        content = getattr(message, "content", "")
-        author_id = str(getattr(author, "id", ""))
-        webhook_id = getattr(message, "webhook_id", None)
-        application = getattr(message, "application", None)
-        embeds = getattr(message, "embeds", [])
-        
-        # === PRIMARY INDICATORS ===
-        
-        # Check 1: Direct ID match with known Tupperbox/proxy bots
-        if author_id in tupperbox_ids:
-            self.log.debug(f"Detected Tupperbox message: ID match {author_id}")
-            return True
-            
-        # Check 2: Author has bot flag set
-        if hasattr(author, "bot") and author.bot:
-            # For direct bot messages, only match if from a proxy system
-            if any(proxy_term in str(author).lower() for proxy_term in 
-                  ["tupper", "plural", "proxy", "pk", "system"]):
-                self.log.debug(f"Detected proxy system bot: {author}")
-                return True
-                
-        # === WEBHOOK & INTEGRATION CHECKS ===
-        
-        # Check 3: Enhanced webhook detection
-        if webhook_id:
-            # Check for common webhook naming patterns used by proxy systems
-            if hasattr(message, "webhook") and getattr(message, "webhook", None):
-                webhook_name = getattr(message.webhook, "name", "").lower()
-                
-                # Known proxy webhook patterns
-                proxy_patterns = ["proxy", "tupper", "pk", "system", "tulpa", "alter"]
-                
-                if any(pattern in webhook_name for pattern in proxy_patterns):
-                    self.log.debug(f"Detected proxy webhook: {webhook_name}")
-                    return True
-                    
-            # If message has very specific structural elements common in proxies
-            if content and not embeds:
-                # Look for proxy tag patterns like [Name] or {Name:} at the start
-                if (content.startswith("[") or content.startswith("{") or 
-                    content.startswith("<") or content.startswith("\"")):
-                    self.log.debug(f"Detected potential proxy message pattern via webhook")
-                    return True
-        
-        # Check 4: Application-based proxying
-        if application:
-            app_name = getattr(application, "name", "").lower()
-            proxy_app_terms = ["proxy", "plural", "tupper", "system", "pk"]
-            
-            if any(term in app_name for term in proxy_app_terms):
-                self.log.debug(f"Detected proxy application: {app_name}")
-                return True
-        
-        # === SYSTEM ACCOUNT & METADATA CHECKS ===
-        
-        # Check 5: Enhanced #0 discriminator check (system accounts)
-        # Modern Discord API
-        if hasattr(author, "discriminator"):
-            discriminator = getattr(author, "discriminator", None)
-            if discriminator is not None:
-                if str(discriminator) == "0" or str(discriminator) == "0000":
-                    self.log.debug(f"Detected system account: discriminator {discriminator}")
-                    return True
-        
-        # Fallback for string representation
-        try:
-            full_tag = str(author)
-            if "#" in full_tag:
-                tag_disc = full_tag.split("#", 1)[1]
-                if tag_disc in ("0", "0000"):
-                    self.log.debug(f"Detected system account via string parsing: {full_tag}")
-                    return True
-        except Exception:
-            pass
-            
-        # === CONTENT & EMBED ANALYSIS ===
-        
-        # Check 6: Enhanced embed pattern detection
-        for embed in embeds:
-            # Check embed footer for proxy signatures
-            footer = getattr(embed, "footer", None)
-            if footer:
-                footer_text = getattr(footer, "text", "").lower()
-                footer_icon = getattr(footer, "icon_url", "")
-                
-                # Check for proxy terms in footer text
-                proxy_terms = ["tupper", "proxy", "proxied", "system", "by", "via", "pluralkit", "pk"]
-                if any(term in footer_text for term in proxy_terms):
-                    self.log.debug(f"Detected proxy embed footer: {footer_text}")
-                    return True
-                    
-                # Check for known proxy system URLs in footer icons
-                proxy_domains = ["pluralkit", "tupperbox", "tupper.io", "discord.com/api/webhooks"]
-                if any(domain in footer_icon for domain in proxy_domains):
-                    self.log.debug(f"Detected proxy footer icon: {footer_icon}")
-                    return True
-            
-            # Check embed author for proxy patterns
-            author_field = getattr(embed, "author", None)
-            if author_field:
-                author_name = getattr(author_field, "name", "").lower()
-                
-                # System identifiers in author field
-                if any(f"[{term}]" in author_name for term in ["system", "proxy", "pk"]):
-                    self.log.debug(f"Detected proxy embed author: {author_name}")
-                    return True
-                    
-        # Check 7: Advanced content pattern analysis
-        if content:
-            # Look for message edit signatures commonly used by proxy systems
-            edit_signatures = [
-                "(edited)", "[edited]", "• edited", 
-                "proxied by", "proxy by", "via proxy"
-            ]
-            
-            if any(signature in content.lower() for signature in edit_signatures):
-                self.log.debug(f"Detected proxy edit signature in content")
-                return True
-                
-        return False
