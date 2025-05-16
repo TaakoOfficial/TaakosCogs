@@ -709,16 +709,119 @@ class YALC(commands.Cog):
             if embeds:
                 embed_info = []
                 for i, msg_embed in enumerate(embeds[:3]):  # Show details for first 3 embeds
+                    # Get the embed title with proper formatting
                     embed_title = getattr(msg_embed, "title", "*No title*")
-                    embed_desc = getattr(msg_embed, "description", "*No description*")
-                    if embed_desc and len(embed_desc) > 50:
-                        embed_desc = embed_desc[:47] + "..."
+                    if embed_title and len(embed_title) > 80:
+                        embed_title = embed_title[:77] + "..."
                     
-                    embed_info.append(f"**Embed {i+1}**: {embed_title}\n{embed_desc}")
+                    # Format the embed details with a divider for better readability
+                    embed_details = [f"**Embed {i+1}**: {embed_title}"]
+                    embed_details.append("───────────────")  # Divider
+                    
+                    # Add description with proper truncation and formatting
+                    embed_desc = getattr(msg_embed, "description", None)
+                    if embed_desc:
+                        if len(embed_desc) > 200:  # Increased character limit
+                            embed_desc = embed_desc[:197] + "..."
+                        embed_details.append(f"**Description**: {embed_desc}")
+                    
+                    # Add URL if present
+                    embed_url = getattr(msg_embed, "url", None)
+                    if embed_url:
+                        embed_details.append(f"**URL**: [Link]({embed_url})")
+                    
+                    # Enhanced author display with URL if available
+                    embed_author = getattr(msg_embed, "author", None)
+                    if embed_author:
+                        author_name = getattr(embed_author, "name", None)
+                        author_url = getattr(embed_author, "url", None)
+                        author_icon = getattr(embed_author, "icon_url", None)
+                        
+                        if author_name:
+                            if author_url:
+                                embed_details.append(f"**Author**: [{author_name}]({author_url})")
+                            else:
+                                embed_details.append(f"**Author**: {author_name}")
+                            
+                            if author_icon:
+                                embed_details.append(f"**Author Icon**: [View]({author_icon})")
+                    
+                    # Add fields with improved formatting (up to 3)
+                    embed_fields = getattr(msg_embed, "fields", [])
+                    if embed_fields:
+                        embed_details.append("**Fields**:")
+                        for j, field in enumerate(embed_fields[:3]):
+                            field_name = getattr(field, "name", "Unnamed Field")
+                            field_value = getattr(field, "value", "")
+                            field_inline = getattr(field, "inline", False)
+                            
+                            # Format field values with truncation
+                            if field_value and len(field_value) > 100:
+                                field_value = field_value[:97] + "..."
+                            
+                            # Show field name and value with inline status
+                            inline_status = " (Inline)" if field_inline else ""
+                            embed_details.append(f"• **{field_name}**{inline_status}: {field_value}")
+                        
+                        # Show if there are more fields
+                        if len(embed_fields) > 3:
+                            embed_details.append(f"*...and {len(embed_fields) - 3} more fields*")
+                    
+                    # Enhanced media display
+                    if getattr(msg_embed, "image", None) and getattr(msg_embed.image, "url", None):
+                        embed_details.append(f"**Image**: [View]({msg_embed.image.url})")
+                    
+                    if getattr(msg_embed, "thumbnail", None) and getattr(msg_embed.thumbnail, "url", None):
+                        embed_details.append(f"**Thumbnail**: [View]({msg_embed.thumbnail.url})")
+                    
+                    # Add timestamp if present
+                    if getattr(msg_embed, "timestamp", None):
+                        formatted_time = discord.utils.format_dt(msg_embed.timestamp, style="f")
+                        embed_details.append(f"**Timestamp**: {formatted_time}")
+                    
+                    # Footer with enhanced formatting
+                    embed_footer = getattr(msg_embed, "footer", None)
+                    if embed_footer:
+                        footer_text = getattr(embed_footer, "text", None)
+                        footer_icon = getattr(embed_footer, "icon_url", None)
+                        
+                        if footer_text:
+                            if len(footer_text) > 100:
+                                footer_text = footer_text[:97] + "..."
+                            embed_details.append(f"**Footer**: {footer_text}")
+                        
+                        if footer_icon:
+                            embed_details.append(f"**Footer Icon**: [View]({footer_icon})")
+                    
+                    # Add color with a visual indicator
+                    if getattr(msg_embed, "color", None):
+                        color_hex = f"#{msg_embed.color.value:06x}"
+                        # Add a colored square emoji based on general color
+                        if msg_embed.color.value < 0x800000:  # Dark/Red
+                            color_indicator = "🟥"
+                        elif msg_embed.color.value < 0x808000:  # Orange/Brown
+                            color_indicator = "🟧"
+                        elif msg_embed.color.value < 0x008000:  # Yellow/Gold
+                            color_indicator = "🟨"
+                        elif msg_embed.color.value < 0x008080:  # Green
+                            color_indicator = "🟩"
+                        elif msg_embed.color.value < 0x000080:  # Teal/Cyan
+                            color_indicator = "🟦"
+                        elif msg_embed.color.value < 0x800080:  # Blue/Indigo
+                            color_indicator = "🟪"
+                        else:  # Purple/Pink
+                            color_indicator = "🟪"
+                        
+                        embed_details.append(f"**Color**: {color_indicator} {color_hex}")
+                    
+                    # Join all details together with empty line for readability
+                    embed_info.append("\n".join(embed_details))
                 
+                # Show info about additional embeds
                 if len(embeds) > 3:
                     embed_info.append(f"*...and {len(embeds) - 3} more embeds*")
                 
+                # Add all embed info to the logging embed
                 embed.add_field(
                     name=f"Embeds ({len(embeds)})",
                     value="\n".join(embed_info),
@@ -860,9 +963,124 @@ class YALC(commands.Cog):
                 embed.add_field(name="Attachments", value=attachment_text, inline=False)
                 
             if embeds:
+                embed_info = []
+                for i, msg_embed in enumerate(embeds[:3]):  # Show details for first 3 embeds
+                    # Get the embed title with proper formatting
+                    embed_title = getattr(msg_embed, "title", "*No title*")
+                    if embed_title and len(embed_title) > 80:
+                        embed_title = embed_title[:77] + "..."
+                    
+                    # Format the embed details with a divider for better readability
+                    embed_details = [f"**Embed {i+1}**: {embed_title}"]
+                    embed_details.append("───────────────")  # Divider
+                    
+                    # Add description with proper truncation and formatting
+                    embed_desc = getattr(msg_embed, "description", None)
+                    if embed_desc:
+                        if len(embed_desc) > 200:  # Increased character limit
+                            embed_desc = embed_desc[:197] + "..."
+                        embed_details.append(f"**Description**: {embed_desc}")
+                    
+                    # Add URL if present
+                    embed_url = getattr(msg_embed, "url", None)
+                    if embed_url:
+                        embed_details.append(f"**URL**: [Link]({embed_url})")
+                    
+                    # Enhanced author display with URL if available
+                    embed_author = getattr(msg_embed, "author", None)
+                    if embed_author:
+                        author_name = getattr(embed_author, "name", None)
+                        author_url = getattr(embed_author, "url", None)
+                        author_icon = getattr(embed_author, "icon_url", None)
+                        
+                        if author_name:
+                            if author_url:
+                                embed_details.append(f"**Author**: [{author_name}]({author_url})")
+                            else:
+                                embed_details.append(f"**Author**: {author_name}")
+                            
+                            if author_icon:
+                                embed_details.append(f"**Author Icon**: [View]({author_icon})")
+                    
+                    # Add fields with improved formatting (up to 3)
+                    embed_fields = getattr(msg_embed, "fields", [])
+                    if embed_fields:
+                        embed_details.append("**Fields**:")
+                        for j, field in enumerate(embed_fields[:3]):
+                            field_name = getattr(field, "name", "Unnamed Field")
+                            field_value = getattr(field, "value", "")
+                            field_inline = getattr(field, "inline", False)
+                            
+                            # Format field values with truncation
+                            if field_value and len(field_value) > 100:
+                                field_value = field_value[:97] + "..."
+                            
+                            # Show field name and value with inline status
+                            inline_status = " (Inline)" if field_inline else ""
+                            embed_details.append(f"• **{field_name}**{inline_status}: {field_value}")
+                        
+                        # Show if there are more fields
+                        if len(embed_fields) > 3:
+                            embed_details.append(f"*...and {len(embed_fields) - 3} more fields*")
+                    
+                    # Enhanced media display
+                    if getattr(msg_embed, "image", None) and getattr(msg_embed.image, "url", None):
+                        embed_details.append(f"**Image**: [View]({msg_embed.image.url})")
+                    
+                    if getattr(msg_embed, "thumbnail", None) and getattr(msg_embed.thumbnail, "url", None):
+                        embed_details.append(f"**Thumbnail**: [View]({msg_embed.thumbnail.url})")
+                    
+                    # Add timestamp if present
+                    if getattr(msg_embed, "timestamp", None):
+                        formatted_time = discord.utils.format_dt(msg_embed.timestamp, style="f")
+                        embed_details.append(f"**Timestamp**: {formatted_time}")
+                    
+                    # Footer with enhanced formatting
+                    embed_footer = getattr(msg_embed, "footer", None)
+                    if embed_footer:
+                        footer_text = getattr(embed_footer, "text", None)
+                        footer_icon = getattr(embed_footer, "icon_url", None)
+                        
+                        if footer_text:
+                            if len(footer_text) > 100:
+                                footer_text = footer_text[:97] + "..."
+                            embed_details.append(f"**Footer**: {footer_text}")
+                        
+                        if footer_icon:
+                            embed_details.append(f"**Footer Icon**: [View]({footer_icon})")
+                    
+                    # Add color with a visual indicator
+                    if getattr(msg_embed, "color", None):
+                        color_hex = f"#{msg_embed.color.value:06x}"
+                        # Add a colored square emoji based on general color
+                        if msg_embed.color.value < 0x800000:  # Dark/Red
+                            color_indicator = "🟥"
+                        elif msg_embed.color.value < 0x808000:  # Orange/Brown
+                            color_indicator = "🟧"
+                        elif msg_embed.color.value < 0x008000:  # Yellow/Gold
+                            color_indicator = "🟨"
+                        elif msg_embed.color.value < 0x008080:  # Green
+                            color_indicator = "🟩"
+                        elif msg_embed.color.value < 0x000080:  # Teal/Cyan
+                            color_indicator = "🟦"
+                        elif msg_embed.color.value < 0x800080:  # Blue/Indigo
+                            color_indicator = "🟦"
+                        else:  # Purple/Pink
+                            color_indicator = "🟪"
+                        
+                        embed_details.append(f"**Color**: {color_indicator} {color_hex}")
+                    
+                    # Join all details together with empty line for readability
+                    embed_info.append("\n".join(embed_details))
+                
+                # Show info about additional embeds
+                if len(embeds) > 3:
+                    embed_info.append(f"*...and {len(embeds) - 3} more embeds*")
+                
+                # Add all embed info to the logging embed
                 embed.add_field(
-                    name="Embeds", 
-                    value=f"Message contains {len(embeds)} embed{'s' if len(embeds) != 1 else ''}", 
+                    name=f"Embeds ({len(embeds)})",
+                    value="\n".join(embed_info),
                     inline=False
                 )
                 
