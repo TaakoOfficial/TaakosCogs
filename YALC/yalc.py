@@ -887,6 +887,20 @@ class YALC(commands.Cog):
                 self.log.debug("should_log_event returned False - channel/user/role is ignored.")
                 return
                 
+            # Check if content actually changed
+            if before.content == after.content:
+                # If content is the same, check if this is just an auto-embed conversion
+                # Auto-embeds typically happen when Discord processes links into embeds
+                # without the user actually editing the message
+                if (len(before.embeds) != len(after.embeds) or
+                    before.embeds != after.embeds):
+                    # This is likely an auto-embed conversion, skip logging
+                    self.log.debug("Skipping auto-embed conversion - content unchanged, only embeds different")
+                    return
+                # If content and embeds are the same, nothing meaningful changed
+                self.log.debug("Skipping message edit - no meaningful changes detected")
+                return
+                
             # 4. Get the appropriate log channel
             channel = await self.get_log_channel(before.guild, "message_edit")
             if not channel:
@@ -1413,11 +1427,52 @@ class YALC(commands.Cog):
             self.log.warning("No log channel set for member_leave.")
             return
         try:
-            embed = self.create_embed(
-                "member_leave",
-                f"👋 {member.mention} has left the server.\n\u200b",
-                user=f"{member} ({member.id})"
+            # Create enhanced embed with join date information
+            embed = discord.Embed(
+                title="👋 Member Leave",
+                description=f"{member.mention} has left the server.\n\u200b",
+                color=discord.Color(0xF39C12),  # Orange color for leave events
+                timestamp=datetime.datetime.now(datetime.UTC)
             )
+            
+            # Add user information
+            embed.add_field(
+                name="User",
+                value=f"{member} ({member.id})",
+                inline=True
+            )
+            
+            # Add join date information - this is what was requested
+            if member.joined_at:
+                join_date_formatted = member.joined_at.strftime('%B %d, %Y at %I:%M %p')
+                embed.add_field(
+                    name="📅 Originally Joined",
+                    value=join_date_formatted,
+                    inline=True
+                )
+                
+                # Calculate how long they were in the server
+                time_in_server = datetime.datetime.now(datetime.UTC) - member.joined_at
+                days = time_in_server.days
+                if days > 0:
+                    embed.add_field(
+                        name="⏱️ Time in Server",
+                        value=f"{days} day{'s' if days != 1 else ''}",
+                        inline=True
+                    )
+            
+            # Add server information
+            embed.add_field(name="🏠 Server", value=member.guild.name, inline=True)
+            embed.add_field(name="👥 Members", value=str(member.guild.member_count), inline=True)
+            
+            # Add user thumbnail if available
+            settings = await self.config.guild(member.guild).all()
+            if settings.get("include_thumbnails", True) and member.display_avatar:
+                embed.set_thumbnail(url=member.display_avatar.url)
+            
+            # Set footer
+            self.set_embed_footer(embed, label="YALC Logger • Member Leave")
+            
             await self.safe_send(channel, embed=embed)
         except Exception as e:
             self.log.error(f"Failed to log member_leave: {e}")
