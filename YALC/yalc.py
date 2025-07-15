@@ -2904,10 +2904,10 @@ class YALC(commands.Cog):
         await ctx.send(f"✅ No longer ignoring events from channels in the '{category.name}' category.")
     
     async def is_tupperbox_message(self, message: discord.Message, tupperbox_ids: list) -> bool:
-        """Check if a message is from Tupperbox or a configured proxy bot.
+        """Check if a message is from Tupperbox, Tupperhook, or a configured proxy bot.
         
-        This method checks if a message is from the Tupperbox bot or any other bot
-        configured as a Tupperbox proxy in the guild settings.
+        This method checks if a message is from the Tupperbox bot, a webhook named "Tupperhook"/"Tupperbox",
+        or any other bot configured as a Tupperbox proxy in the guild settings.
         
         Parameters
         ----------
@@ -2919,8 +2919,14 @@ class YALC(commands.Cog):
         Returns
         -------
         bool
-            True if the message is from Tupperbox or a proxy bot, False otherwise
+            True if the message is from Tupperbox, Tupperhook, or a proxy bot, False otherwise
         """
+        # Webhook name detection for Tupperbox/Tupperhook
+        if getattr(message, "webhook_id", None):
+            webhook_name = getattr(message.author, "name", "") or ""
+            if "tupperbox" in webhook_name.lower() or "tupperhook" in webhook_name.lower():
+                return True
+
         if message.author.bot:
             # Check if the bot is in the configured Tupperbox IDs
             if message.author.id in tupperbox_ids:
