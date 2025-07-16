@@ -18,6 +18,9 @@ def dashboard_page(*args, **kwargs):
         return func
     return decorator
 
+# Make dashboard_page available on the cog instance for DashboardIntegration
+setattr(YALC, "dashboard_page", staticmethod(dashboard_page))
+
 # REMOVE THIS DUPLICATE CLASS DEFINITION
 
 from .dashboard_integration import DashboardIntegration
