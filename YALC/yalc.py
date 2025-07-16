@@ -37,19 +37,8 @@ class YALC(commands.Cog):
     - Dashboard integration for easy configuration
     """
 
-    def setup_dashboard(self):
-        """Bind dashboard pages from dashboard_integration.py after all attributes are set."""
-        setup_dashboard_pages(self)
-
-# Make dashboard_page available on the cog instance for DashboardIntegration
-setattr(YALC, "dashboard_page", staticmethod(dashboard_page))
-
-# Make dashboard_page available on the cog instance for DashboardIntegration
-setattr(YALC, "dashboard_page", staticmethod(dashboard_page))
-# Remove broken __init__ assignment and restore the original class-based __init__ definition.
-
-    async def should_log_event(self, guild: discord.Guild, event_type: str, 
-                         channel: Optional[discord.abc.GuildChannel] = None, 
+    async def should_log_event(self, guild: discord.Guild, event_type: str,
+                         channel: Optional[discord.abc.GuildChannel] = None,
                          user: Optional[Union[discord.Member, discord.User]] = None,
                          message: Optional[discord.Message] = None) -> bool:
         """
@@ -151,6 +140,16 @@ setattr(YALC, "dashboard_page", staticmethod(dashboard_page))
             self.log.error(f"Error in should_log_event: {e}", exc_info=True)
             # Default to True if an error occurred (better to log in case of doubt)
             return True
+
+
+    def setup_dashboard(self):
+        """Bind dashboard pages from dashboard_integration.py after all attributes are set."""
+        setup_dashboard_pages(self)
+
+# Make dashboard_page available on the cog instance for DashboardIntegration
+setattr(YALC, "dashboard_page", staticmethod(dashboard_page))
+# Remove broken __init__ assignment and restore the original class-based __init__ definition.
+
 
     async def get_log_channel(self, guild: discord.Guild, event_type: str) -> Optional[discord.TextChannel]:
         """Get the appropriate logging channel for an event. Only event_channels is used."""
