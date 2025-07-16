@@ -511,25 +511,6 @@ class YALC(commands.Cog):
             except Exception as e:
                 self.log.error(f"Failed to register YALC as dashboard third party: {e}")
 
-    @property
-    def dashboard_third_party_name(self) -> str:
-        """Name for dashboard third party integration."""
-        return "YALC"
-
-    @property
-    def dashboard_third_party_description(self) -> str:
-        """Description for dashboard third party integration."""
-        return "Yet Another Logging Cog - advanced server logging and moderation event tracking."
-
-    @property
-    def dashboard_third_party_icon(self) -> str:
-        """Icon URL for dashboard third party integration."""
-        return "https://cdn-icons-png.flaticon.com/512/928/928797.png"
-
-    @property
-    def dashboard_third_party_routes(self) -> list:
-        """Dashboard routes for third party integration (empty if not using custom pages)."""
-        return []
 
     # --- Event Listeners ---
 
