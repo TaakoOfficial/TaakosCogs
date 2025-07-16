@@ -24,15 +24,6 @@ from .dashboard_integration import DashboardIntegration
 
 class YALC(commands.Cog):
     """Yet Another Logging Cog for Red-DiscordBot.
-
-    def set_dashboard_page(self, func):
-        """Bind a dashboard page to the cog instance."""
-        setattr(self, func.__name__, func.__get__(self))
-
-    def set_dashboard_page(self, func):
-        """Bind a dashboard page to the cog instance."""
-        setattr(self, func.__name__, func.__get__(self))
-
     A comprehensive logging solution with both classic and slash commands.
     Features include:
     - Customizable event logging
@@ -42,6 +33,10 @@ class YALC(commands.Cog):
     - Rich embed formatting
     - Dashboard integration for easy configuration
     """
+
+    def set_dashboard_page(self, func):
+        """Bind a dashboard page to the cog instance."""
+        setattr(self, func.__name__, func.__get__(self))
 
     def __init__(self, bot: Red) -> None:
         """Initialize YALC."""
