@@ -60,7 +60,6 @@ class DashboardIntegration:
                 "description": "View YALC features and capabilities",
                 "icon": "📝",
                 "methods": ["GET"],
-                "function": self.dashboard_overview,
                 "endpoint": self.dashboard_overview,
             },
             {
@@ -69,7 +68,6 @@ class DashboardIntegration:
                 "description": "Configure YALC logging settings",
                 "icon": "⚙️",
                 "methods": ["GET", "POST"],
-                "function": self.dashboard_settings,
                 "endpoint": self.dashboard_settings,
             },
             {
@@ -78,7 +76,6 @@ class DashboardIntegration:
                 "description": "Information about YALC functionality",
                 "icon": "ℹ️",
                 "methods": ["GET"],
-                "function": self.dashboard_about,
                 "endpoint": self.dashboard_about,
             },
             {
@@ -87,7 +84,6 @@ class DashboardIntegration:
                 "description": "Test YALC dashboard integration",
                 "icon": "🧪",
                 "methods": ["GET"],
-                "function": self.dashboard_test,
                 "endpoint": self.dashboard_test,
             },
         ]
