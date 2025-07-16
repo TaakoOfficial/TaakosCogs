@@ -550,7 +550,7 @@ class YALC(commands.Cog):
     async def on_dashboard_cog_add(self, dashboard_cog: commands.Cog) -> None:
         """Register YALC as a dashboard third party and setup dashboard pages when dashboard cog is loaded."""
         try:
-            dashboard_cog.rpc.third_parties_handler.add_third_party(self.dashboard)
+            dashboard_cog.rpc.third_parties_handler.add_third_party(self)
             self.log.info("Successfully registered YALC as a dashboard third party.")
             self.dashboard.setup_dashboard()
             self.log.info("Dashboard pages registered via setup_dashboard().")
