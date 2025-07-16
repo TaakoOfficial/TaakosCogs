@@ -534,29 +534,6 @@ class YALC(commands.Cog):
                                 except Exception as e:
                                     self.log.error(f"Error accessing '{attr}': {e}")
                         
-                        dashboard_cog.rpc.third_parties_handler.add_third_party(self.dashboard)
-                        self.log.info("Successfully registered YALC as a dashboard third party.")
-
-                        # Register dashboard pages using the SkySearch pattern
-                        try:
-                            self.dashboard.setup_dashboard()
-                            self.log.info("Dashboard pages registered via setup_dashboard().")
-                        except Exception as e:
-                            self.log.error(f"Error registering dashboard pages: {e}")
-
-                        # Try to verify registration
-                        try:
-                            third_parties = getattr(dashboard_cog.rpc.third_parties_handler, 'third_parties', None)
-                            if third_parties:
-                                self.log.info(f"Number of registered third parties: {len(third_parties)}")
-                                for i, tp in enumerate(third_parties):
-                                    tp_name = getattr(tp, 'name', 'Unknown')
-                                    self.log.info(f"Third party {i+1}: {tp_name}")
-                            else:
-                                self.log.warning("Could not access third_parties list for verification")
-                        except Exception as e:
-                            self.log.error(f"Error verifying registration: {e}")
-                            
                     except Exception as e:
                         self.log.error(f"Failed to register YALC as dashboard third party: {e}", exc_info=True)
                 else:
@@ -568,6 +545,18 @@ class YALC(commands.Cog):
 
 
     # --- Event Listeners ---
+
+    @commands.Cog.listener()
+    async def on_dashboard_cog_add(self, dashboard_cog: commands.Cog) -> None:
+        """Register YALC as a dashboard third party and setup dashboard pages when dashboard cog is loaded."""
+        try:
+            dashboard_cog.rpc.third_parties_handler.add_third_party(self.dashboard)
+            self.log.info("Successfully registered YALC as a dashboard third party.")
+            self.dashboard.setup_dashboard()
+            self.log.info("Dashboard pages registered via setup_dashboard().")
+        except Exception as e:
+            self.log.error(f"Dashboard integration setup failed: {e}")
+
 
     @commands.Cog.listener()
     async def on_message_delete(self, message: discord.Message) -> None:
