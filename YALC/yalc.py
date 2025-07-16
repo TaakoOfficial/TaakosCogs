@@ -502,14 +502,62 @@ class YALC(commands.Cog):
             self.log.info("Registered all YALC events as modlog case types.")
         except Exception as e:
             self.log.error(f"Failed to register YALC case types: {e}")
-        # Register as dashboard third party if dashboard is loaded
+        
+        # Enhanced dashboard registration with debugging
+        self.log.info("Starting dashboard third party registration process...")
         dashboard_cog = self.bot.get_cog("Dashboard")
-        if dashboard_cog and hasattr(dashboard_cog, "rpc") and hasattr(dashboard_cog.rpc, "third_parties_handler"):
-            try:
-                dashboard_cog.rpc.third_parties_handler.add_third_party(self.dashboard)
-                self.log.info("Registered YALC as a dashboard third party.")
-            except Exception as e:
-                self.log.error(f"Failed to register YALC as dashboard third party: {e}")
+        self.log.info(f"Dashboard cog found: {dashboard_cog is not None}")
+        
+        if dashboard_cog:
+            self.log.info(f"Dashboard cog has 'rpc' attribute: {hasattr(dashboard_cog, 'rpc')}")
+            if hasattr(dashboard_cog, "rpc"):
+                self.log.info(f"Dashboard RPC has 'third_parties_handler' attribute: {hasattr(dashboard_cog.rpc, 'third_parties_handler')}")
+                if hasattr(dashboard_cog.rpc, "third_parties_handler"):
+                    try:
+                        self.log.info("Attempting to register YALC as dashboard third party...")
+                        self.log.info(f"Dashboard integration object: {self.dashboard}")
+                        self.log.info(f"Dashboard integration has 'name' property: {hasattr(self.dashboard, 'name')}")
+                        self.log.info(f"Dashboard integration has 'pages' method: {hasattr(self.dashboard, 'pages')}")
+                        
+                        # Check if the dashboard integration has all required attributes
+                        required_attrs = ['name', 'description', 'version', 'author', 'repo', 'support', 'icon', 'pages']
+                        for attr in required_attrs:
+                            has_attr = hasattr(self.dashboard, attr)
+                            self.log.info(f"Dashboard integration has '{attr}': {has_attr}")
+                            if has_attr:
+                                try:
+                                    value = getattr(self.dashboard, attr)
+                                    if callable(value):
+                                        self.log.info(f"'{attr}' is callable")
+                                    else:
+                                        self.log.info(f"'{attr}' value: {value}")
+                                except Exception as e:
+                                    self.log.error(f"Error accessing '{attr}': {e}")
+                        
+                        dashboard_cog.rpc.third_parties_handler.add_third_party(self.dashboard)
+                        self.log.info("Successfully registered YALC as a dashboard third party.")
+                        
+                        # Try to verify registration
+                        try:
+                            third_parties = getattr(dashboard_cog.rpc.third_parties_handler, 'third_parties', None)
+                            if third_parties:
+                                self.log.info(f"Number of registered third parties: {len(third_parties)}")
+                                for i, tp in enumerate(third_parties):
+                                    tp_name = getattr(tp, 'name', 'Unknown')
+                                    self.log.info(f"Third party {i+1}: {tp_name}")
+                            else:
+                                self.log.warning("Could not access third_parties list for verification")
+                        except Exception as e:
+                            self.log.error(f"Error verifying registration: {e}")
+                            
+                    except Exception as e:
+                        self.log.error(f"Failed to register YALC as dashboard third party: {e}", exc_info=True)
+                else:
+                    self.log.warning("Dashboard RPC does not have 'third_parties_handler' attribute")
+            else:
+                self.log.warning("Dashboard cog does not have 'rpc' attribute")
+        else:
+            self.log.warning("Dashboard cog not found - will try to register later when dashboard loads")
 
 
     # --- Event Listeners ---
@@ -2883,6 +2931,140 @@ class YALC(commands.Cog):
             ignored_categories.remove(category.id)
             
         await ctx.send(f"✅ No longer ignoring events from channels in the '{category.name}' category.")
+
+    @yalc_group.command(name="dashboard")
+    @commands.admin_or_permissions(manage_guild=True)
+    async def yalc_dashboard(self, ctx: commands.Context, action: str = "status"):
+        """
+        Check or manage dashboard integration status.
+        
+        Parameters
+        ----------
+        action: str
+            Action to perform: 'status' (default) or 'register'
+        """
+        if action == "status":
+            # Check dashboard integration status
+            dashboard_cog = self.bot.get_cog("Dashboard")
+            
+            embed = discord.Embed(
+                title="🪃 YALC Dashboard Integration Status",
+                color=discord.Color.blue()
+            )
+            
+            if not dashboard_cog:
+                embed.add_field(
+                    name="❌ Dashboard Cog",
+                    value="Dashboard cog is not loaded",
+                    inline=False
+                )
+            else:
+                embed.add_field(
+                    name="✅ Dashboard Cog",
+                    value="Dashboard cog is loaded",
+                    inline=True
+                )
+                
+                if hasattr(dashboard_cog, "rpc"):
+                    embed.add_field(
+                        name="✅ Dashboard RPC",
+                        value="RPC interface is available",
+                        inline=True
+                    )
+                    
+                    if hasattr(dashboard_cog.rpc, "third_parties_handler"):
+                        embed.add_field(
+                            name="✅ Third Party Handler",
+                            value="Third party handler is available",
+                            inline=True
+                        )
+                        
+                        # Check if YALC is registered
+                        try:
+                            third_parties = getattr(dashboard_cog.rpc.third_parties_handler, 'third_parties', [])
+                            yalc_registered = any(getattr(tp, 'name', None) == 'YALC' for tp in third_parties)
+                            
+                            if yalc_registered:
+                                embed.add_field(
+                                    name="✅ YALC Registration",
+                                    value="YALC is registered as a third party",
+                                    inline=False
+                                )
+                            else:
+                                embed.add_field(
+                                    name="❌ YALC Registration",
+                                    value="YALC is NOT registered as a third party",
+                                    inline=False
+                                )
+                                
+                            embed.add_field(
+                                name="📊 Registered Third Parties",
+                                value=f"Total: {len(third_parties)}\n" +
+                                      "\n".join([f"• {getattr(tp, 'name', 'Unknown')}" for tp in third_parties[:5]]) +
+                                      (f"\n• ...and {len(third_parties) - 5} more" if len(third_parties) > 5 else ""),
+                                inline=False
+                            )
+                        except Exception as e:
+                            embed.add_field(
+                                name="❌ Registration Check",
+                                value=f"Error checking registration: {e}",
+                                inline=False
+                            )
+                    else:
+                        embed.add_field(
+                            name="❌ Third Party Handler",
+                            value="Third party handler not available",
+                            inline=True
+                        )
+                else:
+                    embed.add_field(
+                        name="❌ Dashboard RPC",
+                        value="RPC interface not available",
+                        inline=True
+                    )
+            
+            # Add integration object status
+            embed.add_field(
+                name="🔧 Integration Object",
+                value=f"Dashboard integration: {self.dashboard is not None}\n" +
+                      f"Has name property: {hasattr(self.dashboard, 'name')}\n" +
+                      f"Has pages method: {hasattr(self.dashboard, 'pages')}\n" +
+                      f"Name: {getattr(self.dashboard, 'name', 'N/A')}",
+                inline=False
+            )
+            
+            await ctx.send(embed=embed)
+            
+        elif action == "register":
+            # Attempt to register YALC with dashboard
+            dashboard_cog = self.bot.get_cog("Dashboard")
+            
+            if not dashboard_cog:
+                await ctx.send("❌ Dashboard cog is not loaded.")
+                return
+                
+            if not hasattr(dashboard_cog, "rpc") or not hasattr(dashboard_cog.rpc, "third_parties_handler"):
+                await ctx.send("❌ Dashboard third party handler not available.")
+                return
+                
+            try:
+                dashboard_cog.rpc.third_parties_handler.add_third_party(self.dashboard)
+                await ctx.send("✅ Successfully registered YALC as a dashboard third party.")
+                
+                # Verify registration
+                third_parties = getattr(dashboard_cog.rpc.third_parties_handler, 'third_parties', [])
+                yalc_registered = any(getattr(tp, 'name', None) == 'YALC' for tp in third_parties)
+                
+                if yalc_registered:
+                    await ctx.send("✅ Registration verified - YALC is now registered.")
+                else:
+                    await ctx.send("⚠️ Registration completed but verification failed.")
+                    
+            except Exception as e:
+                await ctx.send(f"❌ Failed to register YALC: {e}")
+                
+        else:
+            await ctx.send(f"❌ Unknown action: `{action}`. Use 'status' or 'register'.")
     
     async def is_tupperbox_message(self, message: discord.Message, tupperbox_ids: list) -> bool:
         """Check if a message is from Tupperbox, Tupperhook, or a configured proxy bot.
