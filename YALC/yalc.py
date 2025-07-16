@@ -23,7 +23,7 @@ def dashboard_page(*args, **kwargs):
 
 # REMOVE THIS DUPLICATE CLASS DEFINITION
 
-from .dashboard_integration import DashboardIntegration
+from .dashboard_integration import setup_dashboard_pages
 
 class YALC(commands.Cog):
     """Yet Another Logging Cog for Red-DiscordBot.
@@ -37,13 +37,9 @@ class YALC(commands.Cog):
     - Dashboard integration for easy configuration
     """
 
-    def set_dashboard_page(self, func):
-        """Bind a dashboard page to the cog instance."""
-        setattr(self, func.__name__, func.__get__(self))
-
     def setup_dashboard(self):
-        """No-op for dashboard integration compatibility."""
-        pass
+        """Bind dashboard pages from dashboard_integration.py after all attributes are set."""
+        setup_dashboard_pages(self)
 
 # Make dashboard_page available on the cog instance for DashboardIntegration
 setattr(YALC, "dashboard_page", staticmethod(dashboard_page))
