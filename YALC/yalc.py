@@ -150,18 +150,18 @@ class YALC(commands.Cog):
 setattr(YALC, "dashboard_page", staticmethod(dashboard_page))
 # Remove broken __init__ assignment and restore the original class-based __init__ definition.
 
-
-    async def get_log_channel(self, guild: discord.Guild, event_type: str) -> Optional[discord.TextChannel]:
-        """Get the appropriate logging channel for an event. Only event_channels is used."""
-        settings = await self.config.guild(guild).all()
-        self.log.debug(f"[get_log_channel] Guild: {guild.id}, Event: {event_type}, Settings: {settings}")
-        channel_id = settings["event_channels"].get(event_type)
-        self.log.debug(f"[get_log_channel] Selected channel_id: {channel_id}")
-        if not channel_id:
-            return None
-        channel = guild.get_channel(channel_id)
-        self.log.debug(f"[get_log_channel] Resolved channel: {channel}")
-        return channel if isinstance(channel, discord.TextChannel) else None
+    # Remove indentation from the following method so it is inside the class, not outside
+async def get_log_channel(self, guild: discord.Guild, event_type: str) -> Optional[discord.TextChannel]:
+    """Get the appropriate logging channel for an event. Only event_channels is used."""
+    settings = await self.config.guild(guild).all()
+    self.log.debug(f"[get_log_channel] Guild: {guild.id}, Event: {event_type}, Settings: {settings}")
+    channel_id = settings["event_channels"].get(event_type)
+    self.log.debug(f"[get_log_channel] Selected channel_id: {channel_id}")
+    if not channel_id:
+        return None
+    channel = guild.get_channel(channel_id)
+    self.log.debug(f"[get_log_channel] Resolved channel: {channel}")
+    return channel if isinstance(channel, discord.TextChannel) else None
 
     def create_embed(self, event_type: str, description: str, **kwargs) -> discord.Embed:
         """
