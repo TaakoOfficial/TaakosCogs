@@ -7,6 +7,11 @@ from typing import Optional, Dict, Any, List
 class DashboardIntegration:
     """Dashboard integration for YALC."""
 
+    @property
+    def qualified_name(self) -> str:
+        """The qualified name required by the dashboard API."""
+        return "YALC"
+
     def __init__(self, cog):
         self.cog = cog
         self.bot = cog.bot
