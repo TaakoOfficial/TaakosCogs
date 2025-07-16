@@ -61,6 +61,7 @@ class DashboardIntegration:
                 "icon": "📝",
                 "methods": ["GET"],
                 "function": self.dashboard_overview,
+                "endpoint": self.dashboard_overview,
             },
             {
                 "name": "settings",
@@ -69,6 +70,7 @@ class DashboardIntegration:
                 "icon": "⚙️",
                 "methods": ["GET", "POST"],
                 "function": self.dashboard_settings,
+                "endpoint": self.dashboard_settings,
             },
             {
                 "name": "about",
@@ -77,6 +79,7 @@ class DashboardIntegration:
                 "icon": "ℹ️",
                 "methods": ["GET"],
                 "function": self.dashboard_about,
+                "endpoint": self.dashboard_about,
             },
             {
                 "name": "test",
@@ -85,6 +88,7 @@ class DashboardIntegration:
                 "icon": "🧪",
                 "methods": ["GET"],
                 "function": self.dashboard_test,
+                "endpoint": self.dashboard_test,
             },
         ]
 
