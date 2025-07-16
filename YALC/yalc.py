@@ -273,6 +273,9 @@ class YALC(commands.Cog):
         self.config = Config.get_conf(self, identifier=2394567890, force_registration=True)
         self.config.register_guild(**default_guild)
 
+        # Bind dashboard pages after all attributes are set
+        from .dashboard_integration import DashboardIntegration
+        DashboardIntegration(self).setup_dashboard()
 
     async def should_log_event(self, guild: discord.Guild, event_type: str, 
                          channel: Optional[discord.abc.GuildChannel] = None, 
