@@ -15,20 +15,23 @@ import typing
 def dashboard_page(*args, **kwargs):
     def decorator(func):
         func.__dashboard_decorator_params__ = (args, kwargs)
-        def setter(self):
-            setattr(self, func.__name__, func.__get__(self))
-        func.set_dashboard_page = setter
         return func
     return decorator
 
-def set_dashboard_page(self, func):
-    """Bind a dashboard page to the cog instance."""
-    setattr(self, func.__name__, func.__get__(self))
+# REMOVE THIS DUPLICATE CLASS DEFINITION
 
 from .dashboard_integration import DashboardIntegration
 
 class YALC(commands.Cog):
     """Yet Another Logging Cog for Red-DiscordBot.
+
+    def set_dashboard_page(self, func):
+        """Bind a dashboard page to the cog instance."""
+        setattr(self, func.__name__, func.__get__(self))
+
+    def set_dashboard_page(self, func):
+        """Bind a dashboard page to the cog instance."""
+        setattr(self, func.__name__, func.__get__(self))
 
     A comprehensive logging solution with both classic and slash commands.
     Features include:
