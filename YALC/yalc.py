@@ -536,7 +536,14 @@ class YALC(commands.Cog):
                         
                         dashboard_cog.rpc.third_parties_handler.add_third_party(self.dashboard)
                         self.log.info("Successfully registered YALC as a dashboard third party.")
-                        
+
+                        # Register dashboard pages using the SkySearch pattern
+                        try:
+                            self.dashboard.setup_dashboard()
+                            self.log.info("Dashboard pages registered via setup_dashboard().")
+                        except Exception as e:
+                            self.log.error(f"Error registering dashboard pages: {e}")
+
                         # Try to verify registration
                         try:
                             third_parties = getattr(dashboard_cog.rpc.third_parties_handler, 'third_parties', None)
