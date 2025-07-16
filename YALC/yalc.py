@@ -38,6 +38,10 @@ class YALC(commands.Cog):
         """Bind a dashboard page to the cog instance."""
         setattr(self, func.__name__, func.__get__(self))
 
+    def setup_dashboard(self):
+        """No-op for dashboard integration compatibility."""
+        pass
+
     def __init__(self, bot: Red) -> None:
         """Initialize YALC."""
         self.bot = bot
