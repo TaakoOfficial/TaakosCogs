@@ -38,6 +38,63 @@ class YALC(commands.Cog):
         self.bot = bot
         self.log = logging.getLogger("red.taako.yalc")
 
+        # Comprehensive event descriptions with emojis
+        self.event_descriptions = {
+            "message_delete": ("🗑️", "Message deletions"),
+            "message_edit": ("📝", "Message edits"),
+            "message_bulk_delete": ("♻️", "Bulk message deletions"),
+            "message_pin": ("📌", "Message pins"),
+            "message_unpin": ("📍", "Message unpins"),
+            "member_join": ("🚪", "Member joins"),
+            "member_leave": ("👋", "Member leaves"),
+            "member_ban": ("🔨", "Member bans"),
+            "member_unban": ("🔓", "Member unbans"),
+            "member_kick": ("👢", "Member kicks"),
+            "member_update": ("👤", "Member updates (roles, nickname)"),
+            "member_timeout": ("⏱️", "Member timeout (added/removed)"),
+            "channel_create": ("🆕", "Channel creations"),
+            "channel_delete": ("🗑️", "Channel deletions"),
+            "channel_update": ("🔄", "Channel updates"),
+            "thread_create": ("🧵", "Thread creations"),
+            "thread_delete": ("🗑️", "Thread deletions"),
+            "thread_update": ("🔄", "Thread updates"),
+            "thread_member_join": ("➡️", "Thread member joins"),
+            "thread_member_leave": ("⬅️", "Thread member leaves"),
+            "forum_post_create": ("📰", "Forum post creations"),
+            "forum_post_delete": ("🗑️", "Forum post deletions"),
+            "forum_post_update": ("🔄", "Forum post updates"),
+            "role_create": ("✨", "Role creations"),
+            "role_delete": ("🗑️", "Role deletions"),
+            "role_update": ("🔄", "Role updates"),
+            "guild_update": ("⚙️", "Server setting updates"),
+            "emoji_update": ("😀", "Emoji updates"),
+            "sticker_update": ("🏷️", "Sticker updates"),
+            "invite_create": ("📨", "Invite creations"),
+            "invite_delete": ("🗑️", "Invite deletions"),
+            "guild_scheduled_event_create": ("📅", "Server event creations"),
+            "guild_scheduled_event_update": ("🔄", "Server event updates"),
+            "guild_scheduled_event_delete": ("🗑️", "Server event deletions"),
+            "stage_instance_create": ("🎭", "Stage instance creations"),
+            "stage_instance_delete": ("🗑️", "Stage instance deletions"),
+            "stage_instance_update": ("🔄", "Stage instance updates"),
+            "voice_update": ("🎤", "Voice channel updates"),
+            "voice_state_update": ("🔊", "Voice state changes"),
+            "command_use": ("⌨️", "Command usage"),
+            "command_error": ("⚠️", "Command errors"),
+            "application_cmd": ("🔷", "Application command usage"),
+            "reaction_add": ("👍", "Reaction additions"),
+            "reaction_remove": ("👎", "Reaction removals"),
+            "reaction_clear": ("🧹", "Reaction clears"),
+            "integration_create": ("🔌", "Integration creations"),
+            "integration_update": ("🔄", "Integration updates"),
+            "integration_delete": ("🗑️", "Integration deletions"),
+            "webhook_update": ("🪝", "Webhook updates"),
+            "automod_rule_create": ("🛡️", "AutoMod rule creations"),
+            "automod_rule_update": ("🔄", "AutoMod rule updates"),
+            "automod_rule_delete": ("🗑️", "AutoMod rule deletions"),
+            "automod_action": ("🚫", "AutoMod actions executed")
+        }
+
     def setup_dashboard(self):
         dashboard_page = getattr(self, 'dashboard_page', None)
         if dashboard_page is None:
