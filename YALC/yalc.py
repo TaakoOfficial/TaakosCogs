@@ -19,7 +19,7 @@ def dashboard_page(*args, **kwargs):
     return decorator
 
 # Make dashboard_page available on the cog instance for DashboardIntegration
-setattr(YALC, "dashboard_page", staticmethod(dashboard_page))
+# (Move this after YALC class definition)
 
 # REMOVE THIS DUPLICATE CLASS DEFINITION
 
@@ -44,6 +44,9 @@ class YALC(commands.Cog):
     def setup_dashboard(self):
         """No-op for dashboard integration compatibility."""
         pass
+
+# Make dashboard_page available on the cog instance for DashboardIntegration
+setattr(YALC, "dashboard_page", staticmethod(dashboard_page))
 
     def __init__(self, bot: Red) -> None:
         """Initialize YALC."""
