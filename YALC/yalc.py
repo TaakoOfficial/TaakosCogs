@@ -48,203 +48,110 @@ class YALC(commands.Cog):
 # Make dashboard_page available on the cog instance for DashboardIntegration
 setattr(YALC, "dashboard_page", staticmethod(dashboard_page))
 
-    def __init__(self, bot: Red) -> None:
-        """Initialize YALC."""
-        self.bot = bot
-        self.log = logging.getLogger("red.taako.yalc")
+def __init__(self, bot: Red) -> None:
+    """Initialize YALC."""
+    self.bot = bot
+    self.log = logging.getLogger("red.taako.yalc")
 
-        # Comprehensive event descriptions with emojis
-        self.event_descriptions = {
-            "message_delete": ("🗑️", "Message deletions"),
-            "message_edit": ("📝", "Message edits"),
-            "message_bulk_delete": ("♻️", "Bulk message deletions"),
-            "message_pin": ("📌", "Message pins"),
-            "message_unpin": ("📍", "Message unpins"),
-            "member_join": ("🚪", "Member joins"),
-            "member_leave": ("👋", "Member leaves"),
-            "member_ban": ("🔨", "Member bans"),
-            "member_unban": ("🔓", "Member unbans"),
-            "member_kick": ("👢", "Member kicks"),
-            "member_update": ("👤", "Member updates (roles, nickname)"),
-            "member_timeout": ("⏱️", "Member timeout (added/removed)"),
-            "channel_create": ("🆕", "Channel creations"),
-            "channel_delete": ("🗑️", "Channel deletions"),
-            "channel_update": ("🔄", "Channel updates"),
-            "thread_create": ("🧵", "Thread creations"),
-            "thread_delete": ("🗑️", "Thread deletions"),
-            "thread_update": ("🔄", "Thread updates"),
-            "thread_member_join": ("➡️", "Thread member joins"),
-            "thread_member_leave": ("⬅️", "Thread member leaves"),
-            "forum_post_create": ("📰", "Forum post creations"),
-            "forum_post_delete": ("🗑️", "Forum post deletions"),
-            "forum_post_update": ("🔄", "Forum post updates"),
-            "role_create": ("✨", "Role creations"),
-            "role_delete": ("🗑️", "Role deletions"),
-            "role_update": ("🔄", "Role updates"),
-            "guild_update": ("⚙️", "Server setting updates"),
-            "emoji_update": ("😀", "Emoji updates"),
-            "sticker_update": ("🏷️", "Sticker updates"),
-            "invite_create": ("📨", "Invite creations"),
-            "invite_delete": ("🗑️", "Invite deletions"),
-            "guild_scheduled_event_create": ("📅", "Server event creations"),
-            "guild_scheduled_event_update": ("🔄", "Server event updates"),
-            "guild_scheduled_event_delete": ("🗑️", "Server event deletions"),
-            "stage_instance_create": ("🎭", "Stage instance creations"),
-            "stage_instance_delete": ("🗑️", "Stage instance deletions"),
-            "stage_instance_update": ("🔄", "Stage instance updates"),
-            "voice_update": ("🎤", "Voice channel updates"),
-            "voice_state_update": ("🔊", "Voice state changes"),
-            "command_use": ("⌨️", "Command usage"),
-            "command_error": ("⚠️", "Command errors"),
-            "application_cmd": ("🔷", "Application command usage"),
-            "reaction_add": ("👍", "Reaction additions"),
-            "reaction_remove": ("👎", "Reaction removals"),
-            "reaction_clear": ("🧹", "Reaction clears"),
-            "integration_create": ("🔌", "Integration creations"),
-            "integration_update": ("🔄", "Integration updates"),
-            "integration_delete": ("🗑️", "Integration deletions"),
-            "webhook_update": ("🪝", "Webhook updates"),
-            "automod_rule_create": ("🛡️", "AutoMod rule creations"),
-            "automod_rule_update": ("🔄", "AutoMod rule updates"),
-            "automod_rule_delete": ("🗑️", "AutoMod rule deletions"),
-            "automod_action": ("🚫", "AutoMod actions executed")
-        }
+    # Comprehensive event descriptions with emojis
+    self.event_descriptions = {
+        "message_delete": ("🗑️", "Message deletions"),
+        "message_edit": ("📝", "Message edits"),
+        "message_bulk_delete": ("♻️", "Bulk message deletions"),
+        "message_pin": ("📌", "Message pins"),
+        "message_unpin": ("📍", "Message unpins"),
+        "member_join": ("🚪", "Member joins"),
+        "member_leave": ("👋", "Member leaves"),
+        "member_ban": ("🔨", "Member bans"),
+        "member_unban": ("🔓", "Member unbans"),
+        "member_kick": ("👢", "Member kicks"),
+        "member_update": ("👤", "Member updates (roles, nickname)"),
+        "member_timeout": ("⏱️", "Member timeout (added/removed)"),
+        "channel_create": ("🆕", "Channel creations"),
+        "channel_delete": ("🗑️", "Channel deletions"),
+        "channel_update": ("🔄", "Channel updates"),
+        "thread_create": ("🧵", "Thread creations"),
+        "thread_delete": ("🗑️", "Thread deletions"),
+        "thread_update": ("🔄", "Thread updates"),
+        "thread_member_join": ("➡️", "Thread member joins"),
+        "thread_member_leave": ("⬅️", "Thread member leaves"),
+        "forum_post_create": ("📰", "Forum post creations"),
+        "forum_post_delete": ("🗑️", "Forum post deletions"),
+        "forum_post_update": ("🔄", "Forum post updates"),
+        "role_create": ("✨", "Role creations"),
+        "role_delete": ("🗑️", "Role deletions"),
+        "role_update": ("🔄", "Role updates"),
+        "guild_update": ("⚙️", "Server setting updates"),
+        "emoji_update": ("😀", "Emoji updates"),
+        "sticker_update": ("🏷️", "Sticker updates"),
+        "invite_create": ("📨", "Invite creations"),
+        "invite_delete": ("🗑️", "Invite deletions"),
+        "guild_scheduled_event_create": ("📅", "Server event creations"),
+        "guild_scheduled_event_update": ("🔄", "Server event updates"),
+        "guild_scheduled_event_delete": ("🗑️", "Server event deletions"),
+        "stage_instance_create": ("🎭", "Stage instance creations"),
+        "stage_instance_delete": ("🗑️", "Stage instance deletions"),
+        "stage_instance_update": ("🔄", "Stage instance updates"),
+        "voice_update": ("🎤", "Voice channel updates"),
+        "voice_state_update": ("🔊", "Voice state changes"),
+        "command_use": ("⌨️", "Command usage"),
+        "command_error": ("⚠️", "Command errors"),
+        "application_cmd": ("🔷", "Application command usage"),
+        "reaction_add": ("👍", "Reaction additions"),
+        "reaction_remove": ("👎", "Reaction removals"),
+        "reaction_clear": ("🧹", "Reaction clears"),
+        "integration_create": ("🔌", "Integration creations"),
+        "integration_update": ("🔄", "Integration updates"),
+        "integration_delete": ("🗑️", "Integration deletions"),
+        "webhook_update": ("🪝", "Webhook updates"),
+        "automod_rule_create": ("🛡️", "AutoMod rule creations"),
+        "automod_rule_update": ("🔄", "AutoMod rule updates"),
+        "automod_rule_delete": ("🗑️", "AutoMod rule deletions"),
+        "automod_action": ("🚫", "AutoMod actions executed")
+    }
 
-    # Dashboard page methods are now bound by DashboardIntegration after __init__
-        
-        # Comprehensive event descriptions with emojis
-        self.event_descriptions = {
-            # Message events
-            "message_delete": ("🗑️", "Message deletions"),
-            "message_edit": ("📝", "Message edits"),
-            "message_bulk_delete": ("♻️", "Bulk message deletions"),
-            "message_pin": ("📌", "Message pins"),
-            "message_unpin": ("📍", "Message unpins"),
-            
-            # Member events
-            "member_join": ("🚪", "Member joins"),
-            "member_leave": ("👋", "Member leaves"),
-            "member_ban": ("🔨", "Member bans"),
-            "member_unban": ("🔓", "Member unbans"),
-            "member_kick": ("👢", "Member kicks"),
-            "member_update": ("👤", "Member updates (roles, nickname)"),
-            "member_timeout": ("⏱️", "Member timeout (added/removed)"),
-            
-            # Channel events
-            "channel_create": ("🆕", "Channel creations"),
-            "channel_delete": ("🗑️", "Channel deletions"),
-            "channel_update": ("🔄", "Channel updates"),
-            "thread_create": ("🧵", "Thread creations"),
-            "thread_delete": ("🗑️", "Thread deletions"),
-            "thread_update": ("🔄", "Thread updates"),
-            "thread_member_join": ("➡️", "Thread member joins"),
-            "thread_member_leave": ("⬅️", "Thread member leaves"),
-            "forum_post_create": ("📰", "Forum post creations"),
-            "forum_post_delete": ("🗑️", "Forum post deletions"),
-            "forum_post_update": ("🔄", "Forum post updates"),
-            
-            # Role events
-            "role_create": ("✨", "Role creations"),
-            "role_delete": ("🗑️", "Role deletions"),
-            "role_update": ("🔄", "Role updates"),
-            
-            # Guild events
-            "guild_update": ("⚙️", "Server setting updates"),
-            "emoji_update": ("😀", "Emoji updates"),
-            "sticker_update": ("🏷️", "Sticker updates"),
-            "invite_create": ("📨", "Invite creations"),
-            "invite_delete": ("🗑️", "Invite deletions"),
-            "guild_scheduled_event_create": ("📅", "Server event creations"),
-            "guild_scheduled_event_update": ("🔄", "Server event updates"),
-            "guild_scheduled_event_delete": ("🗑️", "Server event deletions"),
-            "stage_instance_create": ("🎭", "Stage instance creations"),
-            "stage_instance_delete": ("🗑️", "Stage instance deletions"),
-            "stage_instance_update": ("🔄", "Stage instance updates"),
-            
-            # Voice events
-            "voice_update": ("🎤", "Voice channel updates"),
-            "voice_state_update": ("🔊", "Voice state changes"),
-            
-            # Command and interaction events
-            "command_use": ("⌨️", "Command usage"),
-            "command_error": ("⚠️", "Command errors"),
-            "application_cmd": ("🔷", "Application command usage"),
-            
-            # Reaction events
-            "reaction_add": ("👍", "Reaction additions"),
-            "reaction_remove": ("👎", "Reaction removals"),
-            "reaction_clear": ("🧹", "Reaction clears"),
-            
-            # Integration events
-            "integration_create": ("🔌", "Integration creations"),
-            "integration_update": ("🔄", "Integration updates"),
-            "integration_delete": ("🗑️", "Integration deletions"),
-            
-            # Webhook events
-            "webhook_update": ("🪝", "Webhook updates"),
-            
-            # AutoMod events
-            "automod_rule_create": ("🛡️", "AutoMod rule creations"),
-            "automod_rule_update": ("🔄", "AutoMod rule updates"),
-            "automod_rule_delete": ("🗑️", "AutoMod rule deletions"),
-            "automod_action": ("🚫", "AutoMod actions executed")
-        }
+    # Initialize Config with comprehensive defaults
+    default_guild = {
+        "events": {event: False for event in self.event_descriptions},
+        "event_channels": {},
+        "ignore_tupperbox": True,
+        "tupperbox_ids": [
+            "239232811662311425",
+            "431544605209788416",
+            "508808937294331904",
+            "466378653216014359",
+            "798482360910127104",
+            "782749873194696734",
+            "689490322539159592",
+            "765338157961879563"
+        ],
+        "ignore_apps": True,
+        "ignore_webhooks": False,
+        "detect_proxy_deletes": True,
+        "ignore_proxy_patterns": True,
+        "webhook_name_filter": [],
+        "message_prefix_filter": [],
+        "retention_days": 30,
+        "log_by_category": False,
+        "auto_archive_threads": True,
+        "max_embed_count": 25,
+        "ignored_channels": [],
+        "ignored_users": [],
+        "ignored_roles": [],
+        "ignored_categories": [],
+        "use_embeds": True,
+        "embed_color": None,
+        "include_timestamps": True,
+        "include_thumbnails": True,
+        "use_markdown": True,
+        "compact_mode": False
+    }
+    self.config = Config.get_conf(self, identifier=2394567890, force_registration=True)
+    self.config.register_guild(**default_guild)
 
-        # Initialize Config with comprehensive defaults
-        default_guild = {
-            # Event enablement status - all disabled by default
-            "events": {event: False for event in self.event_descriptions},
-            
-            # Channel mapping for each event type
-            "event_channels": {},
-            
-            # Tupperbox and Discord app filtering settings
-            "ignore_tupperbox": True,
-            "tupperbox_ids": [
-                "239232811662311425",  # Default Tupperbox bot ID
-                "431544605209788416",  # Tupper.io
-                "508808937294331904",  # PluralKit
-                "466378653216014359",  # Tupperbox fork
-                "798482360910127104",  # PluralKit webhook service
-                "782749873194696734",  # Another proxy bot
-                "689490322539159592",  # Yet another proxy bot
-                "765338157961879563"   # TupperBox Beta
-            ],
-            
-            # Advanced filtering options
-            "ignore_apps": True,           # Ignore all Discord app messages
-            "ignore_webhooks": False,      # Option to ignore webhook messages
-            "detect_proxy_deletes": True,  # Detect and ignore Tupperbox proxy message patterns
-            "ignore_proxy_patterns": True, # Detect proxy message patterns in normal messages
-            "webhook_name_filter": [],     # Custom webhook names to ignore
-            "message_prefix_filter": [],   # Custom message prefixes to ignore
-            
-            # Log management
-            "retention_days": 30,         # How long to keep logs
-            "log_by_category": False,     # Option to organize logs by category
-            "auto_archive_threads": True, # Auto-archive log threads after retention period
-            "max_embed_count": 25,        # Maximum number of embeds per log entry
-            
-            # Ignore lists
-            "ignored_channels": [],       # Channels to ignore for all events
-            "ignored_users": [],          # Users to ignore for all events
-            "ignored_roles": [],          # Roles to ignore for all events
-            "ignored_categories": [],     # Channel categories to ignore
-            
-            # Appearance settings
-            "use_embeds": True,           # Use rich embeds (vs. plain text)
-            "embed_color": None,          # Custom embed color override
-            "include_timestamps": True,   # Include timestamps in logs
-            "include_thumbnails": True,   # Include user avatars as thumbnails
-            "use_markdown": True,         # Format text with markdown
-            "compact_mode": False         # Use more compact embed layouts for busier servers
-        }
-        self.config = Config.get_conf(self, identifier=2394567890, force_registration=True)
-        self.config.register_guild(**default_guild)
-
-        # Bind dashboard pages after all attributes are set
-        from .dashboard_integration import DashboardIntegration
-        DashboardIntegration(self).setup_dashboard()
+    # Bind dashboard pages after all attributes are set
+    from .dashboard_integration import DashboardIntegration
+    DashboardIntegration(self).setup_dashboard()
 
     async def should_log_event(self, guild: discord.Guild, event_type: str, 
                          channel: Optional[discord.abc.GuildChannel] = None, 
