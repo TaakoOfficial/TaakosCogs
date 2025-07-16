@@ -37,6 +37,12 @@ class YALC(commands.Cog):
     - Dashboard integration for easy configuration
     """
 
+    def __init__(self, bot: Red):
+        self.bot = bot
+        self.config = Config.get_conf(self, identifier=1234567890)
+        self.log = logging.getLogger("red.YALC")
+        # Initialize other attributes as needed
+
     async def should_log_event(self, guild: discord.Guild, event_type: str,
                          channel: Optional[discord.abc.GuildChannel] = None,
                          user: Optional[Union[discord.Member, discord.User]] = None,
