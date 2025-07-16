@@ -584,13 +584,12 @@ class YALC(commands.Cog):
 
     async def cog_unload(self) -> None:
         """Clean up when cog is unloaded."""
-        if hasattr(self, "dashboard"):
-            try:
-                dashboard_cog = self.bot.get_cog("Dashboard")
-                if dashboard_cog and hasattr(dashboard_cog, "rpc"):
-                    dashboard_cog.rpc.third_parties_handler.remove_third_party(self.dashboard)
-            except Exception as e:
-                self.log.error(f"Error removing dashboard integration: {e}", exc_info=True)
+        try:
+            dashboard_cog = self.bot.get_cog("Dashboard")
+            if dashboard_cog and hasattr(dashboard_cog, "rpc"):
+                dashboard_cog.rpc.third_parties_handler.remove_third_party(self)
+        except Exception as e:
+            self.log.error(f"Error removing dashboard integration: {e}", exc_info=True)
 
         # Clean up any other resources
         await super().cog_unload()
@@ -624,18 +623,18 @@ class YALC(commands.Cog):
                 if hasattr(dashboard_cog.rpc, "third_parties_handler"):
                     try:
                         self.log.info("Attempting to register YALC as dashboard third party...")
-                        self.log.info(f"Dashboard integration object: {self.dashboard}")
-                        self.log.info(f"Dashboard integration has 'name' property: {hasattr(self.dashboard, 'name')}")
-                        self.log.info(f"Dashboard integration has 'pages' method: {hasattr(self.dashboard, 'pages')}")
+                        self.log.info(f"Dashboard integration object: {self}")
+                        self.log.info(f"Dashboard integration has 'dashboard_home' method: {hasattr(self, 'dashboard_home')}")
+                        self.log.info(f"Dashboard integration has 'dashboard_settings' method: {hasattr(self, 'dashboard_settings')}")
                         
                         # Check if the dashboard integration has all required attributes
                         required_attrs = ['name', 'description', 'version', 'author', 'repo', 'support', 'icon', 'pages']
-                        for attr in required_attrs:
-                            has_attr = hasattr(self.dashboard, attr)
+                        for attr in ["dashboard_home", "dashboard_settings", "dashboard_about"]:
+                            has_attr = hasattr(self, attr)
                             self.log.info(f"Dashboard integration has '{attr}': {has_attr}")
                             if has_attr:
                                 try:
-                                    value = getattr(self.dashboard, attr)
+                                    value = getattr(self, attr)
                                     if callable(value):
                                         self.log.info(f"'{attr}' is callable")
                                     else:
@@ -3131,10 +3130,10 @@ class YALC(commands.Cog):
             # Add integration object status
             embed.add_field(
                 name="🔧 Integration Object",
-                value=f"Dashboard integration: {self.dashboard is not None}\n" +
-                      f"Has name property: {hasattr(self.dashboard, 'name')}\n" +
-                      f"Has pages method: {hasattr(self.dashboard, 'pages')}\n" +
-                      f"Name: {getattr(self.dashboard, 'name', 'N/A')}",
+                value=f"Dashboard integration: {self is not None}\n" +
+                      f"Has dashboard_home: {hasattr(self, 'dashboard_home')}\n" +
+                      f"Has dashboard_settings: {hasattr(self, 'dashboard_settings')}\n" +
+                      f"Has dashboard_about: {hasattr(self, 'dashboard_about')}",
                 inline=False
             )
             
@@ -3153,7 +3152,7 @@ class YALC(commands.Cog):
                 return
                 
             try:
-                dashboard_cog.rpc.third_parties_handler.add_third_party(self.dashboard)
+                dashboard_cog.rpc.third_parties_handler.add_third_party(self)
                 await ctx.send("✅ Successfully registered YALC as a dashboard third party.")
                 
                 # Verify registration
