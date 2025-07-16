@@ -15,8 +15,15 @@ import typing
 def dashboard_page(*args, **kwargs):
     def decorator(func):
         func.__dashboard_decorator_params__ = (args, kwargs)
+        def setter(self):
+            setattr(self, func.__name__, func.__get__(self))
+        func.set_dashboard_page = setter
         return func
     return decorator
+
+def set_dashboard_page(self, func):
+    """Bind a dashboard page to the cog instance."""
+    setattr(self, func.__name__, func.__get__(self))
 
 from .dashboard_integration import DashboardIntegration
 
