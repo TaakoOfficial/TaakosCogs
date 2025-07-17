@@ -18,12 +18,7 @@ def dashboard_page(*args, **kwargs):
         return func
     return decorator
 
-# Make dashboard_page available on the cog instance for DashboardIntegration
-# (Move this after YALC class definition)
-
-# REMOVE THIS DUPLICATE CLASS DEFINITION
-
-from .dashboard_integration import setup_dashboard_pages
+from .dashboard.pages import setup_dashboard_pages
 
 class YALC(commands.Cog):
     """Yet Another Logging Cog for Red-DiscordBot.
@@ -41,7 +36,115 @@ class YALC(commands.Cog):
         self.bot = bot
         self.config = Config.get_conf(self, identifier=1234567890)
         self.log = logging.getLogger("red.YALC")
-        # Initialize other attributes as needed
+        
+        # Dashboard integration attributes - required for Red Web Dashboard
+        self.name = "YALC"
+        self.description = "Yet Another Logging Cog - Comprehensive Discord event logging with dashboard integration"
+        self.version = "3.0.0"
+        self.author = "YALC Team"
+        self.repo = "https://github.com/your-repo/YALC"
+        self.support = "https://discord.gg/your-support"
+        self.icon = "https://cdn-icons-png.flaticon.com/512/928/928797.png"
+        self.pages = []  # Will be populated by setup_dashboard_pages
+        
+        # Event descriptions for logging and dashboard
+        self.event_descriptions = {
+            # Message events
+            "message_delete": ("🗑️", "Message Deletions"),
+            "message_edit": ("✏️", "Message Edits"),
+            "message_bulk_delete": ("♻️", "Bulk Message Deletions"),
+            "message_pin": ("📌", "Message Pins"),
+            "message_unpin": ("📍", "Message Unpins"),
+            
+            # Member events
+            "member_join": ("👋", "Member Joins"),
+            "member_leave": ("🚪", "Member Leaves"),
+            "member_ban": ("🔨", "Member Bans"),
+            "member_unban": ("🔓", "Member Unbans"),
+            "member_update": ("👤", "Member Updates"),
+            "member_kick": ("👢", "Member Kicks"),
+            "member_timeout": ("⏰", "Member Timeouts"),
+            
+            # Channel events
+            "channel_create": ("📝", "Channel Creation"),
+            "channel_delete": ("🗑️", "Channel Deletion"),
+            "channel_update": ("🔄", "Channel Updates"),
+            "thread_create": ("🧵", "Thread Creation"),
+            "thread_delete": ("🗑️", "Thread Deletion"),
+            "thread_update": ("🔄", "Thread Updates"),
+            "thread_member_join": ("➡️", "Thread Member Joins"),
+            "thread_member_leave": ("⬅️", "Thread Member Leaves"),
+            "forum_post_create": ("📋", "Forum Post Creation"),
+            "forum_post_delete": ("🗑️", "Forum Post Deletion"),
+            "forum_post_update": ("🔄", "Forum Post Updates"),
+            
+            # Role events
+            "role_create": ("✨", "Role Creation"),
+            "role_delete": ("🗑️", "Role Deletion"),
+            "role_update": ("🔄", "Role Updates"),
+            
+            # Guild events
+            "guild_update": ("⚙️", "Server Updates"),
+            "emoji_update": ("😀", "Emoji Updates"),
+            "sticker_update": ("🏷️", "Sticker Updates"),
+            "invite_create": ("📨", "Invite Creation"),
+            "invite_delete": ("📪", "Invite Deletion"),
+            
+            # Event management
+            "guild_scheduled_event_create": ("📅", "Event Creation"),
+            "guild_scheduled_event_update": ("🔄", "Event Updates"),
+            "guild_scheduled_event_delete": ("🗑️", "Event Deletion"),
+            "stage_instance_create": ("🎤", "Stage Instance Creation"),
+            "stage_instance_update": ("🔄", "Stage Instance Updates"),
+            "stage_instance_delete": ("🗑️", "Stage Instance Deletion"),
+            
+            # Voice events
+            "voice_update": ("🔊", "Voice Updates"),
+            "voice_state_update": ("🎧", "Voice State Changes"),
+            
+            # Command events
+            "command_use": ("⚡", "Command Usage"),
+            "command_error": ("❌", "Command Errors"),
+            "application_cmd": ("🤖", "Application Commands"),
+            
+            # Reaction events
+            "reaction_add": ("👍", "Reaction Additions"),
+            "reaction_remove": ("👎", "Reaction Removals"),
+            "reaction_clear": ("🧹", "Reaction Clears"),
+            
+            # Integration events
+            "integration_create": ("🔗", "Integration Creation"),
+            "integration_update": ("🔄", "Integration Updates"),
+            "integration_delete": ("🗑️", "Integration Deletion"),
+            
+            # Webhook/AutoMod
+            "webhook_update": ("🪝", "Webhook Updates"),
+            "automod_rule_create": ("🛡️", "AutoMod Rule Creation"),
+            "automod_rule_update": ("🔄", "AutoMod Rule Updates"),
+            "automod_rule_delete": ("🗑️", "AutoMod Rule Deletion"),
+            "automod_action": ("⚔️", "AutoMod Actions"),
+        }
+        
+        # Configuration defaults
+        default_guild = {
+            "events": {event: False for event in self.event_descriptions.keys()},
+            "event_channels": {event: None for event in self.event_descriptions.keys()},
+            "ignored_users": [],
+            "ignored_roles": [],
+            "ignored_channels": [],
+            "ignored_categories": [],
+            "ignore_bots": False,
+            "ignore_webhooks": False,
+            "ignore_tupperbox": True,
+            "ignore_apps": True,
+            "tupperbox_ids": ["239232811662311425"],  # Default Tupperbox bot ID
+            "include_thumbnails": True,
+            "detect_proxy_deletes": True,
+            "message_prefix_filter": [],
+            "webhook_name_filter": []
+        }
+        
+        self.config.register_guild(**default_guild)
 
     async def should_log_event(self, guild: discord.Guild, event_type: str,
                          channel: Optional[discord.abc.GuildChannel] = None,
@@ -152,22 +255,17 @@ class YALC(commands.Cog):
         """Bind dashboard pages from dashboard_integration.py after all attributes are set."""
         setup_dashboard_pages(self)
 
-# Make dashboard_page available on the cog instance for DashboardIntegration
-setattr(YALC, "dashboard_page", staticmethod(dashboard_page))
-# Remove broken __init__ assignment and restore the original class-based __init__ definition.
-
-    # Remove indentation from the following method so it is inside the class, not outside
-async def get_log_channel(self, guild: discord.Guild, event_type: str) -> Optional[discord.TextChannel]:
-    """Get the appropriate logging channel for an event. Only event_channels is used."""
-    settings = await self.config.guild(guild).all()
-    self.log.debug(f"[get_log_channel] Guild: {guild.id}, Event: {event_type}, Settings: {settings}")
-    channel_id = settings["event_channels"].get(event_type)
-    self.log.debug(f"[get_log_channel] Selected channel_id: {channel_id}")
-    if not channel_id:
-        return None
-    channel = guild.get_channel(channel_id)
-    self.log.debug(f"[get_log_channel] Resolved channel: {channel}")
-    return channel if isinstance(channel, discord.TextChannel) else None
+    async def get_log_channel(self, guild: discord.Guild, event_type: str) -> Optional[discord.TextChannel]:
+        """Get the appropriate logging channel for an event. Only event_channels is used."""
+        settings = await self.config.guild(guild).all()
+        self.log.debug(f"[get_log_channel] Guild: {guild.id}, Event: {event_type}, Settings: {settings}")
+        channel_id = settings["event_channels"].get(event_type)
+        self.log.debug(f"[get_log_channel] Selected channel_id: {channel_id}")
+        if not channel_id:
+            return None
+        channel = guild.get_channel(channel_id)
+        self.log.debug(f"[get_log_channel] Resolved channel: {channel}")
+        return channel if isinstance(channel, discord.TextChannel) else None
 
     def create_embed(self, event_type: str, description: str, **kwargs) -> discord.Embed:
         """
