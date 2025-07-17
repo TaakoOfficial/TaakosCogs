@@ -145,6 +145,9 @@ class YALC(commands.Cog):
         }
         
         self.config.register_guild(**default_guild)
+        
+        # Initialize dashboard integration immediately
+        self.setup_dashboard()
 
     async def should_log_event(self, guild: discord.Guild, event_type: str,
                          channel: Optional[discord.abc.GuildChannel] = None,
