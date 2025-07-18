@@ -227,6 +227,7 @@ def setup_dashboard_pages(cog):
                             </div>
                             <div class="card-body">
                                 <form method="post">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                                     <div class="row">
                                         <div class="col-md-6">
                                             <div class="card">
