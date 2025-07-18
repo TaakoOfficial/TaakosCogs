@@ -2916,6 +2916,210 @@ class YALC(commands.Cog):
             
         await ctx.send(f"✅ No longer ignoring events from channels in the '{category.name}' category.")
 
+    @yalc_group.command(name="bulk_enable")
+    @commands.admin_or_permissions(manage_guild=True)
+    async def yalc_bulk_enable(self, ctx: commands.Context, category: str = None):
+        """
+        Enable multiple events at once by category.
+        
+        Parameters
+        ----------
+        category: str, optional
+            Category to enable: 'message', 'member', 'channel', 'role', 'guild', 'all'
+        """
+        if category is None:
+            await ctx.send("❌ Please specify a category: `message`, `member`, `channel`, `role`, `guild`, or `all`")
+            return
+            
+        category = category.lower()
+        
+        # Define event categories
+        categories = {
+            "message": [k for k in self.event_descriptions.keys() if k.startswith("message_")],
+            "member": [k for k in self.event_descriptions.keys() if k.startswith("member_")],
+            "channel": [k for k in self.event_descriptions.keys() if k.startswith(("channel_", "thread_", "forum_"))],
+            "role": [k for k in self.event_descriptions.keys() if k.startswith("role_")],
+            "guild": [k for k in self.event_descriptions.keys() if k.startswith(("guild_", "emoji_", "sticker_"))],
+            "all": list(self.event_descriptions.keys())
+        }
+        
+        if category not in categories:
+            await ctx.send(f"❌ Unknown category: `{category}`. Available categories: {', '.join(categories.keys())}")
+            return
+            
+        events_to_enable = categories[category]
+        
+        # Enable all events in the category
+        async with self.config.guild(ctx.guild).events() as events:
+            for event_type in events_to_enable:
+                events[event_type] = True
+                
+        await ctx.send(f"✅ Enabled {len(events_to_enable)} events in the **{category}** category.")
+
+    @yalc_group.command(name="bulk_disable")
+    @commands.admin_or_permissions(manage_guild=True)
+    async def yalc_bulk_disable(self, ctx: commands.Context, category: str = None):
+        """
+        Disable multiple events at once by category.
+        
+        Parameters
+        ----------
+        category: str, optional
+            Category to disable: 'message', 'member', 'channel', 'role', 'guild', 'all'
+        """
+        if category is None:
+            await ctx.send("❌ Please specify a category: `message`, `member`, `channel`, `role`, `guild`, or `all`")
+            return
+            
+        category = category.lower()
+        
+        # Define event categories
+        categories = {
+            "message": [k for k in self.event_descriptions.keys() if k.startswith("message_")],
+            "member": [k for k in self.event_descriptions.keys() if k.startswith("member_")],
+            "channel": [k for k in self.event_descriptions.keys() if k.startswith(("channel_", "thread_", "forum_"))],
+            "role": [k for k in self.event_descriptions.keys() if k.startswith("role_")],
+            "guild": [k for k in self.event_descriptions.keys() if k.startswith(("guild_", "emoji_", "sticker_"))],
+            "all": list(self.event_descriptions.keys())
+        }
+        
+        if category not in categories:
+            await ctx.send(f"❌ Unknown category: `{category}`. Available categories: {', '.join(categories.keys())}")
+            return
+            
+        events_to_disable = categories[category]
+        
+        # Disable all events in the category
+        async with self.config.guild(ctx.guild).events() as events:
+            for event_type in events_to_disable:
+                events[event_type] = False
+                
+        await ctx.send(f"✅ Disabled {len(events_to_disable)} events in the **{category}** category.")
+
+    @yalc_group.command(name="reset")
+    @commands.admin_or_permissions(manage_guild=True)
+    async def yalc_reset(self, ctx: commands.Context, confirm: str = None):
+        """
+        Reset all YALC settings to defaults.
+        
+        Parameters
+        ----------
+        confirm: str, optional
+            Must be "CONFIRM" to proceed with reset
+        """
+        if confirm != "CONFIRM":
+            embed = discord.Embed(
+                title="⚠️ Reset YALC Configuration",
+                description="This will reset **ALL** YALC settings to their default values.",
+                color=discord.Color.orange()
+            )
+            embed.add_field(
+                name="What will be reset:",
+                value="• All event logging settings\n"
+                      "• All channel configurations\n"
+                      "• All ignore lists\n"
+                      "• All advanced settings",
+                inline=False
+            )
+            embed.add_field(
+                name="To confirm:",
+                value=f"Run `{ctx.prefix}yalc reset CONFIRM`",
+                inline=False
+            )
+            await ctx.send(embed=embed)
+            return
+            
+        try:
+            await self.config.guild(ctx.guild).clear()
+            await ctx.send("✅ All YALC settings have been reset to defaults.")
+        except Exception as e:
+            await ctx.send(f"❌ Error resetting configuration: {e}")
+
+    @yalc_group.command(name="validate")
+    @commands.admin_or_permissions(manage_guild=True)
+    async def yalc_validate(self, ctx: commands.Context):
+        """Validate the current YALC configuration and report any issues."""
+        try:
+            settings = await self.config.guild(ctx.guild).all()
+            issues = []
+            warnings = []
+            
+            # Check for enabled events without channels
+            enabled_events = [event for event, enabled in settings["events"].items() if enabled]
+            for event in enabled_events:
+                channel_id = settings["event_channels"].get(event)
+                if not channel_id:
+                    warnings.append(f"Event `{event}` is enabled but has no log channel configured")
+                else:
+                    channel = ctx.guild.get_channel(channel_id)
+                    if not channel:
+                        issues.append(f"Event `{event}` is configured to log to channel ID {channel_id} but the channel doesn't exist")
+            
+            # Check for configured channels without enabled events
+            configured_channels = {event: channel_id for event, channel_id in settings["event_channels"].items() if channel_id}
+            for event, channel_id in configured_channels.items():
+                if not settings["events"].get(event, False):
+                    warnings.append(f"Event `{event}` has a log channel configured but is not enabled")
+            
+            # Check for invalid ignored users/roles/channels
+            for user_id in settings.get("ignored_users", []):
+                user = ctx.guild.get_member(user_id)
+                if not user:
+                    warnings.append(f"Ignored user ID {user_id} not found in server")
+            
+            for role_id in settings.get("ignored_roles", []):
+                role = ctx.guild.get_role(role_id)
+                if not role:
+                    warnings.append(f"Ignored role ID {role_id} not found in server")
+            
+            for channel_id in settings.get("ignored_channels", []):
+                channel = ctx.guild.get_channel(channel_id)
+                if not channel:
+                    warnings.append(f"Ignored channel ID {channel_id} not found in server")
+            
+            # Create validation report
+            embed = discord.Embed(
+                title="🔍 YALC Configuration Validation",
+                color=discord.Color.green() if not issues else discord.Color.red()
+            )
+            
+            if not issues and not warnings:
+                embed.description = "✅ Configuration is valid with no issues found!"
+            else:
+                embed.description = f"Found {len(issues)} issues and {len(warnings)} warnings"
+            
+            if issues:
+                embed.add_field(
+                    name="❌ Issues (require attention)",
+                    value="\n".join(f"• {issue}" for issue in issues[:10]) +
+                          (f"\n• ...and {len(issues) - 10} more" if len(issues) > 10 else ""),
+                    inline=False
+                )
+            
+            if warnings:
+                embed.add_field(
+                    name="⚠️ Warnings (recommended fixes)",
+                    value="\n".join(f"• {warning}" for warning in warnings[:10]) +
+                          (f"\n• ...and {len(warnings) - 10} more" if len(warnings) > 10 else ""),
+                    inline=False
+                )
+            
+            # Add summary stats
+            embed.add_field(
+                name="📊 Summary",
+                value=f"• Enabled events: {len(enabled_events)}\n"
+                      f"• Configured channels: {len(configured_channels)}\n"
+                      f"• Ignored users: {len(settings.get('ignored_users', []))}\n"
+                      f"• Ignored roles: {len(settings.get('ignored_roles', []))}\n"
+                      f"• Ignored channels: {len(settings.get('ignored_channels', []))}",
+                inline=False
+            )
+            
+            await ctx.send(embed=embed)
+            
+        except Exception as e:
+            await ctx.send(f"❌ Error validating configuration: {e}")
+
     @yalc_group.command(name="dashboard")
     @commands.admin_or_permissions(manage_guild=True)
     async def yalc_dashboard(self, ctx: commands.Context, action: str = "status"):
@@ -3049,7 +3253,280 @@ class YALC(commands.Cog):
                 
         else:
             await ctx.send(f"❌ Unknown action: `{action}`. Use 'status' or 'register'.")
+
+    # --- Slash Commands ---
     
+    @app_commands.command(name="yalc_enable", description="Enable logging for a specific event type")
+    @app_commands.describe(event_type="The event type to enable logging for")
+    @app_commands.guild_only()
+    async def slash_yalc_enable(self, interaction: discord.Interaction, event_type: str):
+        """Enable logging for a specific event type via slash command."""
+        # Check permissions
+        if not interaction.user.guild_permissions.manage_guild:
+            await interaction.response.send_message("❌ You need the `Manage Server` permission to use this command.", ephemeral=True)
+            return
+            
+        # Check if the event type exists
+        if event_type not in self.event_descriptions:
+            available_events = ", ".join(list(self.event_descriptions.keys())[:10])
+            await interaction.response.send_message(
+                f"❌ Unknown event type: `{event_type}`.\n"
+                f"Available events: {available_events}{'...' if len(self.event_descriptions) > 10 else ''}",
+                ephemeral=True
+            )
+            return
+            
+        # Enable the event
+        async with self.config.guild(interaction.guild).events() as events:
+            events[event_type] = True
+            
+        # Get description for confirmation message
+        emoji, description = self.event_descriptions[event_type]
+        await interaction.response.send_message(f"✅ {emoji} Enabled logging for **{description}** (`{event_type}`).")
+
+    @app_commands.command(name="yalc_disable", description="Disable logging for a specific event type")
+    @app_commands.describe(event_type="The event type to disable logging for")
+    @app_commands.guild_only()
+    async def slash_yalc_disable(self, interaction: discord.Interaction, event_type: str):
+        """Disable logging for a specific event type via slash command."""
+        # Check permissions
+        if not interaction.user.guild_permissions.manage_guild:
+            await interaction.response.send_message("❌ You need the `Manage Server` permission to use this command.", ephemeral=True)
+            return
+            
+        # Check if the event type exists
+        if event_type not in self.event_descriptions:
+            available_events = ", ".join(list(self.event_descriptions.keys())[:10])
+            await interaction.response.send_message(
+                f"❌ Unknown event type: `{event_type}`.\n"
+                f"Available events: {available_events}{'...' if len(self.event_descriptions) > 10 else ''}",
+                ephemeral=True
+            )
+            return
+            
+        # Disable the event
+        async with self.config.guild(interaction.guild).events() as events:
+            events[event_type] = False
+            
+        # Get description for confirmation message
+        emoji, description = self.event_descriptions[event_type]
+        await interaction.response.send_message(f"✅ {emoji} Disabled logging for **{description}** (`{event_type}`).")
+
+    @app_commands.command(name="yalc_setchannel", description="Set the logging channel for a specific event type")
+    @app_commands.describe(
+        event_type="The event type to set the channel for",
+        channel="The channel to log the events to"
+    )
+    @app_commands.guild_only()
+    async def slash_yalc_setchannel(self, interaction: discord.Interaction, event_type: str, channel: discord.TextChannel):
+        """Set the logging channel for a specific event type via slash command."""
+        # Check permissions
+        if not interaction.user.guild_permissions.manage_guild:
+            await interaction.response.send_message("❌ You need the `Manage Server` permission to use this command.", ephemeral=True)
+            return
+            
+        # Check if the event type exists
+        if event_type not in self.event_descriptions and event_type != "all":
+            available_events = ", ".join(list(self.event_descriptions.keys())[:10])
+            await interaction.response.send_message(
+                f"❌ Unknown event type: `{event_type}`.\n"
+                f"Available events: {available_events}{'...' if len(self.event_descriptions) > 10 else ''}\n"
+                f"Use `all` to set for all event types.",
+                ephemeral=True
+            )
+            return
+            
+        # Set the channel
+        if event_type == "all":
+            # Set for all event types
+            async with self.config.guild(interaction.guild).event_channels() as event_channels:
+                for et in self.event_descriptions.keys():
+                    event_channels[et] = channel.id
+            await interaction.response.send_message(f"✅ Set {channel.mention} as the logging channel for **all** event types.")
+        else:
+            # Set for a specific event type
+            async with self.config.guild(interaction.guild).event_channels() as event_channels:
+                event_channels[event_type] = channel.id
+                
+            # Get description for confirmation message
+            emoji, description = self.event_descriptions[event_type]
+            await interaction.response.send_message(f"✅ {emoji} Set {channel.mention} as the logging channel for **{description}** (`{event_type}`).")
+
+    @app_commands.command(name="yalc_settings", description="View current YALC settings for this server")
+    @app_commands.guild_only()
+    async def slash_yalc_settings(self, interaction: discord.Interaction):
+        """View the current YALC settings for this server via slash command."""
+        settings = await self.config.guild(interaction.guild).all()
+        
+        embed = discord.Embed(
+            title="YALC Logger Settings",
+            description="Current logging configuration for this server",
+            color=discord.Color.blue()
+        )
+        
+        # Add enabled events
+        enabled_events = [f"{self.event_descriptions[event][0]} `{event}` - {self.event_descriptions[event][1]}"
+                         for event, enabled in settings["events"].items() if enabled]
+        
+        if enabled_events:
+            embed.add_field(
+                name="📋 Enabled Events",
+                value="\n".join(enabled_events[:15]) +
+                      (f"\n*...and {len(enabled_events) - 15} more*" if len(enabled_events) > 15 else ""),
+                inline=False
+            )
+        else:
+            embed.add_field(
+                name="📋 Enabled Events",
+                value="No events enabled",
+                inline=False
+            )
+            
+        # Add channel mappings
+        channel_mappings = []
+        for event, channel_id in settings["event_channels"].items():
+            if channel_id:
+                channel = interaction.guild.get_channel(channel_id)
+                if channel and event in self.event_descriptions:
+                    channel_mappings.append(f"{self.event_descriptions[event][0]} `{event}` → {channel.mention}")
+        
+        if channel_mappings:
+            embed.add_field(
+                name="📢 Event Channels",
+                value="\n".join(channel_mappings[:10]) +
+                      (f"\n*...and {len(channel_mappings) - 10} more*" if len(channel_mappings) > 10 else ""),
+                inline=False
+            )
+        else:
+            embed.add_field(
+                name="📢 Event Channels",
+                value="No channels configured",
+                inline=False
+            )
+            
+        # Add ignore settings
+        ignore_settings = []
+        
+        if settings.get("ignore_bots", False):
+            ignore_settings.append("🤖 Ignoring bot messages")
+        
+        if settings.get("ignore_webhooks", False):
+            ignore_settings.append("🔗 Ignoring webhook messages")
+            
+        if settings.get("ignore_tupperbox", True):
+            ignore_settings.append("👥 Ignoring Tupperbox/proxy messages")
+            
+        # Add ignored roles, users, channels counts
+        ignored_roles = settings.get("ignored_roles", [])
+        if ignored_roles:
+            role_names = [f"<@&{role_id}>" for role_id in ignored_roles[:3]]
+            ignore_settings.append(f"🚫 Ignored Roles: {', '.join(role_names)}" +
+                                 (f" *and {len(ignored_roles) - 3} more*" if len(ignored_roles) > 3 else ""))
+            
+        ignored_users = settings.get("ignored_users", [])
+        if ignored_users:
+            ignore_settings.append(f"🚫 Ignored Users: {len(ignored_users)}")
+            
+        ignored_channels = settings.get("ignored_channels", [])
+        if ignored_channels:
+            channel_names = [f"<#{channel_id}>" for channel_id in ignored_channels[:3]]
+            ignore_settings.append(f"🚫 Ignored Channels: {', '.join(channel_names)}" +
+                                 (f" *and {len(ignored_channels) - 3} more*" if len(ignored_channels) > 3 else ""))
+            
+        if ignore_settings:
+            embed.add_field(
+                name="⚙️ Ignore Settings",
+                value="\n".join(ignore_settings),
+                inline=False
+            )
+        
+        embed.set_footer(text=f"YALC • Server ID: {interaction.guild.id}")
+        await interaction.response.send_message(embed=embed)
+
+    @app_commands.command(name="yalc_quicksetup", description="Quick setup wizard for YALC logging")
+    @app_commands.describe(
+        log_channel="Channel to use for all logging",
+        enable_basic_events="Enable basic message and member events"
+    )
+    @app_commands.guild_only()
+    async def slash_yalc_quicksetup(self, interaction: discord.Interaction,
+                                    log_channel: discord.TextChannel,
+                                    enable_basic_events: bool = True):
+        """Quick setup wizard for YALC logging via slash command."""
+        # Check permissions
+        if not interaction.user.guild_permissions.manage_guild:
+            await interaction.response.send_message("❌ You need the `Manage Server` permission to use this command.", ephemeral=True)
+            return
+            
+        try:
+            # Set up basic events if requested
+            if enable_basic_events:
+                basic_events = [
+                    "message_delete", "message_edit", "message_bulk_delete",
+                    "member_join", "member_leave", "member_ban", "member_unban",
+                    "channel_create", "channel_delete", "role_create", "role_delete"
+                ]
+                
+                async with self.config.guild(interaction.guild).events() as events:
+                    for event in basic_events:
+                        if event in self.event_descriptions:
+                            events[event] = True
+                
+                # Set the log channel for enabled events
+                async with self.config.guild(interaction.guild).event_channels() as event_channels:
+                    for event in basic_events:
+                        if event in self.event_descriptions:
+                            event_channels[event] = log_channel.id
+                            
+            # Enable some useful default settings
+            await self.config.guild(interaction.guild).ignore_tupperbox.set(True)
+            await self.config.guild(interaction.guild).ignore_apps.set(True)
+            await self.config.guild(interaction.guild).include_thumbnails.set(True)
+            await self.config.guild(interaction.guild).detect_proxy_deletes.set(True)
+            
+            embed = discord.Embed(
+                title="✅ YALC Quick Setup Complete",
+                description=f"YALC has been configured for {interaction.guild.name}",
+                color=discord.Color.green()
+            )
+            
+            if enable_basic_events:
+                embed.add_field(
+                    name="📋 Enabled Events",
+                    value="• Message deletions, edits, and bulk deletions\n"
+                          "• Member joins, leaves, bans, and unbans\n"
+                          "• Channel and role creation/deletion",
+                    inline=False
+                )
+            
+            embed.add_field(
+                name="📢 Log Channel",
+                value=f"All events will be logged to {log_channel.mention}",
+                inline=False
+            )
+            
+            embed.add_field(
+                name="⚙️ Default Settings",
+                value="• Ignoring Tupperbox/proxy messages\n"
+                      "• Ignoring application messages\n"
+                      "• Including user thumbnails\n"
+                      "• Detecting proxy deletions",
+                inline=False
+            )
+            
+            embed.add_field(
+                name="🔧 Next Steps",
+                value="Use `/yalc_settings` to view your configuration\n"
+                      "Use `/yalc_enable` or `/yalc_disable` to adjust events\n"
+                      "Use the web dashboard for advanced configuration",
+                inline=False
+            )
+            
+            await interaction.response.send_message(embed=embed)
+            
+        except Exception as e:
+            await interaction.response.send_message(f"❌ Error during quick setup: {e}", ephemeral=True)
+
     async def is_tupperbox_message(self, message: discord.Message, tupperbox_ids: list) -> bool:
         """Check if a message is from Tupperbox, Tupperhook, or a configured proxy bot.
         

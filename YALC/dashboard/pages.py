@@ -87,12 +87,64 @@ def setup_dashboard_pages(cog):
                 
             config = cog.config.guild(guild)
             settings = await config.all()
+            success_message = ""
+            error_message = ""
             
             # Handle POST requests (form submissions)
             if request and request.get('method') == 'POST':
-                # Process form data here
-                # This would update the configuration based on form input
-                pass
+                try:
+                    form_data = request.get('form', {})
+                    
+                    # Update event enablement
+                    if 'events' in form_data:
+                        async with config.events() as events:
+                            for event_type in cog.event_descriptions.keys():
+                                events[event_type] = event_type in form_data['events']
+                    
+                    # Update event channels
+                    if 'event_channels' in form_data:
+                        async with config.event_channels() as event_channels:
+                            for event_type, channel_id in form_data['event_channels'].items():
+                                if channel_id and channel_id.isdigit():
+                                    event_channels[event_type] = int(channel_id)
+                                else:
+                                    event_channels[event_type] = None
+                    
+                    # Update general settings
+                    if 'ignore_bots' in form_data:
+                        await config.ignore_bots.set(form_data['ignore_bots'] == 'true')
+                    if 'ignore_webhooks' in form_data:
+                        await config.ignore_webhooks.set(form_data['ignore_webhooks'] == 'true')
+                    if 'ignore_tupperbox' in form_data:
+                        await config.ignore_tupperbox.set(form_data['ignore_tupperbox'] == 'true')
+                    if 'ignore_apps' in form_data:
+                        await config.ignore_apps.set(form_data['ignore_apps'] == 'true')
+                    if 'include_thumbnails' in form_data:
+                        await config.include_thumbnails.set(form_data['include_thumbnails'] == 'true')
+                    if 'detect_proxy_deletes' in form_data:
+                        await config.detect_proxy_deletes.set(form_data['detect_proxy_deletes'] == 'true')
+                    
+                    # Update Tupperbox IDs
+                    if 'tupperbox_ids' in form_data:
+                        tupperbox_ids = [tid.strip() for tid in form_data['tupperbox_ids'].split(',') if tid.strip()]
+                        await config.tupperbox_ids.set(tupperbox_ids)
+                    
+                    # Update message prefix filters
+                    if 'message_prefix_filter' in form_data:
+                        prefixes = [p.strip() for p in form_data['message_prefix_filter'].split(',') if p.strip()]
+                        await config.message_prefix_filter.set(prefixes)
+                    
+                    # Update webhook name filters
+                    if 'webhook_name_filter' in form_data:
+                        filters = [f.strip() for f in form_data['webhook_name_filter'].split(',') if f.strip()]
+                        await config.webhook_name_filter.set(filters)
+                    
+                    # Refresh settings after update
+                    settings = await config.all()
+                    success_message = "Configuration updated successfully!"
+                    
+                except Exception as e:
+                    error_message = f"Failed to update configuration: {str(e)}"
             
             # Count enabled events
             enabled_events = sum(1 for enabled in settings["events"].values() if enabled)
@@ -106,8 +158,67 @@ def setup_dashboard_pages(cog):
             ignored_roles = len(settings.get("ignored_roles", []))
             ignored_channels = len(settings.get("ignored_channels", []))
             
+            # Build channel options
+            channel_options = ""
+            for channel in guild.text_channels:
+                channel_options += f'<option value="{channel.id}">#{channel.name}</option>'
+            
+            # Build event configuration form
+            event_form = ""
+            categories = {
+                "Message Events": [k for k in cog.event_descriptions.keys() if k.startswith("message_")],
+                "Member Events": [k for k in cog.event_descriptions.keys() if k.startswith("member_")],
+                "Channel Events": [k for k in cog.event_descriptions.keys() if k.startswith(("channel_", "thread_", "forum_"))],
+                "Role Events": [k for k in cog.event_descriptions.keys() if k.startswith("role_")],
+                "Guild Events": [k for k in cog.event_descriptions.keys() if k.startswith(("guild_", "emoji_", "sticker_"))],
+                "Other Events": [k for k in cog.event_descriptions.keys() if not any(k.startswith(p) for p in
+                                ["message_", "member_", "channel_", "thread_", "forum_", "role_", "guild_", "emoji_", "sticker_"])]
+            }
+            
+            for category, events in categories.items():
+                if events:
+                    event_form += f'<h6 class="mt-3">{category}</h6>'
+                    for event in events:
+                        emoji, description = cog.event_descriptions[event]
+                        enabled = settings["events"].get(event, False)
+                        channel_id = settings["event_channels"].get(event, None)
+                        
+                        event_form += f'''
+                        <div class="row mb-2">
+                            <div class="col-md-1">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="events" value="{event}"
+                                           id="event_{event}" {"checked" if enabled else ""}>
+                                </div>
+                            </div>
+                            <div class="col-md-5">
+                                <label class="form-check-label" for="event_{event}">
+                                    {emoji} {description}
+                                </label>
+                            </div>
+                            <div class="col-md-6">
+                                <select class="form-select form-select-sm" name="event_channels[{event}]">
+                                    <option value="">Select Channel...</option>
+                                    {channel_options}
+                                </select>
+                            </div>
+                        </div>
+                        '''
+                        
+                        # Set selected channel
+                        if channel_id:
+                            event_form = event_form.replace(f'value="{channel_id}"', f'value="{channel_id}" selected')
+            
+            # Build messages
+            messages = ""
+            if success_message:
+                messages += f'<div class="alert alert-success alert-dismissible fade show" role="alert">{success_message}<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>'
+            if error_message:
+                messages += f'<div class="alert alert-danger alert-dismissible fade show" role="alert">{error_message}<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>'
+            
             source = f'''
             <div class="container mt-4">
+                {messages}
                 <div class="row">
                     <div class="col-md-12">
                         <div class="card">
@@ -115,55 +226,168 @@ def setup_dashboard_pages(cog):
                                 <h3><i class="fas fa-cog"></i> YALC Configuration for {guild.name}</h3>
                             </div>
                             <div class="card-body">
-                                <div class="row">
-                                    <div class="col-md-6">
-                                        <div class="card">
-                                            <div class="card-header">
-                                                <h5>Event Configuration</h5>
+                                <form method="post">
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <div class="card">
+                                                <div class="card-header">
+                                                    <h5>Event Configuration</h5>
+                                                </div>
+                                                <div class="card-body">
+                                                    <p><strong>Enabled Events:</strong> {enabled_events} / {total_events}</p>
+                                                    <p><strong>Configured Channels:</strong> {configured_channels}</p>
+                                                    <div class="progress mb-3">
+                                                        <div class="progress-bar" role="progressbar"
+                                                             style="width: {(enabled_events/total_events*100):.1f}%">
+                                                            {(enabled_events/total_events*100):.1f}%
+                                                        </div>
+                                                    </div>
+                                                </div>
                                             </div>
-                                            <div class="card-body">
-                                                <p><strong>Enabled Events:</strong> {enabled_events} / {total_events}</p>
-                                                <p><strong>Configured Channels:</strong> {configured_channels}</p>
-                                                <div class="progress mb-3">
-                                                    <div class="progress-bar" role="progressbar"
-                                                         style="width: {(enabled_events/total_events*100):.1f}%">
-                                                        {(enabled_events/total_events*100):.1f}%
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="card">
+                                                <div class="card-header">
+                                                    <h5>General Settings</h5>
+                                                </div>
+                                                <div class="card-body">
+                                                    <div class="form-check mb-2">
+                                                        <input class="form-check-input" type="checkbox" name="ignore_bots" value="true"
+                                                               id="ignore_bots" {"checked" if settings.get("ignore_bots", False) else ""}>
+                                                        <label class="form-check-label" for="ignore_bots">
+                                                            Ignore Bot Messages
+                                                        </label>
+                                                    </div>
+                                                    <div class="form-check mb-2">
+                                                        <input class="form-check-input" type="checkbox" name="ignore_webhooks" value="true"
+                                                               id="ignore_webhooks" {"checked" if settings.get("ignore_webhooks", False) else ""}>
+                                                        <label class="form-check-label" for="ignore_webhooks">
+                                                            Ignore Webhook Messages
+                                                        </label>
+                                                    </div>
+                                                    <div class="form-check mb-2">
+                                                        <input class="form-check-input" type="checkbox" name="ignore_tupperbox" value="true"
+                                                               id="ignore_tupperbox" {"checked" if settings.get("ignore_tupperbox", True) else ""}>
+                                                        <label class="form-check-label" for="ignore_tupperbox">
+                                                            Ignore Tupperbox Messages
+                                                        </label>
+                                                    </div>
+                                                    <div class="form-check mb-2">
+                                                        <input class="form-check-input" type="checkbox" name="ignore_apps" value="true"
+                                                               id="ignore_apps" {"checked" if settings.get("ignore_apps", True) else ""}>
+                                                        <label class="form-check-label" for="ignore_apps">
+                                                            Ignore Application Messages
+                                                        </label>
+                                                    </div>
+                                                    <div class="form-check mb-2">
+                                                        <input class="form-check-input" type="checkbox" name="include_thumbnails" value="true"
+                                                               id="include_thumbnails" {"checked" if settings.get("include_thumbnails", True) else ""}>
+                                                        <label class="form-check-label" for="include_thumbnails">
+                                                            Include User Thumbnails
+                                                        </label>
+                                                    </div>
+                                                    <div class="form-check mb-2">
+                                                        <input class="form-check-input" type="checkbox" name="detect_proxy_deletes" value="true"
+                                                               id="detect_proxy_deletes" {"checked" if settings.get("detect_proxy_deletes", True) else ""}>
+                                                        <label class="form-check-label" for="detect_proxy_deletes">
+                                                            Detect Proxy Deletes
+                                                        </label>
                                                     </div>
                                                 </div>
                                             </div>
                                         </div>
                                     </div>
-                                    <div class="col-md-6">
-                                        <div class="card">
-                                            <div class="card-header">
-                                                <h5>Ignore Settings</h5>
-                                            </div>
-                                            <div class="card-body">
-                                                <p><strong>Ignored Users:</strong> {ignored_users}</p>
-                                                <p><strong>Ignored Roles:</strong> {ignored_roles}</p>
-                                                <p><strong>Ignored Channels:</strong> {ignored_channels}</p>
-                                                <p><strong>Ignore Bots:</strong> {"Yes" if settings.get("ignore_bots", False) else "No"}</p>
-                                                <p><strong>Ignore Webhooks:</strong> {"Yes" if settings.get("ignore_webhooks", False) else "No"}</p>
-                                                <p><strong>Ignore Tupperbox:</strong> {"Yes" if settings.get("ignore_tupperbox", True) else "No"}</p>
+                                    
+                                    <div class="row mt-4">
+                                        <div class="col-md-12">
+                                            <div class="card">
+                                                <div class="card-header">
+                                                    <h5>Advanced Settings</h5>
+                                                </div>
+                                                <div class="card-body">
+                                                    <div class="row">
+                                                        <div class="col-md-6">
+                                                            <div class="mb-3">
+                                                                <label for="tupperbox_ids" class="form-label">Tupperbox Bot IDs (comma-separated)</label>
+                                                                <input type="text" class="form-control" id="tupperbox_ids" name="tupperbox_ids"
+                                                                       value="{','.join(settings.get('tupperbox_ids', []))}"
+                                                                       placeholder="239232811662311425">
+                                                            </div>
+                                                            <div class="mb-3">
+                                                                <label for="message_prefix_filter" class="form-label">Message Prefix Filters (comma-separated)</label>
+                                                                <input type="text" class="form-control" id="message_prefix_filter" name="message_prefix_filter"
+                                                                       value="{','.join(settings.get('message_prefix_filter', []))}"
+                                                                       placeholder="!,;,//,pk;">
+                                                            </div>
+                                                        </div>
+                                                        <div class="col-md-6">
+                                                            <div class="mb-3">
+                                                                <label for="webhook_name_filter" class="form-label">Webhook Name Filters (comma-separated)</label>
+                                                                <input type="text" class="form-control" id="webhook_name_filter" name="webhook_name_filter"
+                                                                       value="{','.join(settings.get('webhook_name_filter', []))}"
+                                                                       placeholder="tupperbox,carl">
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
-                                </div>
-                                
-                                <div class="row mt-4">
-                                    <div class="col-md-12">
-                                        <div class="alert alert-info">
-                                            <h5><i class="fas fa-info-circle"></i> Configuration Notice</h5>
-                                            <p>For detailed configuration, use the bot commands in Discord:</p>
-                                            <ul>
-                                                <li><code>!yalc enable &lt;event_type&gt;</code> - Enable event logging</li>
-                                                <li><code>!yalc setchannel &lt;event_type&gt; &lt;channel&gt;</code> - Set logging channel</li>
-                                                <li><code>!yalc settings</code> - View current configuration</li>
-                                                <li><code>!yalc ignore user/channel/role &lt;target&gt;</code> - Add ignore rules</li>
-                                            </ul>
+                                    
+                                    <div class="row mt-4">
+                                        <div class="col-md-12">
+                                            <div class="card">
+                                                <div class="card-header">
+                                                    <h5>Event Configuration</h5>
+                                                </div>
+                                                <div class="card-body">
+                                                    <div class="row">
+                                                        <div class="col-md-1"><strong>Enable</strong></div>
+                                                        <div class="col-md-5"><strong>Event Type</strong></div>
+                                                        <div class="col-md-6"><strong>Log Channel</strong></div>
+                                                    </div>
+                                                    <hr>
+                                                    {event_form}
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
-                                </div>
+                                    
+                                    <div class="row mt-4">
+                                        <div class="col-md-12">
+                                            <div class="card">
+                                                <div class="card-header">
+                                                    <h5>Current Ignore Lists</h5>
+                                                </div>
+                                                <div class="card-body">
+                                                    <div class="row">
+                                                        <div class="col-md-4">
+                                                            <p><strong>Ignored Users:</strong> {ignored_users}</p>
+                                                        </div>
+                                                        <div class="col-md-4">
+                                                            <p><strong>Ignored Roles:</strong> {ignored_roles}</p>
+                                                        </div>
+                                                        <div class="col-md-4">
+                                                            <p><strong>Ignored Channels:</strong> {ignored_channels}</p>
+                                                        </div>
+                                                    </div>
+                                                    <div class="alert alert-info">
+                                                        <strong>Note:</strong> Use Discord commands to manage ignore lists:
+                                                        <code>/yalc ignore user</code>, <code>/yalc ignore role</code>, <code>/yalc ignore channel</code>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="row mt-4">
+                                        <div class="col-md-12 text-center">
+                                            <button type="submit" class="btn btn-primary btn-lg">
+                                                <i class="fas fa-save"></i> Save Configuration
+                                            </button>
+                                        </div>
+                                    </div>
+                                </form>
                             </div>
                         </div>
                     </div>
