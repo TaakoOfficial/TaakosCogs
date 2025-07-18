@@ -3120,6 +3120,217 @@ class YALC(commands.Cog):
         except Exception as e:
             await ctx.send(f"❌ Error validating configuration: {e}")
 
+    @yalc_group.command(name="setup")
+    @commands.admin_or_permissions(manage_guild=True)
+    async def yalc_setup(self, ctx: commands.Context, confirm: str = None):
+        """
+        Full YALC setup - creates logging channels and category automatically.
+        
+        Parameters
+        ----------
+        confirm: str, optional
+            Must be "CONFIRM" to proceed with setup
+        """
+        if confirm != "CONFIRM":
+            embed = discord.Embed(
+                title="🏗️ YALC Full Setup",
+                description="This will create a complete logging infrastructure for your server.",
+                color=discord.Color.blue()
+            )
+            embed.add_field(
+                name="What will be created:",
+                value="• **YALC Logs** category\n"
+                      "• **#yalc-messages** - Message events (edits, deletions)\n"
+                      "• **#yalc-members** - Member events (joins, leaves, bans)\n"
+                      "• **#yalc-channels** - Channel/role events\n"
+                      "• **#yalc-moderation** - Moderation events\n"
+                      "• **#yalc-general** - Other server events",
+                inline=False
+            )
+            embed.add_field(
+                name="Events to be enabled:",
+                value="• Message deletions, edits, bulk deletions\n"
+                      "• Member joins, leaves, bans, unbans\n"
+                      "• Channel and role management\n"
+                      "• Guild events and moderation",
+                inline=False
+            )
+            embed.add_field(
+                name="To confirm:",
+                value=f"Run `{ctx.prefix}yalc setup CONFIRM`",
+                inline=False
+            )
+            await ctx.send(embed=embed)
+            return
+            
+        try:
+            # Create the YALC Logs category
+            category = await ctx.guild.create_category_channel(
+                "YALC Logs",
+                overwrites={
+                    ctx.guild.default_role: discord.PermissionOverwrite(
+                        read_messages=False,
+                        send_messages=False
+                    ),
+                    ctx.guild.me: discord.PermissionOverwrite(
+                        read_messages=True,
+                        send_messages=True,
+                        manage_messages=True
+                    )
+                },
+                reason="YALC logging setup"
+            )
+            
+            # Create logging channels
+            channels = {}
+            
+            # Messages channel
+            channels["messages"] = await ctx.guild.create_text_channel(
+                "yalc-messages",
+                category=category,
+                topic="YALC: Message events (edits, deletions, bulk deletions)",
+                reason="YALC logging setup"
+            )
+            
+            # Members channel
+            channels["members"] = await ctx.guild.create_text_channel(
+                "yalc-members",
+                category=category,
+                topic="YALC: Member events (joins, leaves, bans, role changes)",
+                reason="YALC logging setup"
+            )
+            
+            # Channels/Roles channel
+            channels["channels"] = await ctx.guild.create_text_channel(
+                "yalc-channels",
+                category=category,
+                topic="YALC: Channel and role management events",
+                reason="YALC logging setup"
+            )
+            
+            # Moderation channel
+            channels["moderation"] = await ctx.guild.create_text_channel(
+                "yalc-moderation",
+                category=category,
+                topic="YALC: Moderation events (bans, kicks, timeouts)",
+                reason="YALC logging setup"
+            )
+            
+            # General events channel
+            channels["general"] = await ctx.guild.create_text_channel(
+                "yalc-general",
+                category=category,
+                topic="YALC: Server events (guild updates, integrations, etc.)",
+                reason="YALC logging setup"
+            )
+            
+            # Configure event mappings
+            event_mappings = {
+                # Message events -> messages channel
+                "message_delete": channels["messages"].id,
+                "message_edit": channels["messages"].id,
+                "message_bulk_delete": channels["messages"].id,
+                "message_pin": channels["messages"].id,
+                "message_unpin": channels["messages"].id,
+                
+                # Member events -> members channel
+                "member_join": channels["members"].id,
+                "member_leave": channels["members"].id,
+                "member_update": channels["members"].id,
+                
+                # Moderation events -> moderation channel
+                "member_ban": channels["moderation"].id,
+                "member_unban": channels["moderation"].id,
+                "member_kick": channels["moderation"].id,
+                "member_timeout": channels["moderation"].id,
+                
+                # Channel/Role events -> channels channel
+                "channel_create": channels["channels"].id,
+                "channel_delete": channels["channels"].id,
+                "channel_update": channels["channels"].id,
+                "thread_create": channels["channels"].id,
+                "thread_delete": channels["channels"].id,
+                "thread_update": channels["channels"].id,
+                "thread_member_join": channels["channels"].id,
+                "thread_member_leave": channels["channels"].id,
+                "role_create": channels["channels"].id,
+                "role_delete": channels["channels"].id,
+                "role_update": channels["channels"].id,
+                
+                # Guild events -> general channel
+                "guild_update": channels["general"].id,
+                "emoji_update": channels["general"].id,
+                "sticker_update": channels["general"].id,
+                "invite_create": channels["general"].id,
+                "invite_delete": channels["general"].id,
+                "guild_scheduled_event_create": channels["general"].id,
+                "guild_scheduled_event_update": channels["general"].id,
+                "guild_scheduled_event_delete": channels["general"].id,
+                "command_error": channels["general"].id,
+            }
+            
+            # Apply configuration
+            async with self.config.guild(ctx.guild).events() as events:
+                async with self.config.guild(ctx.guild).event_channels() as event_channels:
+                    for event_type, channel_id in event_mappings.items():
+                        events[event_type] = True
+                        event_channels[event_type] = channel_id
+            
+            # Set up default ignore settings
+            await self.config.guild(ctx.guild).ignore_tupperbox.set(True)
+            await self.config.guild(ctx.guild).ignore_apps.set(True)
+            await self.config.guild(ctx.guild).include_thumbnails.set(True)
+            await self.config.guild(ctx.guild).detect_proxy_deletes.set(True)
+            
+            # Send success message
+            embed = discord.Embed(
+                title="✅ YALC Setup Complete!",
+                description=f"Successfully created logging infrastructure for {ctx.guild.name}",
+                color=discord.Color.green()
+            )
+            
+            embed.add_field(
+                name="📁 Created Category",
+                value=f"**{category.name}** - {category.mention}",
+                inline=False
+            )
+            
+            embed.add_field(
+                name="📢 Created Channels",
+                value=f"• {channels['messages'].mention} - Message events\n"
+                      f"• {channels['members'].mention} - Member events\n"
+                      f"• {channels['channels'].mention} - Channel/Role events\n"
+                      f"• {channels['moderation'].mention} - Moderation events\n"
+                      f"• {channels['general'].mention} - Server events",
+                inline=False
+            )
+            
+            embed.add_field(
+                name="⚙️ Configuration",
+                value=f"• **{len(event_mappings)}** events enabled\n"
+                      "• Ignoring Tupperbox/proxy messages\n"
+                      "• Ignoring application messages\n"
+                      "• Including user thumbnails\n"
+                      "• Detecting proxy deletions",
+                inline=False
+            )
+            
+            embed.add_field(
+                name="🎯 Next Steps",
+                value=f"• Use `{ctx.prefix}yalc settings` to view configuration\n"
+                      f"• Use `{ctx.prefix}yalc enable/disable` to adjust events\n"
+                      "• Use the web dashboard for advanced configuration\n"
+                      f"• Use `{ctx.prefix}yalc validate` to check for issues",
+                inline=False
+            )
+            
+            await ctx.send(embed=embed)
+            
+        except discord.Forbidden:
+            await ctx.send("❌ I don't have permission to create channels and categories. Please ensure I have `Manage Channels` permission.")
+        except Exception as e:
+            await ctx.send(f"❌ Error during setup: {e}")
+
     @yalc_group.command(name="dashboard")
     @commands.admin_or_permissions(manage_guild=True)
     async def yalc_dashboard(self, ctx: commands.Context, action: str = "status"):
