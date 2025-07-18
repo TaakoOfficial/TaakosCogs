@@ -2656,93 +2656,108 @@ class YALC(commands.Cog):
     @yalc_group.command(name="settings")
     @commands.guild_only()
     async def yalc_settings(self, ctx: commands.Context):
-        """View the current YALC settings for this server."""
+        """View the current YALC settings for this server, paginated if too long."""
         settings = await self.config.guild(ctx.guild).all()
-        
-        embed = discord.Embed(
+
+        embeds = []
+
+        # Page 1: Enabled Events
+        enabled_events = [f"{self.event_descriptions[event][0]} `{event}` - {self.event_descriptions[event][1]}"
+                          for event, enabled in settings["events"].items() if enabled]
+        embed_events = discord.Embed(
             title="YALC Logger Settings",
-            description="Current logging configuration for this server",
+            description="Enabled Events",
             color=discord.Color.blue()
         )
-        
-        # Add enabled events
-        enabled_events = [f"{self.event_descriptions[event][0]} `{event}` - {self.event_descriptions[event][1]}" 
-                         for event, enabled in settings["events"].items() if enabled]
-        
         if enabled_events:
-            embed.add_field(
-                name="📋 Enabled Events",
-                value="\n".join(enabled_events[:15]) + 
-                      (f"\n*...and {len(enabled_events) - 15} more*" if len(enabled_events) > 15 else ""),
-                inline=False
-            )
+            for i in range(0, len(enabled_events), 15):
+                embed_events.add_field(
+                    name=f"📋 Enabled Events {i+1}-{min(i+15, len(enabled_events))}",
+                    value="\n".join(enabled_events[i:i+15]),
+                    inline=False
+                )
         else:
-            embed.add_field(
+            embed_events.add_field(
                 name="📋 Enabled Events",
                 value="No events enabled",
                 inline=False
             )
-            
-        # Add channel mappings
+        embeds.append(embed_events)
+
+        # Page 2: Event Channels
         channel_mappings = []
         for event, channel_id in settings["event_channels"].items():
             if channel_id:
                 channel = ctx.guild.get_channel(channel_id)
                 if channel and event in self.event_descriptions:
                     channel_mappings.append(f"{self.event_descriptions[event][0]} `{event}` → {channel.mention}")
-        
+        embed_channels = discord.Embed(
+            title="YALC Logger Settings",
+            description="Event Channels",
+            color=discord.Color.blue()
+        )
         if channel_mappings:
-            embed.add_field(
-                name="📢 Event Channels",
-                value="\n".join(channel_mappings[:10]) + 
-                      (f"\n*...and {len(channel_mappings) - 10} more*" if len(channel_mappings) > 10 else ""),
-                inline=False
-            )
+            for i in range(0, len(channel_mappings), 10):
+                embed_channels.add_field(
+                    name=f"📢 Event Channels {i+1}-{min(i+10, len(channel_mappings))}",
+                    value="\n".join(channel_mappings[i:i+10]),
+                    inline=False
+                )
         else:
-            embed.add_field(
+            embed_channels.add_field(
                 name="📢 Event Channels",
                 value="No channels configured",
                 inline=False
             )
-            
-        # Add ignore settings
+        embeds.append(embed_channels)
+
+        # Page 3: Ignore Settings
         ignore_settings = []
-        
         if settings.get("ignore_bots", False):
             ignore_settings.append("🤖 Ignoring bot messages")
-        
         if settings.get("ignore_webhooks", False):
             ignore_settings.append("🔗 Ignoring webhook messages")
-            
         if settings.get("ignore_tupperbox", True):
             ignore_settings.append("👥 Ignoring Tupperbox/proxy messages")
-            
-        # Add ignored roles, users, channels counts
         ignored_roles = settings.get("ignored_roles", [])
         if ignored_roles:
             role_names = [f"<@&{role_id}>" for role_id in ignored_roles[:3]]
-            ignore_settings.append(f"🚫 Ignored Roles: {', '.join(role_names)}" + 
-                                 (f" *and {len(ignored_roles) - 3} more*" if len(ignored_roles) > 3 else ""))
-            
+            ignore_settings.append(f"🚫 Ignored Roles: {', '.join(role_names)}" +
+                                  (f" *and {len(ignored_roles) - 3} more*" if len(ignored_roles) > 3 else ""))
         ignored_users = settings.get("ignored_users", [])
         if ignored_users:
             ignore_settings.append(f"🚫 Ignored Users: {len(ignored_users)}")
-            
         ignored_channels = settings.get("ignored_channels", [])
         if ignored_channels:
             channel_names = [f"<#{channel_id}>" for channel_id in ignored_channels[:3]]
-            ignore_settings.append(f"🚫 Ignored Channels: {', '.join(channel_names)}" + 
-                                 (f" *and {len(ignored_channels) - 3} more*" if len(ignored_channels) > 3 else ""))
-            
+            ignore_settings.append(f"🚫 Ignored Channels: {', '.join(channel_names)}" +
+                                  (f" *and {len(ignored_channels) - 3} more*" if len(ignored_channels) > 3 else ""))
+        embed_ignore = discord.Embed(
+            title="YALC Logger Settings",
+            description="Ignore Settings",
+            color=discord.Color.blue()
+        )
         if ignore_settings:
-            embed.add_field(
+            embed_ignore.add_field(
                 name="⚙️ Ignore Settings",
                 value="\n".join(ignore_settings),
                 inline=False
             )
-        
-        embed.set_footer(text=f"YALC • Server ID: {ctx.guild.id}")
-        await ctx.send(embed=embed)
+        else:
+            embed_ignore.add_field(
+                name="⚙️ Ignore Settings",
+                value="No ignore settings configured",
+                inline=False
+            )
+        embeds.append(embed_ignore)
+
+        # Add footer to all embeds
+        for embed in embeds:
+            embed.set_footer(text=f"YALC • Server ID: {ctx.guild.id}")
+
+        # Send paginated embeds (simple implementation: send all embeds in order)
+        for embed in embeds:
+            await ctx.send(embed=embed)
 
     @yalc_group.group(name="ignore", invoke_without_command=True)
     @commands.admin_or_permissions(manage_guild=True)
