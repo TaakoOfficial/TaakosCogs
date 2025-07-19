@@ -117,14 +117,7 @@ def setup_dashboard_pages(cog):
                 try:
                     form_data = request.get('form', {})
                     
-                    # Validate CSRF token
-                    submitted_token = form_data.get('csrf_token', '')
-                    if not validate_csrf_token(submitted_token, user.id, guild.id):
-                        return {
-                            "status": 1,
-                            "error_title": "CSRF Error",
-                            "error_message": "CSRF token is missing or invalid."
-                        }
+                    
                     
                     # Update event enablement
                     if 'events' in form_data:
