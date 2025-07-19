@@ -209,10 +209,8 @@ def setup_dashboard_pages(cog):
                         if channel_id:
                             event_form = event_form.replace(f'value="{channel_id}"', f'value="{channel_id}" selected')
             
-            # Get CSRF token from request context if available
-            csrf_token = ""
-            if request:
-                csrf_token = request.get('csrf_token', '') or kwargs.get('csrf_token', '')
+            # Get CSRF token from request context (Red Dashboard should provide this)
+            csrf_token = kwargs.get('csrf_token', '')
             
             # Build messages
             messages = ""
