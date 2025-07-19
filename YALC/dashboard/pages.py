@@ -1,5 +1,4 @@
 import typing
-from AAA3A_utils.settings import DashboardIntegration
 
 def setup_dashboard_pages(cog):
     """Setup dashboard pages for the YALC cog and bind them to the cog instance."""
@@ -94,16 +93,6 @@ def setup_dashboard_pages(cog):
             # Handle POST requests (form submissions)
             if request and request.get('method') == 'POST':
                 try:
-                    # Validate CSRF token using AAA3A_utils
-                    dashboard_integration = DashboardIntegration(cog)
-                    csrf_token = dashboard_integration.get_csrf_token(request)
-                    if not csrf_token:
-                        return {
-                            "status": 1,
-                            "error_title": "CSRF Error",
-                            "error_message": "CSRF token is missing or invalid."
-                        }
-                    
                     form_data = request.get('form', {})
                     
                     # Update event enablement
@@ -220,9 +209,10 @@ def setup_dashboard_pages(cog):
                         if channel_id:
                             event_form = event_form.replace(f'value="{channel_id}"', f'value="{channel_id}" selected')
             
-            # Generate CSRF token using AAA3A_utils
-            dashboard_integration = DashboardIntegration(cog)
-            csrf_token = dashboard_integration.get_csrf_token(request) or ""
+            # Get CSRF token from request context if available
+            csrf_token = ""
+            if request:
+                csrf_token = request.get('csrf_token', '') or kwargs.get('csrf_token', '')
             
             # Build messages
             messages = ""
