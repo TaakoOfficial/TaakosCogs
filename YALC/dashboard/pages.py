@@ -1,4 +1,24 @@
 import typing
+import secrets
+import hashlib
+import time
+
+def generate_csrf_token(user_id: int, guild_id: int) -> str:
+    """Generate a CSRF token based on user and guild ID."""
+    timestamp = str(int(time.time() // 300))  # 5-minute window
+    data = f"{user_id}:{guild_id}:{timestamp}"
+    token = hashlib.sha256(data.encode()).hexdigest()[:32]
+    return token
+
+def validate_csrf_token(token: str, user_id: int, guild_id: int) -> bool:
+    """Validate a CSRF token."""
+    current_timestamp = int(time.time() // 300)
+    # Check current and previous 5-minute window
+    for timestamp in [current_timestamp, current_timestamp - 1]:
+        expected_token = generate_csrf_token(user_id, guild_id)
+        if token == expected_token:
+            return True
+    return False
 
 def setup_dashboard_pages(cog):
     """Setup dashboard pages for the YALC cog and bind them to the cog instance."""
@@ -78,6 +98,8 @@ def setup_dashboard_pages(cog):
     async def dashboard_settings(self, user, guild, request: typing.Optional[dict] = None, **kwargs) -> typing.Dict[str, typing.Any]:
         """Dashboard settings page for YALC."""
         try:
+            
+            
             if not guild:
                 return {
                     "status": 1,
@@ -94,6 +116,15 @@ def setup_dashboard_pages(cog):
             if request and request.get('method') == 'POST':
                 try:
                     form_data = request.get('form', {})
+                    
+                    # Validate CSRF token
+                    submitted_token = form_data.get('csrf_token', '')
+                    if not validate_csrf_token(submitted_token, user.id, guild.id):
+                        return {
+                            "status": 1,
+                            "error_title": "CSRF Error",
+                            "error_message": "CSRF token is missing or invalid."
+                        }
                     
                     # Update event enablement
                     if 'events' in form_data:
@@ -209,8 +240,8 @@ def setup_dashboard_pages(cog):
                         if channel_id:
                             event_form = event_form.replace(f'value="{channel_id}"', f'value="{channel_id}" selected')
             
-            # Get CSRF token from request context (Red Dashboard should provide this)
-            csrf_token = kwargs.get('csrf_token', '')
+            # Generate our own CSRF token
+            csrf_token = generate_csrf_token(user.id, guild.id)
             
             # Build messages
             messages = ""
