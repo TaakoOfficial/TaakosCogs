@@ -1,24 +1,4 @@
 import typing
-import secrets
-import hashlib
-import time
-
-def generate_csrf_token(user_id: int, guild_id: int) -> str:
-    """Generate a CSRF token based on user and guild ID."""
-    timestamp = str(int(time.time() // 300))  # 5-minute window
-    data = f"{user_id}:{guild_id}:{timestamp}"
-    token = hashlib.sha256(data.encode()).hexdigest()[:32]
-    return token
-
-def validate_csrf_token(token: str, user_id: int, guild_id: int) -> bool:
-    """Validate a CSRF token."""
-    current_timestamp = int(time.time() // 300)
-    # Check current and previous 5-minute window
-    for timestamp in [current_timestamp, current_timestamp - 1]:
-        expected_token = generate_csrf_token(user_id, guild_id)
-        if token == expected_token:
-            return True
-    return False
 
 def setup_dashboard_pages(cog):
     """Setup dashboard pages for the YALC cog and bind them to the cog instance."""
@@ -94,7 +74,7 @@ def setup_dashboard_pages(cog):
                 "error_message": f"Failed to load YALC dashboard home: {e}"
             }
 
-    @dashboard_page(name="settings", description="Configure YALC logging settings", methods=("GET", "POST"), is_owner=False)
+    @dashboard_page(name="settings", description="Configure YALC logging settings", methods=("GET",), is_owner=False)
     async def dashboard_settings(self, user, guild, request: typing.Optional[dict] = None, **kwargs) -> typing.Dict[str, typing.Any]:
         """Dashboard settings page for YALC."""
         try:
@@ -112,63 +92,9 @@ def setup_dashboard_pages(cog):
             success_message = ""
             error_message = ""
             
-            # Handle POST requests (form submissions)
-            if request and request.get('method') == 'POST':
-                try:
-                    form_data = request.get('form', {})
-                    
-                    
-                    
-                    # Update event enablement
-                    if 'events' in form_data:
-                        async with config.events() as events:
-                            for event_type in cog.event_descriptions.keys():
-                                events[event_type] = event_type in form_data['events']
-                    
-                    # Update event channels
-                    if 'event_channels' in form_data:
-                        async with config.event_channels() as event_channels:
-                            for event_type, channel_id in form_data['event_channels'].items():
-                                if channel_id and channel_id.isdigit():
-                                    event_channels[event_type] = int(channel_id)
-                                else:
-                                    event_channels[event_type] = None
-                    
-                    # Update general settings
-                    if 'ignore_bots' in form_data:
-                        await config.ignore_bots.set(form_data['ignore_bots'] == 'true')
-                    if 'ignore_webhooks' in form_data:
-                        await config.ignore_webhooks.set(form_data['ignore_webhooks'] == 'true')
-                    if 'ignore_tupperbox' in form_data:
-                        await config.ignore_tupperbox.set(form_data['ignore_tupperbox'] == 'true')
-                    if 'ignore_apps' in form_data:
-                        await config.ignore_apps.set(form_data['ignore_apps'] == 'true')
-                    if 'include_thumbnails' in form_data:
-                        await config.include_thumbnails.set(form_data['include_thumbnails'] == 'true')
-                    if 'detect_proxy_deletes' in form_data:
-                        await config.detect_proxy_deletes.set(form_data['detect_proxy_deletes'] == 'true')
-                    
-                    # Update Tupperbox IDs
-                    if 'tupperbox_ids' in form_data:
-                        tupperbox_ids = [tid.strip() for tid in form_data['tupperbox_ids'].split(',') if tid.strip()]
-                        await config.tupperbox_ids.set(tupperbox_ids)
-                    
-                    # Update message prefix filters
-                    if 'message_prefix_filter' in form_data:
-                        prefixes = [p.strip() for p in form_data['message_prefix_filter'].split(',') if p.strip()]
-                        await config.message_prefix_filter.set(prefixes)
-                    
-                    # Update webhook name filters
-                    if 'webhook_name_filter' in form_data:
-                        filters = [f.strip() for f in form_data['webhook_name_filter'].split(',') if f.strip()]
-                        await config.webhook_name_filter.set(filters)
-                    
-                    # Refresh settings after update
-                    settings = await config.all()
-                    success_message = "Configuration updated successfully!"
-                    
-                except Exception as e:
-                    error_message = f"Failed to update configuration: {str(e)}"
+            # Check for success message from redirect
+            if kwargs.get('saved') == '1':
+                success_message = "Configuration updated successfully!"
             
             # Count enabled events
             enabled_events = sum(1 for enabled in settings["events"].values() if enabled)
@@ -233,8 +159,7 @@ def setup_dashboard_pages(cog):
                         if channel_id:
                             event_form = event_form.replace(f'value="{channel_id}"', f'value="{channel_id}" selected')
             
-            # Generate our own CSRF token
-            csrf_token = generate_csrf_token(user.id, guild.id)
+            
             
             # Build messages
             messages = ""
@@ -253,8 +178,7 @@ def setup_dashboard_pages(cog):
                                 <h3><i class="fas fa-cog"></i> YALC Configuration for {guild.name}</h3>
                             </div>
                             <div class="card-body">
-                                <form method="post">
-                                    <input type="hidden" name="csrf_token" value="{csrf_token}">
+                                <form method="post" action="settings_save">
                                     <div class="row">
                                         <div class="col-md-6">
                                             <div class="card">
@@ -434,6 +358,93 @@ def setup_dashboard_pages(cog):
                 "error_message": f"Failed to load YALC settings: {e}"
             }
 
+    @dashboard_page(name="settings_save", description="Save YALC settings", methods=("POST",), is_owner=False)
+    async def dashboard_settings_save(self, user, guild, request: typing.Optional[dict] = None, **kwargs) -> typing.Dict[str, typing.Any]:
+        """Handle settings form submission."""
+        try:
+            if not guild:
+                return {
+                    "status": 1,
+                    "error_title": "Guild Required",
+                    "error_message": "This page requires a guild context."
+                }
+                
+            config = cog.config.guild(guild)
+            
+            if request and request.get('method') == 'POST':
+                try:
+                    form_data = request.get('form', {})
+                    
+                    # Update event enablement
+                    if 'events' in form_data:
+                        async with config.events() as events:
+                            for event_type in cog.event_descriptions.keys():
+                                events[event_type] = event_type in form_data['events']
+                    
+                    # Update event channels
+                    if 'event_channels' in form_data:
+                        async with config.event_channels() as event_channels:
+                            for event_type, channel_id in form_data['event_channels'].items():
+                                if channel_id and channel_id.isdigit():
+                                    event_channels[event_type] = int(channel_id)
+                                else:
+                                    event_channels[event_type] = None
+                    
+                    # Update general settings
+                    if 'ignore_bots' in form_data:
+                        await config.ignore_bots.set(form_data['ignore_bots'] == 'true')
+                    if 'ignore_webhooks' in form_data:
+                        await config.ignore_webhooks.set(form_data['ignore_webhooks'] == 'true')
+                    if 'ignore_tupperbox' in form_data:
+                        await config.ignore_tupperbox.set(form_data['ignore_tupperbox'] == 'true')
+                    if 'ignore_apps' in form_data:
+                        await config.ignore_apps.set(form_data['ignore_apps'] == 'true')
+                    if 'include_thumbnails' in form_data:
+                        await config.include_thumbnails.set(form_data['include_thumbnails'] == 'true')
+                    if 'detect_proxy_deletes' in form_data:
+                        await config.detect_proxy_deletes.set(form_data['detect_proxy_deletes'] == 'true')
+                    
+                    # Update Tupperbox IDs
+                    if 'tupperbox_ids' in form_data:
+                        tupperbox_ids = [tid.strip() for tid in form_data['tupperbox_ids'].split(',') if tid.strip()]
+                        await config.tupperbox_ids.set(tupperbox_ids)
+                    
+                    # Update message prefix filters
+                    if 'message_prefix_filter' in form_data:
+                        prefixes = [p.strip() for p in form_data['message_prefix_filter'].split(',') if p.strip()]
+                        await config.message_prefix_filter.set(prefixes)
+                    
+                    # Update webhook name filters
+                    if 'webhook_name_filter' in form_data:
+                        filters = [f.strip() for f in form_data['webhook_name_filter'].split(',') if f.strip()]
+                        await config.webhook_name_filter.set(filters)
+                    
+                    # Redirect back to settings page with success message
+                    return {
+                        "status": 0,
+                        "web_content": {"redirect": "../settings?saved=1"}
+                    }
+                    
+                except Exception as e:
+                    return {
+                        "status": 1,
+                        "error_title": "Save Error",
+                        "error_message": f"Failed to save configuration: {str(e)}"
+                    }
+            
+            return {
+                "status": 1,
+                "error_title": "Invalid Request",
+                "error_message": "Invalid request method."
+            }
+            
+        except Exception as e:
+            return {
+                "status": 1,
+                "error_title": "Settings Save Error",
+                "error_message": f"Failed to save YALC settings: {e}"
+            }
+
     @dashboard_page(name="about", description="About YALC", methods=("GET",), is_owner=False)
     async def dashboard_about(self, user, **kwargs) -> typing.Dict[str, typing.Any]:
         """Dashboard about page for YALC."""
@@ -535,6 +546,7 @@ def setup_dashboard_pages(cog):
     # Bind the methods to the cog instance
     cog.dashboard_home = dashboard_home.__get__(cog)
     cog.dashboard_settings = dashboard_settings.__get__(cog)
+    cog.dashboard_settings_save = dashboard_settings_save.__get__(cog)
     cog.dashboard_about = dashboard_about.__get__(cog)
     
     # Add to pages list for dashboard registration
@@ -544,5 +556,6 @@ def setup_dashboard_pages(cog):
     cog.pages.extend([
         dashboard_home,
         dashboard_settings,
+        dashboard_settings_save,
         dashboard_about
     ])
