@@ -1,0 +1,16 @@
+{
+  "$schema": "https://raw.githubusercontent.com/Cog-Creators/Red-DiscordBot/V3/develop/schema/red_cog.schema.json",
+  "name": "ZodiacColorRoles",
+  "author": ["Taako"],
+  "description": "Provides slash commands for server owners to create zodiac and color roles for users.",
+  "install_msg": "Thank you for installing the ZodiacColorRoles cog! Use `[p]addzodiacrole` and `[p]addcolorrole` for commands.",
+  "short": "Create zodiac and color roles easily.",
+  "tags": ["roles", "zodiac", "color", "slashcommands"],
+  "min_bot_version": "3.5.0",
+  "version": "1.0.0",
+  "requirements": [],
+  "end_user_data_statement": "This cog does not persistently store or share any end user data.",
+  "hidden": false,
+  "disabled": false,
+  "type": "COG"
+}
