@@ -3,6 +3,22 @@ from redbot.core import commands
 
 class ZodiacColorRoles(commands.Cog):
     """Cog for easy creation of zodiac and color roles."""
+    PRONOUN_ROLES = [
+        "he/him",
+        "she/her",
+        "they/them",
+        "any pronouns",
+        "ask me",
+        "xe/xem",
+        "ze/zir"
+    ]
+
+    COMMON_PING_ROLES = [
+        "Common Ping",
+        "No Pings",
+        "Ping on Important",
+        "Ping for Events"
+    ]
 
     ZODIAC_SIGNS = [
         "Aries", "Taurus", "Gemini", "Cancer", "Leo", "Virgo",
@@ -90,16 +106,58 @@ class ZodiacColorRoles(commands.Cog):
             await ctx.send(
                 f"Added all color roles: {', '.join(added_roles)}", ephemeral=True if ctx.interaction else False
             )
-            return
-        if color_name not in self.COLOR_CHOICES:
+    @commands.hybrid_command(name="addpronounrole", description="Create a pronoun role or all pronoun roles on the server.")
+    async def addpronounrole(self, ctx: commands.Context, pronoun: str):
+        """Add a pronoun role or all pronoun roles to the server."""
+        guild = ctx.guild
+        pronoun_name = pronoun.strip().lower()
+        if pronoun_name == "all":
+            added_roles = []
+            for role_name in self.PRONOUN_ROLES:
+                role = discord.utils.get(guild.roles, name=role_name)
+                if not role:
+                    role = await guild.create_role(name=role_name)
+                added_roles.append(role_name)
             await ctx.send(
-                f"Invalid color. Use `/listcolorroles` to see valid options.", ephemeral=True if ctx.interaction else False
+                f"Added all pronoun roles: {', '.join(added_roles)}", ephemeral=True if ctx.interaction else False
             )
             return
-        hex_code = self.COLOR_CHOICES[color_name]
-        role_name = f"Color {color_name}"
+        valid_names = [r.lower() for r in self.PRONOUN_ROLES]
+        if pronoun_name not in valid_names:
+            await ctx.send(
+                f"Invalid pronoun. Valid options: {', '.join(self.PRONOUN_ROLES)}", ephemeral=True if ctx.interaction else False
+            )
+            return
+        role_name = self.PRONOUN_ROLES[valid_names.index(pronoun_name)]
         role = discord.utils.get(guild.roles, name=role_name)
         if not role:
-            discord_color = discord.Color(int(hex_code.lstrip("#"), 16))
-            role = await guild.create_role(name=role_name, color=discord_color)
-        await ctx.send(f"Added color role: {role_name}", ephemeral=True if ctx.interaction else False)
+            role = await guild.create_role(name=role_name)
+        await ctx.send(f"Added pronoun role: {role_name}", ephemeral=True if ctx.interaction else False)
+
+    @commands.hybrid_command(name="addcommonpingrole", description="Create a common ping role or all common ping roles on the server.")
+    async def addcommonpingrole(self, ctx: commands.Context, pingrole: str):
+        """Add a common ping role or all common ping roles to the server."""
+        guild = ctx.guild
+        pingrole_name = pingrole.strip().lower()
+        if pingrole_name == "all":
+            added_roles = []
+            for role_name in self.COMMON_PING_ROLES:
+                role = discord.utils.get(guild.roles, name=role_name)
+                if not role:
+                    role = await guild.create_role(name=role_name)
+                added_roles.append(role_name)
+            await ctx.send(
+                f"Added all common ping roles: {', '.join(added_roles)}", ephemeral=True if ctx.interaction else False
+            )
+            return
+        valid_names = [r.lower() for r in self.COMMON_PING_ROLES]
+        if pingrole_name not in valid_names:
+            await ctx.send(
+                f"Invalid common ping role. Valid options: {', '.join(self.COMMON_PING_ROLES)}", ephemeral=True if ctx.interaction else False
+            )
+            return
+        role_name = self.COMMON_PING_ROLES[valid_names.index(pingrole_name)]
+        role = discord.utils.get(guild.roles, name=role_name)
+        if not role:
+            role = await guild.create_role(name=role_name)
+        await ctx.send(f"Added common ping role: {role_name}", ephemeral=True if ctx.interaction else False)
