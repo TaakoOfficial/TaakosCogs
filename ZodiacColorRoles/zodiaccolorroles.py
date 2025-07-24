@@ -1,5 +1,5 @@
 import discord
-from redbot.core import commands, app_commands
+from redbot.core import commands
 
 class ZodiacColorRoles(commands.Cog):
     """Cog for easy creation of zodiac and color roles."""
@@ -31,23 +31,23 @@ class ZodiacColorRoles(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @app_commands.command(name="listzodiacroles", description="List all available zodiac roles.")
-    async def listzodiacroles(self, interaction: discord.Interaction):
+    @commands.hybrid_command(name="listzodiacroles", description="List all available zodiac roles.")
+    async def listzodiacroles(self, ctx: commands.Context):
         """List all zodiac roles the bot can create."""
         zodiac_list = ", ".join(self.ZODIAC_SIGNS)
-        await interaction.response.send_message(f"Available zodiac roles: {zodiac_list}", ephemeral=True)
+        await ctx.send(f"Available zodiac roles: {zodiac_list}", ephemeral=True if ctx.interaction else False)
 
-    @app_commands.command(name="listcolorroles", description="List all available color roles.")
-    async def listcolorroles(self, interaction: discord.Interaction):
+    @commands.hybrid_command(name="listcolorroles", description="List all available color roles.")
+    async def listcolorroles(self, ctx: commands.Context):
         """List all color roles the bot can create."""
         color_list = ", ".join(f"{name} ({hexcode})" for name, hexcode in self.COLOR_CHOICES.items())
-        await interaction.response.send_message(f"Available color roles: {color_list}", ephemeral=True)
+        await ctx.send(f"Available color roles: {color_list}", ephemeral=True if ctx.interaction else False)
 
-    @app_commands.command(name="addzodiacrole", description="Create a zodiac role for a user, or all zodiac roles.")
-    @app_commands.describe(zodiac="Zodiac sign for the role, or 'all' to add all zodiac roles")
-    async def addzodiacrole(self, interaction: discord.Interaction, zodiac: str):
+    @commands.hybrid_command(name="addzodiacrole", description="Create a zodiac role for a user, or all zodiac roles.")
+    async def addzodiacrole(self, ctx: commands.Context, zodiac: str):
         """Add a zodiac role or all zodiac roles to the server."""
-        guild = interaction.guild
+        guild = ctx.guild
+        member = ctx.author
         zodiac = zodiac.title()
         if zodiac.lower() == "all":
             added_roles = []
@@ -56,29 +56,29 @@ class ZodiacColorRoles(commands.Cog):
                 role = discord.utils.get(guild.roles, name=role_name)
                 if not role:
                     role = await guild.create_role(name=role_name)
-                await interaction.user.add_roles(role)
+                await member.add_roles(role)
                 added_roles.append(role_name)
-            await interaction.response.send_message(
-                f"Added all zodiac roles: {', '.join(added_roles)}", ephemeral=True
+            await ctx.send(
+                f"Added all zodiac roles: {', '.join(added_roles)}", ephemeral=True if ctx.interaction else False
             )
             return
         if zodiac not in self.ZODIAC_SIGNS:
-            await interaction.response.send_message(
-                f"Invalid zodiac sign. Use `/listzodiacroles` to see valid options.", ephemeral=True
+            await ctx.send(
+                f"Invalid zodiac sign. Use `/listzodiacroles` to see valid options.", ephemeral=True if ctx.interaction else False
             )
             return
         role_name = f"{zodiac}"
         role = discord.utils.get(guild.roles, name=role_name)
         if not role:
             role = await guild.create_role(name=role_name)
-        await interaction.user.add_roles(role)
-        await interaction.response.send_message(f"Added zodiac role: {role_name}", ephemeral=True)
+        await member.add_roles(role)
+        await ctx.send(f"Added zodiac role: {role_name}", ephemeral=True if ctx.interaction else False)
 
-    @app_commands.command(name="addcolorrole", description="Create a color role for a user, or all color roles.")
-    @app_commands.describe(color="Color name (e.g. Red, Blue, Green), or 'all' to add all color roles")
-    async def addcolorrole(self, interaction: discord.Interaction, color: str):
+    @commands.hybrid_command(name="addcolorrole", description="Create a color role for a user, or all color roles.")
+    async def addcolorrole(self, ctx: commands.Context, color: str):
         """Add a color role or all color roles to the server."""
-        guild = interaction.guild
+        guild = ctx.guild
+        member = ctx.author
         color_name = color.title()
         if color_name.lower() == "all":
             added_roles = []
@@ -88,15 +88,15 @@ class ZodiacColorRoles(commands.Cog):
                 if not role:
                     discord_color = discord.Color(int(hex_code.lstrip("#"), 16))
                     role = await guild.create_role(name=role_name, color=discord_color)
-                await interaction.user.add_roles(role)
+                await member.add_roles(role)
                 added_roles.append(role_name)
-            await interaction.response.send_message(
-                f"Added all color roles: {', '.join(added_roles)}", ephemeral=True
+            await ctx.send(
+                f"Added all color roles: {', '.join(added_roles)}", ephemeral=True if ctx.interaction else False
             )
             return
         if color_name not in self.COLOR_CHOICES:
-            await interaction.response.send_message(
-                f"Invalid color. Use `/listcolorroles` to see valid options.", ephemeral=True
+            await ctx.send(
+                f"Invalid color. Use `/listcolorroles` to see valid options.", ephemeral=True if ctx.interaction else False
             )
             return
         hex_code = self.COLOR_CHOICES[color_name]
@@ -105,5 +105,5 @@ class ZodiacColorRoles(commands.Cog):
         if not role:
             discord_color = discord.Color(int(hex_code.lstrip("#"), 16))
             role = await guild.create_role(name=role_name, color=discord_color)
-        await interaction.user.add_roles(role)
-        await interaction.response.send_message(f"Added color role: {role_name}", ephemeral=True)
+        await member.add_roles(role)
+        await ctx.send(f"Added color role: {role_name}", ephemeral=True if ctx.interaction else False)
