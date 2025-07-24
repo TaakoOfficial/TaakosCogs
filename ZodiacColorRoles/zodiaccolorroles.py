@@ -56,7 +56,6 @@ class ZodiacColorRoles(commands.Cog):
                 role = discord.utils.get(guild.roles, name=role_name)
                 if not role:
                     role = await guild.create_role(name=role_name)
-                await member.add_roles(role)
                 added_roles.append(role_name)
             await ctx.send(
                 f"Added all zodiac roles: {', '.join(added_roles)}", ephemeral=True if ctx.interaction else False
@@ -71,7 +70,6 @@ class ZodiacColorRoles(commands.Cog):
         role = discord.utils.get(guild.roles, name=role_name)
         if not role:
             role = await guild.create_role(name=role_name)
-        await member.add_roles(role)
         await ctx.send(f"Added zodiac role: {role_name}", ephemeral=True if ctx.interaction else False)
 
     @commands.hybrid_command(name="addcolorrole", description="Create a color role for a user, or all color roles.")
@@ -88,7 +86,6 @@ class ZodiacColorRoles(commands.Cog):
                 if not role:
                     discord_color = discord.Color(int(hex_code.lstrip("#"), 16))
                     role = await guild.create_role(name=role_name, color=discord_color)
-                await member.add_roles(role)
                 added_roles.append(role_name)
             await ctx.send(
                 f"Added all color roles: {', '.join(added_roles)}", ephemeral=True if ctx.interaction else False
@@ -105,5 +102,4 @@ class ZodiacColorRoles(commands.Cog):
         if not role:
             discord_color = discord.Color(int(hex_code.lstrip("#"), 16))
             role = await guild.create_role(name=role_name, color=discord_color)
-        await member.add_roles(role)
         await ctx.send(f"Added color role: {role_name}", ephemeral=True if ctx.interaction else False)
