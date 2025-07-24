@@ -149,6 +149,37 @@ class YALC(commands.Cog):
         # Initialize dashboard integration immediately
         self.setup_dashboard()
 
+    async def _get_audit_log_entry(self, guild, action, target=None, timeout_seconds=10):
+        """
+        Helper function to get recent audit log entries with proper error handling.
+        
+        Args:
+            guild: The guild to search audit logs in
+            action: The AuditLogAction to search for
+            target: Optional target to match against (user, channel, role, etc.)
+            timeout_seconds: How recent the entry should be (default 10 seconds)
+            
+        Returns:
+            AuditLogEntry or None if not found/no permission
+        """
+        if not guild.me.guild_permissions.view_audit_log:
+            return None
+            
+        try:
+            async for entry in guild.audit_logs(action=action, limit=10):
+                # Check if this audit log entry is recent
+                if (datetime.datetime.now(datetime.UTC) - entry.created_at).total_seconds() <= timeout_seconds:
+                    # If target is specified, check if it matches
+                    if target is None or entry.target == target:
+                        return entry
+                # Stop searching if entries are too old
+                elif (datetime.datetime.now(datetime.UTC) - entry.created_at).total_seconds() > timeout_seconds * 2:
+                    break
+        except (discord.Forbidden, discord.HTTPException, asyncio.TimeoutError):
+            pass  # We don't have permission to view audit logs or there was an error
+            
+        return None
+
     async def should_log_event(self, guild: discord.Guild, event_type: str,
                          channel: Optional[discord.abc.GuildChannel] = None,
                          user: Optional[Union[discord.Member, discord.User]] = None,
@@ -671,14 +702,60 @@ class YALC(commands.Cog):
             else:
                 metadata["Author"] = "Unknown User"
             
+            # Try to get audit log information about who deleted the message
+            deletion_info = None
+            if message.guild and message.guild.me.guild_permissions.view_audit_log:
+                try:
+                    # Look for message delete audit log entries
+                    audit_entry = await self._get_audit_log_entry(
+                        message.guild,
+                        discord.AuditLogAction.message_delete,
+                        target=message.author,
+                        timeout_seconds=10
+                    )
+                    
+                    if audit_entry:
+                        deletion_info = {
+                            "deleted_by": audit_entry.user,
+                            "reason": getattr(audit_entry, "reason", None)
+                        }
+                except Exception as e:
+                    self.log.debug(f"Could not fetch audit log for message deletion: {e}")
+            
             # Initialize the embed with base information
-            description = f"🗑️ Message deleted in {getattr(message.channel, 'mention', str(message.channel))}\n\u200b"
+            description = f"🗑️ Message deleted in {getattr(message.channel, 'mention', str(message.channel))}"
+            
+            # Add deletion information if available
+            if deletion_info:
+                deleter = deletion_info["deleted_by"]
+                if deleter != message.author:  # Only show if deleted by someone else
+                    description += f" by {deleter.mention}"
+            
+            description += "\n\u200b"
             
             # Add jump URL if available (useful for context)
             message_id = getattr(message, "id", None)
             channel_id = getattr(message.channel, "id", None)
             if message_id and channel_id:
                 description += f"\nMessage ID: `{message_id}`"
+            
+            # Add deletion metadata
+            if deletion_info:
+                deleter = deletion_info["deleted_by"]
+                metadata["Deleted By"] = f"{deleter.mention} (`{deleter}`, ID: `{deleter.id}`)"
+                
+                # Add reason if provided
+                if deletion_info["reason"]:
+                    metadata["Deletion Reason"] = deletion_info["reason"]
+                    
+                # Indicate if it was self-deleted vs moderated
+                if deleter == message.author:
+                    metadata["Deletion Type"] = "Self-deleted"
+                else:
+                    metadata["Deletion Type"] = "Moderated deletion"
+            else:
+                # If no audit log info available, indicate unknown
+                metadata["Deleted By"] = "Unknown (audit log unavailable)"
             
             # Build a comprehensive and visually appealing embed
             embed = self.create_embed(
@@ -1263,28 +1340,35 @@ class YALC(commands.Cog):
                 
             embed.add_field(name="Message Count", value=message_count_text, inline=True)
             
-            # Add moderation data if available
+            # Add moderation data if available using centralized audit log helper
             audit_entry = None
             try:
-                if guild.me.guild_permissions.view_audit_log:
-                    async for entry in guild.audit_logs(limit=5, action=discord.AuditLogAction.message_bulk_delete):
-                        # Match the entry with our channel
-                        target_channel = getattr(entry, "target", None)
-                        if target_channel and target_channel.id == channel.id:
-                            audit_entry = entry
-                            break
+                # Look for bulk message delete audit log entries using our centralized helper
+                audit_entry = await self._get_audit_log_entry(
+                    guild,
+                    discord.AuditLogAction.message_bulk_delete,
+                    target=channel,
+                    timeout_seconds=10
+                )
             except Exception as e:
-                self.log.debug(f"Could not fetch audit logs: {e}")
+                self.log.debug(f"Could not fetch audit log for bulk message delete: {e}")
                 
             if audit_entry:
                 embed.add_field(
                     name="Deleted By",
-                    value=f"{audit_entry.user.mention} ({audit_entry.user})",
+                    value=f"{audit_entry.user.mention} (`{audit_entry.user}`, ID: `{audit_entry.user.id}`)",
                     inline=True
                 )
                 
                 if hasattr(audit_entry, "reason") and audit_entry.reason:
                     embed.add_field(name="Reason", value=audit_entry.reason, inline=True)
+            else:
+                # If no audit log info available, indicate unknown
+                embed.add_field(
+                    name="Deleted By",
+                    value="Unknown (audit log unavailable)",
+                    inline=True
+                )
             
             # Add authors summary (who sent the deleted messages)
             authors = {}
@@ -1528,6 +1612,7 @@ class YALC(commands.Cog):
 
     @commands.Cog.listener()
     async def on_member_update(self, before: discord.Member, after: discord.Member) -> None:
+        """Log member update events with audit log integration to show who made changes."""
         self.log.debug("Listener triggered: on_member_update")
         if not before.guild:
             self.log.debug("No guild on member.")
@@ -1551,34 +1636,142 @@ class YALC(commands.Cog):
             return
         try:
             changes = []
+            moderator_info = None
+            
+            # Check for role changes
             added_roles = [r for r in after.roles if r not in before.roles]
             removed_roles = [r for r in before.roles if r not in after.roles]
+            
+            # Try to get audit log information for role changes
             if added_roles or removed_roles:
+                try:
+                    # Look for member role update in audit logs
+                    audit_entry = await self._get_audit_log_entry(
+                        before.guild,
+                        discord.AuditLogAction.member_role_update,
+                        target=after,
+                        timeout_seconds=10
+                    )
+                    
+                    if audit_entry and audit_entry.user != after:
+                        moderator_info = {
+                            "moderator": audit_entry.user,
+                            "reason": getattr(audit_entry, "reason", None)
+                        }
+                except Exception as e:
+                    self.log.debug(f"Could not fetch audit log for member role update: {e}")
+                
+                # Add role changes to the changes list
                 for role in added_roles:
                     changes.append(f"➕ Added {role.mention}")
                 for role in removed_roles:
                     changes.append(f"➖ Removed {role.mention}")
+            
+            # Check for nickname changes
             if before.nick != after.nick:
+                try:
+                    # Look for member update in audit logs (covers nickname changes)
+                    audit_entry = await self._get_audit_log_entry(
+                        before.guild,
+                        discord.AuditLogAction.member_update,
+                        target=after,
+                        timeout_seconds=10
+                    )
+                    
+                    if audit_entry and audit_entry.user != after and not moderator_info:
+                        moderator_info = {
+                            "moderator": audit_entry.user,
+                            "reason": getattr(audit_entry, "reason", None)
+                        }
+                except Exception as e:
+                    self.log.debug(f"Could not fetch audit log for member nickname update: {e}")
+                
                 changes.append(f"📝 Nickname changed: '{before.nick or before.display_name}' → '{after.nick or after.display_name}'")
+            
+            # Skip if no changes detected
             if not changes:
                 return
-            embed = discord.Embed(
-                title="👤 Member Role Update",
-                description=f"{after.mention} ({after.display_name})'s roles or nickname were updated.",
-                color=discord.Color.blurple(),
-                timestamp=datetime.datetime.now(datetime.UTC)
+            
+            # Create the embed with enhanced information
+            if moderator_info:
+                description = f"👤 {after.mention} ({after.display_name})'s profile was updated by {moderator_info['moderator'].mention}"
+            else:
+                description = f"👤 {after.mention} ({after.display_name})'s profile was updated"
+            
+            embed = self.create_embed(
+                "member_update",
+                description + "\n\u200b"
             )
-            embed.add_field(name="Changes", value="\n".join(changes), inline=False)
-            if after.display_avatar:
+            
+            # Add user information
+            embed.add_field(
+                name="Member",
+                value=f"{after.mention} (`{after}`, ID: `{after.id}`)",
+                inline=True
+            )
+            
+            # Add moderator information if available
+            if moderator_info:
+                embed.add_field(
+                    name="Updated By",
+                    value=f"{moderator_info['moderator'].mention} (`{moderator_info['moderator']}`, ID: `{moderator_info['moderator'].id}`)",
+                    inline=True
+                )
+                
+                # Add reason if provided
+                if moderator_info["reason"]:
+                    embed.add_field(
+                        name="Reason",
+                        value=moderator_info["reason"],
+                        inline=False
+                    )
+                    
+                # Indicate if it was self-updated vs moderated
+                if moderator_info["moderator"] == after:
+                    embed.add_field(
+                        name="Update Type",
+                        value="Self-updated",
+                        inline=True
+                    )
+                else:
+                    embed.add_field(
+                        name="Update Type",
+                        value="Moderated update",
+                        inline=True
+                    )
+            else:
+                # If no audit log info available, indicate unknown
+                embed.add_field(
+                    name="Updated By",
+                    value="Unknown (audit log unavailable or self-updated)",
+                    inline=True
+                )
+            
+            # Add the changes
+            embed.add_field(
+                name="Changes",
+                value="\n".join(changes),
+                inline=False
+            )
+            
+            # Add user thumbnail for better visual identification
+            settings = await self.config.guild(before.guild).all()
+            if settings.get("include_thumbnails", True) and after.display_avatar:
                 embed.set_thumbnail(url=after.display_avatar.url)
+            
+            # Set footer
             event_time = datetime.datetime.now(datetime.UTC)
-            self.set_embed_footer(embed, event_time=event_time, label="YALC Logger • Role/Nick Update")
+            self.set_embed_footer(embed, event_time=event_time, label="YALC Logger • Member Update")
+            
+            # Send the log message
             await self.safe_send(channel, embed=embed)
+            
         except Exception as e:
             self.log.error(f"Failed to log member_update: {e}")
 
     @commands.Cog.listener()
     async def on_guild_channel_create(self, channel: discord.abc.GuildChannel) -> None:
+        """Log channel creation events with audit log integration to show who created channels."""
         self.log.debug("Listener triggered: on_guild_channel_create")
         if not channel.guild:
             self.log.debug("No guild on channel.")
@@ -1601,20 +1794,130 @@ class YALC(commands.Cog):
             self.log.warning("No log channel set for channel_create.")
             return
         try:
+            # Try to get audit log information about who created the channel
+            creator_info = None
+            try:
+                # Look for channel create audit log entries
+                audit_entry = await self._get_audit_log_entry(
+                    channel.guild,
+                    discord.AuditLogAction.channel_create,
+                    target=channel,
+                    timeout_seconds=10
+                )
+                
+                if audit_entry:
+                    creator_info = {
+                        "creator": audit_entry.user,
+                        "reason": getattr(audit_entry, "reason", None)
+                    }
+            except Exception as e:
+                self.log.debug(f"Could not fetch audit log for channel creation: {e}")
+            
+            # Create the embed with enhanced information
+            if creator_info:
+                description = f"📝 Channel created: {getattr(channel, 'mention', str(channel))} by {creator_info['creator'].mention}"
+            else:
+                description = f"📝 Channel created: {getattr(channel, 'mention', str(channel))}"
+            
+            description += "\n\u200b"
+            
             embed = self.create_embed(
                 "channel_create",
-                f"📝 Channel created: {getattr(channel, 'mention', str(channel))}\n\u200b",
-                name=channel.name,
-                id=channel.id,
-                type=type(channel).__name__,
-                channel_name=channel.name
+                description
             )
+            
+            # Add channel information
+            embed.add_field(
+                name="Channel",
+                value=f"{getattr(channel, 'mention', str(channel))} (`{channel.name}`, ID: `{channel.id}`)",
+                inline=True
+            )
+            
+            embed.add_field(
+                name="Type",
+                value=type(channel).__name__,
+                inline=True
+            )
+            
+            # Add creator information if available
+            if creator_info:
+                embed.add_field(
+                    name="Created By",
+                    value=f"{creator_info['creator'].mention} (`{creator_info['creator']}`, ID: `{creator_info['creator'].id}`)",
+                    inline=True
+                )
+                
+                # Add reason if provided
+                if creator_info["reason"]:
+                    embed.add_field(
+                        name="Reason",
+                        value=creator_info["reason"],
+                        inline=False
+                    )
+            else:
+                # If no audit log info available, indicate unknown
+                embed.add_field(
+                    name="Created By",
+                    value="Unknown (audit log unavailable)",
+                    inline=True
+                )
+            
+            # Add category info if applicable
+            if hasattr(channel, 'category') and channel.category:
+                embed.add_field(
+                    name="Category",
+                    value=f"{channel.category.name} (`{channel.category.id}`)",
+                    inline=True
+                )
+            
+            # Add channel-specific information
+            if isinstance(channel, discord.TextChannel):
+                if channel.topic:
+                    embed.add_field(
+                        name="Topic",
+                        value=channel.topic[:1024] if len(channel.topic) <= 1024 else channel.topic[:1021] + "...",
+                        inline=False
+                    )
+                embed.add_field(
+                    name="NSFW",
+                    value="Yes" if channel.nsfw else "No",
+                    inline=True
+                )
+                if channel.slowmode_delay > 0:
+                    embed.add_field(
+                        name="Slowmode",
+                        value=f"{channel.slowmode_delay} seconds",
+                        inline=True
+                    )
+            elif isinstance(channel, discord.VoiceChannel):
+                embed.add_field(
+                    name="Bitrate",
+                    value=f"{channel.bitrate} bps",
+                    inline=True
+                )
+                if channel.user_limit > 0:
+                    embed.add_field(
+                        name="User Limit",
+                        value=str(channel.user_limit),
+                        inline=True
+                    )
+            
+            # Add creator thumbnail for better visual identification
+            settings = await self.config.guild(channel.guild).all()
+            if creator_info and settings.get("include_thumbnails", True) and hasattr(creator_info["creator"], "display_avatar"):
+                embed.set_thumbnail(url=creator_info["creator"].display_avatar.url)
+            
+            # Set footer
+            event_time = datetime.datetime.now(datetime.UTC)
+            self.set_embed_footer(embed, event_time=event_time, label="YALC Logger • Channel Created")
+            
             await self.safe_send(log_channel, embed=embed)
         except Exception as e:
             self.log.error(f"Failed to log channel_create: {e}")
 
     @commands.Cog.listener()
     async def on_guild_channel_delete(self, channel: discord.abc.GuildChannel) -> None:
+        """Log channel deletion events with audit log integration to show who deleted channels."""
         self.log.debug("Listener triggered: on_guild_channel_delete")
         if not channel.guild:
             self.log.debug("No guild on channel.")
@@ -1637,14 +1940,125 @@ class YALC(commands.Cog):
             self.log.warning("No log channel set for channel_delete.")
             return
         try:
+            # Try to get audit log information about who deleted the channel
+            deleter_info = None
+            try:
+                # Look for channel delete audit log entries
+                audit_entry = await self._get_audit_log_entry(
+                    channel.guild,
+                    discord.AuditLogAction.channel_delete,
+                    target=channel,
+                    timeout_seconds=10
+                )
+                
+                if audit_entry:
+                    deleter_info = {
+                        "deleter": audit_entry.user,
+                        "reason": getattr(audit_entry, "reason", None)
+                    }
+            except Exception as e:
+                self.log.debug(f"Could not fetch audit log for channel deletion: {e}")
+            
+            # Create the embed with enhanced information
+            if deleter_info:
+                description = f"🗑️ Channel deleted: **{channel.name}** by {deleter_info['deleter'].mention}"
+            else:
+                description = f"🗑️ Channel deleted: **{channel.name}**"
+            
+            description += "\n\u200b"
+            
             embed = self.create_embed(
                 "channel_delete",
-                f"🗑️ Channel deleted: {getattr(channel, 'mention', str(channel))}\n\u200b",
-                name=channel.name,
-                id=channel.id,
-                type=type(channel).__name__,
-                channel_name=channel.name
+                description
             )
+            
+            # Add channel information
+            embed.add_field(
+                name="Channel",
+                value=f"**{channel.name}** (ID: `{channel.id}`)",
+                inline=True
+            )
+            
+            embed.add_field(
+                name="Type",
+                value=type(channel).__name__,
+                inline=True
+            )
+            
+            # Add deleter information if available
+            if deleter_info:
+                embed.add_field(
+                    name="Deleted By",
+                    value=f"{deleter_info['deleter'].mention} (`{deleter_info['deleter']}`, ID: `{deleter_info['deleter'].id}`)",
+                    inline=True
+                )
+                
+                # Add reason if provided
+                if deleter_info["reason"]:
+                    embed.add_field(
+                        name="Reason",
+                        value=deleter_info["reason"],
+                        inline=False
+                    )
+            else:
+                # If no audit log info available, indicate unknown
+                embed.add_field(
+                    name="Deleted By",
+                    value="Unknown (audit log unavailable)",
+                    inline=True
+                )
+            
+            # Add category info if applicable
+            if hasattr(channel, 'category') and channel.category:
+                embed.add_field(
+                    name="Category",
+                    value=f"{channel.category.name} (`{channel.category.id}`)",
+                    inline=True
+                )
+            
+            # Add channel-specific information that was preserved before deletion
+            if isinstance(channel, discord.TextChannel):
+                if hasattr(channel, 'topic') and channel.topic:
+                    embed.add_field(
+                        name="Topic",
+                        value=channel.topic[:1024] if len(channel.topic) <= 1024 else channel.topic[:1021] + "...",
+                        inline=False
+                    )
+                if hasattr(channel, 'nsfw'):
+                    embed.add_field(
+                        name="NSFW",
+                        value="Yes" if channel.nsfw else "No",
+                        inline=True
+                    )
+                if hasattr(channel, 'slowmode_delay') and channel.slowmode_delay > 0:
+                    embed.add_field(
+                        name="Slowmode",
+                        value=f"{channel.slowmode_delay} seconds",
+                        inline=True
+                    )
+            elif isinstance(channel, discord.VoiceChannel):
+                if hasattr(channel, 'bitrate'):
+                    embed.add_field(
+                        name="Bitrate",
+                        value=f"{channel.bitrate} bps",
+                        inline=True
+                    )
+                if hasattr(channel, 'user_limit') and channel.user_limit > 0:
+                    embed.add_field(
+                        name="User Limit",
+                        value=str(channel.user_limit),
+                        inline=True
+                    )
+            
+            # Add deleter thumbnail for better visual identification
+            settings = await self.config.guild(channel.guild).all()
+            if deleter_info and settings.get("include_thumbnails", True) and hasattr(deleter_info["deleter"], "display_avatar"):
+                embed.set_thumbnail(url=deleter_info["deleter"].display_avatar.url)
+            
+            # Set footer
+            event_time = datetime.datetime.now(datetime.UTC)
+            self.set_embed_footer(embed, event_time=event_time, label="YALC Logger • Channel Deleted")
+            
             await self.safe_send(log_channel, embed=embed)
         except Exception as e:
             self.log.error(f"Failed to log channel_delete: {e}")
@@ -1889,6 +2303,7 @@ class YALC(commands.Cog):
 
     @commands.Cog.listener()
     async def on_role_create(self, role: discord.Role) -> None:
+        """Log role creation events with audit log integration to show who created roles."""
         self.log.debug("Listener triggered: on_role_create")
         if not role.guild:
             self.log.debug("No guild on role.")
@@ -1911,18 +2326,158 @@ class YALC(commands.Cog):
             self.log.warning("No log channel set for role_create.")
             return
         try:
+            # Try to get audit log information about who created the role
+            creator_info = None
+            try:
+                # Look for role create audit log entries
+                audit_entry = await self._get_audit_log_entry(
+                    role.guild,
+                    discord.AuditLogAction.role_create,
+                    target=role,
+                    timeout_seconds=10
+                )
+                
+                if audit_entry:
+                    creator_info = {
+                        "creator": audit_entry.user,
+                        "reason": getattr(audit_entry, "reason", None)
+                    }
+            except Exception as e:
+                self.log.debug(f"Could not fetch audit log for role creation: {e}")
+            
+            # Create the embed with enhanced information
+            if creator_info:
+                description = f"✨ Role created: {role.mention} by {creator_info['creator'].mention}"
+            else:
+                description = f"✨ Role created: {role.mention}"
+            
+            description += "\n\u200b"
+            
             embed = self.create_embed(
                 "role_create",
-                f"✨ Role created: {role.mention}\n\u200b",
-                name=role.name,
-                id=role.id
+                description
             )
+            
+            # Add role information
+            embed.add_field(
+                name="Role",
+                value=f"{role.mention} (`{role.name}`, ID: `{role.id}`)",
+                inline=True
+            )
+            
+            # Add role color if it's not default
+            if role.color != discord.Color.default():
+                color_hex = f"#{role.color.value:06x}"
+                # Add a colored square emoji based on general color
+                if role.color.value < 0x800000:  # Dark/Red
+                    color_indicator = "🟥"
+                elif role.color.value < 0x808000:  # Orange/Brown
+                    color_indicator = "🟧"
+                elif role.color.value < 0x008000:  # Yellow/Gold
+                    color_indicator = "🟨"
+                elif role.color.value < 0x008080:  # Green
+                    color_indicator = "🟩"
+                elif role.color.value < 0x000080:  # Teal/Cyan
+                    color_indicator = "🟦"
+                elif role.color.value < 0x800080:  # Blue/Indigo
+                    color_indicator = "🟦"
+                else:  # Purple/Pink
+                    color_indicator = "🟪"
+                
+                embed.add_field(
+                    name="Color",
+                    value=f"{color_indicator} {color_hex}",
+                    inline=True
+                )
+            
+            # Add role position
+            embed.add_field(
+                name="Position",
+                value=str(role.position),
+                inline=True
+            )
+            
+            # Add creator information if available
+            if creator_info:
+                embed.add_field(
+                    name="Created By",
+                    value=f"{creator_info['creator'].mention} (`{creator_info['creator']}`, ID: `{creator_info['creator'].id}`)",
+                    inline=True
+                )
+                
+                # Add reason if provided
+                if creator_info["reason"]:
+                    embed.add_field(
+                        name="Reason",
+                        value=creator_info["reason"],
+                        inline=False
+                    )
+            else:
+                # If no audit log info available, indicate unknown
+                embed.add_field(
+                    name="Created By",
+                    value="Unknown (audit log unavailable)",
+                    inline=True
+                )
+            
+            # Add role properties
+            role_properties = []
+            if role.mentionable:
+                role_properties.append("📢 Mentionable")
+            if role.hoist:
+                role_properties.append("📌 Hoisted (displays separately)")
+            if role.managed:
+                role_properties.append("🤖 Managed by integration")
+            if role.premium_subscriber:
+                role_properties.append("💎 Premium subscriber role")
+            
+            if role_properties:
+                embed.add_field(
+                    name="Properties",
+                    value="\n".join(role_properties),
+                    inline=False
+                )
+            
+            # Add permission summary if role has elevated permissions
+            dangerous_perms = []
+            if role.permissions.administrator:
+                dangerous_perms.append("🔧 Administrator")
+            if role.permissions.manage_guild:
+                dangerous_perms.append("⚙️ Manage Server")
+            if role.permissions.manage_roles:
+                dangerous_perms.append("👥 Manage Roles")
+            if role.permissions.manage_channels:
+                dangerous_perms.append("📝 Manage Channels")
+            if role.permissions.kick_members:
+                dangerous_perms.append("👢 Kick Members")
+            if role.permissions.ban_members:
+                dangerous_perms.append("🔨 Ban Members")
+            if role.permissions.moderate_members:
+                dangerous_perms.append("⏰ Timeout Members")
+            
+            if dangerous_perms:
+                embed.add_field(
+                    name="Key Permissions",
+                    value="\n".join(dangerous_perms),
+                    inline=False
+                )
+            
+            # Add creator thumbnail for better visual identification
+            settings = await self.config.guild(role.guild).all()
+            if creator_info and settings.get("include_thumbnails", True) and hasattr(creator_info["creator"], "display_avatar"):
+                embed.set_thumbnail(url=creator_info["creator"].display_avatar.url)
+            
+            # Set footer
+            event_time = datetime.datetime.now(datetime.UTC)
+            self.set_embed_footer(embed, event_time=event_time, label="YALC Logger • Role Created")
+            
             await self.safe_send(channel, embed=embed)
         except Exception as e:
             self.log.error(f"Failed to log role_create: {e}")
 
     @commands.Cog.listener()
     async def on_role_delete(self, role: discord.Role) -> None:
+        """Log role deletion events with audit log integration to show who deleted roles."""
         self.log.debug("Listener triggered: on_role_delete")
         if not role.guild:
             self.log.debug("No guild on role.")
@@ -1945,12 +2500,151 @@ class YALC(commands.Cog):
             self.log.warning("No log channel set for role_delete.")
             return
         try:
+            # Try to get audit log information about who deleted the role
+            deleter_info = None
+            try:
+                # Look for role delete audit log entries
+                audit_entry = await self._get_audit_log_entry(
+                    role.guild,
+                    discord.AuditLogAction.role_delete,
+                    target=role,
+                    timeout_seconds=10
+                )
+                
+                if audit_entry:
+                    deleter_info = {
+                        "deleter": audit_entry.user,
+                        "reason": getattr(audit_entry, "reason", None)
+                    }
+            except Exception as e:
+                self.log.debug(f"Could not fetch audit log for role deletion: {e}")
+            
+            # Create the embed with enhanced information
+            if deleter_info:
+                description = f"🗑️ Role deleted: **{role.name}** by {deleter_info['deleter'].mention}"
+            else:
+                description = f"🗑️ Role deleted: **{role.name}**"
+            
+            description += "\n\u200b"
+            
             embed = self.create_embed(
                 "role_delete",
-                f"🗑️ Role deleted: {role.name}\n\u200b",
-                name=role.name,
-                id=role.id
+                description
             )
+            
+            # Add role information
+            embed.add_field(
+                name="Role",
+                value=f"**{role.name}** (ID: `{role.id}`)",
+                inline=True
+            )
+            
+            # Add role color if it wasn't default
+            if role.color != discord.Color.default():
+                color_hex = f"#{role.color.value:06x}"
+                # Add a colored square emoji based on general color
+                if role.color.value < 0x800000:  # Dark/Red
+                    color_indicator = "🟥"
+                elif role.color.value < 0x808000:  # Orange/Brown
+                    color_indicator = "🟧"
+                elif role.color.value < 0x008000:  # Yellow/Gold
+                    color_indicator = "🟨"
+                elif role.color.value < 0x008080:  # Green
+                    color_indicator = "🟩"
+                elif role.color.value < 0x000080:  # Teal/Cyan
+                    color_indicator = "🟦"
+                elif role.color.value < 0x800080:  # Blue/Indigo
+                    color_indicator = "🟦"
+                else:  # Purple/Pink
+                    color_indicator = "🟪"
+                
+                embed.add_field(
+                    name="Color",
+                    value=f"{color_indicator} {color_hex}",
+                    inline=True
+                )
+            
+            # Add role position
+            embed.add_field(
+                name="Position",
+                value=str(role.position),
+                inline=True
+            )
+            
+            # Add deleter information if available
+            if deleter_info:
+                embed.add_field(
+                    name="Deleted By",
+                    value=f"{deleter_info['deleter'].mention} (`{deleter_info['deleter']}`, ID: `{deleter_info['deleter'].id}`)",
+                    inline=True
+                )
+                
+                # Add reason if provided
+                if deleter_info["reason"]:
+                    embed.add_field(
+                        name="Reason",
+                        value=deleter_info["reason"],
+                        inline=False
+                    )
+            else:
+                # If no audit log info available, indicate unknown
+                embed.add_field(
+                    name="Deleted By",
+                    value="Unknown (audit log unavailable)",
+                    inline=True
+                )
+            
+            # Add role properties that were preserved before deletion
+            role_properties = []
+            if role.mentionable:
+                role_properties.append("📢 Was mentionable")
+            if role.hoist:
+                role_properties.append("📌 Was hoisted (displayed separately)")
+            if role.managed:
+                role_properties.append("🤖 Was managed by integration")
+            if role.premium_subscriber:
+                role_properties.append("💎 Was premium subscriber role")
+            
+            if role_properties:
+                embed.add_field(
+                    name="Properties",
+                    value="\n".join(role_properties),
+                    inline=False
+                )
+            
+            # Add permission summary if role had elevated permissions
+            dangerous_perms = []
+            if role.permissions.administrator:
+                dangerous_perms.append("🔧 Had Administrator")
+            if role.permissions.manage_guild:
+                dangerous_perms.append("⚙️ Had Manage Server")
+            if role.permissions.manage_roles:
+                dangerous_perms.append("👥 Had Manage Roles")
+            if role.permissions.manage_channels:
+                dangerous_perms.append("📝 Had Manage Channels")
+            if role.permissions.kick_members:
+                dangerous_perms.append("👢 Had Kick Members")
+            if role.permissions.ban_members:
+                dangerous_perms.append("🔨 Had Ban Members")
+            if role.permissions.moderate_members:
+                dangerous_perms.append("⏰ Had Timeout Members")
+            
+            if dangerous_perms:
+                embed.add_field(
+                    name="Key Permissions",
+                    value="\n".join(dangerous_perms),
+                    inline=False
+                )
+            
+            # Add deleter thumbnail for better visual identification
+            settings = await self.config.guild(role.guild).all()
+            if deleter_info and settings.get("include_thumbnails", True) and hasattr(deleter_info["deleter"], "display_avatar"):
+                embed.set_thumbnail(url=deleter_info["deleter"].display_avatar.url)
+            
+            # Set footer
+            event_time = datetime.datetime.now(datetime.UTC)
+            self.set_embed_footer(embed, event_time=event_time, label="YALC Logger • Role Deleted")
+            
             await self.safe_send(channel, embed=embed)
         except Exception as e:
             self.log.error(f"Failed to log role_delete: {e}")
