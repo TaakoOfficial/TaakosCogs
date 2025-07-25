@@ -149,24 +149,27 @@ class YALC(commands.Cog):
         # Initialize dashboard integration immediately
         self.setup_dashboard()
 
-    async def _get_audit_log_entry(self, guild, action, target=None, timeout_seconds=10):
+    async def _get_audit_log_entry(self, guild, action, target=None, timeout_seconds=30):
         """
-        Helper function to get recent audit log entries with proper error handling.
+        Helper function to get recent audit log entries with improved reliability.
         
         Args:
             guild: The guild to search audit logs in
             action: The AuditLogAction to search for
             target: Optional target to match against (user, channel, role, etc.)
-            timeout_seconds: How recent the entry should be (default 10 seconds)
+            timeout_seconds: How recent the entry should be (default 30 seconds)
             
         Returns:
             AuditLogEntry or None if not found/no permission
         """
         if not guild.me.guild_permissions.view_audit_log:
             return None
-            
+
+        # Wait briefly to allow Discord to write the audit log (helps with API delay)
+        await asyncio.sleep(2)
+
         try:
-            async for entry in guild.audit_logs(action=action, limit=10):
+            async for entry in guild.audit_logs(action=action, limit=15):
                 # Check if this audit log entry is recent
                 if (datetime.datetime.now(datetime.UTC) - entry.created_at).total_seconds() <= timeout_seconds:
                     # If target is specified, check if it matches
@@ -177,7 +180,7 @@ class YALC(commands.Cog):
                     break
         except (discord.Forbidden, discord.HTTPException, asyncio.TimeoutError):
             pass  # We don't have permission to view audit logs or there was an error
-            
+
         return None
 
     async def should_log_event(self, guild: discord.Guild, event_type: str,
