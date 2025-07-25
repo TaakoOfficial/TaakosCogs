@@ -2252,12 +2252,57 @@ class YALC(commands.Cog):
                     changes.append(f"User limit: {before.user_limit} → {after.user_limit}")
             if not changes:
                 return
+
+            # Try to get audit log information about who updated the channel
+            updater_info = None
+            try:
+                audit_entry = await self._get_audit_log_entry(
+                    before.guild,
+                    discord.AuditLogAction.channel_update,
+                    target=after,
+                    timeout_seconds=10
+                )
+                if audit_entry:
+                    updater_info = {
+                        "updater": audit_entry.user,
+                        "reason": getattr(audit_entry, "reason", None)
+                    }
+            except Exception as e:
+                self.log.debug(f"Could not fetch audit log for channel update: {e}")
+
+            # Build description with updater if available
+            if updater_info:
+                description = f"🔄 Channel updated: {getattr(after, 'mention', str(after))} by {updater_info['updater'].mention}\n\u200b"
+            else:
+                description = f"🔄 Channel updated: {getattr(after, 'mention', str(after))}\n\u200b"
+
             embed = self.create_embed(
                 "channel_update",
-                f"🔄 Channel updated: {getattr(after, 'mention', str(after))}\n\u200b",
+                description,
                 changes="\n".join(changes),
                 channel_name=after.name
             )
+
+            # Add updater info if available
+            if updater_info:
+                embed.add_field(
+                    name="Updated By",
+                    value=f"{updater_info['updater'].mention} (`{updater_info['updater']}`, ID: `{updater_info['updater'].id}`)",
+                    inline=True
+                )
+                if updater_info["reason"]:
+                    embed.add_field(
+                        name="Reason",
+                        value=updater_info["reason"],
+                        inline=False
+                    )
+            else:
+                embed.add_field(
+                    name="Updated By",
+                    value="Unknown (audit log unavailable or self-updated)",
+                    inline=True
+                )
+
             await self.safe_send(log_channel, embed=embed)
         except Exception as e:
             self.log.error(f"Failed to log channel_update: {e}")
@@ -2286,15 +2331,57 @@ class YALC(commands.Cog):
             self.log.warning("No log channel set for thread_create.")
             return
         try:
+            # Try to get audit log information about who created the thread
+            creator_info = None
+            try:
+                audit_entry = await self._get_audit_log_entry(
+                    thread.guild,
+                    discord.AuditLogAction.thread_create,
+                    target=thread,
+                    timeout_seconds=10
+                )
+                if audit_entry:
+                    creator_info = {
+                        "creator": audit_entry.user,
+                        "reason": getattr(audit_entry, "reason", None)
+                    }
+            except Exception as e:
+                self.log.debug(f"Could not fetch audit log for thread creation: {e}")
+
+            if creator_info:
+                description = f"🧵 Thread created in {getattr(thread.parent, 'mention', None)} by {creator_info['creator'].mention}\n\u200b"
+            else:
+                description = f"🧵 Thread created in {getattr(thread.parent, 'mention', None)}\n\u200b"
+
             embed = self.create_embed(
                 "thread_create",
-                f"🧵 Thread created in {getattr(thread.parent, 'mention', None)}\n\u200b",
+                description,
                 thread=thread.mention,
                 name=thread.name,
                 creator=f"{thread.owner} ({thread.owner_id})" if thread.owner else f"ID: {thread.owner_id}",
                 type=str(thread.type),
                 slowmode=f"{thread.slowmode_delay}s" if thread.slowmode_delay else "None"
             )
+
+            if creator_info:
+                embed.add_field(
+                    name="Created By",
+                    value=f"{creator_info['creator'].mention} (`{creator_info['creator']}`, ID: `{creator_info['creator'].id}`)",
+                    inline=True
+                )
+                if creator_info["reason"]:
+                    embed.add_field(
+                        name="Reason",
+                        value=creator_info["reason"],
+                        inline=False
+                    )
+            else:
+                embed.add_field(
+                    name="Created By",
+                    value="Unknown (audit log unavailable)",
+                    inline=True
+                )
+
             await self.safe_send(log_channel, embed=embed)
         except Exception as e:
             self.log.error(f"Failed to log thread_create: {e}")
@@ -2323,14 +2410,56 @@ class YALC(commands.Cog):
             self.log.warning("No log channel set for thread_delete.")
             return
         try:
+            # Try to get audit log information about who deleted the thread
+            deleter_info = None
+            try:
+                audit_entry = await self._get_audit_log_entry(
+                    thread.guild,
+                    discord.AuditLogAction.thread_delete,
+                    target=thread,
+                    timeout_seconds=10
+                )
+                if audit_entry:
+                    deleter_info = {
+                        "deleter": audit_entry.user,
+                        "reason": getattr(audit_entry, "reason", None)
+                    }
+            except Exception as e:
+                self.log.debug(f"Could not fetch audit log for thread deletion: {e}")
+
+            if deleter_info:
+                description = f"🗑️ Thread deleted from {getattr(thread.parent, 'mention', None)} by {deleter_info['deleter'].mention}\n\u200b"
+            else:
+                description = f"🗑️ Thread deleted from {getattr(thread.parent, 'mention', None)}\n\u200b"
+
             embed = self.create_embed(
                 "thread_delete",
-                f"🗑️ Thread deleted from {getattr(thread.parent, 'mention', None)}\n\u200b",
+                description,
                 name=thread.name,
                 archived=thread.archived,
                 locked=thread.locked,
                 type=str(thread.type)
             )
+
+            if deleter_info:
+                embed.add_field(
+                    name="Deleted By",
+                    value=f"{deleter_info['deleter'].mention} (`{deleter_info['deleter']}`, ID: `{deleter_info['deleter'].id}`)",
+                    inline=True
+                )
+                if deleter_info["reason"]:
+                    embed.add_field(
+                        name="Reason",
+                        value=deleter_info["reason"],
+                        inline=False
+                    )
+            else:
+                embed.add_field(
+                    name="Deleted By",
+                    value="Unknown (audit log unavailable)",
+                    inline=True
+                )
+
             await self.safe_send(log_channel, embed=embed)
         except Exception as e:
             self.log.error(f"Failed to log thread_delete: {e}")
@@ -2900,11 +3029,55 @@ class YALC(commands.Cog):
                 changes.append(f"AFK Timeout: {getattr(before, 'afk_timeout', None)} → {getattr(after, 'afk_timeout', None)}")
             if not changes:
                 return
+
+            # Try to get audit log information about who updated the guild
+            updater_info = None
+            try:
+                audit_entry = await self._get_audit_log_entry(
+                    before,
+                    discord.AuditLogAction.guild_update,
+                    timeout_seconds=10
+                )
+                if audit_entry:
+                    updater_info = {
+                        "updater": audit_entry.user,
+                        "reason": getattr(audit_entry, "reason", None)
+                    }
+            except Exception as e:
+                self.log.debug(f"Could not fetch audit log for guild update: {e}")
+
+            # Build description with updater if available
+            if updater_info:
+                description = f"⚙️ Server updated by {updater_info['updater'].mention}"
+            else:
+                description = "⚙️ Server updated"
+
             embed = self.create_embed(
                 "guild_update",
-                f"⚙️ Server updated",
+                description,
                 changes="\n".join(changes)
             )
+
+            # Add updater info if available
+            if updater_info:
+                embed.add_field(
+                    name="Updated By",
+                    value=f"{updater_info['updater'].mention} (`{updater_info['updater']}`, ID: `{updater_info['updater'].id}`)",
+                    inline=True
+                )
+                if updater_info["reason"]:
+                    embed.add_field(
+                        name="Reason",
+                        value=updater_info["reason"],
+                        inline=False
+                    )
+            else:
+                embed.add_field(
+                    name="Updated By",
+                    value="Unknown (audit log unavailable or self-updated)",
+                    inline=True
+                )
+
             await self.safe_send(channel, embed=embed)
         except Exception as e:
             self.log.error(f"Failed to log guild_update: {e}")
