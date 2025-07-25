@@ -3790,8 +3790,21 @@ class YALC(commands.Cog):
             # Check for invalid ignored users/roles/channels
             for user_id in settings.get("ignored_users", []):
                 user = ctx.guild.get_member(user_id)
+                username_info = None
                 if not user:
-                    warnings.append(f"Ignored user ID {user_id} not found in server")
+                    # Try to fetch user from API as fallback
+                    try:
+                        fetched_user = await self.bot.fetch_user(user_id)
+                        if fetched_user:
+                            username_info = f"{fetched_user} (ID: {user_id})"
+                        else:
+                            username_info = f"ID: {user_id}"
+                    except Exception:
+                        username_info = f"ID: {user_id}"
+                    warnings.append(f"Ignored user {username_info} not found in server")
+                else:
+                    username_info = f"{user} (ID: {user_id})"
+                    warnings.append(f"Ignored user {username_info} not found in server")
             
             for role_id in settings.get("ignored_roles", []):
                 role = ctx.guild.get_role(role_id)
