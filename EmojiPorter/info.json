@@ -10,5 +10,5 @@
   "disabled": false,
   "type": "COG",
   "short": "Copy emojis and stickers between Discord servers.",
-  "version": "1.0.0"
+  "version": "1.0.1"
 }

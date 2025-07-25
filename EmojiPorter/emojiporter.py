@@ -78,23 +78,22 @@ class EmojiPorter(commands.Cog):
             existing = discord.utils.get(target_guild.stickers, name=source_sticker.name)
             if existing:
                 return existing
-# Download sticker file
-file_data = await self._download_asset(str(source_sticker.url))
+            # Download sticker file
+            file_data = await self._download_asset(str(source_sticker.url))
 
-# Wrap bytes in BytesIO for discord.File
-file_obj = io.BytesIO(file_data)
-file_obj.seek(0)
-# Create sticker in target guild
-new_sticker = await target_guild.create_sticker(
-    name=source_sticker.name,
-    description=source_sticker.description or "Imported sticker",
-    emoji=source_sticker.emoji,
-    file=discord.File(fp=file_obj, filename=f"{source_sticker.name}.png"),
-    reason="Copied via EmojiPorter"
-)
-return new_sticker
+            # Wrap bytes in BytesIO for discord.File
+            file_obj = io.BytesIO(file_data)
+            file_obj.seek(0)
+            # Create sticker in target guild
+            new_sticker = await target_guild.create_sticker(
+                name=source_sticker.name,
+                description=source_sticker.description or "Imported sticker",
+                emoji=source_sticker.emoji,
+                file=discord.File(fp=file_obj, filename=f"{source_sticker.name}.png"),
+                reason="Copied via EmojiPorter"
+            )
+            return new_sticker
 
-            
         except discord.Forbidden:
             raise commands.BotMissingPermissions(["manage_emojis_and_stickers"])
         except discord.HTTPException as e:
