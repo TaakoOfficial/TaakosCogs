@@ -1,0 +1,14 @@
+{
+  "name": "Dicey",
+  "description": "A Red DiscordBot cog for random chance utilities: coin flips, dice rolls, and more.",
+  "author": "Taako",
+  "install_msg": "Dicey cog loaded. Use [p]coinflip and [p]roll.",
+  "requirements": [],
+  "tags": ["fun", "random", "dice", "coin", "utility"],
+  "min_bot_version": "3.0.0",
+  "hidden": false,
+  "disabled": false,
+  "type": "COG",
+  "short": "Random chance utilities for Red.",
+  "version": "0.1.0"
+}
