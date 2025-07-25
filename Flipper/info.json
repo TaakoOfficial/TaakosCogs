@@ -1,0 +1,14 @@
+{
+  "name": "Flipper",
+  "description": "A Red DiscordBot cog for flipping coins.",
+  "author": "Taako",
+  "install_msg": "Flipper cog loaded. Use [p]coinflip.",
+  "requirements": [],
+  "tags": ["fun", "random", "coin", "utility"],
+  "min_bot_version": "3.0.0",
+  "hidden": false,
+  "disabled": false,
+  "type": "COG",
+  "short": "Coin flip utility for Red.",
+  "version": "0.1.0"
+}
