@@ -151,16 +151,21 @@ class YALC(commands.Cog):
 
     async def _get_audit_log_entry(self, guild, action, target=None, timeout_seconds=30):
         """
-        Helper function to get recent audit log entries with improved reliability and fallback matching.
-        
+        Helper function to get recent audit log entries with improved reliability and generalized fallback matching.
+
         Args:
             guild: The guild to search audit logs in
             action: The AuditLogAction to search for
             target: Optional target to match against (user, channel, role, etc.)
             timeout_seconds: How recent the entry should be (default 30 seconds)
-            
+
         Returns:
             AuditLogEntry or None if not found/no permission
+
+        Matching order:
+        1. Exact object match (entry.target == target)
+        2. Fallback: match by .id if both entry.target and target have .id
+        3. Fallback: most recent entry in window
         """
         if not guild.me.guild_permissions.view_audit_log:
             return None
@@ -179,7 +184,7 @@ class YALC(commands.Cog):
                     # First, try exact match
                     if target is not None and entry.target == target:
                         return entry
-            # Fallback: try matching by channel ID if target is a channel
+            # Fallback: try matching by .id for any target type
             if target is not None and hasattr(target, "id"):
                 for entry in entries:
                     if hasattr(entry.target, "id") and entry.target.id == target.id:
