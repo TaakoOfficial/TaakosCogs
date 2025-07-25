@@ -578,6 +578,137 @@ class YALC(commands.Cog):
                 self.log.warning("Dashboard cog does not have 'rpc' attribute")
         else:
             self.log.warning("Dashboard cog not found - will try to register later when dashboard loads")
+    @commands.Cog.listener()
+    async def on_voice_state_update(self, member: discord.Member, before: discord.VoiceState, after: discord.VoiceState):
+        """Log voice channel join/leave/move events, including who moved the user if possible."""
+        try:
+            channel = await self.get_log_channel(member.guild, "voice_state_update")
+            if not channel:
+                return
+            desc = f"🎧 {member.mention} voice state changed: "
+            actor_info = ""
+            if before.channel != after.channel:
+                # Try to get who moved the user from audit log if moved/kicked
+                actor = None
+                if before.channel and after.channel:
+                    desc += f"moved from {before.channel.mention} to {after.channel.mention}"
+                    # Check for move in audit log
+                    entry = await self._get_audit_log_entry(member.guild, discord.AuditLogAction.member_move, target=member, timeout_seconds=10)
+                    if entry and entry.user:
+                        actor_info = f" by {entry.user.mention} ({entry.user})"
+                elif before.channel and not after.channel:
+                    desc += f"left {before.channel.mention}"
+                    entry = await self._get_audit_log_entry(member.guild, discord.AuditLogAction.member_disconnect, target=member, timeout_seconds=10)
+                    if entry and entry.user:
+                        actor_info = f" by {entry.user.mention} ({entry.user})"
+                elif after.channel and not before.channel:
+                    desc += f"joined {after.channel.mention}"
+            else:
+                desc += "state updated"
+            embed = self.create_embed("voice_state_update", desc + actor_info)
+            await self.safe_send(channel, embed=embed)
+        except Exception as e:
+            self.log.error(f"Failed to log voice_state_update: {e}")
+
+    @commands.Cog.listener()
+    async def on_presence_update(self, before: discord.Member, after: discord.Member):
+        """Log presence/status updates."""
+        try:
+            channel = await self.get_log_channel(after.guild, "presence_update")
+            if not channel:
+                return
+            desc = f"🟢 {after.mention} presence changed: {before.status} → {after.status}"
+            # Presence updates are user-driven, so actor is the user themselves
+            embed = self.create_embed("presence_update", desc + f" (by {after.mention} ({after}))")
+            await self.safe_send(channel, embed=embed)
+        except Exception as e:
+            self.log.error(f"Failed to log presence_update: {e}")
+
+    @commands.Cog.listener()
+    async def on_guild_integrations_update(self, guild: discord.Guild):
+        """Log integration updates/removals, showing who did it if possible."""
+        try:
+            channel = await self.get_log_channel(guild, "integration_update")
+            if not channel:
+                return
+            desc = f"🔗 Integrations updated for {guild.name}"
+            # Try to get actor from audit log
+            entry = await self._get_audit_log_entry(guild, discord.AuditLogAction.integration_update, timeout_seconds=10)
+            if entry and entry.user:
+                desc += f" by {entry.user.mention} ({entry.user})"
+            embed = self.create_embed("integration_update", desc)
+            await self.safe_send(channel, embed=embed)
+        except Exception as e:
+            self.log.error(f"Failed to log guild_integrations_update: {e}")
+
+    @commands.Cog.listener()
+    async def on_invite_create(self, invite: discord.Invite):
+        """Log invite creation, showing who did it."""
+        try:
+            channel = await self.get_log_channel(invite.guild, "invite_create")
+            if not channel:
+                return
+            desc = f"📨 Invite created: {invite.url}"
+            if invite.inviter:
+                desc += f" by {invite.inviter.mention} ({invite.inviter})"
+            else:
+                # Try audit log fallback
+                entry = await self._get_audit_log_entry(invite.guild, discord.AuditLogAction.invite_create, timeout_seconds=10)
+                if entry and entry.user:
+                    desc += f" by {entry.user.mention} ({entry.user})"
+            embed = self.create_embed("invite_create", desc)
+            await self.safe_send(channel, embed=embed)
+        except Exception as e:
+            self.log.error(f"Failed to log invite_create: {e}")
+
+    @commands.Cog.listener()
+    async def on_invite_delete(self, invite: discord.Invite):
+        """Log invite deletion/expiration, showing who did it if possible."""
+        try:
+            channel = await self.get_log_channel(invite.guild, "invite_delete")
+            if not channel:
+                return
+            desc = f"📪 Invite deleted/expired: {invite.url}"
+            # Try audit log for deleter
+            entry = await self._get_audit_log_entry(invite.guild, discord.AuditLogAction.invite_delete, timeout_seconds=10)
+            if entry and entry.user:
+                desc += f" by {entry.user.mention} ({entry.user})"
+            embed = self.create_embed("invite_delete", desc)
+            await self.safe_send(channel, embed=embed)
+        except Exception as e:
+            self.log.error(f"Failed to log invite_delete: {e}")
+
+    @commands.Cog.listener()
+    async def on_application_command_permissions_update(self, guild: discord.Guild, permissions):
+        """Log application command permission changes, showing who did it if possible."""
+        try:
+            channel = await self.get_log_channel(guild, "application_cmd_permissions_update")
+            if not channel:
+                return
+            desc = f"⚙️ Application command permissions updated."
+            # Try audit log for actor
+            entry = await self._get_audit_log_entry(guild, discord.AuditLogAction.application_command_permission_update, timeout_seconds=10)
+            if entry and entry.user:
+                desc += f" by {entry.user.mention} ({entry.user})"
+            embed = self.create_embed("application_cmd_permissions_update", desc)
+            await self.safe_send(channel, embed=embed)
+        except Exception as e:
+            self.log.error(f"Failed to log application_command_permissions_update: {e}")
+
+    @commands.Cog.listener()
+    async def on_audit_log_entry_create(self, entry, guild):
+        """Log audit log entry creation, showing who did it."""
+        try:
+            channel = await self.get_log_channel(guild, "audit_log_entry_create")
+            if not channel:
+                return
+            desc = f"📝 New audit log entry: {entry.action}"
+            if hasattr(entry, "user") and entry.user:
+                desc += f" by {entry.user.mention} ({entry.user})"
+            embed = self.create_embed("audit_log_entry_create", desc)
+            await self.safe_send(channel, embed=embed)
+        except Exception as e:
+            self.log.error(f"Failed to log audit_log_entry_create: {e}")
 
 
     # --- Event Listeners ---
@@ -2691,19 +2822,38 @@ class YALC(commands.Cog):
             return
         try:
             changes = []
+            color_changed = before.color != after.color
             if before.name != after.name:
                 changes.append(f"Name: {before.name} → {after.name}")
-            if before.color != after.color:
-                changes.append(f"Color: {before.color} → {after.color}")
             if before.permissions != after.permissions:
                 changes.append("Permissions changed")
-            if not changes:
+            if not changes and not color_changed:
                 return
             embed = self.create_embed(
                 "role_update",
                 f"🔄 Role updated: {after.mention}\n\u200b",
-                changes="\n".join(changes)
+                changes="\n".join(changes) if changes else None
             )
+            if color_changed:
+                before_hex = f"#{before.color.value:06x}"
+                after_hex = f"#{after.color.value:06x}"
+                before_emoji = "🟪" if before.color.value >= 0x800080 else (
+                    "🟦" if before.color.value >= 0x000080 else (
+                    "🟩" if before.color.value >= 0x008000 else (
+                    "🟨" if before.color.value >= 0x008080 else (
+                    "🟧" if before.color.value >= 0x808000 else (
+                    "🟥")))))
+                after_emoji = "🟪" if after.color.value >= 0x800080 else (
+                    "🟦" if after.color.value >= 0x000080 else (
+                    "🟩" if after.color.value >= 0x008000 else (
+                    "🟨" if after.color.value >= 0x008080 else (
+                    "🟧" if after.color.value >= 0x808000 else (
+                    "🟥")))))
+                embed.add_field(
+                    name="Color Change",
+                    value=f"{before_emoji} {before_hex} → {after_emoji} {after_hex}",
+                    inline=True
+                )
             await self.safe_send(channel, embed=embed)
         except Exception as e:
             self.log.error(f"Failed to log role_update: {e}")
