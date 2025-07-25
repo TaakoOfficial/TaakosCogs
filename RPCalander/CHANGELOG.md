@@ -1,91 +1,119 @@
-# 📅 rpcalander Changelog
+# Changelog
 
-## [v1.3.1] - 2025-05-12
+All notable changes to the RPCalander cog will be documented in this file.
 
-### 🔄 Changes
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-- Simplified blood moon functionality to be a direct toggle instead of requiring admin approvals
-- Updated moon phase icons with better quality images
-- Improved user experience for managing moon phase settings
+## [1.3.1] - 2025-05-12
 
-## [v1.3.0] - 2025-05-10
+### Changed
+- **Blood Moon System**: Simplified blood moon functionality to direct toggle instead of admin approvals
+- **User Experience**: Improved interface for managing moon phase settings
+- **Visual Quality**: Updated moon phase icons with enhanced graphics
 
-### ✨ New Features
+### Improved
+- **Accessibility**: Streamlined blood moon configuration process
+- **Interface**: More intuitive moon phase management commands
+- **Visual Appeal**: Higher quality moon phase icons and embeds
 
-- Added moon phase tracking to display accurate moon phases based on the RP calendar date
-- Implemented blood moon functionality for rare special events
-- Added separate moon phase embeds with custom styling
-- Added the ability to configure a separate channel for moon phase updates
-
-### 🛠️ Commands
-
-- Added `/rpca moonphase` to display the current moon phase
-- Added `/rpca forcemoonupdate` to manually trigger a moon phase post
-- Added `/rpca moonconfig` to configure moon phase settings:
-  - `enable/disable`: Toggle moon phase tracking
-  - `bloodmoon`: Toggle blood moon mode on/off
-  - `setchannel`: Set a separate channel for moon updates
-- Added `/rpca resetbloodmoon` to disable blood moon mode
-
-### 📚 Documentation
-
-- Updated help documentation for all commands
-- Added moon phase information to the `/rpca info` command
-
-## [v1.2.2] - 2025-04-15
-
-### 🛠️ Improvements
-
-- Switched license to AGPLv3 for stronger copyleft and attribution.
-- Improved input validation and error handling for all commands.
-- Added type hints to all methods and commands.
-- Cleaned up code and removed unnecessary comments.
-
-### 📚 Documentation
-
-- Updated LICENSE file to AGPLv3.
-
-## [v1.2.1] - 2025-04-15
-
-### 🛠️ Improvements
-
-- Added automatic installation for the `pytz` dependency. Now the cog handles its time zone magic seamlessly! ✨
-
-## v1.2.0
+## [1.3.0] - 2025-05-10
 
 ### Added
+- **Moon Phase System**: Complete lunar tracking based on RP calendar dates
+- **Blood Moon Events**: Rare special events during full moons for dramatic roleplay
+- **Separate Embeds**: Custom styling for moon phase displays distinct from calendar
+- **Channel Configuration**: Ability to set separate channels for moon phase updates
 
-- Added `[p]rpca force` command to immediately post a calendar update to the configured channel.
+### New Commands
+- **`[p]rpca moonphase`**: Display current moon phase for RP date
+- **`[p]rpca forcemoonupdate`**: Manually trigger moon phase updates
+- **`[p]rpca moonconfig`**: Complete moon phase configuration system
+  - `enable/disable`: Toggle moon phase tracking on/off
+  - `bloodmoon`: Toggle blood moon event mode
+  - `setchannel`: Configure separate moon phase update channel
+- **`[p]rpca resetbloodmoon`**: Quick disable for blood moon mode
 
-## v1.1.0
+### Enhanced Features
+- **Lunar Calculations**: Accurate 29.5-day lunar cycle tracking
+- **Visual Elements**: Moon phase icons and themed embed colors
+- **Roleplay Integration**: Atmospheric descriptions perfect for fantasy settings
+- **Administrative Control**: Full control over moon phase features
+
+### Documentation
+- **Help System**: Updated all command documentation
+- **Info Display**: Added moon phase settings to `[p]rpca info` command
+- **User Guide**: Comprehensive moon phase usage instructions
+
+## [1.2.2] - 2025-04-15
+
+### Changed
+- **License**: Switched to AGPLv3 for stronger copyleft protection and attribution requirements
+- **Code Quality**: Enhanced input validation and error handling across all commands
+- **Type Safety**: Added comprehensive type hints to all methods and commands
+- **Code Maintenance**: Cleaned up codebase and removed unnecessary comments
+
+### Documentation
+- **License**: Updated LICENSE file to GNU Affero General Public License v3.0
+- **Legal**: Enhanced attribution and distribution requirements
+
+## [1.2.1] - 2025-04-15
 
 ### Added
+- **Automatic Dependencies**: Implemented automatic `pytz` library installation
+- **Seamless Setup**: Time zone functionality now works out-of-the-box
+- **Error Prevention**: Eliminates dependency-related installation issues
 
-- Standardized the date format to `Day of the Week MM-DD-YYYY` across the cog.
-- Added the ability to set a custom title for the main embed using `[p]rpca settitle <title>`.
-- Added the ability to set a custom description for the main embed using `[p]rpca setdescription <description>`.
-- Added a toggle for the footer in the main embed using `[p]rpca togglefooter`.
-- Added the ability to set a custom embed color using `[p]rpca setcolor <color>`.
+### Improved
+- **User Experience**: Streamlined installation process without manual dependency management
+- **Reliability**: Consistent time zone handling across all server environments
 
-### Updated
-
-- Enhanced the `info` command to display all current settings, including:
-  - Start Date
-  - Current Date
-  - Update Channel
-  - Time Zone
-  - Embed Color
-  - Embed Title
-  - Embed Description
-
----
-
-## v1.0.0
+## [1.2.0] - 2025-04-14
 
 ### Added
+- **Force Updates**: `[p]rpca force` command for immediate calendar updates
+- **Manual Control**: Bypass automatic scheduling when needed
+- **Testing Support**: Easy way to verify calendar configuration and appearance
 
-- Initial release of the `rpcalander` cog.
-- Features include:
-  - Daily calendar updates with the current date and day of the week.
-  - Customizable start date and time zone.
-  - Persistent settings across bot restarts.
+### Enhanced
+- **Administrative Tools**: Better control over calendar posting timing
+- **Troubleshooting**: Simplified testing of calendar embed formatting
+
+## [1.1.0] - 2025-04-13
+
+### Added
+- **Date Standardization**: Consistent `Day of the Week MM-DD-YYYY` format across all displays
+- **Custom Titles**: `[p]rpca settitle <title>` for personalized embed headers
+- **Custom Descriptions**: `[p]rpca setdescription <description>` for detailed embed content
+- **Footer Control**: `[p]rpca togglefooter` to show/hide embed attribution
+- **Color Customization**: `[p]rpca setcolor <color>` for themed embed appearance
+
+### Enhanced
+- **Info Command**: Comprehensive settings display including:
+  - Current RP start date and calculated current date
+  - Configured update channel and timezone
+  - Visual customization settings (embed color, title, description)
+  - Footer visibility status
+- **User Interface**: More intuitive configuration management
+- **Visual Consistency**: Standardized appearance across all calendar displays
+
+## [1.0.0] - 2025-04-01
+
+### Added
+- **Core Functionality**: Initial release of RPCalander cog
+- **Daily Updates**: Automatic calendar posting with current RP date and day of week
+- **Custom Timeline**: Configurable starting date for any fantasy world or campaign
+- **Time Zone Support**: Accurate daily updates based on server timezone
+- **Persistent Settings**: Configuration survives bot restarts and updates
+
+### Features
+- **Date Calculation**: Smart progression from custom start date
+- **Timezone Integration**: Powered by `pytz` library for accurate time handling
+- **Channel Configuration**: Designate specific channels for calendar updates
+- **Basic Customization**: Foundation for visual and functional enhancements
+
+### Technical Details
+- **Dependencies**: `pytz` for timezone calculations
+- **Data Storage**: Local configuration persistence
+- **Update System**: Daily automated posting mechanism
+- **Command Structure**: Intuitive `[p]rpca` command group

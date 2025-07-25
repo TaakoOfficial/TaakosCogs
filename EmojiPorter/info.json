@@ -1,0 +1,14 @@
+{
+  "name": "EmojiPorter",
+  "description": "A Red DiscordBot cog for copying emojis and stickers between Discord servers.",
+  "author": "Taako",
+  "install_msg": "EmojiPorter cog loaded. Use [p]copyemojis, [p]copystickers, [p]listemojis, and [p]liststickers commands.",
+  "requirements": ["aiohttp"],
+  "tags": ["utility", "emoji", "sticker", "server", "copy", "migration"],
+  "min_bot_version": "3.0.0",
+  "hidden": false,
+  "disabled": false,
+  "type": "COG",
+  "short": "Copy emojis and stickers between Discord servers.",
+  "version": "1.0.0"
+}
