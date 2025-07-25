@@ -151,7 +151,7 @@ class YALC(commands.Cog):
 
     async def _get_audit_log_entry(self, guild, action, target=None, timeout_seconds=30):
         """
-        Helper function to get recent audit log entries with improved reliability.
+        Helper function to get recent audit log entries with improved reliability and fallback matching.
         
         Args:
             guild: The guild to search audit logs in
@@ -165,21 +165,30 @@ class YALC(commands.Cog):
         if not guild.me.guild_permissions.view_audit_log:
             return None
 
-        # Wait briefly to allow Discord to write the audit log (helps with API delay)
         await asyncio.sleep(2)
 
         try:
+            now = datetime.datetime.now(datetime.UTC)
+            entries = []
             async for entry in guild.audit_logs(action=action, limit=15):
-                # Check if this audit log entry is recent
-                if (datetime.datetime.now(datetime.UTC) - entry.created_at).total_seconds() <= timeout_seconds:
-                    # If target is specified, check if it matches
-                    if target is None or entry.target == target:
-                        return entry
-                # Stop searching if entries are too old
-                elif (datetime.datetime.now(datetime.UTC) - entry.created_at).total_seconds() > timeout_seconds * 2:
+                age = (now - entry.created_at).total_seconds()
+                if age > timeout_seconds * 2:
                     break
+                if age <= timeout_seconds:
+                    entries.append(entry)
+                    # First, try exact match
+                    if target is not None and entry.target == target:
+                        return entry
+            # Fallback: try matching by channel ID if target is a channel
+            if target is not None and hasattr(target, "id"):
+                for entry in entries:
+                    if hasattr(entry.target, "id") and entry.target.id == target.id:
+                        return entry
+            # Fallback: return most recent entry in window if any
+            if entries:
+                return entries[0]
         except (discord.Forbidden, discord.HTTPException, asyncio.TimeoutError):
-            pass  # We don't have permission to view audit logs or there was an error
+            pass
 
         return None
 
