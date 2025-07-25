@@ -23,3 +23,19 @@ Copy the `ZodiacColorRoles` folder to your cogs directory and load with:
 
 ```
 [p]load ZodiacColorRoles
+```
+
+## Commands
+
+- `/addzodiacrole <zodiac>` — Create a zodiac role (e.g., Aries, Taurus)
+- `/addcolorrole <color>` — Create a color role (e.g., Red, Blue)
+- `/addpronounrole <pronoun>` — Create a pronoun role (e.g., he/him, they/them)
+- `/addcommonpingrole <role>` — Create a common ping role (e.g., Common Ping, No Pings)
+- `/listzodiacroles` — List all available zodiac roles
+- `/listcolorroles` — List all available color roles
+
+Use "all" as the parameter to create all roles of that type at once.
+
+## License
+
+MIT

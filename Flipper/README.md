@@ -8,7 +8,7 @@ Flipper is a Red DiscordBot cog providing a simple coin flip command.
 
 ## Installation
 
-1. Place the `Flipper` (formerly Dicey) folder in your `cogs` directory.
+1. Place the `Flipper` folder in your `cogs` directory.
 2. Load the cog with:
    ```
    [p]load flipper
