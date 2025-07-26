@@ -138,6 +138,11 @@ class Paranoia(commands.Cog):
         Usage: `[p]paranoia start @player1 @player2 @player3`
         Minimum 3 players required.
         """
+        # Check if command is being used in a guild context
+        if not ctx.guild:
+            await ctx.send("❌ This command can only be used in a server channel, not in DMs!")
+            return
+            
         if len(players) < 3:
             await ctx.send("❌ You need at least 3 players to start a Paranoia game!")
             return
@@ -228,6 +233,11 @@ class Paranoia(commands.Cog):
         Usage: `[p]paranoia answer @player`
         Works with Tupperbox proxies - the bot will detect the real user behind proxies.
         """
+        # Check if command is being used in a guild context
+        if not ctx.guild:
+            await ctx.send("❌ This command can only be used in a server channel, not in DMs!")
+            return
+            
         guild_data = await self.config.guild(ctx.guild).active_games()
         
         if str(ctx.channel.id) not in guild_data:
@@ -410,6 +420,11 @@ class Paranoia(commands.Cog):
     @paranoia.command(name="stop")
     async def stop_game(self, ctx):
         """Stop the current Paranoia game."""
+        # Check if command is being used in a guild context
+        if not ctx.guild:
+            await ctx.send("❌ This command can only be used in a server channel, not in DMs!")
+            return
+            
         guild_data = await self.config.guild(ctx.guild).active_games()
         
         if str(ctx.channel.id) not in guild_data:
@@ -430,6 +445,11 @@ class Paranoia(commands.Cog):
     @paranoia.command(name="addquestion")
     async def add_question(self, ctx, *, question: str):
         """Add a custom question to the server's question pool."""
+        # Check if command is being used in a guild context
+        if not ctx.guild:
+            await ctx.send("❌ This command can only be used in a server channel, not in DMs!")
+            return
+            
         if len(question) > 200:
             await ctx.send("❌ Questions must be 200 characters or less!")
             return
@@ -448,6 +468,11 @@ class Paranoia(commands.Cog):
     @paranoia.command(name="questions")
     async def list_questions(self, ctx):
         """List all available questions (default + custom)."""
+        # Check if command is being used in a guild context
+        if not ctx.guild:
+            await ctx.send("❌ This command can only be used in a server channel, not in DMs!")
+            return
+            
         custom_questions = await self.config.guild(ctx.guild).custom_questions()
         
         embed = discord.Embed(
@@ -474,6 +499,11 @@ class Paranoia(commands.Cog):
     @paranoia.command(name="status")
     async def game_status(self, ctx):
         """Check the status of the current game."""
+        # Check if command is being used in a guild context
+        if not ctx.guild:
+            await ctx.send("❌ This command can only be used in a server channel, not in DMs!")
+            return
+            
         guild_data = await self.config.guild(ctx.guild).active_games()
         
         if str(ctx.channel.id) not in guild_data:
@@ -507,11 +537,16 @@ class Paranoia(commands.Cog):
         """
         Toggle Tupperbox support for this server or check current status.
         
-        Usage: 
+        Usage:
         `[p]paranoia tupperbox` - Check current status
         `[p]paranoia tupperbox true` - Enable Tupperbox support
         `[p]paranoia tupperbox false` - Disable Tupperbox support
         """
+        # Check if command is being used in a guild context
+        if not ctx.guild:
+            await ctx.send("❌ This command can only be used in a server channel, not in DMs!")
+            return
+            
         if not ctx.author.guild_permissions.manage_guild:
             await ctx.send("❌ You need Manage Server permissions to change Tupperbox settings!")
             return
