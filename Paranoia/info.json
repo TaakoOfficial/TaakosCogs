@@ -1,0 +1,22 @@
+{
+    "author": ["Taako"],
+    "name": "Paranoia",
+    "short": "A cog for playing the social party game Paranoia in Discord.",
+    "description": "Play the popular social party game Paranoia in Discord! Players receive secret questions via DM and answer by naming other players. Perfect for breaking the ice and having fun with friends.",
+    "end_user_data_statement": "This cog stores game data temporarily during active sessions including player IDs, questions, and answers. Custom questions added by users are stored per guild. All data is used solely for game functionality.",
+    "install_msg": "Thanks for installing Paranoia! Use `[p]help paranoia` to get started. Make sure players allow DMs from server members for the best experience.",
+    "tags": [
+        "game",
+        "social",
+        "party",
+        "fun",
+        "icebreaker",
+        "entertainment"
+    ],
+    "requirements": [],
+    "version": "1.1.0",
+    "hidden": false,
+    "min_bot_version": "3.4.0",
+    "min_python_version": [3, 8, 0],
+    "type": "COG"
+}
