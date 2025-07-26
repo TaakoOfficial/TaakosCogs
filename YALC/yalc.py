@@ -695,21 +695,20 @@ class YALC(commands.Cog):
         except Exception as e:
             self.log.error(f"Failed to log application_command_permissions_update: {e}")
 
-    @commands.Cog.listener()
-    async def on_audit_log_entry_create(self, entry, guild):
-        """Log audit log entry creation, showing who did it."""
-        # Correct signature: (self, entry, guild)
-        try:
-            channel = await self.get_log_channel(guild, "audit_log_entry_create")
-            if not channel:
-                return
-            desc = f"📝 New audit log entry: {entry.action}"
-            if hasattr(entry, "user") and entry.user:
-                desc += f" by {entry.user.mention} ({entry.user})"
-            embed = self.create_embed("audit_log_entry_create", desc)
-            await self.safe_send(channel, embed=embed)
-        except Exception as e:
-            self.log.error(f"Failed to log audit_log_entry_create: {e}")
+    # @commands.Cog.listener()
+    # async def on_audit_log_entry_create(self, entry, guild):
+    #     """Log audit log entry creation, showing who did it."""
+    #     try:
+    #         channel = await self.get_log_channel(guild, "audit_log_entry_create")
+    #         if not channel:
+    #             return
+    #         desc = f"📝 New audit log entry: {entry.action}"
+    #         if hasattr(entry, "user") and entry.user:
+    #             desc += f" by {entry.user.mention} ({entry.user})"
+    #         embed = self.create_embed("audit_log_entry_create", desc)
+    #         await self.safe_send(channel, embed=embed)
+    #     except Exception as e:
+    #         self.log.error(f"Failed to log audit_log_entry_create: {e}")
 
 
     # --- Event Listeners ---
