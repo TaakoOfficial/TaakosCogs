@@ -1,6 +1,6 @@
 {
   "$schema": "https://raw.githubusercontent.com/Cog-Creators/Red-DiscordBot/V3/develop/schema/red_cog.schema.json",
-  "author": ["Taako"],
+  "author": "Taako",
   "name": "YALC",
   "version": "3.1.1",
   "install_msg": "Thanks for installing YALC (Yet Another Logging Cog)! Use `[p]help YALC` or `/yalc` to get started. For full documentation, visit the repo.",
