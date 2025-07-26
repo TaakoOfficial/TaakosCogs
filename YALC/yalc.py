@@ -2929,6 +2929,8 @@ class YALC(commands.Cog):
     @commands.Cog.listener()
     async def on_role_update(self, before: discord.Role, after: discord.Role) -> None:
         self.log.debug("Listener triggered: on_role_update")
+        self.log.debug(f"Role before: name={before.name}, color={before.color}, permissions={before.permissions}")
+        self.log.debug(f"Role after:  name={after.name}, color={after.color}, permissions={after.permissions}")
         if not before.guild:
             self.log.debug("No guild on role.")
             return
@@ -2953,10 +2955,15 @@ class YALC(commands.Cog):
             changes = []
             color_changed = before.color != after.color
             if before.name != after.name:
+                self.log.debug(f"Role name changed: {before.name} -> {after.name}")
                 changes.append(f"Name: {before.name} → {after.name}")
             if before.permissions != after.permissions:
+                self.log.debug(f"Role permissions changed: {before.permissions} -> {after.permissions}")
                 changes.append("Permissions changed")
+            if color_changed:
+                self.log.debug(f"Role color changed: {before.color} -> {after.color}")
             if not changes and not color_changed:
+                self.log.debug("No changes detected in name, permissions, or color.")
                 return
             embed = self.create_embed(
                 "role_update",
