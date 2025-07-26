@@ -15,6 +15,7 @@ Paranoia is a fun social party game where players receive secret questions about
 - **Optional Question Reveals**: Choose whether to reveal what questions were asked
 - **Player Management**: Minimum 3 players, no maximum limit
 - **Game Status**: Check current game progress and player participation
+- **Tupperbox Integration**: Full support for roleplay communities using Tupperbox
 
 ## Commands
 
@@ -29,6 +30,10 @@ Paranoia is a fun social party game where players receive secret questions about
 
 - `[p]paranoia addquestion <question>` - Add a custom question to the server pool
 - `[p]paranoia questions` - List all available questions
+### Admin Commands
+
+- `[p]paranoia tupperbox [true/false]` - Enable or disable Tupperbox integration (moderator only)
+
 
 ## How to Play
 
@@ -52,6 +57,30 @@ Paranoia is a fun social party game where players receive secret questions about
 - Players must allow DMs from server members for questions to be delivered
 - The bot needs permission to send messages and add reactions
 - Minimum Red Discord Bot version: 3.4.0
+## Tupperbox Integration
+
+This cog includes full support for roleplay communities that use Tupperbox! When Tupperbox integration is enabled:
+
+- **Automatic Detection**: The bot automatically detects when players are using Tupperbox proxies
+- **Character Preservation**: Game results show both the character name and real player for clarity
+- **Seamless Experience**: Players can participate normally through their proxy characters
+- **Easy Toggle**: Server administrators can enable/disable this feature as needed
+
+### How Tupperbox Support Works
+
+1. **Enable Integration**: Use `[p]paranoia tupperbox true` to enable Tupperbox support
+2. **Play Normally**: Players can join games and submit answers using their proxy characters
+3. **Clear Results**: Game results display both "[Character Name] (Real Player)" for transparency
+4. **Automatic Fallback**: If proxy detection fails, the system gracefully falls back to normal operation
+
+### Tupperbox Commands
+
+- `[p]paranoia tupperbox` - Check current Tupperbox integration status
+- `[p]paranoia tupperbox true` - Enable Tupperbox integration
+- `[p]paranoia tupperbox false` - Disable Tupperbox integration
+
+**Note**: Only server moderators can toggle Tupperbox integration settings.
+
 
 ## Privacy & Data
 
@@ -71,6 +100,10 @@ Paranoia is a fun social party game where players receive secret questions about
 
 **"Couldn't send DM" error**: Player needs to allow DMs from server members in their privacy settings.
 
+
+**Tupperbox issues**: If proxy detection isn't working properly, try disabling and re-enabling Tupperbox integration, or contact your server administrators.
+
+**Character name confusion**: When Tupperbox is enabled, results show both character and real player names for clarity.
 **Game stuck**: Use `[p]paranoia stop` to end the current game and start fresh.
 
 **Missing answers**: Use `[p]paranoia status` to see who still needs to submit answers.

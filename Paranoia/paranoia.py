@@ -3,7 +3,8 @@ from redbot.core import commands, Config
 from redbot.core.utils.chat_formatting import box, humanize_list
 import asyncio
 import random
-from typing import Optional, Dict, List
+import re
+from typing import Optional, Dict, List, Union
 
 
 class Paranoia(commands.Cog):
@@ -12,6 +13,8 @@ class Paranoia(commands.Cog):
     
     In Paranoia, players whisper questions about other players, and answers are revealed publicly
     while keeping the questions secret until the end of the round.
+    
+    Features Tupperbox integration for roleplay communities!
     """
 
     def __init__(self, bot):
@@ -20,7 +23,8 @@ class Paranoia(commands.Cog):
         
         default_guild = {
             "active_games": {},
-            "custom_questions": []
+            "custom_questions": [],
+            "tupperbox_support": True
         }
         
         self.config.register_guild(**default_guild)
@@ -43,6 +47,83 @@ class Paranoia(commands.Cog):
             "Who would you trust to plan your birthday party?",
             "Who has the most contagious laugh?"
         ]
+
+    def _is_tupperbox_message(self, message: discord.Message) -> bool:
+        """Check if a message is from Tupperbox."""
+        if not message.webhook_id:
+            return False
+        
+        # Check if the webhook name contains common Tupperbox patterns
+        if message.author.name == "Tupperbox":
+            return True
+            
+        # Check for Tupperbox message format indicators
+        return bool(message.webhook_id and (
+            message.author.discriminator == "0000" or
+            hasattr(message, 'interaction') and message.interaction is None
+        ))
+
+    async def _get_tupperbox_user(self, message: discord.Message) -> Optional[discord.Member]:
+        """Extract the actual user behind a Tupperbox proxy message."""
+        if not self._is_tupperbox_message(message):
+            return None
+        
+        guild = message.guild
+        if not guild:
+            return None
+            
+        # Look for user mention or ID in message content patterns
+        # Tupperbox often includes user info in specific formats
+        content = message.content.lower()
+        
+        # Try to find user ID in common Tupperbox formats
+        # Pattern: Looking for user IDs in various formats
+        user_id_pattern = r'(?:user[:\s]*|id[:\s]*|<@!?(\d+)>|\b(\d{17,19})\b)'
+        matches = re.findall(user_id_pattern, content)
+        
+        for match in matches:
+            user_id = match[0] or match[1] if isinstance(match, tuple) else match
+            if user_id and user_id.isdigit():
+                try:
+                    member = guild.get_member(int(user_id))
+                    if member:
+                        return member
+                except (ValueError, AttributeError):
+                    continue
+        
+        # Alternative: Look in recent message history for the triggering user
+        # Check the last few messages for potential Tupperbox trigger
+        try:
+            async for hist_msg in message.channel.history(limit=10, before=message):
+                # Look for messages that might have triggered this Tupperbox message
+                if hist_msg.author.bot:
+                    continue
+                    
+                # Check if this could be a Tupperbox trigger
+                if any(prefix in hist_msg.content.lower() for prefix in ['tupper:', 'tb:', 'proxy:']):
+                    return hist_msg.author
+                    
+        except discord.HTTPException:
+            pass
+            
+        return None
+
+    async def _resolve_user_from_message(self, message: discord.Message) -> Optional[discord.Member]:
+        """Resolve the actual user from a message, handling both regular and Tupperbox messages."""
+        if self._is_tupperbox_message(message):
+            tupperbox_support = await self.config.guild(message.guild).tupperbox_support()
+            if tupperbox_support:
+                return await self._get_tupperbox_user(message)
+        
+        # Return the message author if not a Tupperbox message or if Tupperbox support is disabled
+        return message.author if isinstance(message.author, discord.Member) else None
+
+    async def _get_display_name(self, user: Union[discord.Member, discord.User], message: Optional[discord.Message] = None) -> str:
+        """Get the appropriate display name, considering Tupperbox proxies."""
+        if message and self._is_tupperbox_message(message):
+            # For Tupperbox messages, use the proxy name
+            return message.author.display_name
+        return user.display_name
 
     @commands.group(name="paranoia", invoke_without_command=True)
     async def paranoia(self, ctx):
@@ -82,9 +163,12 @@ class Paranoia(commands.Cog):
         
         player_mentions = humanize_list([p.mention for p in players])
         
+        tupperbox_status = await self.config.guild(ctx.guild).tupperbox_support()
+        tupperbox_note = "\n🎭 **Tupperbox users:** Your proxy characters can participate!" if tupperbox_status else ""
+        
         embed = discord.Embed(
             title="🎭 Paranoia Game Started!",
-            description=f"**Players:** {player_mentions}\n**Round:** 1",
+            description=f"**Players:** {player_mentions}\n**Round:** 1{tupperbox_note}",
             color=discord.Color.red()
         )
         embed.add_field(
@@ -125,7 +209,8 @@ class Paranoia(commands.Cog):
                 )
                 embed.add_field(
                     name="How to Answer",
-                    value=f"Go to {ctx.channel.mention} and use:\n`{ctx.prefix}paranoia answer @player`",
+                    value=f"Go to {ctx.channel.mention} and use:\n`{ctx.prefix}paranoia answer @player`\n\n"
+                          "💡 **Tip:** Tupperbox users can use their proxy characters to answer!",
                     inline=False
                 )
                 
@@ -141,6 +226,7 @@ class Paranoia(commands.Cog):
         Submit your answer for the current round.
         
         Usage: `[p]paranoia answer @player`
+        Works with Tupperbox proxies - the bot will detect the real user behind proxies.
         """
         guild_data = await self.config.guild(ctx.guild).active_games()
         
@@ -150,11 +236,17 @@ class Paranoia(commands.Cog):
         
         game_data = guild_data[str(ctx.channel.id)]
         
-        if ctx.author.id not in game_data["players"]:
+        # Resolve the actual user (handles Tupperbox)
+        actual_user = await self._resolve_user_from_message(ctx.message)
+        if not actual_user:
+            await ctx.send("❌ Could not determine the user behind this message!")
+            return
+        
+        if actual_user.id not in game_data["players"]:
             await ctx.send("❌ You're not part of this game!")
             return
         
-        if str(ctx.author.id) in game_data["current_answers"]:
+        if str(actual_user.id) in game_data["current_answers"]:
             await ctx.send("❌ You've already submitted your answer for this round!")
             return
         
@@ -162,10 +254,15 @@ class Paranoia(commands.Cog):
             await ctx.send("❌ That player is not part of this game!")
             return
         
+        # Get appropriate display names
+        answerer_name = await self._get_display_name(actual_user, ctx.message)
+        answer_name = await self._get_display_name(player)
+        
         # Record the answer
-        game_data["current_answers"][str(ctx.author.id)] = {
+        game_data["current_answers"][str(actual_user.id)] = {
             "answer": player.id,
-            "answer_name": player.display_name
+            "answer_name": answer_name,
+            "answerer_display_name": answerer_name
         }
         
         await ctx.send(f"✅ Your answer has been recorded!")
@@ -192,9 +289,13 @@ class Paranoia(commands.Cog):
             answer_player = self.bot.get_user(answer_data["answer"])
             
             if player and answer_player:
+                # Use stored display names which may include Tupperbox proxy names
+                answerer_name = answer_data.get("answerer_display_name", player.display_name)
+                answer_name = answer_data.get("answer_name", answer_player.display_name)
+                
                 embed.add_field(
-                    name=f"{player.display_name}'s Answer",
-                    value=answer_player.display_name,
+                    name=f"{answerer_name}'s Answer",
+                    value=answer_name,
                     inline=True
                 )
         
@@ -256,9 +357,13 @@ class Paranoia(commands.Cog):
             question = game_data["current_questions"].get(str(player_id), "Unknown question")
             
             if player:
+                # Use stored display names which may include Tupperbox proxy names
+                answerer_name = answer_data.get("answerer_display_name", player.display_name)
+                answer_name = answer_data.get("answer_name", "Unknown")
+                
                 embed.add_field(
-                    name=f"{player.display_name}'s Question",
-                    value=f"**Q:** {question}\n**A:** {answer_data['answer_name']}",
+                    name=f"{answerer_name}'s Question",
+                    value=f"**Q:** {question}\n**A:** {answer_name}",
                     inline=False
                 )
         
@@ -394,5 +499,67 @@ class Paranoia(commands.Cog):
             value=f"{answers_submitted}/{total_players} answers submitted", 
             inline=True
         )
+        
+        await ctx.send(embed=embed)
+
+    @paranoia.command(name="tupperbox")
+    async def toggle_tupperbox(self, ctx, enabled: Optional[bool] = None):
+        """
+        Toggle Tupperbox support for this server or check current status.
+        
+        Usage: 
+        `[p]paranoia tupperbox` - Check current status
+        `[p]paranoia tupperbox true` - Enable Tupperbox support
+        `[p]paranoia tupperbox false` - Disable Tupperbox support
+        """
+        if not ctx.author.guild_permissions.manage_guild:
+            await ctx.send("❌ You need Manage Server permissions to change Tupperbox settings!")
+            return
+        
+        if enabled is None:
+            # Check current status
+            current = await self.config.guild(ctx.guild).tupperbox_support()
+            status = "enabled" if current else "disabled"
+            embed = discord.Embed(
+                title="🎭 Tupperbox Support Status",
+                description=f"Tupperbox support is currently **{status}** for this server.",
+                color=discord.Color.blue()
+            )
+            if current:
+                embed.add_field(
+                    name="What this means",
+                    value="• Proxy characters can participate in games\n"
+                          "• Answers will show proxy names\n"
+                          "• Bot detects real users behind proxies",
+                    inline=False
+                )
+            await ctx.send(embed=embed)
+            return
+        
+        # Set new status
+        await self.config.guild(ctx.guild).tupperbox_support.set(enabled)
+        status = "enabled" if enabled else "disabled"
+        
+        embed = discord.Embed(
+            title="✅ Tupperbox Support Updated",
+            description=f"Tupperbox support has been **{status}** for this server.",
+            color=discord.Color.green()
+        )
+        
+        if enabled:
+            embed.add_field(
+                name="Tupperbox Features Now Active",
+                value="• Proxy characters can participate in Paranoia games\n"
+                      "• Game results will show proxy character names\n"
+                      "• Bot will automatically detect real users behind proxies",
+                inline=False
+            )
+        else:
+            embed.add_field(
+                name="Tupperbox Features Disabled",
+                value="• Only regular Discord users can participate\n"
+                      "• Proxy messages will be ignored",
+                inline=False
+            )
         
         await ctx.send(embed=embed)
