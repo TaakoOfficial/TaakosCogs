@@ -9,6 +9,8 @@ from typing import Dict, List, Optional, Union, cast
 import datetime
 import asyncio
 import logging
+import time
+from datetime import timedelta
 from redbot.core import modlog
 import typing
 
@@ -46,6 +48,9 @@ class YALC(commands.Cog):
         self.support = "https://discord.gg/your-support"
         self.icon = "https://cdn-icons-png.flaticon.com/512/928/928797.png"
         self.pages = []  # Will be populated by setup_dashboard_pages
+        
+        # Real-time audit log entry storage for role attribution
+        self.recent_audit_entries = {}
         
         # Event descriptions for logging and dashboard
         self.event_descriptions = {
@@ -695,20 +700,31 @@ class YALC(commands.Cog):
         except Exception as e:
             self.log.error(f"Failed to log application_command_permissions_update: {e}")
 
-    # @commands.Cog.listener()
-    # async def on_audit_log_entry_create(self, entry, guild):
-    #     """Log audit log entry creation, showing who did it."""
-    #     try:
-    #         channel = await self.get_log_channel(guild, "audit_log_entry_create")
-    #         if not channel:
-    #             return
-    #         desc = f"📝 New audit log entry: {entry.action}"
-    #         if hasattr(entry, "user") and entry.user:
-    #             desc += f" by {entry.user.mention} ({entry.user})"
-    #         embed = self.create_embed("audit_log_entry_create", desc)
-    #         await self.safe_send(channel, embed=embed)
-    #     except Exception as e:
-    #         self.log.error(f"Failed to log audit_log_entry_create: {e}")
+    @commands.Cog.listener()
+    async def on_audit_log_entry_create(self, entry):
+        """Handle audit log entries for role updates and store them temporarily for real-time attribution."""
+        try:
+            # Only capture role_update audit entries for real-time role logging
+            if entry.action == discord.AuditLogAction.role_update:
+                # Store audit entry temporarily with timestamp for role attribution
+                role_id = entry.target.id if entry.target else None
+                if role_id:
+                    self.recent_audit_entries[role_id] = {
+                        'entry': entry,
+                        'timestamp': time.time()
+                    }
+                    
+                    # Clean up old entries (older than 30 seconds) to prevent memory leaks
+                    current_time = time.time()
+                    expired_keys = [
+                        key for key, data in self.recent_audit_entries.items()
+                        if current_time - data['timestamp'] > 30
+                    ]
+                    for key in expired_keys:
+                        del self.recent_audit_entries[key]
+                        
+        except Exception as e:
+            self.log.error(f"Failed to handle audit_log_entry_create: {e}", exc_info=True)
 
 
     # --- Event Listeners ---
@@ -2928,6 +2944,7 @@ class YALC(commands.Cog):
 
     @commands.Cog.listener()
     async def on_role_update(self, before: discord.Role, after: discord.Role) -> None:
+        """Log role update events with real-time audit log attribution."""
         self.log.debug("Listener triggered: on_role_update")
         self.log.debug(f"Role before: name={before.name}, color={before.color}, permissions={before.permissions}")
         self.log.debug(f"Role after:  name={after.name}, color={after.color}, permissions={after.permissions}")
@@ -2952,24 +2969,121 @@ class YALC(commands.Cog):
             self.log.warning("No log channel set for role_update.")
             return
         try:
+            # Detect changes
             changes = []
             color_changed = before.color != after.color
+            position_changed = before.position != after.position
+            
             if before.name != after.name:
                 self.log.debug(f"Role name changed: {before.name} -> {after.name}")
-                changes.append(f"Name: {before.name} → {after.name}")
+                changes.append(f"**Name:** `{before.name}` → `{after.name}`")
             if before.permissions != after.permissions:
                 self.log.debug(f"Role permissions changed: {before.permissions} -> {after.permissions}")
-                changes.append("Permissions changed")
+                changes.append("**Permissions:** Changed")
+            if position_changed:
+                self.log.debug(f"Role position changed: {before.position} -> {after.position}")
+                changes.append(f"**Position:** `{before.position}` → `{after.position}`")
+            if before.mentionable != after.mentionable:
+                changes.append(f"**Mentionable:** `{before.mentionable}` → `{after.mentionable}`")
+            if before.hoist != after.hoist:
+                changes.append(f"**Hoisted:** `{before.hoist}` → `{after.hoist}`")
+            
             if color_changed:
                 self.log.debug(f"Role color changed: {before.color} -> {after.color}")
+            
+            # Check if there are any meaningful changes
             if not changes and not color_changed:
-                self.log.debug("No changes detected in name, permissions, or color.")
+                self.log.debug("No meaningful changes detected.")
                 return
-            embed = self.create_embed(
-                "role_update",
-                f"🔄 Role updated: {after.mention}\n\u200b",
-                changes="\n".join(changes) if changes else None
+            
+            # Try to get real-time audit log data first, then fall back to API query
+            user_who_changed = None
+            audit_reason = None
+            
+            # Check recent audit entries first (real-time)
+            if after.id in self.recent_audit_entries:
+                audit_data = self.recent_audit_entries[after.id]
+                # Check if the audit entry is recent (within 5 seconds)
+                if time.time() - audit_data['timestamp'] <= 5:
+                    audit_entry = audit_data['entry']
+                    user_who_changed = audit_entry.user
+                    audit_reason = getattr(audit_entry, 'reason', None)
+                    self.log.debug(f"Using real-time audit data for role {after.id}")
+                    
+                    # Clean up used entry
+                    del self.recent_audit_entries[after.id]
+            
+            # Fall back to API query if no real-time data
+            if not user_who_changed:
+                try:
+                    audit_entry = await self._get_audit_log_entry(
+                        before.guild,
+                        discord.AuditLogAction.role_update,
+                        target=after,
+                        timeout_seconds=10
+                    )
+                    if audit_entry:
+                        user_who_changed = audit_entry.user
+                        audit_reason = getattr(audit_entry, 'reason', None)
+                        self.log.debug(f"Using API audit data for role {after.id}")
+                except Exception as e:
+                    self.log.debug(f"Could not fetch audit log for role update: {e}")
+            
+            # Create enhanced embed with attribution
+            if user_who_changed:
+                description = f"🔄 Role updated: {after.mention} by {user_who_changed.mention}"
+            else:
+                description = f"🔄 Role updated: {after.mention}"
+            
+            description += "\n\u200b"
+            
+            embed = self.create_embed("role_update", description)
+            
+            # Add role information
+            embed.add_field(
+                name="Role",
+                value=f"{after.mention} (`{after.name}`, ID: `{after.id}`)",
+                inline=True
             )
+            
+            # Add who changed it
+            if user_who_changed:
+                embed.add_field(
+                    name="Changed By",
+                    value=f"{user_who_changed.mention} (`{user_who_changed.id}`)",
+                    inline=True
+                )
+                
+                # Add reason if provided
+                if audit_reason:
+                    embed.add_field(
+                        name="Reason",
+                        value=audit_reason,
+                        inline=False
+                    )
+            else:
+                embed.add_field(
+                    name="Changed By",
+                    value="Unknown (audit log unavailable)",
+                    inline=True
+                )
+            
+            # Add timestamp
+            embed.add_field(
+                name="When",
+                value=f"<t:{int(time.time())}:R>",
+                inline=True
+            )
+            
+            # Add changes
+            if changes:
+                embed.add_field(
+                    name="Changes",
+                    value="\n".join(changes),
+                    inline=False
+                )
+            
+            # Add color change if applicable
             if color_changed:
                 before_hex = f"#{before.color.value:06x}"
                 after_hex = f"#{after.color.value:06x}"
@@ -2990,6 +3104,16 @@ class YALC(commands.Cog):
                     value=f"{before_emoji} {before_hex} → {after_emoji} {after_hex}",
                     inline=True
                 )
+            
+            # Add user thumbnail for better visual identification
+            settings = await self.config.guild(before.guild).all()
+            if user_who_changed and settings.get("include_thumbnails", True) and hasattr(user_who_changed, "display_avatar"):
+                embed.set_thumbnail(url=user_who_changed.display_avatar.url)
+            
+            # Set footer
+            event_time = datetime.datetime.now(datetime.UTC)
+            self.set_embed_footer(embed, event_time=event_time, label="YALC Logger • Role Update")
+            
             await self.safe_send(channel, embed=embed)
         except Exception as e:
             self.log.error(f"Failed to log role_update: {e}")
