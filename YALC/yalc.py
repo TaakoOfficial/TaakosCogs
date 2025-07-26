@@ -698,6 +698,7 @@ class YALC(commands.Cog):
     @commands.Cog.listener()
     async def on_audit_log_entry_create(self, entry, guild):
         """Log audit log entry creation, showing who did it."""
+        # Correct signature: (self, entry, guild)
         try:
             channel = await self.get_log_channel(guild, "audit_log_entry_create")
             if not channel:
