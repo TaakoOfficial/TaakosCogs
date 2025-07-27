@@ -1562,7 +1562,7 @@ class Fable(commands.Cog):
                 )
         
         example_command = (
-            f"```[p]fable character create \"Character Name\" \"A detailed description\" "
+            f"--[p]fable character create \"Character Name\" \"A detailed description\" "
             f"--species \"{template['fields'].get('species', 'Species')}\" "
             f"--traits \"{', '.join(template['fields'].get('traits', []))}\" "
             f"--languages \"{', '.join(template['fields'].get('languages', []))}\" "
@@ -1572,7 +1572,7 @@ class Fable(commands.Cog):
         
         embed.add_field(
             name="Example Command",
-            value=f"{example_command}```",
+            value=f"{example_command}",
             inline=False
         )
         
@@ -1828,7 +1828,6 @@ class Fable(commands.Cog):
             else:
                 await ctx.send("That category already exists.")
 
-        elif action```python
         elif action == "remove" and category:
             if category.title() in categories:
                 categories.remove(category.title())
@@ -2072,4 +2071,3 @@ class Fable(commands.Cog):
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(Fable(bot))
-```

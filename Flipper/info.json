@@ -1,7 +1,7 @@
 {
   "name": "Flipper",
   "description": "A Red DiscordBot cog for flipping coins.",
-  "author": ["Taako"]
+  "author": ["Taako"],
   "install_msg": "Flipper cog loaded. Use [p]coinflip.",
   "requirements": [],
   "tags": ["fun", "random", "coin", "utility"],
