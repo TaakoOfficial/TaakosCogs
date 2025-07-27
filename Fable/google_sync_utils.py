@@ -47,7 +47,44 @@ def import_from_sheet(sheet_id: str, api_key: str, range_: str = "A1") -> Option
             return None
     return None
 
-from .doc_templates import get_character_template, get_timeline_template
+def get_character_template(char_data: dict) -> str:
+    """Generate a character template string for Google Doc export."""
+    content = f"## {char_data.get('name', 'Unknown Character')}\n\n"
+    
+    if char_data.get('description'):
+        content += f"{char_data['description']}\n\n"
+    
+    # Identity section
+    identity = []
+    if char_data.get('full_name'):
+        identity.append(f"**Full Name:** {char_data['full_name']}")
+    if char_data.get('species'):
+        identity.append(f"**Species:** {char_data['species']}")
+    if char_data.get('gender'):
+        identity.append(f"**Gender:** {char_data['gender']}")
+    
+    if identity:
+        content += "### Identity\n" + "\n".join(identity) + "\n\n"
+    
+    # Background
+    if char_data.get('background'):
+        content += f"### Background\n{char_data['background']}\n\n"
+    
+    # Traits
+    if char_data.get('traits'):
+        content += "### Traits\n" + "\n".join(f"• {t}" for t in char_data['traits']) + "\n\n"
+    
+    return content
+
+def get_timeline_template(events) -> str:
+    """Generate a timeline template string for Google Doc export."""
+    content = ""
+    for event in sorted(events, key=lambda e: e.get('created_at', '')):
+        content += f"**{event.get('ic_date', 'Unknown Date')}**: {event.get('description', 'No description')}\n"
+        if event.get('characters'):
+            content += f"  *Characters: {', '.join(event['characters'])}*\n"
+        content += "\n"
+    return content
 
 def export_to_doc(doc_id: str, api_key: str, data: dict):
     """Export Fable data to a Google Doc with proper formatting."""
