@@ -153,3 +153,7 @@ def import_from_doc(doc_id: str, api_key: str) -> Optional[Dict[str, Any]]:
         return json.loads(text)
     except Exception:
         return None
+
+def import_to_sheet(sheet_id: str, api_key: str, data: Dict[str, Any], range_: str = "A1") -> None:
+    """Import data to Google Sheet (alias for export_to_sheet for consistency)."""
+    return export_to_sheet(sheet_id, api_key, data, range_)
