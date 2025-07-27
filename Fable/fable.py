@@ -3,7 +3,7 @@ import discord
 from typing import Optional, List
 import aiohttp
 from Fable.google_sync_utils import (
-    export_to_sheet, import_to_sheet, export_to_doc, import_from_doc
+    export_to_sheet, import_to_sheet, export_to_doc, import_from_doc, import_from_sheet
 )
 import importlib.util
 import subprocess
@@ -1237,16 +1237,10 @@ class Fable(commands.Cog):
             except:
                 pass
 
-    @character.group(name="timeline", description="View a character's visual timeline.")
+    @character.command(name="timeline", description="View a character's timeline.")
     @commands.guild_only()
-    async def character_timeline(self, ctx: commands.Context):
-        """View a character's development timeline with visual elements."""
-        if ctx.invoked_subcommand is None:
-            await ctx.send_help(ctx.command)
-
-    @character_timeline.command(name="view", description="View a character's timeline.")
     @commands.cooldown(1, 5, commands.BucketType.user)
-    async def timeline_view(
+    async def character_timeline(
         self,
         ctx: commands.Context,
         character: str,
