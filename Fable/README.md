@@ -96,7 +96,7 @@ Create deep characters, track their growth, visualize their connections, and wat
 2. **Install Fable**
 
    ```bash
-   [p]repo add taako https://github.com/TaakoOfficial/TaakosCogs
+   [p]repo add TaakosCogs https://github.com/TaakoOfficial/TaakosCogs
    [p]cog install TaakosCogs Fable
    [p]load Fable
    ```
