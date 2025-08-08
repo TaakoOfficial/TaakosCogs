@@ -11,6 +11,13 @@ except ImportError:
 import wtforms
 from wtforms.validators import Optional
 
+class DashboardPage:
+    def __init__(self, func, name):
+        self.func = func
+        self.name = name
+    async def __call__(self, *args, **kwargs):
+        return await self.func(*args, **kwargs)
+
 def setup_dashboard_pages(cog):
     """Setup dashboard pages for the YALC cog and bind them to the cog instance."""
     import logging
@@ -348,14 +355,14 @@ def setup_dashboard_pages(cog):
             }
 
     # Bind the methods to the cog instance
-    cog.dashboard_home = dashboard_home.__get__(cog)
-    cog.dashboard_settings = dashboard_settings.__get__(cog)
-    cog.dashboard_about = dashboard_about.__get__(cog)
-    
+    cog.dashboard_home = DashboardPage(dashboard_home.__get__(cog), None)
+    cog.dashboard_settings = DashboardPage(dashboard_settings.__get__(cog), "settings")
+    cog.dashboard_about = DashboardPage(dashboard_about.__get__(cog), "about")
+
     # Add to pages list for dashboard registration
     if not hasattr(cog, 'pages'):
         cog.pages = []
-    
+
     cog.pages.extend([
         cog.dashboard_home,
         cog.dashboard_settings,
