@@ -1,4 +1,5 @@
 import typing
+import types
 try:
     from redbot.core.utils.dashboard import dashboard_page
 except ImportError:
@@ -11,24 +12,12 @@ except ImportError:
 import wtforms
 from wtforms.validators import Optional
 
-class DashboardPage:
-    def __init__(self, func, name, description, methods, is_owner=False, category=None):
-        self.func = func
-        self.name = name
-        self.description = description
-        self.methods = methods
-        self.is_owner = is_owner
-        self.category = category
-        self.__doc__ = func.__doc__
-    async def __call__(self, *args, **kwargs):
-        return await self.func(*args, **kwargs)
-
 def setup_dashboard_pages(cog):
     """Setup dashboard pages for the YALC cog and bind them to the cog instance."""
     import logging
     logging.info("[YALC] setup_dashboard_pages called for cog: %s", cog)
 
-    @dashboard_page(name=None, description="YALC Dashboard Home", methods=("GET",), is_owner=False)
+    @dashboard_page(name="home", description="YALC Dashboard Home", methods=("GET",), is_owner=False)
     async def dashboard_home(self, user, **kwargs) -> typing.Dict[str, typing.Any]:
         """Dashboard home page for YALC."""
         try:
@@ -359,38 +348,22 @@ def setup_dashboard_pages(cog):
                 "error_message": f"Failed to load YALC about page: {e}"
             }
 
-    # Bind the methods to the cog instance
-    cog.dashboard_home = DashboardPage(
-        dashboard_home.__get__(cog),
-        "home",
-        "YALC Dashboard Home",
-        ("GET",),
-        is_owner=False,
-        category="General"
-    )
-    cog.dashboard_settings = DashboardPage(
-        dashboard_settings.__get__(cog),
-        "settings",
-        "Configure YALC logging settings",
-        ("GET", "POST"),
-        is_owner=False,
-        category="Configuration"
-    )
-    cog.dashboard_about = DashboardPage(
-        dashboard_about.__get__(cog),
-        "about",
-        "About YALC",
-        ("GET",),
-        is_owner=False,
-        category="General"
-    )
+    # Bind the decorated methods directly to the cog instance
+    # This preserves the @dashboard_page decorator metadata that Red Dashboard expects
+    cog.dashboard_home = types.MethodType(dashboard_home, cog)
+    cog.dashboard_settings = types.MethodType(dashboard_settings, cog)
+    cog.dashboard_about = types.MethodType(dashboard_about, cog)
 
-    # Add to pages list for dashboard registration
+    # Initialize pages list if it doesn't exist
     if not hasattr(cog, 'pages'):
         cog.pages = []
 
+    # Add the bound methods to the pages list for dashboard registration
     cog.pages.extend([
         cog.dashboard_home,
         cog.dashboard_settings,
         cog.dashboard_about
     ])
+    
+    logging.info("[YALC] Dashboard pages bound to cog: dashboard_home=%s, dashboard_settings=%s, dashboard_about=%s",
+                 hasattr(cog, 'dashboard_home'), hasattr(cog, 'dashboard_settings'), hasattr(cog, 'dashboard_about'))
