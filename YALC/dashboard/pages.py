@@ -12,9 +12,14 @@ import wtforms
 from wtforms.validators import Optional
 
 class DashboardPage:
-    def __init__(self, func, name):
+    def __init__(self, func, name, description, methods, is_owner=False, category=None):
         self.func = func
         self.name = name
+        self.description = description
+        self.methods = methods
+        self.is_owner = is_owner
+        self.category = category
+        self.__doc__ = func.__doc__
     async def __call__(self, *args, **kwargs):
         return await self.func(*args, **kwargs)
 
@@ -355,9 +360,30 @@ def setup_dashboard_pages(cog):
             }
 
     # Bind the methods to the cog instance
-    cog.dashboard_home = DashboardPage(dashboard_home.__get__(cog), None)
-    cog.dashboard_settings = DashboardPage(dashboard_settings.__get__(cog), "settings")
-    cog.dashboard_about = DashboardPage(dashboard_about.__get__(cog), "about")
+    cog.dashboard_home = DashboardPage(
+        dashboard_home.__get__(cog),
+        None,
+        "YALC Dashboard Home",
+        ("GET",),
+        is_owner=False,
+        category="General"
+    )
+    cog.dashboard_settings = DashboardPage(
+        dashboard_settings.__get__(cog),
+        "settings",
+        "Configure YALC logging settings",
+        ("GET", "POST"),
+        is_owner=False,
+        category="Configuration"
+    )
+    cog.dashboard_about = DashboardPage(
+        dashboard_about.__get__(cog),
+        "about",
+        "About YALC",
+        ("GET",),
+        is_owner=False,
+        category="General"
+    )
 
     # Add to pages list for dashboard registration
     if not hasattr(cog, 'pages'):
