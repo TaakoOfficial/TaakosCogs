@@ -5,7 +5,17 @@ A comprehensive logging solution with both classic and slash commands.
 import discord
 from redbot.core import Config, commands, app_commands
 from redbot.core.bot import Red
-from redbot.core.utils.dashboard import DashboardIntegration, dashboard_page
+try:
+    from redbot.core.utils.dashboard import DashboardIntegration, dashboard_page
+    _dashboard_available = True
+except ImportError:
+    _dashboard_available = False
+    class DashboardIntegration:
+        pass
+    def dashboard_page(*args, **kwargs):
+        def decorator(func):
+            return func
+        return decorator
 from typing import Dict, List, Optional, Union, cast
 import datetime
 import asyncio

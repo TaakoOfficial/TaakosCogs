@@ -1,5 +1,11 @@
 import typing
-from redbot.core.utils.dashboard import dashboard_page
+try:
+    from redbot.core.utils.dashboard import dashboard_page
+except ImportError:
+    def dashboard_page(*args, **kwargs):
+        def decorator(func):
+            return func
+        return decorator
 
 # WTForms integration
 import wtforms
