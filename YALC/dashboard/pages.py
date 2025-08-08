@@ -393,11 +393,12 @@ def setup_dashboard_pages(cog):
     cog.dashboard_settings = types.MethodType(dashboard_settings, cog)
     cog.dashboard_yalc_settings = types.MethodType(dashboard_yalc_settings, cog)
     cog.dashboard_about = types.MethodType(dashboard_about, cog)
+    # Instead of bound methods, store the undecorated page objects
     if not hasattr(cog, 'pages'):
         cog.pages = []
     cog.pages.extend([
-        cog.dashboard_home,
-        cog.dashboard_settings,
-        cog.dashboard_yalc_settings,
-        cog.dashboard_about
+        dashboard_home,
+        dashboard_settings,
+        dashboard_yalc_settings,
+        dashboard_about
     ])
