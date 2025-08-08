@@ -13,6 +13,8 @@ from wtforms.validators import Optional
 
 def setup_dashboard_pages(cog):
     """Setup dashboard pages for the YALC cog and bind them to the cog instance."""
+    import logging
+    logging.info("[YALC] setup_dashboard_pages called for cog: %s", cog)
 
     @dashboard_page(name=None, description="YALC Dashboard Home", methods=("GET",), is_owner=False)
     async def dashboard_home(self, user, **kwargs) -> typing.Dict[str, typing.Any]:
