@@ -362,7 +362,7 @@ def setup_dashboard_pages(cog):
     # Bind the methods to the cog instance
     cog.dashboard_home = DashboardPage(
         dashboard_home.__get__(cog),
-        None,
+        "home",
         "YALC Dashboard Home",
         ("GET",),
         is_owner=False,
