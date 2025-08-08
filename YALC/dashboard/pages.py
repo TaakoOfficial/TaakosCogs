@@ -355,7 +355,7 @@ def setup_dashboard_pages(cog):
         cog.pages = []
     
     cog.pages.extend([
-        dashboard_home,
-        dashboard_settings,
-        dashboard_about
+        cog.dashboard_home,
+        cog.dashboard_settings,
+        cog.dashboard_about
     ])
