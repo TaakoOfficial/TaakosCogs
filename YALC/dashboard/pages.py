@@ -179,6 +179,7 @@ def setup_dashboard_pages(cog):
                             </div>
                             <div class="card-body">
                                 <form method="post" action="settings_save">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                                     <div class="row">
                                         <div class="col-md-6">
                                             <div class="card">
@@ -350,6 +351,7 @@ def setup_dashboard_pages(cog):
             return {
                 "status": 0,
                 "web_content": {"source": source},
+                "csrf_token": await self._generate_csrf_token(user, guild)
             }
         except Exception as e:
             return {
@@ -367,6 +369,14 @@ def setup_dashboard_pages(cog):
                     "status": 1,
                     "error_title": "Guild Required",
                     "error_message": "This page requires a guild context."
+                }
+            
+            # Validate CSRF token
+            if not await self._validate_csrf_token(user, guild, request):
+                return {
+                    "status": 1,
+                    "error_title": "CSRF Validation Failed",
+                    "error_message": "Invalid or missing CSRF token. Please try again."
                 }
                 
             config = cog.config.guild(guild)
@@ -548,6 +558,60 @@ def setup_dashboard_pages(cog):
     cog.dashboard_settings = dashboard_settings.__get__(cog)
     cog.dashboard_settings_save = dashboard_settings_save.__get__(cog)
     cog.dashboard_about = dashboard_about.__get__(cog)
+    
+    # CSRF token helper methods
+    async def _generate_csrf_token(self, user, guild) -> str:
+        """Generate a CSRF token for the given user and guild."""
+        import secrets
+        import hashlib
+        import time
+        
+        # Create a unique token based on user, guild, timestamp, and secret
+        timestamp = str(int(time.time()))
+        secret_key = getattr(cog, '_csrf_secret', secrets.token_hex(32))
+        if not hasattr(cog, '_csrf_secret'):
+            cog._csrf_secret = secret_key
+            
+        token_data = f"{user.id}:{guild.id if guild else 'none'}:{timestamp}:{secret_key}"
+        token_hash = hashlib.sha256(token_data.encode()).hexdigest()
+        
+        # Store token with timestamp for validation
+        if not hasattr(cog, '_csrf_tokens'):
+            cog._csrf_tokens = {}
+        cog._csrf_tokens[token_hash] = timestamp
+        
+        return token_hash
+
+    async def _validate_csrf_token(self, user, guild, request) -> bool:
+        """Validate CSRF token from request."""
+        if not request or not request.get('form'):
+            return False
+            
+        submitted_token = request.get('form', {}).get('csrf_token')
+        if not submitted_token:
+            return False
+            
+        # Check if token exists in our stored tokens
+        if not hasattr(cog, '_csrf_tokens') or submitted_token not in cog._csrf_tokens:
+            return False
+            
+        # Validate token age (expire after 1 hour)
+        import time
+        token_timestamp = int(cog._csrf_tokens[submitted_token])
+        current_time = int(time.time())
+        
+        if current_time - token_timestamp > 3600:  # 1 hour
+            # Remove expired token
+            del cog._csrf_tokens[submitted_token]
+            return False
+            
+        # Remove token after use (one-time use)
+        del cog._csrf_tokens[submitted_token]
+        return True
+
+    # Bind CSRF helper methods to cog
+    cog._generate_csrf_token = _generate_csrf_token.__get__(cog)
+    cog._validate_csrf_token = _validate_csrf_token.__get__(cog)
     
     # Add to pages list for dashboard registration
     if not hasattr(cog, 'pages'):
