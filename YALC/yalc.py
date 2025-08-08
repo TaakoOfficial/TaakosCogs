@@ -25,8 +25,6 @@ from datetime import timedelta
 from redbot.core import modlog
 import typing
 
-from .dashboard.pages import setup_dashboard_pages
-
 class YALC(commands.Cog, DashboardIntegration):
     """Yet Another Logging Cog for Red-DiscordBot.
     A comprehensive logging solution with both classic and slash commands.
@@ -41,7 +39,7 @@ class YALC(commands.Cog, DashboardIntegration):
 
     def __init__(self, bot: Red):
         self.bot = bot
-        self.config = Config.get_conf(self, identifier=1234567890)
+        self.config = Config.get_conf(self, identifier=1234567875)
         self.log = logging.getLogger("red.YALC")
         
         # Dashboard integration attributes - required for Red Web Dashboard
@@ -156,8 +154,7 @@ class YALC(commands.Cog, DashboardIntegration):
         
         self.config.register_guild(**default_guild)
         
-        # Initialize dashboard integration immediately
-        self.setup_dashboard()
+        # Dashboard integration is handled via inheritance and decorators in dashboard_integration.py
 
     async def _get_audit_log_entry(self, guild, action, target=None, timeout_seconds=30):
         """
@@ -312,9 +309,7 @@ class YALC(commands.Cog, DashboardIntegration):
             return True
 
 
-    def setup_dashboard(self):
-        """Bind dashboard pages from dashboard_integration.py after all attributes are set."""
-        setup_dashboard_pages(self)
+    # Removed setup_dashboard; dashboard pages are now registered via inheritance and decorators in dashboard_integration.py
 
     async def get_log_channel(self, guild: discord.Guild, event_type: str) -> Optional[discord.TextChannel]:
         """Get the appropriate logging channel for an event. Only event_channels is used."""
