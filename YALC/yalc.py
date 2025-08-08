@@ -5,6 +5,7 @@ A comprehensive logging solution with both classic and slash commands.
 import discord
 from redbot.core import Config, commands, app_commands
 from redbot.core.bot import Red
+from redbot.core.utils.dashboard import DashboardIntegration, dashboard_page
 from typing import Dict, List, Optional, Union, cast
 import datetime
 import asyncio
@@ -14,15 +15,9 @@ from datetime import timedelta
 from redbot.core import modlog
 import typing
 
-def dashboard_page(*args, **kwargs):
-    def decorator(func):
-        func.__dashboard_decorator_params__ = (args, kwargs)
-        return func
-    return decorator
-
 from .dashboard.pages import setup_dashboard_pages
 
-class YALC(commands.Cog):
+class YALC(commands.Cog, DashboardIntegration):
     """Yet Another Logging Cog for Red-DiscordBot.
     A comprehensive logging solution with both classic and slash commands.
     Features include:
