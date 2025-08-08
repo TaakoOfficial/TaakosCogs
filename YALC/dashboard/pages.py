@@ -1,4 +1,5 @@
 import typing
+from redbot.core.utils.dashboard import dashboard_page
 
 # WTForms integration
 import wtforms
@@ -6,24 +7,7 @@ from wtforms.validators import Optional
 
 def setup_dashboard_pages(cog):
     """Setup dashboard pages for the YALC cog and bind them to the cog instance."""
-    
-    # Get the dashboard_page decorator from the module where it's defined
-    import sys
-    dashboard_page = None
-    
-    # Find the dashboard_page decorator in the YALC module
-    if hasattr(sys.modules.get('YALC.yalc'), 'dashboard_page'):
-        dashboard_page = sys.modules['YALC.yalc'].dashboard_page
-    elif hasattr(cog, 'dashboard_page'):
-        dashboard_page = cog.dashboard_page
-    else:
-        # Create a simple decorator if not found
-        def dashboard_page(*args, **kwargs):
-            def decorator(func):
-                func.__dashboard_decorator_params__ = (args, kwargs)
-                return func
-            return decorator
-    
+
     @dashboard_page(name=None, description="YALC Dashboard Home", methods=("GET",), is_owner=False)
     async def dashboard_home(self, user, **kwargs) -> typing.Dict[str, typing.Any]:
         """Dashboard home page for YALC."""
