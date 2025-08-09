@@ -27,6 +27,9 @@ class DashboardIntegration:
     support = "https://discord.gg/your-support"
     icon = "https://cdn-icons-png.flaticon.com/512/928/928797.png"
     
+    # Required bot attribute for Red-Web-Dashboard
+    bot: Red
+    
     # Required method for third-party integration
     def get_pages(self) -> typing.List[typing.Dict[str, typing.Any]]:
         """Return a list of dashboard pages for this third-party integration.
@@ -130,7 +133,86 @@ class DashboardIntegration:
                 "redirect_url": kwargs["request_url"],
             }
 
-        source = "{{ form|safe }}"
+        # Get some stats about YALC
+        total_guilds = len(self.bot.guilds) if hasattr(self, 'bot') else 0
+        event_count = len(getattr(self, 'event_descriptions', {}))
+
+        source = f"""
+        <div class="dashboard-header">
+            <h2>🎯 YALC Dashboard</h2>
+            <p>Yet Another Logging Cog - Comprehensive Discord event logging</p>
+        </div>
+        
+        <div class="stats-grid">
+            <div class="stat-card">
+                <h3>📊 Statistics</h3>
+                <p><strong>Total Servers:</strong> {total_guilds}</p>
+                <p><strong>Event Types:</strong> {event_count}</p>
+                <p><strong>Version:</strong> {self.version}</p>
+            </div>
+            
+            <div class="stat-card">
+                <h3>🔧 Quick Actions</h3>
+                <p><a href="/dashboard/{{ guild.id }}/third-party/YALC/settings" class="btn btn-primary">Configure Logging</a></p>
+                <p><a href="/dashboard/{{ guild.id }}/third-party/YALC/guild" class="btn btn-secondary">View Server Info</a></p>
+            </div>
+        </div>
+        
+        <div class="form-section">
+            <h3>📝 Quick Actions</h3>
+            {{ form|safe }}
+        </div>
+        
+        <style>
+        .dashboard-header {{
+            text-align: center;
+            margin-bottom: 2rem;
+            padding: 1rem;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 10px;
+        }}
+        
+        .stats-grid {{
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }}
+        
+        .stat-card {{
+            background: #f8f9fa;
+            padding: 1rem;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }}
+        
+        .form-section {{
+            background: white;
+            padding: 1rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }}
+        
+        .btn {{
+            display: inline-block;
+            padding: 0.5rem 1rem;
+            text-decoration: none;
+            border-radius: 4px;
+            margin: 0.25rem;
+        }}
+        
+        .btn-primary {{
+            background: #007bff;
+            color: white;
+        }}
+        
+        .btn-secondary {{
+            background: #6c757d;
+            color: white;
+        }}
+        </style>
+        """
 
         return {
             "status": 0,
@@ -168,37 +250,63 @@ class DashboardIntegration:
         else:
             current_settings = {}
 
+        # Get event descriptions from the main cog
+        event_descriptions = getattr(self, 'event_descriptions', {})
+
         class SettingsForm(kwargs["Form"]):
             def __init__(self):
                 super().__init__(prefix="yalc_settings_form_")
-            
-            # Create form fields based on available events
-            # Note: event_descriptions is defined in the main cog class
-            # We'll create a basic form for now, can be enhanced later
-            submit: wtforms.SubmitField = wtforms.SubmitField("Save Settings")
+                
+                # Create form fields based on available events
+                for event_name, (emoji, description) in event_descriptions.items():
+                    field_name = f"event_{event_name}"
+                    current_value = current_settings.get("events", {}).get(event_name, False)
+                    setattr(self, field_name, wtforms.BooleanField(
+                        f"{emoji} {description}",
+                        default=current_value
+                    ))
+                
+                self.submit = wtforms.SubmitField("Save Settings")
 
         form: SettingsForm = SettingsForm()
         
         if form.validate_on_submit():
             # Update settings based on form submission
             try:
-                # For now, just return success since we don't have dynamic form fields
-                # This can be enhanced later to work with the actual event descriptions
+                new_settings = {}
+                for event_name in event_descriptions.keys():
+                    field_name = f"event_{event_name}"
+                    if hasattr(form, field_name):
+                        new_settings[event_name] = getattr(form, field_name).data
+                
+                # Update the configuration
+                await self.config.guild(guild).events.set(new_settings)
+                
                 return {
                     "status": 0,
-                    "notifications": [{"message": "Settings form submitted! (Enhanced form coming soon)", "category": "info"}],
+                    "notifications": [{"message": "Settings updated successfully!", "category": "success"}],
                     "redirect_url": kwargs["request_url"],
                 }
             except Exception as e:
                 return {
                     "status": 0,
-                    "notifications": [{"message": f"Error processing form: {e}", "category": "error"}],
+                    "notifications": [{"message": f"Error updating settings: {e}", "category": "error"}],
                 }
 
         source = """
         <h3>YALC Settings for {{ guild.name }}</h3>
         <p>Configure which events to log in this server.</p>
-        {{ form|safe }}
+        <form method="POST">
+            {% for field in form %}
+                {% if field.type != 'SubmitField' %}
+                    <div class="form-group">
+                        {{ field.label }}
+                        {{ field }}
+                    </div>
+                {% endif %}
+            {% endfor %}
+            {{ form.submit }}
+        </form>
         """
 
         return {

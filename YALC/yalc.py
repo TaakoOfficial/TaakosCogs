@@ -17,7 +17,7 @@ from datetime import timedelta
 from redbot.core import modlog
 import typing
 
-class YALC(commands.Cog, DashboardIntegration):
+class YALC(DashboardIntegration, commands.Cog):
     """Yet Another Logging Cog for Red-DiscordBot.
     A comprehensive logging solution with both classic and slash commands.
     Features include:
