@@ -5,17 +5,9 @@ A comprehensive logging solution with both classic and slash commands.
 import discord
 from redbot.core import Config, commands, app_commands
 from redbot.core.bot import Red
-try:
-    from redbot.core.utils.dashboard import DashboardIntegration, dashboard_page
-    _dashboard_available = True
-except ImportError:
-    _dashboard_available = False
-    class DashboardIntegration:
-        pass
-    def dashboard_page(*args, **kwargs):
-        def decorator(func):
-            return func
-        return decorator
+# Import dashboard integration from local module
+from .dashboard.dashboard_integration import DashboardIntegration, dashboard_page
+_dashboard_available = True
 from typing import Dict, List, Optional, Union, cast
 import datetime
 import asyncio
@@ -50,7 +42,6 @@ class YALC(commands.Cog, DashboardIntegration):
         self.repo = "https://github.com/your-repo/YALC"
         self.support = "https://discord.gg/your-support"
         self.icon = "https://cdn-icons-png.flaticon.com/512/928/928797.png"
-        self.pages = []  # Will be populated by setup_dashboard_pages
         
         # Real-time audit log entry storage for role attribution
         self.recent_audit_entries = {}
@@ -544,45 +535,9 @@ class YALC(commands.Cog, DashboardIntegration):
         except Exception as e:
             self.log.error(f"Failed to register YALC case types: {e}")
         
-        # Enhanced dashboard registration with debugging
-        self.log.info("Starting dashboard third party registration process...")
-        dashboard_cog = self.bot.get_cog("Dashboard")
-        self.log.info(f"Dashboard cog found: {dashboard_cog is not None}")
-        
-        if dashboard_cog:
-            self.log.info(f"Dashboard cog has 'rpc' attribute: {hasattr(dashboard_cog, 'rpc')}")
-            if hasattr(dashboard_cog, "rpc"):
-                self.log.info(f"Dashboard RPC has 'third_parties_handler' attribute: {hasattr(dashboard_cog.rpc, 'third_parties_handler')}")
-                if hasattr(dashboard_cog.rpc, "third_parties_handler"):
-                    try:
-                        self.log.info("Attempting to register YALC as dashboard third party...")
-                        self.log.info(f"Dashboard integration object: {self}")
-                        self.log.info(f"Dashboard integration has 'dashboard_home' method: {hasattr(self, 'dashboard_home')}")
-                        self.log.info(f"Dashboard integration has 'dashboard_settings' method: {hasattr(self, 'dashboard_settings')}")
-                        
-                        # Check if the dashboard integration has all required attributes
-                        required_attrs = ['name', 'description', 'version', 'author', 'repo', 'support', 'icon', 'pages']
-                        for attr in ["dashboard_home", "dashboard_settings", "dashboard_about"]:
-                            has_attr = hasattr(self, attr)
-                            self.log.info(f"Dashboard integration has '{attr}': {has_attr}")
-                            if has_attr:
-                                try:
-                                    value = getattr(self, attr)
-                                    if callable(value):
-                                        self.log.info(f"'{attr}' is callable")
-                                    else:
-                                        self.log.info(f"'{attr}' value: {value}")
-                                except Exception as e:
-                                    self.log.error(f"Error accessing '{attr}': {e}")
-                        
-                    except Exception as e:
-                        self.log.error(f"Failed to register YALC as dashboard third party: {e}", exc_info=True)
-                else:
-                    self.log.warning("Dashboard RPC does not have 'third_parties_handler' attribute")
-            else:
-                self.log.warning("Dashboard cog does not have 'rpc' attribute")
-        else:
-            self.log.warning("Dashboard cog not found - will try to register later when dashboard loads")
+        # Dashboard integration will be handled by the on_dashboard_cog_add listener
+        # when the Dashboard cog loads
+        self.log.info("YALC cog loaded - dashboard integration will be registered when Dashboard cog loads.")
     @commands.Cog.listener()
     async def on_voice_state_update(self, member: discord.Member, before: discord.VoiceState, after: discord.VoiceState):
         """Log voice channel join/leave/move events, including who moved the user if possible."""
@@ -731,12 +686,10 @@ class YALC(commands.Cog, DashboardIntegration):
 
     @commands.Cog.listener()
     async def on_dashboard_cog_add(self, dashboard_cog: commands.Cog) -> None:
-        """Register YALC as a dashboard third party and setup dashboard pages when dashboard cog is loaded."""
+        """Register YALC as a dashboard third party when dashboard cog is loaded."""
         try:
             dashboard_cog.rpc.third_parties_handler.add_third_party(self)
             self.log.info("Successfully registered YALC as a dashboard third party.")
-            self.setup_dashboard()
-            self.log.info("Dashboard pages registered via setup_dashboard().")
         except Exception as e:
             self.log.error(f"Dashboard integration setup failed: {e}")
 
