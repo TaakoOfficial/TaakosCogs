@@ -11,10 +11,11 @@ def dashboard_page(*args, **kwargs):
     return decorator
 
 class DashboardIntegration:
-    """Dashboard integration for YALC cog.
+    """Dashboard integration mixin for YALC cog.
     
     This class provides the required interface for Red-Web-Dashboard
-    third-party integrations.
+    third-party integrations. It's designed to be inherited from
+    by the main cog class.
     """
     
     # Required attributes for Red-Web-Dashboard third-party integration

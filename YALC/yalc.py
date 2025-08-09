@@ -34,8 +34,6 @@ class YALC(commands.Cog, DashboardIntegration):
         self.config = Config.get_conf(self, identifier=1234567875)
         self.log = logging.getLogger("red.YALC")
         
-        # Dashboard integration attributes are now defined in DashboardIntegration class
-        
         # Real-time audit log entry storage for role attribution
         self.recent_audit_entries = {}
         
