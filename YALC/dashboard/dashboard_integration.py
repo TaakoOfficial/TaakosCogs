@@ -11,25 +11,80 @@ def dashboard_page(*args, **kwargs):
     return decorator
 
 class DashboardIntegration:
-    bot: Red
+    """Dashboard integration for YALC cog.
+    
+    This class provides the required interface for Red-Web-Dashboard
+    third-party integrations.
+    """
+    
+    # Required attributes for Red-Web-Dashboard third-party integration
+    name = "YALC"
+    description = "Yet Another Logging Cog - Comprehensive Discord event logging with dashboard integration"
+    version = "3.0.0"
+    author = "YALC Team"
+    repo = "https://github.com/your-repo/YALC"
+    support = "https://discord.gg/your-support"
+    icon = "https://cdn-icons-png.flaticon.com/512/928/928797.png"
+    
+    # Required method for third-party integration
+    def get_pages(self) -> typing.List[typing.Dict[str, typing.Any]]:
+        """Return a list of dashboard pages for this third-party integration.
+        
+        This method is required by Red-Web-Dashboard to discover available pages.
+        """
+        pages = []
+        
+        # Main dashboard page
+        pages.append({
+            "name": None,  # Main page
+            "description": "YALC Dashboard: Manage and view YALC features.",
+            "methods": ("GET", "POST"),
+            "is_owner": True,
+            "function": self.yalcdash_main
+        })
+        
+        # Guild-specific page
+        pages.append({
+            "name": "guild",
+            "description": "YALC Guild Dashboard: View guild details.",
+            "methods": ("GET",),
+            "is_owner": False,
+            "function": self.yalcdash_guild
+        })
+        
+        # Settings page
+        pages.append({
+            "name": "settings",
+            "description": "YALC Settings Dashboard: Configure logging settings.",
+            "methods": ("GET", "POST"),
+            "is_owner": False,
+            "function": self.yalcdash_settings
+        })
+        
+        return pages
 
     @commands.Cog.listener()
     async def on_dashboard_cog_add(self, dashboard_cog: commands.Cog) -> None:
         """Register this cog as a third party with the Dashboard when dashboard cog is loaded."""
         try:
-            dashboard_cog.rpc.third_parties_handler.add_third_party(self)
-            self.log.info("Successfully registered YALC as a dashboard third party.")
+            # Check if the dashboard cog has the required attributes
+            if hasattr(dashboard_cog, 'rpc') and hasattr(dashboard_cog.rpc, 'third_parties_handler'):
+                dashboard_cog.rpc.third_parties_handler.add_third_party(self)
+                # Access log through the main cog instance
+                if hasattr(self, 'log'):
+                    self.log.info("Successfully registered YALC as a dashboard third party.")
+                else:
+                    print("YALC: Successfully registered as a dashboard third party.")
+            else:
+                if hasattr(self, 'log'):
+                    self.log.warning("Dashboard cog found but missing required attributes for third-party integration.")
+                else:
+                    print("YALC: Dashboard cog found but missing required attributes for third-party integration.")
         except Exception as e:
-            self.log.error(f"Dashboard integration setup failed: {e}")
-
-    def setup_dashboard(self):
-        """Setup dashboard pages and configuration."""
-        try:
-            # This method is called by the main cog to setup dashboard integration
-            # The actual registration happens in on_dashboard_cog_add
-            self.log.info("Dashboard setup called - pages will be registered when dashboard loads.")
-        except Exception as e:
-            self.log.error(f"Error in setup_dashboard: {e}")
+            if hasattr(self, 'log'):
+                self.log.error(f"Dashboard integration setup failed: {e}")
+            else:
+                print(f"YALC: Dashboard integration setup failed: {e}")
 
     @dashboard_page(
         name=None,
@@ -106,8 +161,11 @@ class DashboardIntegration:
         """Settings configuration page for YALC."""
         import wtforms
 
-        # Get current settings for this guild
-        current_settings = await self.config.guild(guild).all()
+        # Get current settings for this guild - access config through the main cog instance
+        if hasattr(self, 'config'):
+            current_settings = await self.config.guild(guild).all()
+        else:
+            current_settings = {}
 
         class SettingsForm(kwargs["Form"]):
             def __init__(self):

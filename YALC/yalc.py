@@ -34,14 +34,7 @@ class YALC(commands.Cog, DashboardIntegration):
         self.config = Config.get_conf(self, identifier=1234567875)
         self.log = logging.getLogger("red.YALC")
         
-        # Dashboard integration attributes - required for Red Web Dashboard
-        self.name = "YALC"
-        self.description = "Yet Another Logging Cog - Comprehensive Discord event logging with dashboard integration"
-        self.version = "3.0.0"
-        self.author = "YALC Team"
-        self.repo = "https://github.com/your-repo/YALC"
-        self.support = "https://discord.gg/your-support"
-        self.icon = "https://cdn-icons-png.flaticon.com/512/928/928797.png"
+        # Dashboard integration attributes are now defined in DashboardIntegration class
         
         # Real-time audit log entry storage for role attribution
         self.recent_audit_entries = {}
@@ -684,14 +677,8 @@ class YALC(commands.Cog, DashboardIntegration):
 
     # --- Event Listeners ---
 
-    @commands.Cog.listener()
-    async def on_dashboard_cog_add(self, dashboard_cog: commands.Cog) -> None:
-        """Register YALC as a dashboard third party when dashboard cog is loaded."""
-        try:
-            dashboard_cog.rpc.third_parties_handler.add_third_party(self)
-            self.log.info("Successfully registered YALC as a dashboard third party.")
-        except Exception as e:
-            self.log.error(f"Dashboard integration setup failed: {e}")
+    # Dashboard integration is handled by the DashboardIntegration class
+    # The on_dashboard_cog_add method is inherited from DashboardIntegration
 
 
     @commands.Cog.listener()
