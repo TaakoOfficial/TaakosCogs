@@ -521,496 +521,6 @@ class YALC(DashboardIntegration, commands.Cog):
         # Clean up any other resources
         await super().cog_unload()
 
-    # ============= Voice Session Tracking Methods =============
-
-    async def _log_voice_event(self, guild_id: int, user_id: int, channel_id: Optional[int],
-                              event_type: str, moderator_id: Optional[int] = None,
-                              reason: Optional[str] = None) -> None:
-        """
-        Log a voice event to the stored events history.
-
-        This method adds a new voice event entry to the rotating events list,
-        maintaining a maximum of 50 entries for performance and storage efficiency.
-
-        Parameters
-        ----------
-        guild_id : int
-            The ID of the guild where the event occurred
-        user_id : int
-            The ID of the user involved in the event
-        channel_id : Optional[int]
-            The ID of the voice channel involved (None for disconnection)
-        event_type : str
-            Type of event: "join", "leave", "move", "timeout", "disconnect"
-        moderator_id : Optional[int]
-            ID of the moderator who performed the action, if applicable
-        reason : Optional[str]
-            Reason for the action, if provided by the moderator
-        """
-        try:
-            event_data = {
-                "timestamp": time.time(),
-                "user_id": user_id,
-                "channel_id": channel_id,
-                "event_type": event_type,
-                "moderator_id": moderator_id,
-                "reason": reason
-            }
-
-            async with self.config.guild_from_id(guild_id).voice_events() as events:
-                # Add new event to the beginning of the list
-                events.insert(0, event_data)
-
-                # Maintain maximum of 50 events to prevent unlimited growth
-                if len(events) > 50:
-                    events[:] = events[:50]
-
-        except Exception as e:
-            self.log.error(f"Error logging voice event: {e}", exc_info=True)
-
-    async def _start_voice_session(self, guild_id: int, user_id: int, channel_id: int) -> None:
-        """
-        Start tracking a new voice session for a user.
-
-        This method records the start time when a user joins a voice channel,
-        enabling session duration calculation when they leave.
-
-        Parameters
-        ----------
-        guild_id : int
-            The ID of the guild where the session is starting
-        user_id : int
-            The ID of the user starting the session
-        channel_id : int
-            The ID of the voice channel being joined
-        """
-        try:
-            session_data = {
-                "channel_id": channel_id,
-                "start_time": time.time(),
-                "last_activity": time.time()
-            }
-
-            async with self.config.guild_from_id(guild_id).voice_sessions() as sessions:
-                sessions[str(user_id)] = session_data
-
-        except Exception as e:
-            self.log.error(f"Error starting voice session for user {user_id}: {e}", exc_info=True)
-
-    async def _end_voice_session(self, guild_id: int, user_id: int) -> Optional[int]:
-        """
-        End tracking of a voice session and calculate duration.
-
-        This method removes the session from active tracking and returns
-        the duration in seconds for logging purposes.
-
-        Parameters
-        ----------
-        guild_id : int
-            The ID of the guild where the session ended
-        user_id : int
-            The ID of the user ending the session
-
-        Returns
-        -------
-        Optional[int]
-            Session duration in seconds, or None if no active session found
-        """
-        try:
-            async with self.config.guild_from_id(guild_id).voice_sessions() as sessions:
-                session_data = sessions.get(str(user_id))
-
-                if not session_data:
-                    return None
-
-                # Calculate session duration
-                start_time = session_data.get("start_time", time.time())
-                duration_seconds = int(time.time() - start_time)
-
-                # Remove the session from active tracking
-                del sessions[str(user_id)]
-
-                return duration_seconds
-
-        except Exception as e:
-            self.log.error(f"Error ending voice session for user {user_id}: {e}", exc_info=True)
-            return None
-
-    async def _get_voice_session_stats(self, guild_id: int, user_id: int, days: int = 7) -> Dict:
-        """
-        Get voice session statistics for a specific user.
-
-        This method analyzes stored voice events to provide:
-        - Total number of voice sessions
-        - Total time spent in voice channels
-        - Average session duration
-        - Most active channels
-
-        Parameters
-        ----------
-        guild_id : int
-            The ID of the guild to analyze
-        user_id : int
-            The ID of the user to get statistics for
-        days : int, default=7
-            Number of days to look back for statistics
-
-        Returns
-        -------
-        Dict
-            Dictionary containing session statistics with the following keys:
-            - sessions_count: Total number of sessions
-            - total_duration: Total time in seconds across all sessions
-            - average_duration: Average session duration in seconds
-            - channel_usage: Dictionary mapping channel IDs to usage time
-        """
-        try:
-            cutoff_time = time.time() - (days * 24 * 60 * 60)
-            sessions = []
-            current_session = None
-            channel_usage = {}  # channel_id -> total_time_in_seconds
-
-            # Get recent voice events for this user
-            async with self.config.guild_from_id(guild_id).voice_events() as events:
-                user_events = [e for e in events if e["user_id"] == user_id and e["timestamp"] > cutoff_time]
-
-            # Group events into sessions by analyzing joins and leaves
-            for event in reversed(user_events):  # Process events chronologically
-                if event["event_type"] == "join":
-                    if current_session:
-                        sessions.append(current_session)
-                    channel_id = event["channel_id"]
-                    start_time = event["timestamp"]
-                    current_session = {
-                        "start_time": start_time,
-                        "channel_id": channel_id
-                    }
-                elif event["event_type"] in ["leave", "disconnect"] and current_session:
-                    end_time = event["timestamp"]
-                    duration = end_time - current_session["start_time"]
-                    current_session["duration"] = duration
-
-                    # Add to channel usage tracking
-                    channel_id = current_session["channel_id"]
-                    if channel_id:
-                        channel_usage[str(channel_id)] = channel_usage.get(str(channel_id), 0) + duration
-
-                    sessions.append(current_session)
-                    current_session = None
-                elif event["event_type"] == "move" and current_session:
-                    # Handle channel moves within a session
-                    old_channel_id = current_session["channel_id"]
-                    new_channel_id = event["channel_id"]
-
-                    # Calculate time spent in old channel
-                    move_time = event["timestamp"]
-                    duration_in_old_channel = move_time - current_session["start_time"]
-                    channel_usage[str(old_channel_id)] = channel_usage.get(str(old_channel_id), 0) + duration_in_old_channel
-
-                    # Start new segment in new channel
-                    current_session = {
-                        "start_time": move_time,
-                        "channel_id": new_channel_id
-                    }
-
-            # Handle active session if user is still in voice
-            if current_session:
-                # Check if user is currently active
-                async with self.config.guild_from_id(guild_id).voice_sessions() as active_sessions:
-                    active_session = active_sessions.get(str(user_id))
-                    if active_session:
-                        current_time = time.time()
-                        duration_in_channel = current_time - current_session["start_time"]
-                        channel_usage[str(current_session["channel_id"])] = channel_usage.get(str(current_session["channel_id"]), 0) + duration_in_channel
-                        current_session["duration"] = duration_in_channel
-                        sessions.append(current_session)
-
-            # Calculate statistics
-            total_duration = sum((s.get("duration", 0) for s in sessions))
-            sessions_count = len(sessions)
-            average_duration = total_duration / sessions_count if sessions_count > 0 else 0
-
-            return {
-                "sessions_count": sessions_count,
-                "total_duration": int(total_duration),
-                "average_duration": int(average_duration),
-                "channel_usage": {k: int(v) for k, v in channel_usage.items()}
-            }
-
-        except Exception as e:
-            self.log.error(f"Error getting voice session stats for user {user_id}: {e}", exc_info=True)
-            return {
-                "sessions_count": 0,
-                "total_duration": 0,
-                "average_duration": 0,
-                "channel_usage": {}
-            }
-
-    async def _get_recent_voice_events(self, guild_id: int, limit: int = 10) -> List[Dict]:
-        """
-        Get a list of recent voice events for a guild.
-
-        This method provides a paginated view of recent voice activity
-        for administrative review and troubleshooting.
-
-        Parameters
-        ----------
-        guild_id : int
-            The ID of the guild to get events for
-        limit : int, default=10
-            Maximum number of events to return
-
-        Returns
-        -------
-        List[Dict]
-            List of recent voice events, ordered by timestamp (newest first)
-        """
-        try:
-            async with self.config.guild_from_id(guild_id).voice_events() as events:
-                return events[:limit]
-
-        except Exception as e:
-            self.log.error(f"Error getting recent voice events for guild {guild_id}: {e}", exc_info=True)
-            return []
-
-    async def _get_active_voice_sessions(self, guild_id: int) -> Dict[int, Dict]:
-        """
-        Get all currently active voice sessions for a guild.
-
-        This method shows which users are currently in voice channels
-        and how long they've been active in their current sessions.
-
-        Parameters
-        ----------
-        guild_id : int
-            The ID of the guild to get active sessions for
-
-        Returns
-        -------
-        Dict[int, Dict]
-            Dictionary mapping user_id to session information:
-            - channel_id: ID of the voice channel
-            - start_time: Session start timestamp
-            - duration_seconds: Current session duration in seconds
-        """
-        try:
-            current_time = time.time()
-            async with self.config.guild_from_id(guild_id).voice_sessions() as sessions:
-                active_sessions = {}
-
-                for user_id_str, session_data in sessions.items():
-                    try:
-                        user_id = int(user_id_str)
-                        start_time = session_data.get("start_time", current_time)
-                        duration_seconds = int(current_time - start_time)
-
-                        active_sessions[user_id] = {
-                            "channel_id": session_data.get("channel_id"),
-                            "start_time": start_time,
-                            "duration_seconds": duration_seconds
-                        }
-                    except (ValueError, TypeError) as e:
-                        self.log.warning(f"Invalid session data for user {user_id_str}: {e}")
-
-                return active_sessions
-
-        except Exception as e:
-            self.log.error(f"Error getting active voice sessions for guild {guild_id}: {e}", exc_info=True)
-            return {}
-
-    @yalc_group.command(name="test", aliases=["diagnostics", "debug"])
-    @commands.guild_only()
-    @commands.admin_or_permissions(manage_guild=True)
-    async def yalc_test(self, ctx: commands.Context):
-        """
-        Run diagnostic tests and show voice logging status.
-
-        This command provides comprehensive troubleshooting information including:
-        - Configuration status
-        - Voice session tracking status
-        - Recent voice activity
-        - Current active voice sessions
-        - User-specific voice statistics
-        """
-        try:
-            embed = discord.Embed(
-                title="🧪 YALC Voice Logging Diagnostics",
-                description=f"Comprehensive diagnostic report for {ctx.guild.name}",
-                color=discord.Color.blue(),
-                timestamp=datetime.datetime.now(datetime.UTC)
-            )
-
-            # ===== Configuration Status =====
-            settings = await self.config.guild(ctx.guild).all()
-
-            # Voice event enabled status
-            voice_enabled = settings["events"].get("voice_state_update", False)
-            voice_channel_id = settings["event_channels"].get("voice_state_update")
-            voice_channel = ctx.guild.get_channel(voice_channel_id) if voice_channel_id else None
-
-            embed.add_field(
-                name="⚙️ Configuration Status",
-                value=f"• Voice logging: {'✅ Enabled' if voice_enabled else '❌ Disabled'}\n"
-                      f"• Log channel: {voice_channel.mention if voice_channel else '❌ Not configured'}\n"
-                      f"• Bot permissions: {'✅ Connected' if ctx.guild.me.guild_permissions.connect else '❌ Missing Connect'}\n"
-                      f"• Voice perms: {'✅ View Audit Log' if ctx.guild.me.guild_permissions.view_audit_log else '❌ Missing View Audit Log'}",
-                inline=False
-            )
-
-            # ===== Voice Session Tracking Status =====
-            active_sessions = await self._get_active_voice_sessions(ctx.guild.id)
-            recent_events = await self._get_recent_voice_events(ctx.guild.id, limit=5)
-
-            embed.add_field(
-                name="🎧 Session Tracking",
-                value=f"• Active sessions: {len(active_sessions)} users\n"
-                      f"• Stored events: {len(settings.get('voice_events', []))} total\n"
-                      f"• Recent events: {len(recent_events)} (last 5)\n"
-                      f"• Session storage: {'✅ Working' if isinstance(settings.get('voice_sessions'), dict) else '❌ Failed'}",
-                inline=False
-            )
-
-            if active_sessions:
-                session_details = []
-                for user_id, session in list(active_sessions.items())[:5]:  # Show up to 5
-                    try:
-                        user = ctx.guild.get_member(user_id)
-                        channel = ctx.guild.get_channel(session['channel_id'])
-                        duration_str = self._format_duration(session['duration_seconds'])
-
-                        user_display = user.mention if user else f"User {user_id}"
-                        channel_display = channel.name if channel else f"Channel {session['channel_id']}"
-
-                        session_line = f"• {user_display}"
-                        session_line += f"\n  📺 {channel_display}"
-                        session_line += f"\n  ⏱️ {duration_str}"
-                        session_details.append(session_line)
-
-                    except Exception as e:
-                        session_details.append(f"• User {user_id} - Error: {e}")
-
-                embed.add_field(
-                    name="🎤 Active Sessions",
-                    value="\n".join(session_details),
-                    inline=False
-                )
-
-            # ===== Recent Voice Events =====
-            if recent_events:
-                event_details = []
-                for event in recent_events:
-                    try:
-                        user = ctx.guild.get_member(event['user_id'])
-                        channel = ctx.guild.get_channel(event['channel_id'])
-                        timestamp = datetime.datetime.fromtimestamp(event['timestamp'])
-
-                        event_type = event['event_type'].title()
-                        user_display = f"• **{event_type}**"
-                        user_mention = user.mention if user else f'User {event["user_id"]}'
-
-                        event_line = f"{user_display} - {user_mention}"
-                        if channel:
-                            event_line += f" in {channel.name}"
-
-                        # Format relative time
-                        relative_time = discord.utils.format_dt(timestamp, style="R")
-                        event_line += f"\n  🕒 {relative_time}"
-
-                        # Add moderator info if applicable
-                        if event.get('moderator_id'):
-                            moderator = ctx.guild.get_member(event['moderator_id'])
-                            if moderator:
-                                event_line += f" • Mod: {moderator.mention}"
-
-                        event_details.append(event_line)
-
-                    except Exception as e:
-                        event_details.append(f"• Error reading event: {e}")
-
-                embed.add_field(
-                    name="📋 Recent Events",
-                    value="\n".join(event_details),
-                    inline=False
-                )
-
-            # ===== Specific User Statistics =====
-            # Show statistics for the command author
-            if ctx.author.voice and ctx.author.voice.channel:
-                user_stats = await self._get_voice_session_stats(ctx.guild.id, ctx.author.id, days=1)
-
-                embed.add_field(
-                    name="📊 Your Voice Stats (24h)",
-                    value=f"• Sessions: {user_stats['sessions_count']}\n"
-                          f"• Total time: {self._format_duration(user_stats['total_duration'])}\n"
-                          f"• Avg session: {self._format_duration(user_stats['average_duration'])}\n"
-                          f"• Channels used: {len(user_stats['channel_usage'])}",
-                    inline=False
-                )
-
-            # ===== Test Triggers =====
-            embed.add_field(
-                name="🧪 Manual Tests",
-                value="To test voice logging:\n"
-                      "• Join/leave a voice channel\n"
-                      "• Move between voice channels\n"
-                      "• Run `/yalc test` again to see changes\n"
-                      "• Check log channel for new entries",
-                inline=False
-            )
-
-            # ===== Performance Info =====
-            embed.add_field(
-                name="⚡ Performance",
-                value="• Config operations: ✅ Async handled\n"
-                      "• Memory usage: ✅ Limited to 50 events\n"
-                      "• Error recovery: ✅ Exception handling active\n"
-                      "• Cleanup: ✅ Active sessions cleared on reload",
-                inline=False
-            )
-
-            # Set thumbnail if available
-            if ctx.guild.icon:
-                embed.set_thumbnail(url=ctx.guild.icon.url)
-
-            embed.set_footer(text=f"YALC Diagnostics • Guild ID: {ctx.guild.id}")
-
-            await ctx.send(embed=embed)
-
-        except Exception as e:
-            error_embed = discord.Embed(
-                title="❌ Diagnostic Error",
-                description=f"An error occurred while running diagnostics: {e}",
-                color=discord.Color.red()
-            )
-            await ctx.send(embed=error_embed)
-            self.log.error(f"Error in yalc_test command: {e}", exc_info=True)
-
-    def _format_duration(self, seconds: int) -> str:
-        """
-        Format a duration in seconds into a human-readable string.
-
-        Parameters
-        ----------
-        seconds : int
-            Duration in seconds
-
-        Returns
-        -------
-        str
-            Human-readable duration string (e.g., "2h 30m 15s")
-        """
-        if seconds < 60:
-            return f"{seconds}s"
-        elif seconds < 3600:
-            minutes = seconds // 60
-            remaining_seconds = seconds % 60
-            return f"{minutes}m {remaining_seconds}s"
-        else:
-            hours = seconds // 3600
-            remaining_minutes = (seconds % 3600) // 60
-            remaining_seconds = seconds % 60
-            return f"{hours}h {remaining_minutes}m {remaining_seconds}s"
-
     async def cog_load(self) -> None:
         """Register all YALC events as modlog case types and dashboard third party."""
         # Register modlog case types
@@ -1027,7 +537,7 @@ class YALC(DashboardIntegration, commands.Cog):
             self.log.info("Registered all YALC events as modlog case types.")
         except Exception as e:
             self.log.error(f"Failed to register YALC case types: {e}")
-        
+
         # Dashboard integration will be handled by the on_dashboard_cog_add listener
         # when the Dashboard cog loads
         self.log.info("YALC cog loaded - dashboard integration will be registered when Dashboard cog loads.")
@@ -1249,9 +759,193 @@ class YALC(DashboardIntegration, commands.Cog):
             self.set_embed_footer(embed, label="YALC Logger • Voice State Update")
             
             await self.safe_send(channel, embed=embed)
-            
+
+            # Integrated voice session tracking
+            try:
+                user_id = member.id
+                guild = member.guild
+
+                if action == "joined":
+                    # User joined voice - start session tracking
+                    if after.channel:
+                        current_channel_id = after.channel.id
+                        await self._start_voice_session(guild, user_id, current_channel_id)
+                        await self._log_voice_event(guild, user_id, "session_start",
+                                                  channel_id=current_channel_id)
+
+                elif action == "left":
+                    # User left voice - end session tracking
+                    if before.channel:
+                        previous_channel_id = before.channel.id
+                        await self._end_voice_session(guild, user_id, previous_channel_id)
+                        # Session end logging is handled within _end_voice_session
+
+                elif action == "moved":
+                    # User moved between channels - update session tracking
+                    if before.channel and after.channel:
+                        old_channel_id = before.channel.id
+                        new_channel_id = after.channel.id
+
+                        # End session in old channel and start new one
+                        await self._end_voice_session(guild, user_id, old_channel_id)
+                        await self._start_voice_session(guild, user_id, new_channel_id)
+
+                        # Log the channel move
+                        await self._log_voice_event(guild, user_id, "channel_move",
+                                                  channel_id=new_channel_id)
+
+                elif action == "state_changed":
+                    # State changes within same channel - track if user is in voice
+                    current_channel_id = None
+                    if after.channel and after.channel.id:
+                        current_channel_id = after.channel.id
+
+                        # Check if user is actively in voice session
+                        async with self.config.guild(guild).voice_sessions() as sessions:
+                            session_key = str(user_id)
+                            if session_key in sessions:
+                                session = sessions[session_key]
+                                if session.get("active", False):
+                                    # Update channel if necessary
+                                    if session["channel_id"] != current_channel_id:
+                                        await self._log_voice_event(guild, user_id, "channel_move",
+                                                                  channel_id=current_channel_id)
+
+            except Exception as e:
+                self.log.error(f"Error in voice session tracking: {e}", exc_info=True)
+
         except Exception as e:
             self.log.error(f"Failed to log voice_state_update: {e}", exc_info=True)
+
+    async def _log_voice_event(self, guild: discord.Guild, user_id: int, event_type: str,
+                              channel_id: Optional[int] = None, duration: Optional[float] = None):
+        """Internal method to log voice session events."""
+        try:
+            session_data = {
+                "timestamp": time.time(),
+                "user_id": user_id,
+                "event_type": event_type,
+                "channel_id": channel_id,
+                "duration": duration
+            }
+
+            async with self.config.guild(guild).voice_events() as events:
+                events.append(session_data)
+                if len(events) > 50:  # Keep only last 50 events
+                    events.pop(0)
+
+        except Exception as e:
+            self.log.error(f"Error logging voice event: {e}")
+
+    async def _start_voice_session(self, guild: discord.Guild, user_id: int, channel_id: int):
+        """Start a voice session for a user."""
+        try:
+            session_start = {"channel_id": channel_id, "start_time": time.time(), "active": True}
+
+            async with self.config.guild(guild).voice_sessions() as sessions:
+                sessions[str(user_id)] = session_start
+
+            self.log.debug(f"Started voice session for user {user_id} in channel {channel_id}")
+
+        except Exception as e:
+            self.log.error(f"Error starting voice session: {e}")
+
+    async def _end_voice_session(self, guild: discord.Guild, user_id: int, channel_id: int) -> Optional[float]:
+        """End a voice session for a user and return the duration."""
+        try:
+            async with self.config.guild(guild).voice_sessions() as sessions:
+                if str(user_id) in sessions:
+                    session = sessions[str(user_id)]
+                    if session.get("active", False):
+                        duration = time.time() - session["start_time"]
+                        session["duration"] = duration
+                        session["active"] = False
+                        session["end_time"] = time.time()
+
+                        # Log the session
+                        await self._log_voice_event(
+                            guild, user_id, "session_end",
+                            channel_id=channel_id, duration=duration
+                        )
+
+                        self.log.debug(f"Ended voice session for user {user_id}, duration: {duration}")
+                        return duration
+
+            return None
+
+        except Exception as e:
+            self.log.error(f"Error ending voice session: {e}")
+            return None
+
+    async def _get_voice_session_stats(self, guild: discord.Guild) -> dict:
+        """Get statistics for all active voice sessions."""
+        try:
+            async with self.config.guild(guild).voice_sessions() as sessions:
+                active_sessions = sum(1 for s in sessions.values() if s.get("active", False))
+
+                stats = {
+                    "active_sessions": active_sessions,
+                    "total_sessions": len(sessions),
+                    "sessions_by_channel": {}
+                }
+
+                # Group by channel
+                for user_id, session in sessions.items():
+                    if session.get("active", False):
+                        channel_id = session["channel_id"]
+                        if channel_id not in stats["sessions_by_channel"]:
+                            stats["sessions_by_channel"][channel_id] = []
+                        stats["sessions_by_channel"][channel_id].append(user_id)
+
+                return stats
+
+        except Exception as e:
+            self.log.error(f"Error getting voice session stats: {e}")
+            return {"error": str(e)}
+
+    async def _get_recent_voice_events(self, guild: discord.Guild, limit: int = 10) -> list:
+        """Get recent voice events."""
+        try:
+            async with self.config.guild(guild).voice_events() as events:
+                return events[-limit:] if len(events) >= limit else events
+
+        except Exception as e:
+            self.log.error(f"Error getting recent voice events: {e}")
+            return []
+
+    async def _get_active_voice_sessions(self, guild: discord.Guild) -> list:
+        """Get all currently active voice sessions."""
+        try:
+            async with self.config.guild(guild).voice_sessions() as sessions:
+                active_sessions = [
+                    {
+                        "user_id": int(user_id),
+                        "channel_id": session["channel_id"],
+                        "start_time": session["start_time"],
+                        "duration": time.time() - session["start_time"]
+                    }
+                    for user_id, session in sessions.items()
+                    if session.get("active", False)
+                ]
+
+                return active_sessions
+
+        except Exception as e:
+            self.log.error(f"Error getting active voice sessions: {e}")
+            return []
+
+    def _format_duration(self, seconds: float) -> str:
+        """Format duration in seconds to a human-readable string."""
+        if seconds < 60:
+            return f"{int(seconds)}s"
+        elif seconds < 3600:
+            minutes = int(seconds // 60)
+            secs = int(seconds % 60)
+            return f"{minutes}m {secs}s"
+        else:
+            hours = int(seconds // 3600)
+            minutes = int((seconds % 3600) // 60)
+            return f"{hours}h {minutes}m"
 
     @commands.Cog.listener()
     async def on_presence_update(self, before: discord.Member, after: discord.Member):
@@ -4324,11 +4018,186 @@ class YALC(DashboardIntegration, commands.Cog):
     async def yalc_group(self, ctx: commands.Context):
         """
         Yet Another Logging Cog - Main commands.
-        
+
         This command group provides access to all YALC logging configuration commands.
         Run a subcommand to perform a specific action.
         """
         await ctx.send_help(ctx.command)
+
+    @yalc_group.command(name="test", aliases=["diagnostics", "debug"])
+    @commands.guild_only()
+    async def yalc_test(self, ctx: commands.Context):
+        """Test YALC voice logging functionality and show comprehensive diagnostic information."""
+        try:
+            # Create main diagnostic embed
+            embed = discord.Embed(
+                title="🔍 YALC System Diagnostics",
+                description="Comprehensive system health check and voice session analysis",
+                color=discord.Color.blue(),
+                timestamp=datetime.datetime.now(datetime.UTC)
+            )
+
+            # System Status Section
+            embed.add_field(
+                name="🤖 System Status",
+                value="✅ YALC Cog loaded\n"
+                      f"✅ Guild: {ctx.guild.name}\n"
+                      f"✅ Bot latency: {self.bot.latency*1000:.1f}ms\n"
+                      f"✅ Guild members: {ctx.guild.member_count}",
+                inline=False
+            )
+
+            # Voice Session Statistics
+            session_stats = await self._get_voice_session_stats(ctx.guild)
+
+            embed.add_field(
+                name="🎧 Voice Session Statistics",
+                value="### Current Status\n"
+                      f"• Active sessions: **{session_stats['active_sessions']}**\n"
+                      f"• Total sessions tracked: **{session_stats['total_sessions']}**\n"
+                      f"• Channels with activity: **{len(session_stats['sessions_by_channel'])}**",
+                inline=False
+            )
+
+            # Active Voice Sessions
+            active_sessions = await self._get_active_voice_sessions(ctx.guild)
+
+            if active_sessions:
+                session_info = []
+                for session in active_sessions[:5]:  # Show first 5
+                    try:
+                        member = ctx.guild.get_member(session['user_id'])
+                        member_display = member.mention if member else f"ID: {session['user_id']}"
+
+                        channel = ctx.guild.get_channel(session['channel_id'])
+                        channel_name = channel.name if channel else f"ID: {session['channel_id']}"
+
+                        duration = self._format_duration(session['duration'])
+                        session_info.append(f"• {member_display} in **#{channel_name}** ({duration})")
+                    except Exception:
+                        session_info.append(f"• Unknown user in unknown channel ({self._format_duration(session['duration'])})")
+
+                if len(active_sessions) > 5:
+                    session_info.append(f"• ...and {len(active_sessions) - 5} more sessions")
+
+                embed.add_field(
+                    name="🔊 Active Sessions",
+                    value="\n".join(session_info),
+                    inline=False
+                )
+            else:
+                embed.add_field(
+                    name="🔊 Active Sessions",
+                    value="*No active voice sessions*",
+                    inline=False
+                )
+
+            # Recent Voice Events
+            recent_events = await self._get_recent_voice_events(ctx.guild, limit=5)
+
+            if recent_events:
+                event_info = []
+                for event in recent_events:
+                    try:
+                        member = ctx.guild.get_member(event['user_id']) or await self.bot.fetch_user(event['user_id'])
+                        member_display = member.mention if hasattr(member, 'mention') else str(member)
+
+                        channel = ctx.guild.get_channel(event['channel_id'])
+                        channel_name = f"#{channel.name}" if channel else f"ID: {event['channel_id']}"
+
+                        event_time = datetime.datetime.fromtimestamp(event['timestamp'], tz=datetime.timezone.utc)
+                        relative_time = discord.utils.format_dt(event_time, style="R")
+
+                        duration_text = ""
+                        if event.get('duration') and event['duration'] > 0:
+                            duration_text = f" ({self._format_duration(event['duration'])})"
+
+                        event_info.append(f"• **{event['event_type']}** - {member_display} {channel_name}{duration_text}")
+                        event_info.append(f"  {relative_time}")  # No emoji, clean
+                        event_info.append("")  # Empty line for spacing
+
+                    except Exception as e:
+                        self.log.debug(f"Error processing event: {e}")
+                        continue
+
+                embed.add_field(
+                    name="📜 Recent Voice Events",
+                    value="\n".join(event_info)[:1024],  # Discord embed field limit
+                    inline=False
+                )
+            else:
+                embed.add_field(
+                    name="📜 Recent Voice Events",
+                    value="*No recent voice events*",
+                    inline=False
+                )
+
+            # Voice Channels Monitoring
+            voice_channels = [vc for vc in ctx.guild.channels if isinstance(vc, discord.VoiceChannel)]
+            voice_stats = []
+
+            for vc in voice_channels:
+                member_count = len(vc.members) if vc.members else 0
+                if member_count > 0 or len(voice_channels) <= 10:  # Show active channels or if we have few channels
+                    voice_stats.append(f"• **#{vc.name}**: {member_count} members ({'active' if member_count > 0 else 'empty'})")
+
+            if voice_stats:
+                embed.add_field(
+                    name="🔊 Voice Channels Status",
+                    value="\n".join(voice_stats[:10]) + (f"\n*...and {len(voice_channels) - 10} more*" if len(voice_channels) > 10 else ""),
+                    inline=False
+                )
+            else:
+                embed.add_field(
+                    name="🔊 Voice Channels Status",
+                    value=f"Found {len(voice_channels)} voice channels, all currently empty",
+                    inline=False
+                )
+
+            # Configuration Check
+            settings = await self.config.guild(ctx.guild).all()
+            enabled_voice_events = [event for event in self.event_descriptions.keys()
+                                   if event.startswith("voice_") and settings["events"].get(event, False)]
+
+            embed.add_field(
+                name="⚙️ Voice Configuration",
+                value=f"• Voice state update event: {'✅ Enabled' if settings['events'].get('voice_state_update', False) else '❌ Disabled'}\n"
+                      f"• Log channel configured: {'✅ Yes' if settings['event_channels'].get('voice_state_update') else '❌ No'}\n"
+                      f"• Voice events enabled: **{len(enabled_voice_events)}**\n"
+                      f"• Ignore bots: {'✅ Yes' if settings.get('ignore_bots', False) else '❌ No'}",
+                inline=False
+            )
+
+            # Performance Info
+            embed.add_field(
+                name="⚡ Performance",
+                value=f"• Voice session tracking: ✅ Active\n"
+                      f"• Real-time updates: ✅ Enabled\n"
+                      f"• Database persistence: ✅ Config-based\n"
+                      f"• Event logging: ✅ Last 50 events stored",
+                inline=False
+            )
+
+            # Add footer
+            embed.set_footer(text="YALC Diagnostic Report", icon_url="https://cdn-icons-png.flaticon.com/512/928/928797.png")
+
+            await ctx.send(embed=embed)
+
+            # Send summary message
+            await ctx.send("✅ **YALC Diagnostics Complete!**\n"
+                          f"🎧 Found {session_stats['active_sessions']} active voice sessions\n"
+                          f"📊 Tracked {len(recent_events)} recent voice events\n"
+                          f"🔊 Monitoring {len(voice_channels)} voice channels")
+
+        except Exception as e:
+            error_embed = discord.Embed(
+                title="❌ Diagnostic Error",
+                description=f"An error occurred during diagnostics:\n```{e}```",
+                color=discord.Color.red(),
+                timestamp=datetime.datetime.now(datetime.UTC)
+            )
+            await ctx.send(embed=error_embed)
+            self.log.error(f"Error in YALC test command: {e}", exc_info=True)
 
     @yalc_group.command(name="enable")
     @commands.admin_or_permissions(manage_guild=True)
