@@ -3,21 +3,14 @@ from redbot.core.bot import Red
 import discord
 import typing
 
-# Dashboard page decorator for Red-Web-Dashboard third-party integration
-def dashboard_page(*args, **kwargs):
-    def decorator(func: typing.Callable):
-        func.__dashboard_decorator_params__ = (args, kwargs)
-        return func
-    return decorator
-
 class DashboardIntegration:
     """Dashboard integration mixin for YALC cog.
-    
+
     This class provides the required interface for Red-Web-Dashboard
     third-party integrations. It's designed to be inherited from
     by the main cog class.
     """
-    
+
     # Required attributes for Red-Web-Dashboard third-party integration
     name = "YALC"
     description = "Yet Another Logging Cog - Comprehensive Discord event logging with dashboard integration"
@@ -26,9 +19,12 @@ class DashboardIntegration:
     repo = "https://github.com/your-repo/YALC"
     support = "https://discord.gg/your-support"
     icon = "https://cdn-icons-png.flaticon.com/512/928/928797.png"
-    
+
     # Required bot attribute for Red-Web-Dashboard
     bot: Red
+
+    # Dashboard page decorator (will be set when Dashboard cog loads)
+    dashboard_page = None
     
     # Required method for third-party integration
     def get_pages(self) -> typing.List[typing.Dict[str, typing.Any]]:
@@ -73,6 +69,10 @@ class DashboardIntegration:
         try:
             # Check if the dashboard cog has the required attributes
             if hasattr(dashboard_cog, 'rpc') and hasattr(dashboard_cog.rpc, 'third_parties_handler'):
+                # Set up the dashboard_page decorator from the dashboard cog
+                if hasattr(dashboard_cog.rpc.third_parties_handler, 'dashboard_page'):
+                    self.dashboard_page = dashboard_cog.rpc.third_parties_handler.dashboard_page
+
                 dashboard_cog.rpc.third_parties_handler.add_third_party(self)
                 # Access log through the main cog instance
                 if hasattr(self, 'log'):
@@ -90,12 +90,7 @@ class DashboardIntegration:
             else:
                 print(f"YALC: Dashboard integration setup failed: {e}")
 
-    @dashboard_page(
-        name=None,
-        description="YALC Dashboard: Manage and view YALC features.",
-        methods=("GET", "POST"),
-        is_owner=True
-    )
+    # Dashboard page methods without decorators - they'll be registered manually
     async def yalcdash_main(self, user: discord.User, **kwargs) -> typing.Dict[str, typing.Any]:
         """Main YALC dashboard page."""
         import wtforms
@@ -142,7 +137,7 @@ class DashboardIntegration:
             <h2>🎯 YALC Dashboard</h2>
             <p>Yet Another Logging Cog - Comprehensive Discord event logging</p>
         </div>
-        
+
         <div class="stats-grid">
             <div class="stat-card">
                 <h3>📊 Statistics</h3>
@@ -150,19 +145,19 @@ class DashboardIntegration:
                 <p><strong>Event Types:</strong> {event_count}</p>
                 <p><strong>Version:</strong> {self.version}</p>
             </div>
-            
+
             <div class="stat-card">
                 <h3>🔧 Quick Actions</h3>
-                <p><a href="/dashboard/{{ guild.id }}/third-party/YALC/settings" class="btn btn-primary">Configure Logging</a></p>
-                <p><a href="/dashboard/{{ guild.id }}/third-party/YALC/guild" class="btn btn-secondary">View Server Info</a></p>
+                <p><a href="/dashboard/{{{{ guild.id }}}}/third-party/YALC/settings" class="btn btn-primary">Configure Logging</a></p>
+                <p><a href="/dashboard/{{{{ guild.id }}}}/third-party/YALC/guild" class="btn btn-secondary">View Server Info</a></p>
             </div>
         </div>
-        
+
         <div class="form-section">
             <h3>📝 Quick Actions</h3>
-            {{ form|safe }}
+            {{{{ form|safe }}}}
         </div>
-        
+
         <style>
         .dashboard-header {{
             text-align: center;
@@ -172,28 +167,28 @@ class DashboardIntegration:
             color: white;
             border-radius: 10px;
         }}
-        
+
         .stats-grid {{
             display: grid;
             grid-template-columns: 1fr 1fr;
             gap: 1rem;
             margin-bottom: 2rem;
         }}
-        
+
         .stat-card {{
             background: #f8f9fa;
             padding: 1rem;
             border-radius: 8px;
             border-left: 4px solid #667eea;
         }}
-        
+
         .form-section {{
             background: white;
             padding: 1rem;
             border-radius: 8px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }}
-        
+
         .btn {{
             display: inline-block;
             padding: 0.5rem 1rem;
@@ -201,12 +196,12 @@ class DashboardIntegration:
             border-radius: 4px;
             margin: 0.25rem;
         }}
-        
+
         .btn-primary {{
             background: #007bff;
             color: white;
         }}
-        
+
         .btn-secondary {{
             background: #6c757d;
             color: white;
@@ -219,11 +214,6 @@ class DashboardIntegration:
             "web_content": {"source": source, "form": form},
         }
 
-    @dashboard_page(
-        name="guild",
-        description="YALC Guild Dashboard: View guild details.",
-        methods=("GET",),
-    )
     async def yalcdash_guild(self, user: discord.User, guild: discord.Guild, **kwargs) -> typing.Dict[str, typing.Any]:
         """Guild-specific YALC dashboard page."""
         return {
@@ -234,21 +224,19 @@ class DashboardIntegration:
             },
         }
 
-    @dashboard_page(
-        name="settings",
-        description="YALC Settings Dashboard: Configure logging settings.",
-        methods=("GET", "POST"),
-        is_owner=False
-    )
     async def yalcdash_settings(self, user: discord.User, guild: discord.Guild, **kwargs) -> typing.Dict[str, typing.Any]:
         """Settings configuration page for YALC."""
         import wtforms
 
         # Get current settings for this guild - access config through the main cog instance
-        if hasattr(self, 'config'):
-            current_settings = await self.config.guild(guild).all()
-        else:
-            current_settings = {}
+        current_settings = {}
+        if hasattr(self, 'config') and hasattr(self.config, 'guild'):
+            try:
+                current_settings = await self.config.guild(guild).all()
+            except Exception as e:
+                if hasattr(self, 'log'):
+                    self.log.debug(f"Could not get current settings: {e}")
+                current_settings = {}
 
         # Get event descriptions from the main cog
         event_descriptions = getattr(self, 'event_descriptions', {})
@@ -256,7 +244,7 @@ class DashboardIntegration:
         class SettingsForm(kwargs["Form"]):
             def __init__(self):
                 super().__init__(prefix="yalc_settings_form_")
-                
+
                 # Create form fields based on available events
                 for event_name, (emoji, description) in event_descriptions.items():
                     field_name = f"event_{event_name}"
@@ -265,11 +253,11 @@ class DashboardIntegration:
                         f"{emoji} {description}",
                         default=current_value
                     ))
-                
+
                 self.submit = wtforms.SubmitField("Save Settings")
 
         form: SettingsForm = SettingsForm()
-        
+
         if form.validate_on_submit():
             # Update settings based on form submission
             try:
@@ -278,10 +266,11 @@ class DashboardIntegration:
                     field_name = f"event_{event_name}"
                     if hasattr(form, field_name):
                         new_settings[event_name] = getattr(form, field_name).data
-                
-                # Update the configuration
-                await self.config.guild(guild).events.set(new_settings)
-                
+
+                # Update the configuration - only if we have access to config
+                if hasattr(self, 'config') and hasattr(self.config, 'guild'):
+                    await self.config.guild(guild).events.set(new_settings)
+
                 return {
                     "status": 0,
                     "notifications": [{"message": "Settings updated successfully!", "category": "success"}],
@@ -293,20 +282,47 @@ class DashboardIntegration:
                     "notifications": [{"message": f"Error updating settings: {e}", "category": "error"}],
                 }
 
-        source = """
-        <h3>YALC Settings for {{ guild.name }}</h3>
+        # Prepare form HTML
+        form_fields_html = ""
+        for field_name, field in form._fields.items():
+            if field.type != 'SubmitField':
+                checked_attr = ' checked="checked"' if field.data else ''
+                form_fields_html += f"""
+                <div class="form-group">
+                    <label for="{field_name}">{field.label.text}</label>
+                    <input type="checkbox" id="{field_name}" name="{field_name}"{checked_attr}>
+                </div>
+                """
+
+        source = f"""
+        <h3>YALC Settings for {{{{ guild.name }}}}</h3>
         <p>Configure which events to log in this server.</p>
         <form method="POST">
-            {% for field in form %}
-                {% if field.type != 'SubmitField' %}
-                    <div class="form-group">
-                        {{ field.label }}
-                        {{ field }}
-                    </div>
-                {% endif %}
-            {% endfor %}
-            {{ form.submit }}
+            {form_fields_html}
+            <input type="submit" value="Save Settings" class="btn btn-primary">
         </form>
+        <style>
+        .form-group {{
+            margin-bottom: 1rem;
+        }}
+        .form-group label {{
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: bold;
+        }}
+        .btn {{
+            display: inline-block;
+            padding: 0.5rem 1rem;
+            text-decoration: none;
+            border-radius: 4px;
+            border: none;
+            cursor: pointer;
+        }}
+        .btn-primary {{
+            background: #007bff;
+            color: white;
+        }}
+        </style>
         """
 
         return {

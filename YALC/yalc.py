@@ -6,7 +6,7 @@ import discord
 from redbot.core import Config, commands, app_commands
 from redbot.core.bot import Red
 # Import dashboard integration from local module
-from .dashboard.dashboard_integration import DashboardIntegration, dashboard_page
+from .dashboard.dashboard_integration import DashboardIntegration
 _dashboard_available = True
 from typing import Dict, List, Optional, Union, cast
 import datetime
