@@ -817,6 +817,546 @@ class YALC(DashboardIntegration, commands.Cog):
         except Exception as e:
             self.log.error(f"Failed to log voice_state_update: {e}", exc_info=True)
 
+    @commands.Cog.listener()
+    async def on_message_pin(self, message: discord.Message) -> None:
+        """Log message pin events with audit log integration."""
+        self.log.debug("Listener triggered: on_message_pin")
+        if not message.guild:
+            return
+        try:
+            should_log = await self.should_log_event(message.guild, "message_pin", user=message.author, message=message)
+            if not should_log:
+                return
+            channel = await self.get_log_channel(message.guild, "message_pin")
+            if not channel:
+                return
+
+            # Try to get audit log information about who pinned the message
+            entry = await self._get_audit_log_entry(message.guild, discord.AuditLogAction.message_pin_add, target=message.author, timeout_seconds=10)
+
+            embed = self.create_embed("message_pin",
+                f"📌 Message pinned in {message.channel.mention}",
+                user=f"{message.author.mention} ({message.author.id})",
+                content=message.content[:200] if message.content else "*No content*",
+                timestamp=discord.utils.format_dt(message.created_at, "f"))
+
+            embed.add_field(name="Jump URL", value=f"[View Message]({message.jump_url})", inline=True)
+
+            if entry and entry.user:
+                embed.add_field(name="Pinned By", value=f"{entry.user.mention} (`{entry.user}`, ID: `{entry.user.id}`)", inline=True)
+                if entry.reason:
+                    embed.add_field(name="Reason", value=entry.reason, inline=False)
+
+            # Include user thumbnail
+            settings = await self.config.guild(message.guild).all()
+            if settings.get("include_thumbnails", True) and message.author.display_avatar:
+                embed.set_thumbnail(url=message.author.display_avatar.url)
+
+            await self.safe_send(channel, embed=embed)
+
+        except Exception as e:
+            self.log.error(f"Failed to log message_pin: {e}")
+
+    @commands.Cog.listener()
+    async def on_message_unpin(self, message: discord.Message) -> None:
+        """Log message unpin events with audit log integration."""
+        self.log.debug("Listener triggered: on_message_unpin")
+        if not message.guild:
+            return
+        try:
+            should_log = await self.should_log_event(message.guild, "message_unpin", user=message.author, message=message)
+            if not should_log:
+                return
+            channel = await self.get_log_channel(message.guild, "message_unpin")
+            if not channel:
+                return
+
+            # Try to get audit log information about who unpinned the message
+            entry = await self._get_audit_log_entry(message.guild, discord.AuditLogAction.message_pin_add, target=message.author, timeout_seconds=10)
+
+            embed = self.create_embed("message_unpin",
+                f"📍 Message unpinned in {message.channel.mention}",
+                user=f"{message.author.mention} ({message.author.id})",
+                content=message.content[:200] if message.content else "*No content*",
+                timestamp=discord.utils.format_dt(message.created_at, "f"))
+
+            embed.add_field(name="Jump URL", value=f"[View Message]({message.jump_url})", inline=True)
+
+            if entry and entry.user:
+                embed.add_field(name="Unpinned By", value=f"{entry.user.mention} (`{entry.user}`, ID: `{entry.user.id}`)", inline=True)
+                if entry.reason:
+                    embed.add_field(name="Reason", value=entry.reason, inline=False)
+
+            # Include user thumbnail
+            settings = await self.config.guild(message.guild).all()
+            if settings.get("include_thumbnails", True) and message.author.display_avatar:
+                embed.set_thumbnail(url=message.author.display_avatar.url)
+
+            await self.safe_send(channel, embed=embed)
+
+        except Exception as e:
+            self.log.error(f"Failed to log message_unpin: {e}")
+
+    @commands.Cog.listener()
+    async def on_reaction_add(self, reaction: discord.Reaction, user: discord.User) -> None:
+        """Log reaction add events."""
+        self.log.debug("Listener triggered: on_reaction_add")
+        if not reaction.message.guild:
+            return
+        try:
+            should_log = await self.should_log_event(reaction.message.guild, "reaction_add", user=user, message=reaction.message)
+            if not should_log:
+                return
+            channel = await self.get_log_channel(reaction.message.guild, "reaction_add")
+            if not channel:
+                return
+
+            # Get emoji representation
+            emoji_str = str(reaction.emoji) if hasattr(reaction.emoji, 'name') else reaction.emoji
+            if hasattr(reaction.emoji, 'id') and reaction.emoji.id:
+                emoji_str = f"<:{reaction.emoji.name}:{reaction.emoji.id}>"
+            elif isinstance(reaction.emoji, str):
+                emoji_str = reaction.emoji
+
+            embed = self.create_embed("reaction_add",
+                f"👍 {user.mention} added reaction {emoji_str} to a message",
+                user=f"{user.mention} ({user.id})",
+                reaction=f"{emoji_str} ({reaction.emoji})",
+                channel=f"{reaction.message.channel.mention}",
+                message_content=reaction.message.content[:100] if reaction.message.content else "*No text content*")
+
+            embed.add_field(name="Message Link", value=f"[View Message]({reaction.message.jump_url})", inline=False)
+
+            # Include user thumbnail
+            settings = await self.config.guild(reaction.message.guild).all()
+            if settings.get("include_thumbnails", True) and user.display_avatar:
+                embed.set_thumbnail(url=user.display_avatar.url)
+
+            await self.safe_send(channel, embed=embed)
+
+        except Exception as e:
+            self.log.error(f"Failed to log reaction_add: {e}")
+
+    @commands.Cog.listener()
+    async def on_reaction_remove(self, reaction: discord.Reaction, user: discord.User) -> None:
+        """Log reaction remove events."""
+        self.log.debug("Listener triggered: on_reaction_remove")
+        if not reaction.message.guild:
+            return
+        try:
+            should_log = await self.should_log_event(reaction.message.guild, "reaction_remove", user=user, message=reaction.message)
+            if not should_log:
+                return
+            channel = await self.get_log_channel(reaction.message.guild, "reaction_remove")
+            if not channel:
+                return
+
+            # Get emoji representation
+            emoji_str = str(reaction.emoji) if hasattr(reaction.emoji, 'name') else reaction.emoji
+            if hasattr(reaction.emoji, 'id') and reaction.emoji.id:
+                emoji_str = f"<:{reaction.emoji.name}:{reaction.emoji.id}>"
+            elif isinstance(reaction.emoji, str):
+                emoji_str = reaction.emoji
+
+            embed = self.create_embed("reaction_remove",
+                f"👎 {user.mention} removed reaction {emoji_str} from a message",
+                user=f"{user.mention} ({user.id})",
+                reaction=f"{emoji_str} ({reaction.emoji})",
+                channel=f"{reaction.message.channel.mention}",
+                message_content=reaction.message.content[:100] if reaction.message.content else "*No text content*")
+
+            embed.add_field(name="Message Link", value=f"[View Message]({reaction.message.jump_url})", inline=False)
+
+            # Include user thumbnail
+            settings = await self.config.guild(reaction.message.guild).all()
+            if settings.get("include_thumbnails", True) and user.display_avatar:
+                embed.set_thumbnail(url=user.display_avatar.url)
+
+            await self.safe_send(channel, embed=embed)
+
+        except Exception as e:
+            self.log.error(f"Failed to log reaction_remove: {e}")
+
+    @commands.Cog.listener()
+    async def on_reaction_clear(self, message: discord.Message, reactions: list) -> None:
+        """Log reaction clear events."""
+        self.log.debug("Listener triggered: on_reaction_clear")
+        if not message.guild:
+            return
+        try:
+            should_log = await self.should_log_event(message.guild, "reaction_clear", message=message)
+            if not should_log:
+                return
+            channel = await self.get_log_channel(message.guild, "reaction_clear")
+            if not channel:
+                return
+
+            # Analyze reactions that were cleared
+            unique_emoji = set(str(r.emoji) if hasattr(r.emoji, 'name') else r.emoji for r in reactions)
+
+            embed = self.create_embed("reaction_clear",
+                f"🧹 All reactions cleared from message in {message.channel.mention}",
+                cleared_reactions=f"**{len(reactions)}** total reactions ({len(unique_emoji)} unique emojis)",
+                message_content=message.content[:100] if message.content else "*No text content*",
+                author=f"{message.author.mention} ({message.author.id})")
+
+            embed.add_field(name="Message Link", value=f"[View Message]({message.jump_url})", inline=False)
+
+            # Include user thumbnail
+            settings = await self.config.guild(message.guild).all()
+            if settings.get("include_thumbnails", True) and message.author.display_avatar:
+                embed.set_thumbnail(url=message.author.display_avatar.url)
+
+            await self.safe_send(channel, embed=embed)
+
+        except Exception as e:
+            self.log.error(f"Failed to log reaction_clear: {e}")
+
+    @commands.Cog.listener()
+    async def on_integration_create(self, integration: discord.Integration) -> None:
+        """Log integration creation events."""
+        self.log.debug("Listener triggered: on_integration_create")
+        if not integration.guild:
+            return
+        try:
+            should_log = await self.should_log_event(integration.guild, "integration_create")
+            if not should_log:
+                return
+            channel = await self.get_log_channel(integration.guild, "integration_create")
+            if not channel:
+                return
+
+            # Try to get audit log information
+            entry = await self._get_audit_log_entry(integration.guild, discord.AuditLogAction.integration_create, timeout_seconds=10)
+
+            embed = self.create_embed("integration_create",
+                f"🔗 Integration created: **{integration.name}**",
+                integration_type=getattr(integration.type, 'name', str(integration.type)),
+                enabled=integration.enabled)
+
+            if entry and entry.user:
+                embed.add_field(name="Created By",
+                    value=f"{entry.user.mention} (`{entry.user}`, ID: `{entry.user.id}`)",
+                    inline=True)
+
+            embed.set_footer(text=f"Integration ID: {integration.id}")
+
+            await self.safe_send(channel, embed=embed)
+
+        except Exception as e:
+            self.log.error(f"Failed to log integration_create: {e}")
+
+    @commands.Cog.listener()
+    async def on_integration_update(self, before: discord.Integration, after: discord.Integration) -> None:
+        """Log integration update events."""
+        self.log.debug("Listener triggered: on_integration_update")
+        if not before.guild:
+            return
+        try:
+            should_log = await self.should_log_event(before.guild, "integration_update")
+            if not should_log:
+                return
+            channel = await self.get_log_channel(before.guild, "integration_update")
+            if not channel:
+                return
+
+            changes = []
+            if before.name != after.name:
+                changes.append(f"Name: `{before.name}` → `{after.name}`")
+            if before.enabled != after.enabled:
+                changes.append(f"Enabled: `{before.enabled}` → `{after.enabled}`")
+
+            if not changes:
+                return  # No meaningful changes
+
+            # Try to get audit log information
+            entry = await self._get_audit_log_entry(before.guild, discord.AuditLogAction.integration_update, timeout_seconds=10)
+
+            embed = self.create_embed("integration_update",
+                f"🔄 Integration updated: **{after.name}**")
+
+            if changes:
+                embed.add_field(name="Changes", value="\n".join(changes), inline=False)
+
+            if entry and entry.user:
+                embed.add_field(name="Updated By",
+                    value=f"{entry.user.mention} (`{entry.user}`, ID: `{entry.user.id}`)",
+                    inline=True)
+
+            embed.set_footer(text=f"Integration ID: {after.id}")
+
+            await self.safe_send(channel, embed=embed)
+
+        except Exception as e:
+            self.log.error(f"Failed to log integration_update: {e}")
+
+    @commands.Cog.listener()
+    async def on_integration_delete(self, integration: discord.Integration) -> None:
+        """Log integration deletion events."""
+        self.log.debug("Listener triggered: on_integration_delete")
+        if not integration.guild:
+            return
+        try:
+            should_log = await self.should_log_event(integration.guild, "integration_delete")
+            if not should_log:
+                return
+            channel = await self.get_log_channel(integration.guild, "integration_delete")
+            if not channel:
+                return
+
+            # Try to get audit log information
+            entry = await self._get_audit_log_entry(integration.guild, discord.AuditLogAction.integration_delete, timeout_seconds=10)
+
+            embed = self.create_embed("integration_delete",
+                f"🗑️ Integration deleted: **{integration.name}**",
+                integration_type=getattr(integration.type, 'name', str(integration.type)))
+
+            if entry and entry.user:
+                embed.add_field(name="Deleted By",
+                    value=f"{entry.user.mention} (`{entry.user}`, ID: `{entry.user.id}`)",
+                    inline=True)
+
+            embed.set_footer(text=f"Integration ID: {integration.id}")
+
+            await self.safe_send(channel, embed=embed)
+
+        except Exception as e:
+            self.log.error(f"Failed to log integration_delete: {e}")
+
+    @commands.Cog.listener()
+    async def on_webhook_update(self, channel: discord.abc.GuildChannel) -> None:
+        """Log webhook update events for the specified channel."""
+        self.log.debug("Listener triggered: on_webhook_update")
+        if not channel.guild:
+            return
+        try:
+            should_log = await self.should_log_event(channel.guild, "webhook_update", channel=channel)
+            if not should_log:
+                return
+            log_channel = await self.get_log_channel(channel.guild, "webhook_update")
+            if not log_channel:
+                return
+
+            # Try to get audit log information about webhook updates
+            entry = await self._get_audit_log_entry(channel.guild, discord.AuditLogAction.webhook_update, timeout_seconds=10)
+
+            embed = self.create_embed("webhook_update",
+                f"🪝 Webhooks updated in {channel.mention}")
+
+            embed.add_field(name="Channel", value=f"{channel.mention} (`{channel.name}`, ID: `{channel.id}`)", inline=True)
+
+            if entry and entry.user:
+                embed.add_field(name="Updated By",
+                    value=f"{entry.user.mention} (`{entry.user}`, ID: `{entry.user.id}`)",
+                    inline=True)
+
+            embed.set_footer(text=f"Channel ID: {channel.id}")
+
+            await self.safe_send(log_channel, embed=embed)
+
+        except Exception as e:
+            self.log.error(f"Failed to log webhook_update: {e}")
+
+    @commands.Cog.listener()
+    async def on_automod_rule_create(self, rule: discord.AutoModRule) -> None:
+        """Log AutoMod rule creation events."""
+        self.log.debug("Listener triggered: on_automod_rule_create")
+        if not rule.guild:
+            return
+        try:
+            should_log = await self.should_log_event(rule.guild, "automod_rule_create")
+            if not should_log:
+                return
+            channel = await self.get_log_channel(rule.guild, "automod_rule_create")
+            if not channel:
+                return
+
+            # Try to get audit log information
+            entry = await self._get_audit_log_entry(rule.guild, discord.AuditLogAction.automod_rule_create, timeout_seconds=10)
+
+            embed = self.create_embed("automod_rule_create",
+                f"🛡️ AutoMod rule created: **{rule.name}**")
+
+            embed.add_field(name="Rule Name", value=rule.name, inline=True)
+            embed.add_field(name="Trigger", value=str(rule.trigger).replace('_', ' ').title(), inline=True)
+
+            # Get rule actions
+            actions_list = []
+            for action in rule.actions:
+                if hasattr(action, 'type'):
+                    action_type = str(action.type).replace('_', ' ').title()
+                    actions_list.append(f"• {action_type}")
+                else:
+                    actions_list.append(f"• {action}")
+
+            if actions_list:
+                embed.add_field(name="Actions", value="\n".join(actions_list[:5]), inline=False)
+
+            if hasattr(rule, 'enabled') and rule.enabled is not None:
+                embed.add_field(name="Enabled", value="✅ Yes" if rule.enabled else "❌ No", inline=True)
+
+            if entry and entry.user:
+                embed.add_field(name="Created By",
+                    value=f"{entry.user.mention} (`{entry.user}`, ID: `{entry.user.id}`)",
+                    inline=True)
+
+            embed.set_footer(text=f"Rule ID: {rule.id}")
+
+            await self.safe_send(channel, embed=embed)
+
+        except Exception as e:
+            self.log.error(f"Failed to log automod_rule_create: {e}")
+
+    @commands.Cog.listener()
+    async def on_automod_rule_update(self, before: discord.AutoModRule, after: discord.AutoModRule) -> None:
+        """Log AutoMod rule update events."""
+        self.log.debug("Listener triggered: on_automod_rule_update")
+        if not before.guild:
+            return
+        try:
+            should_log = await self.should_log_event(before.guild, "automod_rule_update")
+            if not should_log:
+                return
+            channel = await self.get_log_channel(before.guild, "automod_rule_update")
+            if not channel:
+                return
+
+            changes = []
+            if before.name != after.name:
+                changes.append(f"Name: `{before.name}` → `{after.name}`")
+            if hasattr(before, 'enabled') and hasattr(after, 'enabled') and before.enabled != after.enabled:
+                changes.append(f"Enabled: `{before.enabled}` → `{after.enabled}`")
+            if str(before.trigger) != str(after.trigger):
+                changes.append(f"Trigger: `{before.trigger}` → `{after.trigger}`")
+
+            # Check for action changes
+            before_actions = [str(a) for a in before.actions] if before.actions else []
+            after_actions = [str(a) for a in after.actions] if after.actions else []
+            if set(before_actions) != set(after_actions):
+                changes.append(f"Actions changed from {len(before_actions)} to {len(after_actions)} actions")
+
+            if not changes:
+                return  # No meaningful changes
+
+            # Try to get audit log information
+            entry = await self._get_audit_log_entry(before.guild, discord.AuditLogAction.automod_rule_update, timeout_seconds=10)
+
+            embed = self.create_embed("automod_rule_update",
+                f"🔄 AutoMod rule updated: **{after.name}**")
+
+            embed.add_field(name="Rule Name", value=after.name, inline=True)
+
+            if changes:
+                embed.add_field(name="Changes", value="\n".join(changes), inline=False)
+
+            if entry and entry.user:
+                embed.add_field(name="Updated By",
+                    value=f"{entry.user.mention} (`{entry.user}`, ID: `{entry.user.id}`)",
+                    inline=True)
+
+            embed.set_footer(text=f"Rule ID: {after.id}")
+
+            await self.safe_send(channel, embed=embed)
+
+        except Exception as e:
+            self.log.error(f"Failed to log automod_rule_update: {e}")
+
+    @commands.Cog.listener()
+    async def on_automod_rule_delete(self, rule: discord.AutoModRule) -> None:
+        """Log AutoMod rule deletion events."""
+        self.log.debug("Listener triggered: on_automod_rule_delete")
+        if not rule.guild:
+            return
+        try:
+            should_log = await self.should_log_event(rule.guild, "automod_rule_delete")
+            if not should_log:
+                return
+            channel = await self.get_log_channel(rule.guild, "automod_rule_delete")
+            if not channel:
+                return
+
+            # Try to get audit log information
+            entry = await self._get_audit_log_entry(rule.guild, discord.AuditLogAction.automod_rule_delete, timeout_seconds=10)
+
+            embed = self.create_embed("automod_rule_delete",
+                f"🗑️ AutoMod rule deleted: **{rule.name}**")
+
+            embed.add_field(name="Rule Name", value=rule.name, inline=True)
+            embed.add_field(name="Trigger", value=str(rule.trigger).replace('_', ' ').title(), inline=True)
+
+            if entry and entry.user:
+                embed.add_field(name="Deleted By",
+                    value=f"{entry.user.mention} (`{entry.user}`, ID: `{entry.user.id}`)",
+                    inline=True)
+
+            embed.set_footer(text=f"Rule ID: {rule.id}")
+
+            await self.safe_send(channel, embed=embed)
+
+        except Exception as e:
+            self.log.error(f"Failed to log automod_rule_delete: {e}")
+
+    @commands.Cog.listener()
+    async def on_automod_action(self, execution: discord.AutoModAction) -> None:
+        """Log AutoMod action execution events."""
+        self.log.debug("Listener triggered: on_automod_action")
+        if not execution.guild:
+            return
+        try:
+            should_log = await self.should_log_event(execution.guild, "automod_action", user=execution.member, message=execution.content)
+            if not should_log:
+                return
+            channel = await self.get_log_channel(execution.guild, "automod_action")
+            if not channel:
+                return
+
+            embed = self.create_embed("automod_action",
+                f"⚔️ AutoMod action triggered: **{execution.rule_trigger_type.name}**",
+                rule_name=execution.rule_trigger_keyword or "N/A",
+                channel=execution.channel.mention if execution.channel else "Unknown")
+
+            if execution.member:
+                embed.add_field(name="Targeted User",
+                    value=f"{execution.member.mention} (`{execution.member}`, ID: `{execution.member.id}`)",
+                    inline=True)
+
+            embed.add_field(name="Action Type", value=str(execution.action.type).replace('_', ' ').title(), inline=True)
+
+            if execution.content and len(execution.content) > 0:
+                content_preview = execution.content[:500] if len(execution.content) > 500 else execution.content
+                embed.add_field(name="Flagged Content", value=f"```\n{content_preview}\n```", inline=False)
+
+            if execution.action.metadatas:
+                metadata_info = []
+                for metadata in execution.action.metadatas:
+                    if hasattr(metadata, 'channel_id'):
+                        channel_obj = execution.guild.get_channel(metadata.channel_id)
+                        metadata_info.append(f"• Timeout in {channel_obj.mention}" if channel_obj else f"• Timeout in channel {metadata.channel_id}")
+                    elif hasattr(metadata, 'duration'):
+                        duration_str = ""
+                        if metadata.duration:
+                            seconds = metadata.duration.seconds
+                            if seconds < 3600:
+                                duration_str = f"{seconds//60}m {seconds%60}s"
+                            else:
+                                duration_str = f"{seconds//3600}h {(seconds%3600)//60}m"
+                        metadata_info.append(f"• Duration: {duration_str}")
+
+                if metadata_info:
+                    embed.add_field(name="Action Details", value="\n".join(metadata_info), inline=False)
+
+            embed.set_footer(text=f"Rule ID: {execution.rule_id} • Match: {execution.matched_keyword or 'N/A'}")
+
+            # Include user thumbnail
+            settings = await self.config.guild(execution.guild).all()
+            if execution.member and settings.get("include_thumbnails", True) and execution.member.display_avatar:
+                embed.set_thumbnail(url=execution.member.display_avatar.url)
+
+            await self.safe_send(channel, embed=embed)
+
+        except Exception as e:
+            self.log.error(f"Failed to log automod_action: {e}")
+
     async def _log_voice_event(self, guild: discord.Guild, user_id: int, event_type: str,
                               channel_id: Optional[int] = None, duration: Optional[float] = None):
         """Internal method to log voice session events."""
@@ -963,7 +1503,9 @@ class YALC(DashboardIntegration, commands.Cog):
 
     @commands.Cog.listener()
     async def on_guild_integrations_update(self, guild: discord.Guild):
-        """Log integration updates/removals, showing who did it if possible."""
+        """Log integration updates/removals - now using the new integration listeners for detailed logging."""
+        # This listener is kept for backward compatibility, but the detailed logging
+        # is now handled by the specific integration event listeners (integration_create/update/delete)
         try:
             channel = await self.get_log_channel(guild, "integration_update")
             if not channel:
@@ -974,6 +1516,7 @@ class YALC(DashboardIntegration, commands.Cog):
             if entry and entry.user:
                 desc += f" by {entry.user.mention} ({entry.user})"
             embed = self.create_embed("integration_update", desc)
+            embed.set_footer(text="Note: Detailed integration changes are logged separately")
             await self.safe_send(channel, embed=embed)
         except Exception as e:
             self.log.error(f"Failed to log guild_integrations_update: {e}")
