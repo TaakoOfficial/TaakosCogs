@@ -61,7 +61,7 @@ class DashboardIntegration:
         
         # Main dashboard page
         pages.append({
-            "name": None,  # Main page
+            "name": "main",  # Main page with specific name
             "description": "YALC Dashboard: Manage and view YALC features.",
             "methods": ("GET", "POST"),
             "is_owner": True,
@@ -91,7 +91,27 @@ class DashboardIntegration:
     @commands.Cog.listener()
     async def on_dashboard_cog_add(self, dashboard_cog: commands.Cog) -> None:
         """Register this cog as a third party with the Dashboard when dashboard cog is loaded."""
-        await dashboard_cog.rpc.third_parties_handler.add_third_party(self)
+        try:
+            await dashboard_cog.rpc.third_parties_handler.add_third_party(self)
+            if hasattr(self, 'log'):
+                self.log.info("Successfully registered YALC as a dashboard third party.")
+            else:
+                print("YALC: Successfully registered as a dashboard third party.")
+        except RuntimeError as e:
+            if "already an existing page" in str(e):
+                # Third party already registered, which is fine during cog reloads
+                if hasattr(self, 'log'):
+                    self.log.debug("YALC dashboard integration already registered (this is normal during reloads).")
+                else:
+                    print("YALC: Dashboard integration already registered (this is normal during reloads).")
+            else:
+                # Re-raise other RuntimeErrors
+                raise
+        except Exception as e:
+            if hasattr(self, 'log'):
+                self.log.error(f"Dashboard integration setup failed: {e}")
+            else:
+                print(f"YALC: Dashboard integration setup failed: {e}")
 
     # Dashboard page methods with local dashboard_page decorator
     @dashboard_page()
