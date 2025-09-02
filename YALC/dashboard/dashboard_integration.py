@@ -93,6 +93,13 @@ class DashboardIntegration:
                     self.dashboard_page = dashboard_cog.rpc.third_parties_handler.dashboard_page
 
                 dashboard_cog.rpc.third_parties_handler.add_third_party(self)
+
+                # Dynamically apply the dashboard_page decorator to our methods
+                if self.dashboard_page:
+                    self.yalcdash_main = self.dashboard_page(self.yalcdash_main)
+                    self.yalcdash_guild = self.dashboard_page(self.yalcdash_guild)
+                    self.yalcdash_settings = self.dashboard_page(self.yalcdash_settings)
+
                 # Access log through the main cog instance
                 if hasattr(self, 'log'):
                     self.log.info("Successfully registered YALC as a dashboard third party.")
