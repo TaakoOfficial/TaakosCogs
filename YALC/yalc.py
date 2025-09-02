@@ -4875,19 +4875,34 @@ class YALC(DashboardIntegration, commands.Cog):
 
         embeds = []
 
-        # Page 1: Enabled Events
-        enabled_events = [f"{self.event_descriptions[event][0]} `{event}` - {self.event_descriptions[event][1]}"
-                          for event, enabled in settings["events"].items() if enabled]
+        # Page 1: Enabled Events with Channel Info
+        enabled_events_with_channels = []
+        for event, enabled in settings["events"].items():
+            if enabled:
+                channel_id = settings["event_channels"].get(event)
+                channel_info = ""
+                if channel_id:
+                    channel = ctx.guild.get_channel(channel_id)
+                    if channel:
+                        channel_info = f" → {channel.mention}"
+                    else:
+                        channel_info = f" → *Channel not found*"
+                else:
+                    channel_info = " → *No channel set*"
+
+                emoji, description = self.event_descriptions[event]
+                enabled_events_with_channels.append(f"{emoji} `{event}` - {description}{channel_info}")
+
         embed_events = discord.Embed(
             title="YALC Logger Settings",
-            description="Enabled Events",
+            description="Enabled Events with Channel Configuration",
             color=discord.Color.blue()
         )
-        if enabled_events:
-            for i in range(0, len(enabled_events), 15):
+        if enabled_events_with_channels:
+            for i in range(0, len(enabled_events_with_channels), 10):
                 embed_events.add_field(
-                    name=f"📋 Enabled Events {i+1}-{min(i+15, len(enabled_events))}",
-                    value="\n".join(enabled_events[i:i+15]),
+                    name=f"📋 Enabled Events {i+1}-{min(i+10, len(enabled_events_with_channels))}",
+                    value="\n".join(enabled_events_with_channels[i:i+10]),
                     inline=False
                 )
         else:
@@ -5575,6 +5590,220 @@ class YALC(DashboardIntegration, commands.Cog):
         except Exception as e:
             await ctx.send(f"❌ Error during setup: {e}")
 
+    @yalc_group.command(name="autodetect", aliases=["smartsetup", "autosetup"])
+    @commands.admin_or_permissions(manage_guild=True)
+    async def yalc_autodetect(self, ctx: commands.Context, confirm: Optional[str] = None):
+        """
+        Automatically detect log channels based on naming patterns and configure logging.
+
+        Smart channel detection looks for channels with common naming patterns:
+        • thread-logs → Thread events
+        • user-logs → Member events
+        • message-logs → Message events
+        • channel-logs → Channel events
+        • role-logs → Role events
+        • voice-logs → Voice events
+        • moderation-logs → Moderation events
+        • command-logs → Command events
+        • bot-logs → Bot/integration events
+        • system-logs → Guild events
+        • general-logs → All events
+        • mod-logs → Moderation events (alternative)
+
+        Parameters
+        ----------
+        confirm : str, optional
+            Must be "CONFIRM" to apply the detected configuration
+        """
+        if confirm != "CONFIRM":
+            # Scan channels for patterns and generate preview
+            detected_config = await self._scan_for_log_channels(ctx.guild)
+
+            if not detected_config:
+                embed = discord.Embed(
+                    title="🔍 Log Channel Auto-Detection",
+                    description="No log channels were found with common naming patterns.",
+                    color=discord.Color.red()
+                )
+
+                embed.add_field(
+                    name="Expected Patterns",
+                    value="• `thread-logs` for thread events\n"
+                          "• `user-logs` for member events\n"
+                          "• `message-logs` for message events\n"
+                          "• `channel-logs` for channel events\n"
+                          "• `role-logs` for role events\n"
+                          "And many more...",
+                    inline=False
+                )
+
+                embed.add_field(
+                    name="🛠️ Action Required",
+                    value="Create channels with these naming patterns and run this command again.\n\n"
+                          f"**or**\n\n"
+                          f"Use `{ctx.prefix}yalc setup CONFIRM` to automatically create organized log channels.",
+                    inline=False
+                )
+
+                await ctx.send(embed=embed)
+                return
+
+            # Show detected configuration
+            embed = discord.Embed(
+                title="🔍 Log Channel Auto-Detection Results",
+                description="Found potential log channels! Here's what I detected:",
+                color=discord.Color.blue()
+            )
+
+            # Show channels that will be configured
+            channel_lines = []
+            total_enabled_events = 0
+
+            for ch_name, events_data in detected_config.items():
+                channel = events_data['channel']
+                events = events_data['events']
+                channel_lines.append(f"📂 **{ch_name}** (`{channel.name}`) → **{len(events)} events**")
+                total_enabled_events += len(events)
+
+            embed.add_field(
+                name="📢 Detected Channels",
+                value="\n".join(channel_lines),
+                inline=False
+            )
+
+            # Show events per channel (first few channels only)
+            shown_channels = 0
+            for ch_name, events_data in detected_config.items():
+                if shown_channels >= 4:  # Limit to 4 channels to avoid embed limits
+                    remaining = len(detected_config) - 4
+                    if remaining > 0:
+                        embed.add_field(
+                            name="",
+                            value=f"💡 **Plus {remaining} more channels...**",
+                            inline=False
+                        )
+                    break
+
+                events = events_data['events']
+                if events:
+                    event_list = []
+                    for event in events[:8]:  # Show first 8 events
+                        if event in self.event_descriptions:
+                            emoji, desc = self.event_descriptions[event]
+                            event_list.append(f"{emoji} `{event}`")
+                        else:
+                            event_list.append(f"• `{event}`")
+
+                    if len(events) > 8:
+                        event_list.append(f"• ...and {len(events) - 8} more")
+
+                    embed.add_field(
+                        name=f"📋 Events for {ch_name}",
+                        value="\n".join(event_list),
+                        inline=True
+                    )
+
+                shown_channels += 1
+
+            embed.add_field(
+                name="📊 Summary",
+                value=f"• **{len(detected_config)}** log channels detected\n"
+                      f"• **{total_enabled_events}** events will be enabled\n"
+                      f"• **{ctx.guild.channels}** channels to be ignored",
+                inline=False
+            )
+
+            embed.add_field(
+                name="⚠️ Important",
+                value="• Events will be enabled\n"
+                      "• Channel mappings will be set\n"
+                      "• Ignores Tupperbox & app messages by default\n"
+                      "• Previous settings will NOT be overwritten",
+                inline=False
+            )
+
+            embed.add_field(
+                name="🎯 To Apply Configuration",
+                value=f"Run: `{ctx.prefix}yalc autodetect CONFIRM`",
+                inline=False
+            )
+
+            await ctx.send(embed=embed)
+            return
+
+        # Apply the detected configuration
+        detected_config = await self._scan_for_log_channels(ctx.guild)
+
+        if not detected_config:
+            await ctx.send("❌ No log channels found with expected patterns.")
+            return
+
+        # Apply configuration
+        channels_configured = 0
+        events_enabled = 0
+
+        async with ctx.typing():
+            # Set up events and channels
+            async with self.config.guild(ctx.guild).events() as events_setting:
+                async with self.config.guild(ctx.guild).event_channels() as channels_setting:
+                    for channel_name_key, config_data in detected_config.items():
+                        channel = config_data['channel']
+                        events_list = config_data['events']
+
+                        for event_type in events_list:
+                            # Enable the event
+                            events_setting[event_type] = True
+                            # Set the channel
+                            channels_setting[event_type] = channel.id
+                            events_enabled += 1
+
+                channels_configured = len(detected_config)
+
+            # Apply default ignore settings for better experience
+            await self.config.guild(ctx.guild).ignore_tupperbox.set(True)
+            await self.config.guild(ctx.guild).ignore_apps.set(True)
+            await self.config.guild(ctx.guild).include_thumbnails.set(True)
+            await self.config.guild(ctx.guild).detect_proxy_deletes.set(True)
+
+        # Success message
+        embed = discord.Embed(
+            title="✅ YALC Auto-Detection Complete!",
+            description=f"Successfully configured {events_enabled} events across {channels_configured} channels.",
+            color=discord.Color.green()
+        )
+
+        # Show what was configured
+        channel_summary = []
+        for ch_name, config_data in detected_config.items():
+            channel = config_data['channel']
+            events = config_data['events']
+            channel_summary.append(f"• **{ch_name}** ({channel.mention}) → {len(events)} events")
+
+        embed.add_field(
+            name="📢 Configured Channels",
+            value="\n".join(channel_summary),
+            inline=False
+        )
+
+        embed.add_field(
+            name="⚙️ Default Settings Applied",
+            value="• Ignore Tupperbox/proxy messages\n"
+                  "• Ignore application messages\n"
+                  "• Include user thumbnails\n"
+                  "• Detect proxy deletions",
+            inline=False
+        )
+
+        embed.add_field(
+            name="🔧 Next Steps",
+            value=f"• View your settings: `{ctx.prefix}yalc settings`\n"
+                  f"• Test logging: `{ctx.prefix}yalc validate`\n"
+                  f"• Fine-tune: `{ctx.prefix}yalc enable/disable`",
+            inline=False
+        )
+
+        await ctx.send(embed=embed)
+
     @yalc_group.command(name="dashboard")
     @commands.admin_or_permissions(manage_guild=True)
     async def yalc_dashboard(self, ctx: commands.Context, action: str = "status"):
@@ -5790,7 +6019,7 @@ class YALC(DashboardIntegration, commands.Cog):
                 ephemeral=True
             )
             return
-            
+
         # Set the channel
         if event_type == "all":
             # Set for all event types
@@ -5802,10 +6031,113 @@ class YALC(DashboardIntegration, commands.Cog):
             # Set for a specific event type
             async with self.config.guild(interaction.guild).event_channels() as event_channels:
                 event_channels[event_type] = channel.id
-                
+
             # Get description for confirmation message
             emoji, description = self.event_descriptions[event_type]
             await interaction.response.send_message(f"✅ {emoji} Set {channel.mention} as the logging channel for **{description}** (`{event_type}`).")
+
+    async def _scan_for_log_channels(self, guild: discord.Guild) -> dict:
+        """
+        Scan guild text channels for common logging patterns and map them to events.
+
+        Returns a dictionary mapping detected channel patterns to their configuration.
+        """
+        # Define patterns and their associated events
+        patterns = {
+            "thread": [
+                "thread_create", "thread_delete", "thread_update",
+                "thread_member_join", "thread_member_leave",
+                "forum_post_create", "forum_post_delete", "forum_post_update"
+            ],
+            "user": [
+                "member_join", "member_leave", "member_update", "member_timeout"
+            ],
+            "member": [
+                "member_join", "member_leave", "member_update", "member_timeout"
+            ],
+            "message": [
+                "message_delete", "message_edit", "message_bulk_delete",
+                "message_pin", "message_unpin", "reaction_add", "reaction_remove"
+            ],
+            "channel": [
+                "channel_create", "channel_delete", "channel_update"
+            ],
+            "role": [
+                "role_create", "role_delete", "role_update"
+            ],
+            "voice": [
+                "voice_state_update", "voice_update"
+            ],
+            "moderation": [
+                "member_ban", "member_unban", "member_kick", "member_timeout",
+                "automod_action", "automod_rule_create", "automod_rule_update", "automod_rule_delete"
+            ],
+            "mod": [
+                "member_ban", "member_unban", "member_kick", "member_timeout",
+                "automod_action", "automod_rule_create", "automod_rule_update", "automod_rule_delete"
+            ],
+            "command": [
+                "command_use", "command_error", "application_cmd"
+            ],
+            "bot": [
+                "webhook_update", "integration_create", "integration_update", "integration_delete",
+                "sticker_update"
+            ],
+            "integration": [
+                "integration_create", "integration_update", "integration_delete"
+            ],
+            "system": [
+                "guild_update", "emoji_update", "sticker_update"
+            ],
+            "guild": [
+                "guild_update", "emoji_update", "sticker_update", "invite_create", "invite_delete"
+            ],
+            "general": list(self.event_descriptions.keys()),  # All events
+            "log": [],
+            "logs": []
+        }
+
+        detected_config = {}
+        text_channels = [ch for ch in guild.channels if isinstance(ch, discord.TextChannel)]
+
+        for channel in text_channels:
+            channel_name_lower = channel.name.lower()
+
+            # Check for various naming patterns
+            found_match = False
+            for pattern, events in patterns.items():
+                # Check different common log channel naming formats
+                if any(indicator in channel_name_lower for indicator in [pattern, f"{pattern}s", f"{pattern}-", f"{pattern}_"]):
+                    # Skip if this looks like a general "log" or "logs" channel without being more specific
+                    if pattern in ["log", "logs"] and channel_name_lower.strip() in ["log", "logs"]:
+                        continue
+
+                    # Filter events to only include ones that exist in our descriptions
+                    valid_events = [e for e in events if e in self.event_descriptions]
+
+                    if valid_events:
+                        detected_config[channel.name] = {
+                            'channel': channel,
+                            'events': valid_events
+                        }
+                        found_match = True
+                        break
+
+            # If no specific pattern match, check for broader patterns like numbering or log indicators
+            if not found_match:
+                # Look for patterns like "mod-log-1", "message-logs-2", etc.
+                if "log" in channel_name_lower:
+                    for pattern, events in patterns.items():
+                        if pattern in channel_name_lower and len(pattern) > 2:  # Avoid matching just "log"
+                            valid_events = [e for e in events if e in self.event_descriptions]
+                            if valid_events:
+                                detected_config[channel.name] = {
+                                    'channel': channel,
+                                    'events': valid_events
+                                }
+                                break
+
+        return detected_config
 
     @app_commands.command(name="yalc_settings", description="View current YALC settings for this server")
     @app_commands.guild_only()
@@ -5819,15 +6151,29 @@ class YALC(DashboardIntegration, commands.Cog):
             color=discord.Color.blue()
         )
         
-        # Add enabled events
-        enabled_events = [f"{self.event_descriptions[event][0]} `{event}` - {self.event_descriptions[event][1]}"
-                         for event, enabled in settings["events"].items() if enabled]
-        
-        if enabled_events:
+        # Add enabled events with channel info
+        enabled_events_with_channels = []
+        for event, enabled in settings["events"].items():
+            if enabled:
+                channel_id = settings["event_channels"].get(event)
+                channel_info = ""
+                if channel_id:
+                    channel = interaction.guild.get_channel(channel_id)
+                    if channel:
+                        channel_info = f" → {channel.mention}"
+                    else:
+                        channel_info = " → *Channel not found*"
+                else:
+                    channel_info = " → *No channel set*"
+
+                emoji, description = self.event_descriptions[event]
+                enabled_events_with_channels.append(f"{emoji} `{event}` - {description}{channel_info}")
+
+        if enabled_events_with_channels:
             embed.add_field(
-                name="📋 Enabled Events",
-                value="\n".join(enabled_events[:15]) +
-                      (f"\n*...and {len(enabled_events) - 15} more*" if len(enabled_events) > 15 else ""),
+                name="📋 Enabled Events with Channels",
+                value="\n".join(enabled_events_with_channels[:12]) +
+                      (f"\n*...and {len(enabled_events_with_channels) - 12} more*" if len(enabled_events_with_channels) > 12 else ""),
                 inline=False
             )
         else:
