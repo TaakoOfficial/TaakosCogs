@@ -19,6 +19,8 @@ try:
 except ImportError:
     AAA3A_utils = None
 
+import logging
+
 
 class DashboardIntegration:
     """
@@ -38,8 +40,10 @@ class DashboardIntegration:
     bot: Red
 
     def __init__(self, bot: Red) -> None:
-        commands.Cog.__init__(self)
         self.bot = bot
+
+        # Set up logging
+        self.log = logging.getLogger("red.YALC")
 
         # Event descriptions for logging and dashboard (must be set up before config)
         self.event_descriptions = {
