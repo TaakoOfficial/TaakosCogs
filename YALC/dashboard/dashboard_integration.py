@@ -106,8 +106,13 @@ class DashboardIntegration:
                 # Set the dashboard_page for decoration
                 self.dashboard_page = dashboard_page
 
+                # Debug: Print available attributes
+                print(f"YALC: Dashboard cog attributes: {[attr for attr in dir(dashboard_cog) if not attr.startswith('_')]}")
+                if hasattr(dashboard_cog, 'rpc'):
+                    print(f"YALC: Dashboard rpc attributes: {[attr for attr in dir(dashboard_cog.rpc) if not attr.startswith('_')]}")
+
                 # Register the third party
-                third_parties_handler.add_third_party(self)
+                await third_parties_handler.add_third_party(self)
 
                 # Dynamically apply the dashboard_page decorator to our methods if available
                 if self.dashboard_page:
