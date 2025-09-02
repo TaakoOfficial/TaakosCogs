@@ -90,17 +90,42 @@ class DashboardIntegration:
             third_parties_handler = None
             dashboard_page = None
 
-            # Main path: dashboard_cog.rpc.third_parties_handler
-            if hasattr(dashboard_cog, 'rpc') and hasattr(dashboard_cog.rpc, 'third_parties_handler'):
-                third_parties_handler = dashboard_cog.rpc.third_parties_handler
-                if hasattr(third_parties_handler, 'dashboard_page'):
-                    dashboard_page = third_parties_handler.dashboard_page
-
-            # Fallback path: dashboard_cog.third_parties_handler (if rpc is not there)
-            elif hasattr(dashboard_cog, 'third_parties_handler'):
+            # First: try direct on dashboard_cog
+            if hasattr(dashboard_cog, 'third_parties_handler'):
                 third_parties_handler = dashboard_cog.third_parties_handler
+                print("YALC: Found third_parties_handler directly on dashboard_cog")
                 if hasattr(third_parties_handler, 'dashboard_page'):
                     dashboard_page = third_parties_handler.dashboard_page
+                    print("YALC: Found dashboard_page in third_parties_handler")
+                else:
+                    print("YALC: No dashboard_page in third_parties_handler")
+            # Second: try on rpc if rpc exists and third_parties_handler is there
+            elif hasattr(dashboard_cog, 'rpc') and hasattr(dashboard_cog.rpc, 'third_parties_handler'):
+                third_parties_handler = dashboard_cog.rpc.third_parties_handler
+                print("YALC: Found third_parties_handler in rpc")
+                if hasattr(third_parties_handler, 'dashboard_page'):
+                    dashboard_page = third_parties_handler.dashboard_page
+                    print("YALC: Found dashboard_page in rpc third_parties_handler")
+                else:
+                    print("YALC: No dashboard_page in rpc third_parties_handler")
+            # Third: try app if it has third_parties_handler
+            elif hasattr(dashboard_cog, 'app') and hasattr(dashboard_cog.app, 'third_parties_handler'):
+                third_parties_handler = dashboard_cog.app.third_parties_handler
+                print("YALC: Found third_parties_handler in app")
+                if hasattr(third_parties_handler, 'dashboard_page'):
+                    dashboard_page = third_parties_handler.dashboard_page
+                    print("YALC: Found dashboard_page in app third_parties_handler")
+                else:
+                    print("YALC: No dashboard_page in app third_parties_handler")
+
+            # Additional: if dashboard_page not found, try direct on dashboard_cog
+            if not dashboard_page and hasattr(dashboard_cog, 'dashboard_page'):
+                dashboard_page = dashboard_cog.dashboard_page
+                print("YALC: Found dashboard_page directly on dashboard_cog")
+
+            # Check if third_parties_handler was set
+            if not third_parties_handler:
+                print("YALC: No third_parties_handler found in any path")
 
             if third_parties_handler:
                 # Set the dashboard_page for decoration
