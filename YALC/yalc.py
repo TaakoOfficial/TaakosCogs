@@ -30,8 +30,13 @@ class YALC(DashboardIntegration, commands.Cog):
     """
 
     def __init__(self, bot: Red):
-        self.bot = bot
-        self.config = Config.get_conf(self, identifier=1234567875)
+        # Initialize DashboardIntegration first (which handles commands.Cog)
+        DashboardIntegration.__init__(self, bot)
+
+        # Since DashboardIntegration handles commands.Cog initialization,
+        # we don't need to call commands.Cog.__init__ directly
+
+        # Log setup
         self.log = logging.getLogger("red.YALC")
         
         # Real-time audit log entry storage for role attribution
