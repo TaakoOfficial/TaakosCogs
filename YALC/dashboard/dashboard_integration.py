@@ -86,15 +86,30 @@ class DashboardIntegration:
     async def on_dashboard_cog_add(self, dashboard_cog: commands.Cog) -> None:
         """Register this cog as a third party with the Dashboard when dashboard cog is loaded."""
         try:
-            # Check if the dashboard cog has the required attributes
+            # Try different paths to access the third_parties_handler (robust fallback)
+            third_parties_handler = None
+            dashboard_page = None
+
+            # Main path: dashboard_cog.rpc.third_parties_handler
             if hasattr(dashboard_cog, 'rpc') and hasattr(dashboard_cog.rpc, 'third_parties_handler'):
-                # Set up the dashboard_page decorator from the dashboard cog
-                if hasattr(dashboard_cog.rpc.third_parties_handler, 'dashboard_page'):
-                    self.dashboard_page = dashboard_cog.rpc.third_parties_handler.dashboard_page
+                third_parties_handler = dashboard_cog.rpc.third_parties_handler
+                if hasattr(third_parties_handler, 'dashboard_page'):
+                    dashboard_page = third_parties_handler.dashboard_page
 
-                dashboard_cog.rpc.third_parties_handler.add_third_party(self)
+            # Fallback path: dashboard_cog.third_parties_handler (if rpc is not there)
+            elif hasattr(dashboard_cog, 'third_parties_handler'):
+                third_parties_handler = dashboard_cog.third_parties_handler
+                if hasattr(third_parties_handler, 'dashboard_page'):
+                    dashboard_page = third_parties_handler.dashboard_page
 
-                # Dynamically apply the dashboard_page decorator to our methods
+            if third_parties_handler:
+                # Set the dashboard_page for decoration
+                self.dashboard_page = dashboard_page
+
+                # Register the third party
+                third_parties_handler.add_third_party(self)
+
+                # Dynamically apply the dashboard_page decorator to our methods if available
                 if self.dashboard_page:
                     self.yalcdash_main = self.dashboard_page(self.yalcdash_main)
                     self.yalcdash_guild = self.dashboard_page(self.yalcdash_guild)
@@ -107,9 +122,9 @@ class DashboardIntegration:
                     print("YALC: Successfully registered as a dashboard third party.")
             else:
                 if hasattr(self, 'log'):
-                    self.log.warning("Dashboard cog found but missing required attributes for third-party integration.")
+                    self.log.warning("Dashboard cog found but could not locate third_parties_handler.")
                 else:
-                    print("YALC: Dashboard cog found but missing required attributes for third-party integration.")
+                    print("YALC: Dashboard cog found but could not locate third_parties_handler.")
         except Exception as e:
             if hasattr(self, 'log'):
                 self.log.error(f"Dashboard integration setup failed: {e}")
