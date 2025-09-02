@@ -132,6 +132,10 @@ class YALC(DashboardIntegration, commands.Cog):
             "detect_proxy_deletes": True,
             "message_prefix_filter": [],
             "webhook_name_filter": [],
+            # --- Dashboard example config fields ---
+            "enable_feature": False,
+            "custom_message": "",
+            "log_retention_days": 7,
             # Voice session tracking
             "voice_sessions": {},  # Active sessions: user_id -> {"channel_id": int, "start_time": float}
             "voice_events": []  # Recent events history: max 50 entries
