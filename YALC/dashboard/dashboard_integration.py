@@ -51,78 +51,14 @@ class DashboardIntegration:
 
     # Dashboard page decorator is defined at module level
     
-    # Required method for third-party integration
-    def get_pages(self) -> typing.List[typing.Dict[str, typing.Any]]:
-        """Return a list of dashboard pages for this third-party integration.
-        
-        This method is required by Red-Web-Dashboard to discover available pages.
-        """
-        pages = []
-        
-        # Main dashboard page
-        pages.append({
-            "name": None,  # Main page
-            "description": "YALC Dashboard: Manage and view YALC features.",
-            "methods": ("GET", "POST"),
-            "is_owner": True,
-            "function": self.dashboard_home
-        })
-        
-        # Guild-specific page
-        pages.append({
-            "name": "guild",
-            "description": "YALC Guild Dashboard: View guild details.",
-            "methods": ("GET",),
-            "is_owner": False,
-            "function": self.dashboard_guild
-        })
-        
-        # Settings page
-        pages.append({
-            "name": "settings",
-            "description": "YALC Settings Dashboard: Configure logging settings.",
-            "methods": ("GET", "POST"),
-            "is_owner": False,
-            "function": self.dashboard_settings
-        })
-        
-        # About page
-        pages.append({
-            "name": "about",
-            "description": "YALC About: Information about the cog.",
-            "methods": ("GET",),
-            "is_owner": False,
-            "function": self.dashboard_about
-        })
-        
-        return pages
+    # Pages are automatically detected by dashboard_page decorators
 
     @commands.Cog.listener()
     async def on_dashboard_cog_add(self, dashboard_cog: commands.Cog) -> None:
         """Register this cog as a third party with the Dashboard when dashboard cog is loaded."""
-        try:
-            await dashboard_cog.rpc.third_parties_handler.add_third_party(self)
-            if hasattr(self, 'log'):
-                self.log.info("Successfully registered YALC as a dashboard third party.")
-            else:
-                print("YALC: Successfully registered as a dashboard third party.")
-        except RuntimeError as e:
-            if "already an existing page" in str(e):
-                # Third party already registered, which is fine during cog reloads
-                if hasattr(self, 'log'):
-                    self.log.debug("YALC dashboard integration already registered (this is normal during reloads).")
-                else:
-                    print("YALC: Dashboard integration already registered (this is normal during reloads).")
-            else:
-                # Re-raise other RuntimeErrors
-                raise
-        except Exception as e:
-            if hasattr(self, 'log'):
-                self.log.error(f"Dashboard integration setup failed: {e}")
-            else:
-                print(f"YALC: Dashboard integration setup failed: {e}")
+        dashboard_cog.rpc.third_parties_handler.add_third_party(self)
     # Add an about page method that might be expected
-    @dashboard_page()
+    @dashboard_page(name="about", description="YALC About: Information about the cog.", methods=("GET",), is_owner=False)
     async def dashboard_about(self, user: discord.User, **kwargs) -> typing.Dict[str, typing.Any]:
         """About page for YALC dashboard."""
         source = f"""
@@ -163,8 +99,8 @@ class DashboardIntegration:
         }
 
 
-    # Dashboard page methods with local dashboard_page decorator
-    @dashboard_page()
+    # Dashboard page methods with proper decorator parameters
+    @dashboard_page(name=None, description="YALC Dashboard: Manage and view YALC features.", methods=("GET", "POST"), is_owner=True)
     async def dashboard_home(self, user: discord.User, **kwargs) -> typing.Dict[str, typing.Any]:
         """Main YALC dashboard page."""
         import wtforms
