@@ -40,45 +40,8 @@ class DashboardIntegration(commands.Cog):
     def __init__(self, bot: Red) -> None:
         commands.Cog.__init__(self)
         self.bot = bot
-        # Use YALC's actual config identifier
-        self.config = Config.get_conf(
-            self, identifier=1234567875, force_registration=True
-        )
 
-        # YALC's comprehensive default guild settings
-        default_guild = {
-            "events": {event: False for event in self.event_descriptions.keys()},
-            "event_channels": {event: None for event in self.event_descriptions.keys()},
-            "ignored_users": [],
-            "ignored_roles": [],
-            "ignored_channels": [],
-            "ignored_categories": [],
-            "ignore_bots": False,
-            "ignore_webhooks": False,
-            "ignore_tupperbox": True,
-            "ignore_apps": True,
-            "tupperbox_ids": ["239232811662311425"],  # Default Tupperbox bot ID
-            "include_thumbnails": True,
-            "detect_proxy_deletes": True,
-            "message_prefix_filter": [],
-            "webhook_name_filter": [],
-
-            # Dashboard example config fields merged
-            "enable_feature": False,
-            "custom_message": "",
-            "log_retention_days": 7,
-
-            # Voice session tracking
-            "voice_sessions": {},  # Active sessions: user_id -> {"channel_id": int, "start_time": float}
-            "voice_events": []  # Recent events history: max 50 entries
-        }
-
-        self.config.register_guild(**default_guild)
-
-        # Real-time audit log entry storage for role attribution (shared with YALC)
-        self.recent_audit_entries = {}
-
-        # Event descriptions for logging and dashboard (shared with YALC)
+        # Event descriptions for logging and dashboard (must be set up before config)
         self.event_descriptions = {
             # Message events
             "message_delete": ("🗑️", "Message Deletions"),
@@ -155,6 +118,44 @@ class DashboardIntegration(commands.Cog):
             "automod_rule_delete": ("🗑️", "AutoMod Rule Deletion"),
             "automod_action": ("⚔️", "AutoMod Actions"),
         }
+
+        # Use YALC's actual config identifier
+        self.config = Config.get_conf(
+            self, identifier=1234567875, force_registration=True
+        )
+
+        # YALC's comprehensive default guild settings
+        default_guild = {
+            "events": {event: False for event in self.event_descriptions.keys()},
+            "event_channels": {event: None for event in self.event_descriptions.keys()},
+            "ignored_users": [],
+            "ignored_roles": [],
+            "ignored_channels": [],
+            "ignored_categories": [],
+            "ignore_bots": False,
+            "ignore_webhooks": False,
+            "ignore_tupperbox": True,
+            "ignore_apps": True,
+            "tupperbox_ids": ["239232811662311425"],  # Default Tupperbox bot ID
+            "include_thumbnails": True,
+            "detect_proxy_deletes": True,
+            "message_prefix_filter": [],
+            "webhook_name_filter": [],
+
+            # Dashboard example config fields merged
+            "enable_feature": False,
+            "custom_message": "",
+            "log_retention_days": 7,
+
+            # Voice session tracking
+            "voice_sessions": {},  # Active sessions: user_id -> {"channel_id": int, "start_time": float}
+            "voice_events": []  # Recent events history: max 50 entries
+        }
+
+        self.config.register_guild(**default_guild)
+
+        # Real-time audit log entry storage for role attribution (shared with YALC)
+        self.recent_audit_entries = {}
 
     @commands.Cog.listener()
     async def on_dashboard_cog_add(self, dashboard_cog: commands.Cog) -> None:
@@ -453,6 +454,7 @@ class DashboardIntegration(commands.Cog):
             }
 
         return schema
+
     async def dashboard_about(
         self, user: discord.User, **kwargs
     ) -> typing.Dict[str, typing.Any]:
