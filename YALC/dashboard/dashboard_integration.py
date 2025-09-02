@@ -17,6 +17,13 @@ except ImportError:
     except Exception:
         dashboard_utils = None  # Fallback if AAA3A_utils is not installed
 
+# Local dashboard_page decorator for Red-Web-Dashboard compatibility
+def dashboard_page(*args, **kwargs):
+    def decorator(func):
+        func.__dashboard_decorator_params__ = (args, kwargs)
+        return func
+    return decorator
+
 class DashboardIntegration:
     """Dashboard integration mixin for YALC cog.
 
@@ -42,8 +49,7 @@ class DashboardIntegration:
     # Required bot attribute for Red-Web-Dashboard
     bot: Red
 
-    # Dashboard page decorator (will be set when Dashboard cog loads)
-    dashboard_page = None
+    # Dashboard page decorator is defined at module level
     
     # Required method for third-party integration
     def get_pages(self) -> typing.List[typing.Dict[str, typing.Any]]:
@@ -85,88 +91,10 @@ class DashboardIntegration:
     @commands.Cog.listener()
     async def on_dashboard_cog_add(self, dashboard_cog: commands.Cog) -> None:
         """Register this cog as a third party with the Dashboard when dashboard cog is loaded."""
-        try:
-            # Try different paths to access the third_parties_handler (robust fallback)
-            third_parties_handler = None
-            dashboard_page = None
+        await dashboard_cog.rpc.third_parties_handler.add_third_party(self)
 
-            # First: try direct on dashboard_cog
-            if hasattr(dashboard_cog, 'third_parties_handler'):
-                third_parties_handler = dashboard_cog.third_parties_handler
-                print("YALC: Found third_parties_handler directly on dashboard_cog")
-                if hasattr(third_parties_handler, 'dashboard_page'):
-                    dashboard_page = third_parties_handler.dashboard_page
-                    print("YALC: Found dashboard_page in third_parties_handler")
-                else:
-                    print("YALC: No dashboard_page in third_parties_handler")
-            # Second: try on rpc if rpc exists and third_parties_handler is there
-            elif hasattr(dashboard_cog, 'rpc') and hasattr(dashboard_cog.rpc, 'third_parties_handler'):
-                third_parties_handler = dashboard_cog.rpc.third_parties_handler
-                print("YALC: Found third_parties_handler in rpc")
-                if hasattr(third_parties_handler, 'dashboard_page'):
-                    dashboard_page = third_parties_handler.dashboard_page
-                    print("YALC: Found dashboard_page in rpc third_parties_handler")
-                else:
-                    print("YALC: No dashboard_page in rpc third_parties_handler")
-            # Third: try app if it has third_parties_handler
-            elif hasattr(dashboard_cog, 'app') and hasattr(dashboard_cog.app, 'third_parties_handler'):
-                third_parties_handler = dashboard_cog.app.third_parties_handler
-                print("YALC: Found third_parties_handler in app")
-                if hasattr(third_parties_handler, 'dashboard_page'):
-                    dashboard_page = third_parties_handler.dashboard_page
-                    print("YALC: Found dashboard_page in app third_parties_handler")
-                else:
-                    print("YALC: No dashboard_page in app third_parties_handler")
-
-            # Additional: if dashboard_page not found, try direct on dashboard_cog
-            if not dashboard_page and hasattr(dashboard_cog, 'dashboard_page'):
-                dashboard_page = dashboard_cog.dashboard_page
-                print("YALC: Found dashboard_page directly on dashboard_cog")
-
-            # Additional: try in rpc
-            if not dashboard_page and hasattr(dashboard_cog.rpc, 'dashboard_page'):
-                dashboard_page = dashboard_cog.rpc.dashboard_page
-                print("YALC: Found dashboard_page in rpc")
-
-            # Check if third_parties_handler was set
-            if not third_parties_handler:
-                print("YALC: No third_parties_handler found in any path")
-
-            if third_parties_handler:
-                # Set the dashboard_page for decoration
-                self.dashboard_page = dashboard_page
-
-                # Debug: Print available attributes
-                print(f"YALC: Dashboard cog attributes: {[attr for attr in dir(dashboard_cog) if not attr.startswith('_')]}")
-                if hasattr(dashboard_cog, 'rpc'):
-                    print(f"YALC: Dashboard rpc attributes: {[attr for attr in dir(dashboard_cog.rpc) if not attr.startswith('_')]}")
-
-                # Register the third party
-                await third_parties_handler.add_third_party(self)
-
-                # Dynamically apply the dashboard_page decorator to our methods if available
-                if self.dashboard_page:
-                    self.yalcdash_main = self.dashboard_page(self.yalcdash_main)
-                    self.yalcdash_guild = self.dashboard_page(self.yalcdash_guild)
-                    self.yalcdash_settings = self.dashboard_page(self.yalcdash_settings)
-
-                # Access log through the main cog instance
-                if hasattr(self, 'log'):
-                    self.log.info("Successfully registered YALC as a dashboard third party.")
-                else:
-                    print("YALC: Successfully registered as a dashboard third party.")
-            else:
-                if hasattr(self, 'log'):
-                    self.log.warning("Dashboard cog found but could not locate third_parties_handler.")
-                else:
-                    print("YALC: Dashboard cog found but could not locate third_parties_handler.")
-        except Exception as e:
-            if hasattr(self, 'log'):
-                self.log.error(f"Dashboard integration setup failed: {e}")
-            else:
-                print(f"YALC: Dashboard integration setup failed: {e}")
-
-    # Dashboard page methods without decorators - they'll be registered manually
+    # Dashboard page methods with local dashboard_page decorator
+    @dashboard_page()
     async def yalcdash_main(self, user: discord.User, **kwargs) -> typing.Dict[str, typing.Any]:
         """Main YALC dashboard page."""
         import wtforms
@@ -290,6 +218,7 @@ class DashboardIntegration:
             "web_content": {"source": source, "form": form},
         }
 
+    @dashboard_page()
     async def yalcdash_guild(self, user: discord.User, guild: discord.Guild, **kwargs) -> typing.Dict[str, typing.Any]:
         """Guild-specific YALC dashboard page."""
         return {
@@ -300,6 +229,7 @@ class DashboardIntegration:
             },
         }
 
+    @dashboard_page()
     async def yalcdash_settings(self, user: discord.User, guild: discord.Guild, **kwargs) -> typing.Dict[str, typing.Any]:
         """Settings configuration page for YALC."""
         import wtforms
