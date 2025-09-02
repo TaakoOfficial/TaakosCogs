@@ -20,7 +20,7 @@ except ImportError:
     AAA3A_utils = None
 
 
-class DashboardIntegration(commands.Cog):
+class DashboardIntegration:
     """
     Dashboard integration for YALC (Yet Another Logging Cog).
     Allows users to view info and configure the cog through Red-Web-Dashboard.
@@ -158,14 +158,17 @@ class DashboardIntegration(commands.Cog):
         self.recent_audit_entries = {}
 
     @commands.Cog.listener()
-    async def on_dashboard_cog_add(self, dashboard_cog: commands.Cog) -> None:
+    async def on_dashboard_cog_add(self, dashboard_cog) -> None:
         """
         Register this cog as a dashboard third party when the dashboard cog is loaded.
+        This listener will be active through inheritance by the main YALC cog.
         """
         try:
             dashboard_cog.rpc.third_parties_handler.add_third_party(self)
         except Exception as e:
-            self.bot.get_channel(self.log)  # Graceful fallback if registration fails
+            # Graceful fallback if registration fails - log to console if available
+            print(f"[YALC Dashboard] Failed to register as third party: {e}")
+            pass
 
     # ABOUT PAGE
     @dashboard_page(
