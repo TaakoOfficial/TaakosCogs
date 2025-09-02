@@ -1,7 +1,9 @@
-from redbot.core import commands
+from redbot.core import commands, Config
 from redbot.core.bot import Red
 import discord
 import typing
+import logging
+from typing import TYPE_CHECKING
 
 # --- AAA3A_utils import for CFS token/auth handling ---
 import importlib
@@ -39,6 +41,12 @@ class DashboardIntegration:
 
     # Required attributes for Red-Web-Dashboard third-party integration
     name = "YALC"
+    
+    # Type annotations for attributes provided by the inheriting class
+    if TYPE_CHECKING:
+        config: Config
+        log: logging.Logger
+        bot: Red
     description = "Yet Another Logging Cog - Comprehensive Discord event logging with dashboard integration"
     version = "3.0.0"
     author = "YALC Team"
@@ -58,6 +66,252 @@ class DashboardIntegration:
         """Register this cog as a third party with the Dashboard when dashboard cog is loaded."""
         dashboard_cog.rpc.third_parties_handler.add_third_party(self)
     # Add an about page method that might be expected
+    @dashboard_page(name="stats", description="YALC Statistics: View logging statistics and activity.", methods=("GET",), is_owner=False)
+    async def dashboard_stats(self, user: discord.User, guild: discord.Guild, **kwargs) -> typing.Dict[str, typing.Any]:
+        """Statistics page for YALC dashboard."""
+        # Get stats from config if available
+        stats = {}
+        if hasattr(self, 'config') and hasattr(self.config, 'guild'):
+            try:
+                stats = await self.config.guild(guild).stats.get_raw() or {}
+            except Exception:
+                stats = {}
+        
+        # Mock stats for demonstration
+        total_events = stats.get("total_events", 0)
+        events_today = stats.get("events_today", 0)
+        most_active_channel = stats.get("most_active_channel", "N/A")
+        
+        source = f"""
+        <div class="stats-dashboard">
+            <h2>📊 YALC Statistics for {guild.name}</h2>
+            
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <h3>Total Events Logged</h3>
+                    <p class="stat-number">{total_events:,}</p>
+                </div>
+                
+                <div class="stat-card">
+                    <h3>Events Today</h3>
+                    <p class="stat-number">{events_today}</p>
+                </div>
+                
+                <div class="stat-card">
+                    <h3>Most Active Channel</h3>
+                    <p class="stat-text">{most_active_channel}</p>
+                </div>
+                
+                <div class="stat-card">
+                    <h3>Status</h3>
+                    <p class="stat-status">{'✅ Active' if hasattr(self, 'config') else '❌ Inactive'}</p>
+                </div>
+            </div>
+            
+            <div class="chart-section">
+                <h3>Event Activity</h3>
+                <p>📈 Event logging is {'enabled' if hasattr(self, 'config') else 'disabled'} for this server.</p>
+            </div>
+        </div>
+        
+        <style>
+        .stats-dashboard {{
+            padding: 1rem;
+        }}
+        .stats-grid {{
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin: 1rem 0;
+        }}
+        .stat-card {{
+            background: #f8f9fa;
+            padding: 1rem;
+            border-radius: 8px;
+            text-align: center;
+            border-left: 4px solid #007bff;
+        }}
+        .stat-number {{
+            font-size: 2rem;
+            font-weight: bold;
+            color: #007bff;
+            margin: 0.5rem 0;
+        }}
+        .stat-text {{
+            font-size: 1.1rem;
+            color: #495057;
+            margin: 0.5rem 0;
+        }}
+        .stat-status {{
+            font-size: 1.1rem;
+            margin: 0.5rem 0;
+        }}
+        .chart-section {{
+            background: white;
+            padding: 1rem;
+            border-radius: 8px;
+            margin-top: 1rem;
+            border: 1px solid #dee2e6;
+        }}
+        </style>
+        """
+        return {
+            "status": 0,
+            "web_content": {"source": source},
+        }
+
+    @dashboard_page(name="events", description="YALC Event Configuration: Configure which events to log.", methods=("GET", "POST"), is_owner=False)
+    async def dashboard_events(self, user: discord.User, guild: discord.Guild, **kwargs) -> typing.Dict[str, typing.Any]:
+        """Event configuration page for YALC dashboard."""
+        import wtforms
+        
+        # Get current event settings
+        current_events = {}
+        if hasattr(self, 'config') and hasattr(self.config, 'guild'):
+            try:
+                current_events = await self.config.guild(guild).events.get_raw() or {}
+            except Exception:
+                current_events = {}
+        
+        # Get available events from the main cog
+        available_events = getattr(self, 'event_descriptions', {
+            'message_delete': ('🗑️', 'Message Deletions'),
+            'message_edit': ('✏️', 'Message Edits'),
+            'member_join': ('👋', 'Member Joins'),
+            'member_leave': ('👋', 'Member Leaves'),
+            'voice_join': ('🔊', 'Voice Channel Joins'),
+            'voice_leave': ('🔇', 'Voice Channel Leaves'),
+            'role_create': ('➕', 'Role Creation'),
+            'role_delete': ('➖', 'Role Deletion'),
+            'channel_create': ('📝', 'Channel Creation'),
+            'channel_delete': ('🗑️', 'Channel Deletion'),
+        })
+        
+        class EventForm(kwargs["Form"]):
+            def __init__(self):
+                super().__init__(prefix="yalc_events_form_")
+                
+                # Create checkboxes for each event type
+                for event_key, (emoji, description) in available_events.items():
+                    field_name = f"event_{event_key}"
+                    current_value = current_events.get(event_key, False)
+                    setattr(self, field_name, wtforms.BooleanField(
+                        f"{emoji} {description}",
+                        default=current_value
+                    ))
+                
+                self.submit = wtforms.SubmitField("Save Event Settings")
+
+        form = EventForm()
+        
+        if form.validate_on_submit():
+            try:
+                # Save event settings
+                new_events = {}
+                for event_key in available_events.keys():
+                    field_name = f"event_{event_key}"
+                    if hasattr(form, field_name):
+                        new_events[event_key] = getattr(form, field_name).data
+                
+                if hasattr(self, 'config') and hasattr(self.config, 'guild'):
+                    await self.config.guild(guild).events.set(new_events)
+                
+                return {
+                    "status": 0,
+                    "notifications": [{"message": "Event settings saved successfully!", "category": "success"}],
+                    "redirect_url": kwargs["request_url"],
+                }
+            except Exception as e:
+                return {
+                    "status": 0,
+                    "notifications": [{"message": f"Error saving settings: {e}", "category": "error"}],
+                }
+        
+        # Render form HTML
+        form_html = """
+        <div class="events-config">
+            <h2>🎯 Event Logging Configuration</h2>
+            <p>Select which events you want YALC to log in this server.</p>
+            
+            <form method="POST" class="event-form">
+        """
+        
+        for field_name, field in form._fields.items():
+            if field.type == 'BooleanField' and not field_name.startswith('csrf') and field_name != 'submit':
+                checked = ' checked="checked"' if field.data else ''
+                form_html += f"""
+                <div class="event-option">
+                    <label class="event-label">
+                        <input type="checkbox" name="{field_name}" value="y"{checked}>
+                        <span class="event-text">{field.label.text}</span>
+                    </label>
+                </div>
+                """
+        
+        form_html += """
+                <div class="form-actions">
+                    <input type="submit" value="Save Event Settings" class="btn btn-primary">
+                </div>
+            </form>
+        </div>
+        
+        <style>
+        .events-config {
+            padding: 1rem;
+        }
+        .event-form {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 8px;
+            border: 1px solid #dee2e6;
+        }
+        .event-option {
+            margin-bottom: 1rem;
+            padding: 0.75rem;
+            background: #f8f9fa;
+            border-radius: 6px;
+            border-left: 3px solid #007bff;
+        }
+        .event-label {
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+            font-weight: 500;
+        }
+        .event-label input {
+            margin-right: 0.75rem;
+            transform: scale(1.2);
+        }
+        .event-text {
+            font-size: 1rem;
+        }
+        .form-actions {
+            margin-top: 1.5rem;
+            text-align: center;
+        }
+        .btn {
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 500;
+        }
+        .btn-primary {
+            background: #007bff;
+            color: white;
+        }
+        .btn-primary:hover {
+            background: #0056b3;
+        }
+        </style>
+        """
+        
+        return {
+            "status": 0,
+            "web_content": {"source": form_html, "form": form},
+        }
+
     @dashboard_page(name="about", description="YALC About: Information about the cog.", methods=("GET",), is_owner=False)
     async def dashboard_about(self, user: discord.User, **kwargs) -> typing.Dict[str, typing.Any]:
         """About page for YALC dashboard."""
