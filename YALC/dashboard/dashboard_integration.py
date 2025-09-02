@@ -61,11 +61,11 @@ class DashboardIntegration:
         
         # Main dashboard page
         pages.append({
-            "name": "main",  # Main page with specific name
+            "name": None,  # Main page
             "description": "YALC Dashboard: Manage and view YALC features.",
             "methods": ("GET", "POST"),
             "is_owner": True,
-            "function": self.yalcdash_main
+            "function": self.dashboard_home
         })
         
         # Guild-specific page
@@ -74,7 +74,7 @@ class DashboardIntegration:
             "description": "YALC Guild Dashboard: View guild details.",
             "methods": ("GET",),
             "is_owner": False,
-            "function": self.yalcdash_guild
+            "function": self.dashboard_guild
         })
         
         # Settings page
@@ -83,7 +83,16 @@ class DashboardIntegration:
             "description": "YALC Settings Dashboard: Configure logging settings.",
             "methods": ("GET", "POST"),
             "is_owner": False,
-            "function": self.yalcdash_settings
+            "function": self.dashboard_settings
+        })
+        
+        # About page
+        pages.append({
+            "name": "about",
+            "description": "YALC About: Information about the cog.",
+            "methods": ("GET",),
+            "is_owner": False,
+            "function": self.dashboard_about
         })
         
         return pages
@@ -112,10 +121,51 @@ class DashboardIntegration:
                 self.log.error(f"Dashboard integration setup failed: {e}")
             else:
                 print(f"YALC: Dashboard integration setup failed: {e}")
+    # Add an about page method that might be expected
+    @dashboard_page()
+    async def dashboard_about(self, user: discord.User, **kwargs) -> typing.Dict[str, typing.Any]:
+        """About page for YALC dashboard."""
+        source = f"""
+        <div class="about-section">
+            <h2>About YALC</h2>
+            <p><strong>Version:</strong> {self.version}</p>
+            <p><strong>Author:</strong> {self.author}</p>
+            <p><strong>Description:</strong> {self.description}</p>
+            <p><strong>Repository:</strong> <a href="{self.repo}" target="_blank">{self.repo}</a></p>
+            <p><strong>Support:</strong> <a href="{self.support}" target="_blank">{self.support}</a></p>
+        </div>
+        <style>
+        .about-section {{
+            padding: 2rem;
+            background: #f8f9fa;
+            border-radius: 8px;
+            margin: 1rem 0;
+        }}
+        .about-section h2 {{
+            color: #495057;
+            margin-bottom: 1rem;
+        }}
+        .about-section p {{
+            margin-bottom: 0.5rem;
+        }}
+        .about-section a {{
+            color: #007bff;
+            text-decoration: none;
+        }}
+        .about-section a:hover {{
+            text-decoration: underline;
+        }}
+        </style>
+        """
+        return {
+            "status": 0,
+            "web_content": {"source": source},
+        }
+
 
     # Dashboard page methods with local dashboard_page decorator
     @dashboard_page()
-    async def yalcdash_main(self, user: discord.User, **kwargs) -> typing.Dict[str, typing.Any]:
+    async def dashboard_home(self, user: discord.User, **kwargs) -> typing.Dict[str, typing.Any]:
         """Main YALC dashboard page."""
         import wtforms
 
@@ -239,7 +289,7 @@ class DashboardIntegration:
         }
 
     @dashboard_page()
-    async def yalcdash_guild(self, user: discord.User, guild: discord.Guild, **kwargs) -> typing.Dict[str, typing.Any]:
+    async def dashboard_guild(self, user: discord.User, guild: discord.Guild, **kwargs) -> typing.Dict[str, typing.Any]:
         """Guild-specific YALC dashboard page."""
         return {
             "status": 0,
@@ -250,7 +300,7 @@ class DashboardIntegration:
         }
 
     @dashboard_page()
-    async def yalcdash_settings(self, user: discord.User, guild: discord.Guild, **kwargs) -> typing.Dict[str, typing.Any]:
+    async def dashboard_settings(self, user: discord.User, guild: discord.Guild, **kwargs) -> typing.Dict[str, typing.Any]:
         """Settings configuration page for YALC."""
         import wtforms
 
