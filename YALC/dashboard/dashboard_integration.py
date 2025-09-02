@@ -123,6 +123,11 @@ class DashboardIntegration:
                 dashboard_page = dashboard_cog.dashboard_page
                 print("YALC: Found dashboard_page directly on dashboard_cog")
 
+            # Additional: try in rpc
+            if not dashboard_page and hasattr(dashboard_cog.rpc, 'dashboard_page'):
+                dashboard_page = dashboard_cog.rpc.dashboard_page
+                print("YALC: Found dashboard_page in rpc")
+
             # Check if third_parties_handler was set
             if not third_parties_handler:
                 print("YALC: No third_parties_handler found in any path")
