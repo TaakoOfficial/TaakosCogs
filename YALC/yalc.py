@@ -5648,87 +5648,80 @@ class YALC(DashboardIntegration, commands.Cog):
                 await ctx.send(embed=embed)
                 return
 
-            # Show detected configuration
-            embed = discord.Embed(
-                title="🔍 Log Channel Auto-Detection Results",
-                description="Found potential log channels! Here's what I detected:",
+            # Send summary embed first
+            summary_embed = discord.Embed(
+                title="🔍 Log Channel Auto-Detection Summary",
+                description=f"Found {len(detected_config)} potential log channels with {sum(len(data['events']) for data in detected_config.values())} total events.",
                 color=discord.Color.blue()
             )
 
-            # Show channels that will be configured
-            channel_lines = []
-            total_enabled_events = 0
-
-            for ch_name, events_data in detected_config.items():
-                channel = events_data['channel']
-                events = events_data['events']
-                channel_lines.append(f"📂 **{ch_name}** (`{channel.name}`) → **{len(events)} events**")
-                total_enabled_events += len(events)
-
-            embed.add_field(
-                name="📢 Detected Channels",
-                value="\n".join(channel_lines),
+            summary_embed.add_field(
+                name="📊 Quick Stats",
+                value=f"• **Channels Found**: {len(detected_config)}\n"
+                      f"• **Total Events**: {sum(len(data['events']) for data in detected_config.values())}\n"
+                      f"• **Channels Ignored**: {len(ctx.guild.channels) - len(detected_config)}",
                 inline=False
             )
 
-            # Show events per channel (first few channels only)
-            shown_channels = 0
-            for ch_name, events_data in detected_config.items():
-                if shown_channels >= 4:  # Limit to 4 channels to avoid embed limits
-                    remaining = len(detected_config) - 4
-                    if remaining > 0:
-                        embed.add_field(
-                            name="",
-                            value=f"💡 **Plus {remaining} more channels...**",
-                            inline=False
-                        )
-                    break
+            summary_embed.add_field(
+                name="⚠️ Safety Notice",
+                value="Review the channel listings below before confirming.\n"
+                      "**This action will:**\n"
+                      "• Enable events for each detected channel\n"
+                      "• Set appropriate channel mappings\n"
+                      "• Configure default ignore settings",
+                inline=False
+            )
 
-                events = events_data['events']
-                if events:
-                    event_list = []
-                    for event in events[:8]:  # Show first 8 events
-                        if event in self.event_descriptions:
-                            emoji, desc = self.event_descriptions[event]
-                            event_list.append(f"{emoji} `{event}`")
-                        else:
-                            event_list.append(f"• `{event}`")
+            summary_embed.add_field(
+                name="🎯 Next Step",
+                value=f"To apply this configuration:\n`{ctx.prefix}yalc autodetect CONFIRM`",
+                inline=False
+            )
 
-                    if len(events) > 8:
-                        event_list.append(f"• ...and {len(events) - 8} more")
+            summary_embed.set_footer(text=f"Auto-detected {len(detected_config)} channels • YALC Logger")
+            await ctx.send(embed=summary_embed)
 
-                    embed.add_field(
-                        name=f"📋 Events for {ch_name}",
-                        value="\n".join(event_list),
-                        inline=True
+            # Send channel details in multiple embeds (max 10 channels per embed)
+            if detected_config:
+                sorted_channels = sorted(detected_config.keys())
+                channels_per_embed = 10
+
+                for i in range(0, len(sorted_channels), channels_per_embed):
+                    chunk = sorted_channels[i:i + channels_per_embed]
+                    page_num = (i // channels_per_embed) + 1
+                    total_pages = (len(sorted_channels) + channels_per_embed - 1) // channels_per_embed
+
+                    embed = discord.Embed(
+                        title=f"📂 Detected Channels (Page {page_num}/{total_pages})",
+                        description=f"Channels {i+1} to {min(i+len(chunk), len(sorted_channels))} of {len(sorted_channels)}",
+                        color=discord.Color.green()
                     )
 
-                shown_channels += 1
+                    channel_lines = []
+                    for ch_name in chunk:
+                        events_data = detected_config[ch_name]
+                        channel = events_data['channel']
+                        events = events_data['events']
 
-            embed.add_field(
-                name="📊 Summary",
-                value=f"• **{len(detected_config)}** log channels detected\n"
-                      f"• **{total_enabled_events}** events will be enabled\n"
-                      f"• **{ctx.guild.channels}** channels to be ignored",
-                inline=False
-            )
+                        # Use compact emoji representation to save characters
+                        if len(events) <= 5:
+                            event_emojis = [self.event_descriptions[e][0] for e in events[:5] if e in self.event_descriptions]
+                            event_text = "".join(event_emojis) if event_emojis else "📝"
+                        else:
+                            event_emojis = [self.event_descriptions[e][0] for e in events[:3] if e in self.event_descriptions]
+                            event_text = "".join(event_emojis) + f"+{len(events)-3}"
 
-            embed.add_field(
-                name="⚠️ Important",
-                value="• Events will be enabled\n"
-                      "• Channel mappings will be set\n"
-                      "• Ignores Tupperbox & app messages by default\n"
-                      "• Previous settings will NOT be overwritten",
-                inline=False
-            )
+                        channel_lines.append(f"📂 **{ch_name}** → {event_text} ({len(events)} events)")
 
-            embed.add_field(
-                name="🎯 To Apply Configuration",
-                value=f"Run: `{ctx.prefix}yalc autodetect CONFIRM`",
-                inline=False
-            )
+                    embed.add_field(
+                        name="Detected Channels",
+                        value="\n".join(channel_lines),
+                        inline=False
+                    )
 
-            await ctx.send(embed=embed)
+                    embed.set_footer(text=f"Page {page_num}/{total_pages} • Use CONFIRM when ready")
+                    await ctx.send(embed=embed)
             return
 
         # Apply the detected configuration
