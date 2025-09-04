@@ -16,7 +16,7 @@ class DashboardIntegration(Cog if _aaa3a_available else object):
 
     def __init__(self, bot, *args, **kwargs) -> None:
         if _aaa3a_available:
-            super().__init__(bot=bot, cog_name="YALC", *args, **kwargs)
+            super().__init__(bot=bot, *args, **kwargs)
         else:
             # Fallback initialization for when AAA3A_utils is not available
             self.bot = bot
