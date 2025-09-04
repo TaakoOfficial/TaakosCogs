@@ -1,14 +1,63 @@
-from AAA3A_utils import Cog
 import discord
 from redbot.core import commands
 import typing
+import logging
+
+try:
+    from AAA3A_utils import Cog
+    _aaa3a_available = True
+except ImportError:
+    _aaa3a_available = False
+    Cog = object
 
 
-class DashboardIntegration(Cog):
+class DashboardIntegration(Cog if _aaa3a_available else object):
     """Dashboard integration for YALC (Yet Another Logging Cog)."""
 
     def __init__(self, bot, *args, **kwargs) -> None:
-        super().__init__(bot=bot, cog_name="YALC", *args, **kwargs)
+        if _aaa3a_available:
+            super().__init__(bot=bot, cog_name="YALC", *args, **kwargs)
+        else:
+            # Fallback initialization for when AAA3A_utils is not available
+            self.bot = bot
+            self.log = logging.getLogger("red.YALC")
+            
+        # Store event descriptions from main cog for dashboard use
+        self.event_descriptions = getattr(self, 'event_descriptions', {
+            # Message events
+            "message_delete": ("🗑️", "Message Deletions"),
+            "message_edit": ("✏️", "Message Edits"),
+            "message_bulk_delete": ("♻️", "Bulk Message Deletions"),
+            "message_pin": ("📌", "Message Pins"),
+            "message_unpin": ("📍", "Message Unpins"),
+            
+            # Member events
+            "member_join": ("👋", "Member Joins"),
+            "member_leave": ("🚪", "Member Leaves"),
+            "member_ban": ("🔨", "Member Bans"),
+            "member_unban": ("🔓", "Member Unbans"),
+            "member_update": ("👤", "Member Updates"),
+            "member_kick": ("👢", "Member Kicks"),
+            "member_timeout": ("⏰", "Member Timeouts"),
+            
+            # Channel events
+            "channel_create": ("📝", "Channel Creation"),
+            "channel_delete": ("🗑️", "Channel Deletion"),
+            "channel_update": ("🔄", "Channel Updates"),
+            "thread_create": ("🧵", "Thread Creation"),
+            "thread_delete": ("🗑️", "Thread Deletion"),
+            "thread_update": ("🔄", "Thread Updates"),
+            
+            # Role events
+            "role_create": ("✨", "Role Creation"),
+            "role_delete": ("🗑️", "Role Deletion"),
+            "role_update": ("🔄", "Role Updates"),
+            
+            # Guild events
+            "guild_update": ("⚙️", "Server Updates"),
+            "emoji_update": ("😀", "Emoji Updates"),
+            "voice_state_update": ("🎧", "Voice State Changes"),
+        })
 
     def format_settings(
         self,

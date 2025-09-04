@@ -22,7 +22,7 @@ from datetime import timedelta
 from redbot.core import modlog
 import typing
 
-class YALC(commands.Cog, DashboardIntegration):
+class YALC(DashboardIntegration):
     """Yet Another Logging Cog for Red-DiscordBot.
     A comprehensive logging solution with both classic and slash commands.
     Features include:
@@ -35,14 +35,13 @@ class YALC(commands.Cog, DashboardIntegration):
     """
 
     def __init__(self, bot: Red):
-        # Initialize in proper order as per user's requirements
-        commands.Cog.__init__(self)
-        if _dashboard_available:
-            DashboardIntegration.__init__(self, bot)
-            # Add debug/info log to confirm integration loading
+        # Initialize dashboard integration if available
+        if _dashboard_available and DashboardIntegration is not object:
+            super().__init__(bot)
             self.log.info("YALC: DashboardIntegration active - ready for third-party registration")
         else:
-            # Set up basic logging if dashboard not available
+            # Fallback: basic logging setup if dashboard integration is unavailable
+            self.bot = bot
             self.log = logging.getLogger("red.YALC")
         
         # Real-time audit log entry storage for role attribution
