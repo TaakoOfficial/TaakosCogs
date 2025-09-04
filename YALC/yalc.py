@@ -39,8 +39,12 @@ class YALC(commands.Cog):
         self.log = logging.getLogger("red.YALC")
         # Dashboard integration via composition
         if _dashboard_available and DashboardIntegration is not object:
-            self.dashboard = DashboardIntegration(self)
-            self.log.info("YALC: DashboardIntegration active - ready for third-party registration")
+            try:
+                self.dashboard = DashboardIntegration(self.bot)
+                self.log.info("YALC: DashboardIntegration active - ready for third-party registration")
+            except Exception as e:
+                self.dashboard = None
+                self.log.warning(f"YALC: DashboardIntegration could not be initialized: {e}")
         else:
             self.dashboard = None
 
