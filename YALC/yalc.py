@@ -18,7 +18,7 @@ from datetime import timedelta
 from redbot.core import modlog
 import typing
 
-class YALC(commands.Cog):
+class YALC(DashboardIntegration, commands.Cog):
     """Yet Another Logging Cog for Red-DiscordBot.
     A comprehensive logging solution with both classic and slash commands.
     Features include:
@@ -31,17 +31,23 @@ class YALC(commands.Cog):
     """
 
     def __init__(self, bot: Red):
+        # Initialize both parent classes explicitly
+        commands.Cog.__init__(self)
+        DashboardIntegration.__init__(self, bot)
+        
         self.bot = bot
         self.config = Config.get_conf(self, identifier=1234567890)
         self.log = logging.getLogger("red.YALC")
-        # Dashboard integration via composition
-        try:
-            self.log.info(f"YALC: DashboardIntegration type: {type(DashboardIntegration)}")
-            self.dashboard = DashboardIntegration(self.bot)
-            self.log.info("YALC: DashboardIntegration active - ready for third-party registration")
-        except Exception as e:
-            self.dashboard = None
-            self.log.warning(f"YALC: DashboardIntegration could not be initialized: {e}")
+        self.log.info("YALC initialized with DashboardIntegration")
+        
+        # Dashboard listener for when Dashboard cog is loaded
+        @commands.Cog.listener()
+        async def on_dashboard_cog_add(self, dashboard_cog: commands.Cog) -> None:
+            """Called when the Dashboard cog is loaded."""
+            await self.dashboard_cog_add(dashboard_cog)
+        
+        # Bind the listener to this instance
+        self.on_dashboard_cog_add = on_dashboard_cog_add.__get__(self, type(self))
 
         # Real-time audit log entry storage for role attribution
         self.recent_audit_entries = {}

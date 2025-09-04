@@ -5,10 +5,16 @@ import logging
 
 try:
     from AAA3A_utils import Cog
+    from AAA3A_utils.dashboard import dashboard_page
     _aaa3a_available = True
 except ImportError:
     _aaa3a_available = False
     Cog = object
+    # Fallback decorator when AAA3A_utils is not available
+    def dashboard_page():
+        def decorator(func):
+            return func
+        return decorator
 
 
 class DashboardIntegration(Cog if _aaa3a_available else object):
@@ -158,11 +164,7 @@ class DashboardIntegration(Cog if _aaa3a_available else object):
         except Exception as e:
             self.log.error(f"Error updating YALC settings: {e}")
 
-    @commands.Cog.listener()
-    async def on_dashboard_cog_add(self, dashboard_cog: commands.Cog) -> None:
-        """Called when the Dashboard cog is loaded."""
-        await self.dashboard_cog_add(dashboard_cog)
-
+    @dashboard_page()
     async def dashboard_page(
         self,
         user: discord.User,
