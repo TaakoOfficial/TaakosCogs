@@ -181,12 +181,62 @@ class DashboardIntegration:
         methods=("GET",),
         is_owner=False,
     )
+    async def dashboard_about(
+        self, user: discord.User, **kwargs
+    ) -> typing.Dict[str, typing.Any]:
+        """About page for YALC dashboard."""
+        features_html = """
+        <ul style="list-style-type: none; padding: 0;">
+            <li>✅ Comprehensive event logging with 35+ events</li>
+            <li>✅ Per-channel configurations</li>
+            <li>✅ Advanced filtering (users, roles, channels)</li>
+            <li>✅ Message content tracking with Tupperbox support</li>
+            <li>✅ Voice session logging and analytics</li>
+            <li>✅ Audit log integration for attribution</li>
+            <li>✅ Rich embed formatting with thumbnails</li>
+            <li>✅ Dashboard integration for easy configuration</li>
+        </ul>
+        """
+
+        html_content = f"""
+        <div style="padding: 1em; max-width: 800px;">
+            <div style="text-align: center; margin-bottom: 2em;">
+                <img src="{self.icon}" width="96" height="96" style="border-radius: 15px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);"/>
+                <h1 style="color: #3949ab; margin: 0.5em 0;">{self.name}</h1>
+                <p style="color: #666; margin: 0; font-style: italic;">{self.description}</p>
+            </div>
+
+            <div style="background: #f8f9fa; border-radius: 10px; padding: 1.5em; margin-bottom: 1.5em;">
+                <h3 style="color: #3949ab; margin-top: 0;">Features & Capabilities</h3>
+                {features_html}
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1em;">
+                <div style="background: #e8f5e8; border-radius: 8px; padding: 1em;">
+                    <h4 style="color: #2e7d32; margin-top: 0;">Supported Events</h4>
+                    <p style="margin: 0;"><strong>35+ event types</strong> including message actions, member events, channel management, role changes, voice activity, and moderation events.</p>
+                </div>
+                <div style="background: #e3f2fd; border-radius: 8px; padding: 1em;">
+                    <h4 style="color: #1976d2; margin-top: 0;">Filtering Options</h4>
+                    <p style="margin: 0;">Advanced filtering by users, roles, channels, bot messages, webhooks, and custom proxy detection.</p>
+                </div>
+            </div>
+
+            <div style="margin-top: 2em; text-align: center; color: #666;">
+                <p><strong>Version {self.version}</strong> | Created by {self.author}</p>
+                <p><a href="{self.repo}" target="_blank">View on GitHub</a> | <a href="{self.support}" target="_blank">Support Server</a></p>
+            </div>
+        </div>
+        """
+        return {"status": 0, "web_content": {"source": html_content}}
+
     # SETTINGS PAGE
     @dashboard_page(
         name="settings",
         description="Configure YALC settings.",
         methods=("GET", "POST"),
         is_owner=False,  # Allow server admins to configure
+        context_ids=["guild_id"],
     )
     async def dashboard_settings(
         self, user: discord.User, guild_id: int, **kwargs
@@ -462,51 +512,3 @@ class DashboardIntegration:
 
         return schema
 
-    async def dashboard_about(
-        self, user: discord.User, **kwargs
-    ) -> typing.Dict[str, typing.Any]:
-        """About page for YALC dashboard."""
-        features_html = """
-        <ul style="list-style-type: none; padding: 0;">
-            <li>✅ Comprehensive event logging with 35+ events</li>
-            <li>✅ Per-channel configurations</li>
-            <li>✅ Advanced filtering (users, roles, channels)</li>
-            <li>✅ Message content tracking with Tupperbox support</li>
-            <li>✅ Voice session logging and analytics</li>
-            <li>✅ Audit log integration for attribution</li>
-            <li>✅ Rich embed formatting with thumbnails</li>
-            <li>✅ Dashboard integration for easy configuration</li>
-        </ul>
-        """
-
-        html_content = f"""
-        <div style="padding: 1em; max-width: 800px;">
-            <div style="text-align: center; margin-bottom: 2em;">
-                <img src="{self.icon}" width="96" height="96" style="border-radius: 15px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);"/>
-                <h1 style="color: #3949ab; margin: 0.5em 0;">{self.name}</h1>
-                <p style="color: #666; margin: 0; font-style: italic;">{self.description}</p>
-            </div>
-
-            <div style="background: #f8f9fa; border-radius: 10px; padding: 1.5em; margin-bottom: 1.5em;">
-                <h3 style="color: #3949ab; margin-top: 0;">Features & Capabilities</h3>
-                {features_html}
-            </div>
-
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1em;">
-                <div style="background: #e8f5e8; border-radius: 8px; padding: 1em;">
-                    <h4 style="color: #2e7d32; margin-top: 0;">Supported Events</h4>
-                    <p style="margin: 0;"><strong>35+ event types</strong> including message actions, member events, channel management, role changes, voice activity, and moderation events.</p>
-                </div>
-                <div style="background: #e3f2fd; border-radius: 8px; padding: 1em;">
-                    <h4 style="color: #1976d2; margin-top: 0;">Filtering Options</h4>
-                    <p style="margin: 0;">Advanced filtering by users, roles, channels, bot messages, webhooks, and custom proxy detection.</p>
-                </div>
-            </div>
-
-            <div style="margin-top: 2em; text-align: center; color: #666;">
-                <p><strong>Version {self.version}</strong> | Created by {self.author}</p>
-                <p><a href="{self.repo}" target="_blank">View on GitHub</a> | <a href="{self.support}" target="_blank">Support Server</a></p>
-            </div>
-        </div>
-        """
-        return {"status": 0, "web_content": {"source": html_content}}
