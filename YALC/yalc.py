@@ -6,12 +6,8 @@ import discord
 from redbot.core import Config, commands, app_commands
 from redbot.core.bot import Red
 # Import dashboard integration from local module
-try:
-    from .dashboard.dashboard_integration import DashboardIntegration
-    _dashboard_available = True
-except ImportError:
-    DashboardIntegration = object
-    _dashboard_available = False
+from .dashboard.dashboard_integration import DashboardIntegration
+_dashboard_available = True
 
 from typing import Dict, List, Optional, Union, cast
 import datetime
@@ -36,17 +32,16 @@ class YALC(commands.Cog):
 
     def __init__(self, bot: Red):
         self.bot = bot
+        self.config = Config.get_conf(self, identifier=1234567890)
         self.log = logging.getLogger("red.YALC")
         # Dashboard integration via composition
-        if _dashboard_available and DashboardIntegration is not object:
-            try:
-                self.dashboard = DashboardIntegration(self.bot)
-                self.log.info("YALC: DashboardIntegration active - ready for third-party registration")
-            except Exception as e:
-                self.dashboard = None
-                self.log.warning(f"YALC: DashboardIntegration could not be initialized: {e}")
-        else:
+        try:
+            self.log.info(f"YALC: DashboardIntegration type: {type(DashboardIntegration)}")
+            self.dashboard = DashboardIntegration(self.bot)
+            self.log.info("YALC: DashboardIntegration active - ready for third-party registration")
+        except Exception as e:
             self.dashboard = None
+            self.log.warning(f"YALC: DashboardIntegration could not be initialized: {e}")
 
         # Real-time audit log entry storage for role attribution
         self.recent_audit_entries = {}
