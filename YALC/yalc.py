@@ -6,8 +6,13 @@ import discord
 from redbot.core import Config, commands, app_commands
 from redbot.core.bot import Red
 # Import dashboard integration from local module
-from .dashboard.dashboard_integration import DashboardIntegration
-_dashboard_available = True
+try:
+    from .dashboard.dashboard_integration import DashboardIntegration
+    _dashboard_available = True
+except ImportError:
+    DashboardIntegration = object
+    _dashboard_available = False
+
 from typing import Dict, List, Optional, Union, cast
 import datetime
 import asyncio
@@ -17,7 +22,7 @@ from datetime import timedelta
 from redbot.core import modlog
 import typing
 
-class YALC(DashboardIntegration, commands.Cog):
+class YALC(commands.Cog, DashboardIntegration):
     """Yet Another Logging Cog for Red-DiscordBot.
     A comprehensive logging solution with both classic and slash commands.
     Features include:
@@ -32,10 +37,13 @@ class YALC(DashboardIntegration, commands.Cog):
     def __init__(self, bot: Red):
         # Initialize in proper order as per user's requirements
         commands.Cog.__init__(self)
-        DashboardIntegration.__init__(self, bot)
-
-        # Add debug/info log to confirm integration loading
-        self.log.info("YALC: DashboardIntegration active - ready for third-party registration")
+        if _dashboard_available:
+            DashboardIntegration.__init__(self, bot)
+            # Add debug/info log to confirm integration loading
+            self.log.info("YALC: DashboardIntegration active - ready for third-party registration")
+        else:
+            # Set up basic logging if dashboard not available
+            self.log = logging.getLogger("red.YALC")
         
         # Real-time audit log entry storage for role attribution
         self.recent_audit_entries = {}
@@ -6400,3 +6408,8 @@ class YALC(DashboardIntegration, commands.Cog):
         except Exception as e:
             self.log.error(f"Unexpected error when sending to channel {channel.id}: {e}", exc_info=True)
         return None
+
+
+async def setup(bot: Red) -> None:
+    """Load YALC cog."""
+    await bot.add_cog(YALC(bot))
