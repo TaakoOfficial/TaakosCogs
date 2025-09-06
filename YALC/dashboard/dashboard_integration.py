@@ -282,7 +282,17 @@ class DashboardIntegration(object):
             event_sections = self._generate_event_sections(settings)
             channel_sections = self._generate_channel_sections(guild, settings)
 
-            # Create the template content using the form object
+            # Create manual HTML form without WTForms template rendering to avoid form object issues
+            # We'll handle CSRF manually using the data parameter approach
+            
+            # Create manual form fields with current values
+            include_thumbnails_checked = "checked" if settings.get("include_thumbnails", True) else ""
+            ignore_bots_checked = "checked" if settings.get("ignore_bots", False) else ""
+            ignore_webhooks_checked = "checked" if settings.get("ignore_webhooks", False) else ""
+            ignore_tupperbox_checked = "checked" if settings.get("ignore_tupperbox", True) else ""
+            ignore_apps_checked = "checked" if settings.get("ignore_apps", True) else ""
+            detect_proxy_deletes_checked = "checked" if settings.get("detect_proxy_deletes", True) else ""
+            
             source = f"""
             <div style="padding: 1em; max-width: 1200px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #1a1a1a; color: #e0e0e0; min-height: 100vh;">
                 <div style="background: linear-gradient(135deg, #2c5aa0 0%, #4a148c 100%); color: white; padding: 2em; border-radius: 10px; margin-bottom: 2em; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);">
@@ -291,11 +301,7 @@ class DashboardIntegration(object):
                     <p style="margin: 0.5em 0 0 0; opacity: 0.8; font-size: 0.9em;">Monitor 40+ event types across your Discord server</p>
                 </div>
 
-                <!-- Use the WTForms template syntax -->
-                {{{{ form.hidden_tag() }}}}
                 <form method="POST" style="width: 100%;">
-                    {{{{ form.hidden_tag() }}}}
-                    
                     <!-- Filter Settings Section -->
                     <div style="margin-bottom: 2em; padding: 1.5em; background: #2d2d2d; border-radius: 8px; border-left: 4px solid #4caf50;">
                         <h3 style="color: #4caf50; margin-top: 0; margin-bottom: 1em; font-size: 1.3em; font-weight: 600;">🔍 Filtering Options</h3>
@@ -303,7 +309,8 @@ class DashboardIntegration(object):
 
                         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px;">
                             <label style="display: flex; align-items: center; padding: 0.8em; background: #3a3a3a; border-radius: 6px; border: 1px solid #4a4a4a; cursor: pointer; transition: all 0.2s ease;">
-                                {{{{ form.include_thumbnails(style="margin-right: 12px; transform: scale(1.3); accent-color: #4caf50;") }}}}
+                                <input type="checkbox" name="include_thumbnails" value="1" {include_thumbnails_checked}
+                                       style="margin-right: 12px; transform: scale(1.3); accent-color: #4caf50;">
                                 <div>
                                     <div style="font-weight: 500; color: #e0e0e0;">🖼️ Include user thumbnails</div>
                                     <div style="font-size: 0.85em; color: #b0b0b0; margin-top: 2px;">Show user avatars in log embeds</div>
@@ -311,7 +318,8 @@ class DashboardIntegration(object):
                             </label>
 
                             <label style="display: flex; align-items: center; padding: 0.8em; background: #3a3a3a; border-radius: 6px; border: 1px solid #4a4a4a; cursor: pointer; transition: all 0.2s ease;">
-                                {{{{ form.ignore_bots(style="margin-right: 12px; transform: scale(1.3); accent-color: #4caf50;") }}}}
+                                <input type="checkbox" name="ignore_bots" value="1" {ignore_bots_checked}
+                                       style="margin-right: 12px; transform: scale(1.3); accent-color: #4caf50;">
                                 <div>
                                     <div style="font-weight: 500; color: #e0e0e0;">🤖 Ignore bot messages</div>
                                     <div style="font-size: 0.85em; color: #b0b0b0; margin-top: 2px;">Skip logging events from bots</div>
@@ -319,7 +327,8 @@ class DashboardIntegration(object):
                             </label>
 
                             <label style="display: flex; align-items: center; padding: 0.8em; background: #3a3a3a; border-radius: 6px; border: 1px solid #4a4a4a; cursor: pointer; transition: all 0.2s ease;">
-                                {{{{ form.ignore_webhooks(style="margin-right: 12px; transform: scale(1.3); accent-color: #4caf50;") }}}}
+                                <input type="checkbox" name="ignore_webhooks" value="1" {ignore_webhooks_checked}
+                                       style="margin-right: 12px; transform: scale(1.3); accent-color: #4caf50;">
                                 <div>
                                     <div style="font-weight: 500; color: #e0e0e0;">🪝 Ignore webhook messages</div>
                                     <div style="font-size: 0.85em; color: #b0b0b0; margin-top: 2px;">Skip logging webhook events</div>
@@ -327,7 +336,8 @@ class DashboardIntegration(object):
                             </label>
 
                             <label style="display: flex; align-items: center; padding: 0.8em; background: #3a3a3a; border-radius: 6px; border: 1px solid #4a4a4a; cursor: pointer; transition: all 0.2s ease;">
-                                {{{{ form.ignore_tupperbox(style="margin-right: 12px; transform: scale(1.3); accent-color: #4caf50;") }}}}
+                                <input type="checkbox" name="ignore_tupperbox" value="1" {ignore_tupperbox_checked}
+                                       style="margin-right: 12px; transform: scale(1.3); accent-color: #4caf50;">
                                 <div>
                                     <div style="font-weight: 500; color: #e0e0e0;">👥 Ignore Tupperbox/proxy messages</div>
                                     <div style="font-size: 0.85em; color: #b0b0b0; margin-top: 2px;">Skip logging proxy bot messages</div>
@@ -335,7 +345,8 @@ class DashboardIntegration(object):
                             </label>
 
                             <label style="display: flex; align-items: center; padding: 0.8em; background: #3a3a3a; border-radius: 6px; border: 1px solid #4a4a4a; cursor: pointer; transition: all 0.2s ease;">
-                                {{{{ form.ignore_apps(style="margin-right: 12px; transform: scale(1.3); accent-color: #4caf50;") }}}}
+                                <input type="checkbox" name="ignore_apps" value="1" {ignore_apps_checked}
+                                       style="margin-right: 12px; transform: scale(1.3); accent-color: #4caf50;">
                                 <div>
                                     <div style="font-weight: 500; color: #e0e0e0;">📱 Ignore app messages</div>
                                     <div style="font-size: 0.85em; color: #b0b0b0; margin-top: 2px;">Skip logging application events</div>
@@ -343,7 +354,8 @@ class DashboardIntegration(object):
                             </label>
 
                             <label style="display: flex; align-items: center; padding: 0.8em; background: #3a3a3a; border-radius: 6px; border: 1px solid #4a4a4a; cursor: pointer; transition: all 0.2s ease;">
-                                {{{{ form.detect_proxy_deletes(style="margin-right: 12px; transform: scale(1.3); accent-color: #4caf50;") }}}}
+                                <input type="checkbox" name="detect_proxy_deletes" value="1" {detect_proxy_deletes_checked}
+                                       style="margin-right: 12px; transform: scale(1.3); accent-color: #4caf50;">
                                 <div>
                                     <div style="font-weight: 500; color: #e0e0e0;">🔍 Detect proxy deletes</div>
                                     <div style="font-size: 0.85em; color: #b0b0b0; margin-top: 2px;">Log when proxy messages are deleted</div>
@@ -360,7 +372,8 @@ class DashboardIntegration(object):
 
                     <!-- Submit button -->
                     <div style="text-align: center; margin-top: 3em; padding-top: 2em; border-top: 2px solid #4a4a4a;">
-                        {{{{ form.submit(style="background: linear-gradient(135deg, #4caf50 0%, #45a049 100%); color: white; border: none; padding: 1.2em 3em; border-radius: 8px; font-size: 1.1em; font-weight: 600; cursor: pointer; box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3); transition: all 0.3s ease;") }}}}
+                        <input type="submit" name="submit" value="💾 Save Configuration"
+                               style="background: linear-gradient(135deg, #4caf50 0%, #45a049 100%); color: white; border: none; padding: 1.2em 3em; border-radius: 8px; font-size: 1.1em; font-weight: 600; cursor: pointer; box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3); transition: all 0.3s ease;">
                         <p style="margin-top: 1em; color: #b0b0b0; font-size: 0.9em;">
                             Changes are applied immediately and saved to Red's configuration system
                         </p>
@@ -434,7 +447,6 @@ class DashboardIntegration(object):
                 "status": 0,
                 "web_content": {
                     "source": source,
-                    "form": form,  # Pass the form object for WTForms template rendering
                     "expanded": True,  # Use template without guild profile for more space
                 },
             }
