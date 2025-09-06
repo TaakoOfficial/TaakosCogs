@@ -40,14 +40,7 @@ class YALC(DashboardIntegration, commands.Cog):
         self.log = logging.getLogger("red.YALC")
         self.log.info("YALC initialized with DashboardIntegration")
         
-        # Dashboard listener for when Dashboard cog is loaded
-        @commands.Cog.listener()
-        async def on_dashboard_cog_add(self, dashboard_cog: commands.Cog) -> None:
-            """Called when the Dashboard cog is loaded."""
-            await self.dashboard_cog_add(dashboard_cog)
-        
-        # Bind the listener to this instance
-        self.on_dashboard_cog_add = on_dashboard_cog_add.__get__(self, type(self))
+        # Dashboard integration is handled by the DashboardIntegration mixin class
 
         # Real-time audit log entry storage for role attribution
         self.recent_audit_entries = {}

@@ -3,30 +3,23 @@ from redbot.core import commands
 import typing
 import logging
 
+# Try to import dashboard utilities - fallback if not available
 try:
-    from AAA3A_utils import Cog
     from AAA3A_utils.dashboard import dashboard_page
-    _aaa3a_available = True
 except ImportError:
-    _aaa3a_available = False
-    Cog = object
-    # Fallback decorator when AAA3A_utils is not available
+    # Fallback decorator for dashboard_page
     def dashboard_page():
         def decorator(func):
             return func
         return decorator
 
 
-class DashboardIntegration(Cog if _aaa3a_available else object):
+class DashboardIntegration(object):
     """Dashboard integration for YALC (Yet Another Logging Cog)."""
 
     def __init__(self, bot, *args, **kwargs) -> None:
-        if _aaa3a_available:
-            super().__init__(bot=bot, *args, **kwargs)
-        else:
-            # Fallback initialization for when AAA3A_utils is not available
-            self.bot = bot
-            self.log = logging.getLogger("red.YALC")
+        # This is a mixin class, so initialization is handled by the main cog
+        pass
             
         # Store event descriptions from main cog for dashboard use
         self.event_descriptions = getattr(self, 'event_descriptions', {
@@ -65,14 +58,14 @@ class DashboardIntegration(Cog if _aaa3a_available else object):
             "voice_state_update": ("🎧", "Voice State Changes"),
         })
 
-    def format_settings(
+    async def format_settings(
         self,
         guild: discord.Guild,
         **kwargs,
     ) -> typing.Dict[str, typing.Any]:
         """Format settings for the dashboard."""
         try:
-            config = self.config.guild(guild).all()
+            config = await self.config.guild(guild).all()
             
             # Format the settings data for display
             settings = {
@@ -162,7 +155,9 @@ class DashboardIntegration(Cog if _aaa3a_available else object):
                 await self.config.guild(guild).webhook_name_filter.set(new_settings["webhook_name_filter"])
                 
         except Exception as e:
-            self.log.error(f"Error updating YALC settings: {e}")
+            # Use bot logger if available, otherwise just pass
+            if hasattr(self, 'log') and self.log:
+                self.log.error(f"Error updating YALC settings: {e}")
 
     @dashboard_page()
     async def dashboard_page(
@@ -349,3 +344,8 @@ class DashboardIntegration(Cog if _aaa3a_available else object):
                 </div>
             </div>
         """
+
+    @commands.Cog.listener()
+    async def on_dashboard_cog_add(self, dashboard_cog: commands.Cog) -> None:
+        """Register the dashboard integration when dashboard cog is loaded."""
+        dashboard_cog.rpc.third_parties_handler.add_third_party(self)
