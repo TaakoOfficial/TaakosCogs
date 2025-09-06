@@ -243,7 +243,7 @@ class DashboardIntegration(object):
             event_sections = self._generate_event_sections(settings)
             channel_sections = self._generate_channel_sections(guild, settings)
 
-            # Create the template content with dark mode styling and proper form integration
+            # Create the template content with dark mode styling and manual form elements
             source = f"""
             <div style="padding: 1em; max-width: 1200px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #1a1a1a; color: #e0e0e0; min-height: 100vh;">
                 <div style="background: linear-gradient(135deg, #2c5aa0 0%, #4a148c 100%); color: white; padding: 2em; border-radius: 10px; margin-bottom: 2em; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);">
@@ -254,7 +254,7 @@ class DashboardIntegration(object):
 
                 <!-- Complete form with proper method and action -->
                 <form method="POST" style="width: 100%;">
-                    {{{{ form.hidden_tag() }}}}
+                    <input type="hidden" name="csrf_token" value="{{{{ csrf_token() }}}}">
                     
                     <!-- Filter Settings Section -->
                     <div style="margin-bottom: 2em; padding: 1.5em; background: #2d2d2d; border-radius: 8px; border-left: 4px solid #4caf50;">
@@ -263,49 +263,55 @@ class DashboardIntegration(object):
 
                         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px;">
                             <label style="display: flex; align-items: center; padding: 0.8em; background: #3a3a3a; border-radius: 6px; border: 1px solid #4a4a4a; cursor: pointer; transition: all 0.2s ease;">
-                                {{{{ form.include_thumbnails(style="margin-right: 12px; transform: scale(1.3); accent-color: #4caf50;") }}}}
+                                <input type="checkbox" name="yalc_settings_include_thumbnails" value="1" {'checked' if settings.get('include_thumbnails', True) else ''}
+                                       style="margin-right: 12px; transform: scale(1.3); accent-color: #4caf50;">
                                 <div>
-                                    <div style="font-weight: 500; color: #e0e0e0;">🖼️ {{{{ form.include_thumbnails.label.text }}}}</div>
+                                    <div style="font-weight: 500; color: #e0e0e0;">🖼️ Include user thumbnails</div>
                                     <div style="font-size: 0.85em; color: #b0b0b0; margin-top: 2px;">Show user avatars in log embeds</div>
                                 </div>
                             </label>
 
                             <label style="display: flex; align-items: center; padding: 0.8em; background: #3a3a3a; border-radius: 6px; border: 1px solid #4a4a4a; cursor: pointer; transition: all 0.2s ease;">
-                                {{{{ form.ignore_bots(style="margin-right: 12px; transform: scale(1.3); accent-color: #4caf50;") }}}}
+                                <input type="checkbox" name="yalc_settings_ignore_bots" value="1" {'checked' if settings.get('ignore_bots', False) else ''}
+                                       style="margin-right: 12px; transform: scale(1.3); accent-color: #4caf50;">
                                 <div>
-                                    <div style="font-weight: 500; color: #e0e0e0;">🤖 {{{{ form.ignore_bots.label.text }}}}</div>
+                                    <div style="font-weight: 500; color: #e0e0e0;">🤖 Ignore bot messages</div>
                                     <div style="font-size: 0.85em; color: #b0b0b0; margin-top: 2px;">Skip logging events from bots</div>
                                 </div>
                             </label>
 
                             <label style="display: flex; align-items: center; padding: 0.8em; background: #3a3a3a; border-radius: 6px; border: 1px solid #4a4a4a; cursor: pointer; transition: all 0.2s ease;">
-                                {{{{ form.ignore_webhooks(style="margin-right: 12px; transform: scale(1.3); accent-color: #4caf50;") }}}}
+                                <input type="checkbox" name="yalc_settings_ignore_webhooks" value="1" {'checked' if settings.get('ignore_webhooks', False) else ''}
+                                       style="margin-right: 12px; transform: scale(1.3); accent-color: #4caf50;">
                                 <div>
-                                    <div style="font-weight: 500; color: #e0e0e0;">🪝 {{{{ form.ignore_webhooks.label.text }}}}</div>
+                                    <div style="font-weight: 500; color: #e0e0e0;">🪝 Ignore webhook messages</div>
                                     <div style="font-size: 0.85em; color: #b0b0b0; margin-top: 2px;">Skip logging webhook events</div>
                                 </div>
                             </label>
 
                             <label style="display: flex; align-items: center; padding: 0.8em; background: #3a3a3a; border-radius: 6px; border: 1px solid #4a4a4a; cursor: pointer; transition: all 0.2s ease;">
-                                {{{{ form.ignore_tupperbox(style="margin-right: 12px; transform: scale(1.3); accent-color: #4caf50;") }}}}
+                                <input type="checkbox" name="yalc_settings_ignore_tupperbox" value="1" {'checked' if settings.get('ignore_tupperbox', True) else ''}
+                                       style="margin-right: 12px; transform: scale(1.3); accent-color: #4caf50;">
                                 <div>
-                                    <div style="font-weight: 500; color: #e0e0e0;">👥 {{{{ form.ignore_tupperbox.label.text }}}}</div>
+                                    <div style="font-weight: 500; color: #e0e0e0;">👥 Ignore Tupperbox/proxy messages</div>
                                     <div style="font-size: 0.85em; color: #b0b0b0; margin-top: 2px;">Skip logging proxy bot messages</div>
                                 </div>
                             </label>
 
                             <label style="display: flex; align-items: center; padding: 0.8em; background: #3a3a3a; border-radius: 6px; border: 1px solid #4a4a4a; cursor: pointer; transition: all 0.2s ease;">
-                                {{{{ form.ignore_apps(style="margin-right: 12px; transform: scale(1.3); accent-color: #4caf50;") }}}}
+                                <input type="checkbox" name="yalc_settings_ignore_apps" value="1" {'checked' if settings.get('ignore_apps', True) else ''}
+                                       style="margin-right: 12px; transform: scale(1.3); accent-color: #4caf50;">
                                 <div>
-                                    <div style="font-weight: 500; color: #e0e0e0;">📱 {{{{ form.ignore_apps.label.text }}}}</div>
+                                    <div style="font-weight: 500; color: #e0e0e0;">📱 Ignore app messages</div>
                                     <div style="font-size: 0.85em; color: #b0b0b0; margin-top: 2px;">Skip logging application events</div>
                                 </div>
                             </label>
 
                             <label style="display: flex; align-items: center; padding: 0.8em; background: #3a3a3a; border-radius: 6px; border: 1px solid #4a4a4a; cursor: pointer; transition: all 0.2s ease;">
-                                {{{{ form.detect_proxy_deletes(style="margin-right: 12px; transform: scale(1.3); accent-color: #4caf50;") }}}}
+                                <input type="checkbox" name="yalc_settings_detect_proxy_deletes" value="1" {'checked' if settings.get('detect_proxy_deletes', True) else ''}
+                                       style="margin-right: 12px; transform: scale(1.3); accent-color: #4caf50;">
                                 <div>
-                                    <div style="font-weight: 500; color: #e0e0e0;">🔍 {{{{ form.detect_proxy_deletes.label.text }}}}</div>
+                                    <div style="font-weight: 500; color: #e0e0e0;">🔍 Detect proxy deletes</div>
                                     <div style="font-size: 0.85em; color: #b0b0b0; margin-top: 2px;">Log when proxy messages are deleted</div>
                                 </div>
                             </label>
@@ -320,7 +326,8 @@ class DashboardIntegration(object):
 
                     <!-- Submit button -->
                     <div style="text-align: center; margin-top: 3em; padding-top: 2em; border-top: 2px solid #4a4a4a;">
-                        {{{{ form.submit(style="background: linear-gradient(135deg, #4caf50 0%, #45a049 100%); color: white; border: none; padding: 1.2em 3em; border-radius: 8px; font-size: 1.1em; font-weight: 600; cursor: pointer; box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3); transition: all 0.3s ease;") }}}}
+                        <input type="submit" name="yalc_settings_submit" value="💾 Save Configuration"
+                               style="background: linear-gradient(135deg, #4caf50 0%, #45a049 100%); color: white; border: none; padding: 1.2em 3em; border-radius: 8px; font-size: 1.1em; font-weight: 600; cursor: pointer; box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3); transition: all 0.3s ease;">
                         <p style="margin-top: 1em; color: #b0b0b0; font-size: 0.9em;">
                             Changes are applied immediately and saved to Red's configuration system
                         </p>
@@ -395,7 +402,6 @@ class DashboardIntegration(object):
                 "web_content": {
                     "source": source,
                     "expanded": True,  # Use template without guild profile for more space
-                    "form": form,  # Pass the WTForms form object for rendering
                 },
             }
             
