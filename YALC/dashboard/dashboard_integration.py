@@ -17,44 +17,46 @@ class DashboardIntegration(object):
 
     def __init__(self, bot, *args, **kwargs) -> None:
         # This is a mixin class, so initialization is handled by the main cog
-        pass
-            
-        # Store event descriptions from main cog for dashboard use
-        self.event_descriptions = getattr(self, 'event_descriptions', {
-            # Message events
-            "message_delete": ("🗑️", "Message Deletions"),
-            "message_edit": ("✏️", "Message Edits"),
-            "message_bulk_delete": ("♻️", "Bulk Message Deletions"),
-            "message_pin": ("📌", "Message Pins"),
-            "message_unpin": ("📍", "Message Unpins"),
-            
-            # Member events
-            "member_join": ("👋", "Member Joins"),
-            "member_leave": ("🚪", "Member Leaves"),
-            "member_ban": ("🔨", "Member Bans"),
-            "member_unban": ("🔓", "Member Unbans"),
-            "member_update": ("👤", "Member Updates"),
-            "member_kick": ("👢", "Member Kicks"),
-            "member_timeout": ("⏰", "Member Timeouts"),
-            
-            # Channel events
-            "channel_create": ("📝", "Channel Creation"),
-            "channel_delete": ("🗑️", "Channel Deletion"),
-            "channel_update": ("🔄", "Channel Updates"),
-            "thread_create": ("🧵", "Thread Creation"),
-            "thread_delete": ("🗑️", "Thread Deletion"),
-            "thread_update": ("🔄", "Thread Updates"),
-            
-            # Role events
-            "role_create": ("✨", "Role Creation"),
-            "role_delete": ("🗑️", "Role Deletion"),
-            "role_update": ("🔄", "Role Updates"),
-            
-            # Guild events
-            "guild_update": ("⚙️", "Server Updates"),
-            "emoji_update": ("😀", "Emoji Updates"),
-            "voice_state_update": ("🎧", "Voice State Changes"),
-        })
+        # Don't call super().__init__() as this could interfere with multiple inheritance
+        self.bot = bot
+        
+        # Initialize event descriptions if not already set by main cog
+        if not hasattr(self, 'event_descriptions'):
+            self.event_descriptions = {
+                # Message events
+                "message_delete": ("🗑️", "Message Deletions"),
+                "message_edit": ("✏️", "Message Edits"),
+                "message_bulk_delete": ("♻️", "Bulk Message Deletions"),
+                "message_pin": ("📌", "Message Pins"),
+                "message_unpin": ("📍", "Message Unpins"),
+                
+                # Member events
+                "member_join": ("👋", "Member Joins"),
+                "member_leave": ("🚪", "Member Leaves"),
+                "member_ban": ("🔨", "Member Bans"),
+                "member_unban": ("🔓", "Member Unbans"),
+                "member_update": ("👤", "Member Updates"),
+                "member_kick": ("👢", "Member Kicks"),
+                "member_timeout": ("⏰", "Member Timeouts"),
+                
+                # Channel events
+                "channel_create": ("📝", "Channel Creation"),
+                "channel_delete": ("🗑️", "Channel Deletion"),
+                "channel_update": ("🔄", "Channel Updates"),
+                "thread_create": ("🧵", "Thread Creation"),
+                "thread_delete": ("🗑️", "Thread Deletion"),
+                "thread_update": ("🔄", "Thread Updates"),
+                
+                # Role events
+                "role_create": ("✨", "Role Creation"),
+                "role_delete": ("🗑️", "Role Deletion"),
+                "role_update": ("🔄", "Role Updates"),
+                
+                # Guild events
+                "guild_update": ("⚙️", "Server Updates"),
+                "emoji_update": ("😀", "Emoji Updates"),
+                "voice_state_update": ("🎧", "Voice State Changes"),
+            }
 
     async def format_settings(
         self,
@@ -165,33 +167,53 @@ class DashboardIntegration(object):
         **kwargs,
     ) -> typing.Dict[str, typing.Any]:
         """Main dashboard page for YALC."""
-        guild = self.bot.get_guild(guild_id)
-        if not guild:
-            return {"status": 1, "error_title": "Invalid Guild", "error_message": "The specified guild could not be found."}
+        try:
+            # Check if we have access to the required attributes
+            if not hasattr(self, 'config') or not self.config:
+                return {
+                    "status": 1,
+                    "error_title": "Configuration Error",
+                    "error_message": "Dashboard integration is not properly initialized. Please reload the cog."
+                }
+            
+            guild = self.bot.get_guild(guild_id)
+            if not guild:
+                return {"status": 1, "error_title": "Invalid Guild", "error_message": "The specified guild could not be found."}
 
-        # Check permissions
-        member = guild.get_member(user.id)
-        if not member or not member.guild_permissions.manage_guild:
-            return {"status": 1, "error_title": "Insufficient Permissions", "error_message": "You need `Manage Server` permission to view this page."}
+            # Check permissions
+            member = guild.get_member(user.id)
+            if not member or not member.guild_permissions.manage_guild:
+                return {"status": 1, "error_title": "Insufficient Permissions", "error_message": "You need `Manage Server` permission to view this page."}
 
-        # Handle form submission for POST requests
-        method = kwargs.get("method", "GET")
-        if method == "POST":
-            return await self._handle_form_submission(guild, user, **kwargs)
+            # Handle form submission for POST requests
+            method = kwargs.get("method", "GET")
+            if method == "POST":
+                return await self._handle_form_submission(guild, user, **kwargs)
 
-        # Get current settings
-        settings = await self.config.guild(guild).all()
-        
-        # Generate HTML content with form
-        html_content = await self._generate_dashboard_html(guild, settings, **kwargs)
-        
-        return {
-            "status": 0,
-            "web_content": {
-                "source": html_content,
-                "expanded": True,  # Use template without guild profile for more space
-            },
-        }
+            # Get current settings
+            settings = await self.config.guild(guild).all()
+            
+            # Generate HTML content with form
+            html_content = await self._generate_dashboard_html(guild, settings, **kwargs)
+            
+            return {
+                "status": 0,
+                "web_content": {
+                    "source": html_content,
+                    "expanded": True,  # Use template without guild profile for more space
+                },
+            }
+            
+        except Exception as e:
+            # Log the error if we have access to the logger
+            if hasattr(self, 'log') and self.log:
+                self.log.error(f"Error in YALC dashboard page: {e}", exc_info=True)
+            
+            return {
+                "status": 1,
+                "error_title": "Dashboard Error",
+                "error_message": f"An error occurred while loading the dashboard: {str(e)}"
+            }
 
     async def _handle_form_submission(
         self,

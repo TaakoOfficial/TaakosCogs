@@ -31,22 +31,17 @@ class YALC(DashboardIntegration, commands.Cog):
     """
 
     def __init__(self, bot: Red):
-        # Initialize both parent classes explicitly
-        commands.Cog.__init__(self)
-        DashboardIntegration.__init__(self, bot)
-        
+        # Initialize the bot first
         self.bot = bot
+        
+        # Initialize config and logging before parent classes
         self.config = Config.get_conf(self, identifier=1234567890)
         self.log = logging.getLogger("red.YALC")
-        self.log.info("YALC initialized with DashboardIntegration")
         
-        # Dashboard integration is handled by the DashboardIntegration mixin class
-        # The on_dashboard_cog_add listener is inherited from DashboardIntegration
-
         # Real-time audit log entry storage for role attribution
         self.recent_audit_entries = {}
 
-        # Event descriptions for logging and dashboard
+        # Event descriptions for logging and dashboard - MUST be set before DashboardIntegration.__init__
         self.event_descriptions = {
             # Message events
             "message_delete": ("🗑️", "Message Deletions"),
@@ -123,6 +118,15 @@ class YALC(DashboardIntegration, commands.Cog):
             "automod_rule_delete": ("🗑️", "AutoMod Rule Deletion"),
             "automod_action": ("⚔️", "AutoMod Actions"),
         }
+        
+        # Initialize both parent classes after setting up all required attributes
+        commands.Cog.__init__(self)
+        DashboardIntegration.__init__(self, bot)
+        
+        self.log.info("YALC initialized with DashboardIntegration")
+        
+        # Dashboard integration is handled by the DashboardIntegration mixin class
+        # The on_dashboard_cog_add listener is inherited from DashboardIntegration
         
         # Configuration defaults
         default_guild = {
