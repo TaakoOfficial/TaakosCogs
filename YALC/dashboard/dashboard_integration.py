@@ -187,52 +187,6 @@ class DashboardIntegration(object):
 
             # Get current settings
             settings = await self.config.guild(guild).all()
-            
-            # Create WTForms form with current settings
-            import wtforms
-            
-            class YALCSettingsForm(kwargs["Form"]):
-                def __init__(self):
-                    super().__init__(prefix="yalc_settings_")
-                
-                # Filter settings with current values from settings
-                include_thumbnails = wtforms.BooleanField(
-                    "Include user thumbnails",
-                    default=settings.get("include_thumbnails", True)
-                )
-                ignore_bots = wtforms.BooleanField(
-                    "Ignore bot messages",
-                    default=settings.get("ignore_bots", False)
-                )
-                ignore_webhooks = wtforms.BooleanField(
-                    "Ignore webhook messages",
-                    default=settings.get("ignore_webhooks", False)
-                )
-                ignore_tupperbox = wtforms.BooleanField(
-                    "Ignore Tupperbox/proxy messages",
-                    default=settings.get("ignore_tupperbox", True)
-                )
-                ignore_apps = wtforms.BooleanField(
-                    "Ignore app messages",
-                    default=settings.get("ignore_apps", True)
-                )
-                detect_proxy_deletes = wtforms.BooleanField(
-                    "Detect proxy deletes",
-                    default=settings.get("detect_proxy_deletes", True)
-                )
-                
-                submit = wtforms.SubmitField("💾 Save Configuration")
-            
-            # Create form instance with current data
-            form = YALCSettingsForm()
-            
-            # Set form data to current settings
-            form.include_thumbnails.data = settings.get("include_thumbnails", True)
-            form.ignore_bots.data = settings.get("ignore_bots", False)
-            form.ignore_webhooks.data = settings.get("ignore_webhooks", False)
-            form.ignore_tupperbox.data = settings.get("ignore_tupperbox", True)
-            form.ignore_apps.data = settings.get("ignore_apps", True)
-            form.detect_proxy_deletes.data = settings.get("detect_proxy_deletes", True)
 
             # Handle form submission according to Red-Web-Dashboard documentation
             method = kwargs.get("method", "GET")
@@ -240,24 +194,29 @@ class DashboardIntegration(object):
                 # Get form data from the data parameter as specified in documentation
                 data = kwargs.get("data", {})
                 
-                # Check if we have form data to process
-                if data and ("submit" in data or any(key.startswith(("include_", "ignore_", "detect_", "event_")) for key in data.keys())):
-                    # Process basic filter settings
-                    new_settings = {
-                        "include_thumbnails": bool(data.get("include_thumbnails")),
-                        "ignore_bots": bool(data.get("ignore_bots")),
-                        "ignore_webhooks": bool(data.get("ignore_webhooks")),
-                        "ignore_tupperbox": bool(data.get("ignore_tupperbox")),
-                        "ignore_apps": bool(data.get("ignore_apps")),
-                        "detect_proxy_deletes": bool(data.get("detect_proxy_deletes")),
-                    }
+                # Log what we received for debugging
+                if hasattr(self, 'log') and self.log:
+                    self.log.info(f"YALC POST data received: {data}")
+                
+                # Check if we have any form data to process (more permissive check)
+                if data:
+                    # Process basic filter settings with more flexible field detection
+                    new_settings = {}
                     
-                    # Process event toggles
+                    # Handle checkbox values (checkbox fields only appear in data if checked)
+                    new_settings["include_thumbnails"] = "include_thumbnails" in data
+                    new_settings["ignore_bots"] = "ignore_bots" in data
+                    new_settings["ignore_webhooks"] = "ignore_webhooks" in data
+                    new_settings["ignore_tupperbox"] = "ignore_tupperbox" in data
+                    new_settings["ignore_apps"] = "ignore_apps" in data
+                    new_settings["detect_proxy_deletes"] = "detect_proxy_deletes" in data
+                    
+                    # Process event toggles (look for any event_ fields)
                     events = {}
                     for key, value in data.items():
                         if key.startswith("event_"):
                             event_name = key[6:]  # Remove "event_" prefix
-                            events[event_name] = bool(value)
+                            events[event_name] = True  # If field exists, it's checked
                     new_settings["events"] = events
                     
                     # Process channel configurations
@@ -271,6 +230,10 @@ class DashboardIntegration(object):
                                 event_channels[event_name] = None
                     new_settings["event_channels"] = event_channels
                     
+                    # Log what we're about to save for debugging
+                    if hasattr(self, 'log') and self.log:
+                        self.log.info(f"YALC updating settings: {new_settings}")
+                    
                     # Update settings
                     await self.update_settings(guild, new_settings)
                     
@@ -280,14 +243,11 @@ class DashboardIntegration(object):
                         "redirect_url": kwargs.get("request_url", ""),
                     }
             
-            # Generate additional HTML sections for events and channels (non-WTForms)
+            # Generate additional HTML sections for events and channels
             event_sections = self._generate_event_sections(settings)
             channel_sections = self._generate_channel_sections(guild, settings)
 
-            # Create manual HTML form without WTForms template rendering to avoid form object issues
-            # We'll handle CSRF manually using the data parameter approach
-            
-            # Create manual form fields with current values
+            # Create manual HTML form with current values
             include_thumbnails_checked = "checked" if settings.get("include_thumbnails", True) else ""
             ignore_bots_checked = "checked" if settings.get("ignore_bots", False) else ""
             ignore_webhooks_checked = "checked" if settings.get("ignore_webhooks", False) else ""
