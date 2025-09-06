@@ -234,49 +234,51 @@ class DashboardIntegration(object):
             form.ignore_apps.data = settings.get("ignore_apps", True)
             form.detect_proxy_deletes.data = settings.get("detect_proxy_deletes", True)
 
-            # Handle form validation and submission
+            # Handle form submission according to Red-Web-Dashboard documentation
             method = kwargs.get("method", "GET")
-            if method == "POST" and form.validate_on_submit():
-                # Process form data into settings format
-                new_settings = {
-                    "include_thumbnails": form.include_thumbnails.data,
-                    "ignore_bots": form.ignore_bots.data,
-                    "ignore_webhooks": form.ignore_webhooks.data,
-                    "ignore_tupperbox": form.ignore_tupperbox.data,
-                    "ignore_apps": form.ignore_apps.data,
-                    "detect_proxy_deletes": form.detect_proxy_deletes.data,
-                }
-                
-                # Also handle non-WTForms data from the form submission
+            if method == "POST":
+                # Get form data from the data parameter as specified in documentation
                 data = kwargs.get("data", {})
                 
-                # Process event toggles
-                events = {}
-                for key, value in data.items():
-                    if key.startswith("event_"):
-                        event_name = key[6:]  # Remove "event_" prefix
-                        events[event_name] = bool(value)
-                new_settings["events"] = events
-                
-                # Process channel configurations
-                event_channels = {}
-                for key, value in data.items():
-                    if key.startswith("event_channels[") and key.endswith("]"):
-                        event_name = key[15:-1]  # Extract event name from event_channels[event_name]
-                        if value and str(value).isdigit():
-                            event_channels[event_name] = int(value)
-                        else:
-                            event_channels[event_name] = None
-                new_settings["event_channels"] = event_channels
-                
-                # Update settings
-                await self.update_settings(guild, new_settings)
-                
-                return {
-                    "status": 0,
-                    "notifications": [{"message": "YALC settings updated successfully! 🎉", "category": "success"}],
-                    "redirect_url": kwargs.get("request_url", ""),
-                }
+                # Check if we have form data to process
+                if data and ("submit" in data or any(key.startswith(("include_", "ignore_", "detect_", "event_")) for key in data.keys())):
+                    # Process basic filter settings
+                    new_settings = {
+                        "include_thumbnails": bool(data.get("include_thumbnails")),
+                        "ignore_bots": bool(data.get("ignore_bots")),
+                        "ignore_webhooks": bool(data.get("ignore_webhooks")),
+                        "ignore_tupperbox": bool(data.get("ignore_tupperbox")),
+                        "ignore_apps": bool(data.get("ignore_apps")),
+                        "detect_proxy_deletes": bool(data.get("detect_proxy_deletes")),
+                    }
+                    
+                    # Process event toggles
+                    events = {}
+                    for key, value in data.items():
+                        if key.startswith("event_"):
+                            event_name = key[6:]  # Remove "event_" prefix
+                            events[event_name] = bool(value)
+                    new_settings["events"] = events
+                    
+                    # Process channel configurations
+                    event_channels = {}
+                    for key, value in data.items():
+                        if key.startswith("event_channels[") and key.endswith("]"):
+                            event_name = key[15:-1]  # Extract event name from event_channels[event_name]
+                            if value and str(value).isdigit():
+                                event_channels[event_name] = int(value)
+                            else:
+                                event_channels[event_name] = None
+                    new_settings["event_channels"] = event_channels
+                    
+                    # Update settings
+                    await self.update_settings(guild, new_settings)
+                    
+                    return {
+                        "status": 0,
+                        "notifications": [{"message": "YALC settings updated successfully! 🎉", "category": "success"}],
+                        "redirect_url": kwargs.get("request_url", ""),
+                    }
             
             # Generate additional HTML sections for events and channels (non-WTForms)
             event_sections = self._generate_event_sections(settings)
