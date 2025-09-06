@@ -5,9 +5,13 @@ import logging
 
 # Try to import dashboard utilities - fallback if not available
 try:
+    from AAA3A_utils import Cog
     from AAA3A_utils.dashboard import dashboard_page
+    _aaa3a_available = True
 except ImportError:
-    # Fallback decorator for dashboard_page
+    _aaa3a_available = False
+    Cog = object
+    # Fallback decorator when AAA3A_utils is not available
     def dashboard_page():
         def decorator(func):
             return func

@@ -41,6 +41,7 @@ class YALC(DashboardIntegration, commands.Cog):
         self.log.info("YALC initialized with DashboardIntegration")
         
         # Dashboard integration is handled by the DashboardIntegration mixin class
+        # The on_dashboard_cog_add listener is inherited from DashboardIntegration
 
         # Real-time audit log entry storage for role attribution
         self.recent_audit_entries = {}
