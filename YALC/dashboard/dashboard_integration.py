@@ -422,33 +422,17 @@ class DashboardIntegration(object):
         user: discord.User,
         **kwargs
     ) -> typing.Dict[str, typing.Any]:
-        """Handle POST form submissions using WTForms."""
+        """Handle POST form submissions."""
         try:
-            # Use the Red-Web-Dashboard Form utility for proper CSRF handling
-            import wtforms
-            
-            class YALCSettingsForm(kwargs["Form"]):
-                def __init__(self):
-                    super().__init__(prefix="yalc_settings_")
-                
-                # Filter settings
-                include_thumbnails = wtforms.BooleanField("Include user thumbnails", default=True)
-                ignore_bots = wtforms.BooleanField("Ignore bot messages", default=False)
-                ignore_webhooks = wtforms.BooleanField("Ignore webhook messages", default=False)
-                ignore_tupperbox = wtforms.BooleanField("Ignore Tupperbox/proxy messages", default=True)
-                ignore_apps = wtforms.BooleanField("Ignore app messages", default=True)
-                detect_proxy_deletes = wtforms.BooleanField("Detect proxy deletes", default=True)
-                
-                submit = wtforms.SubmitField("Save Configuration")
-            
-            # Create form instance
-            form = YALCSettingsForm()
-            
             # Get raw form data from the request
             data = kwargs.get("data", {})
             
-            # Validate form with CSRF - but also check if we have form data
-            if form.validate_on_submit() or (data and "yalc_settings_submit" in data):
+            # Debug: Log what we received
+            if hasattr(self, 'log') and self.log:
+                self.log.info(f"YALC Form submission data: {data}")
+            
+            # Check if this is a form submission
+            if data and ("yalc_settings_submit" in data or "submit" in data):
                 # Process form data into settings format
                 new_settings = {
                     "include_thumbnails": bool(data.get("yalc_settings_include_thumbnails")),
@@ -478,6 +462,10 @@ class DashboardIntegration(object):
                             event_channels[event_name] = None
                 new_settings["event_channels"] = event_channels
                 
+                # Debug: Log what we're about to save
+                if hasattr(self, 'log') and self.log:
+                    self.log.info(f"YALC Saving settings: {new_settings}")
+                
                 # Update settings
                 await self.update_settings(guild, new_settings)
                 
@@ -487,23 +475,11 @@ class DashboardIntegration(object):
                     "redirect_url": kwargs.get("request_url", ""),
                 }
             else:
-                # Form validation failed
-                error_messages = []
-                if hasattr(form, 'errors'):
-                    for field, errors in form.errors.items():
-                        for error in errors:
-                            error_messages.append(f"{field}: {error}")
-                
-                if error_messages:
-                    return {
-                        "status": 1,
-                        "notifications": [{"message": f"Form validation failed: {'; '.join(error_messages)}", "category": "error"}],
-                    }
-                else:
-                    return {
-                        "status": 1,
-                        "notifications": [{"message": "No form data received or CSRF validation failed", "category": "error"}],
-                    }
+                # No valid form submission detected
+                return {
+                    "status": 1,
+                    "notifications": [{"message": "No valid form submission detected", "category": "error"}],
+                }
             
         except Exception as e:
             if hasattr(self, 'log') and self.log:
