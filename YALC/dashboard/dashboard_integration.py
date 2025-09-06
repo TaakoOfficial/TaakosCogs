@@ -3,19 +3,13 @@ from redbot.core import commands
 import typing
 import logging
 
-# Try to import dashboard utilities - fallback if not available
-try:
-    from AAA3A_utils import Cog
-    from AAA3A_utils.dashboard import dashboard_page
-    _aaa3a_available = True
-except ImportError:
-    _aaa3a_available = False
-    Cog = object
-    # Fallback decorator when AAA3A_utils is not available
-    def dashboard_page():
-        def decorator(func):
-            return func
-        return decorator
+# Dashboard integration decorator - compatible with Red-Web-Dashboard
+def dashboard_page(*args, **kwargs):
+    """Dashboard page decorator that stores parameters for later registration."""
+    def decorator(func: typing.Callable):
+        func.__dashboard_decorator_params__ = (args, kwargs)
+        return func
+    return decorator
 
 
 class DashboardIntegration(object):
@@ -163,7 +157,7 @@ class DashboardIntegration(object):
             if hasattr(self, 'log') and self.log:
                 self.log.error(f"Error updating YALC settings: {e}")
 
-    @dashboard_page()
+    @dashboard_page(name=None, methods=("GET", "POST"))
     async def dashboard_page(
         self,
         user: discord.User,
@@ -173,54 +167,189 @@ class DashboardIntegration(object):
         """Main dashboard page for YALC."""
         guild = self.bot.get_guild(guild_id)
         if not guild:
-            return {"status": 1, "web_content": {"error": "Invalid guild."}}
+            return {"status": 1, "error_title": "Invalid Guild", "error_message": "The specified guild could not be found."}
 
         # Check permissions
         member = guild.get_member(user.id)
         if not member or not member.guild_permissions.manage_guild:
-            return {"status": 1, "web_content": {"error": "You need `Manage Server` permission to view this page."}}
+            return {"status": 1, "error_title": "Insufficient Permissions", "error_message": "You need `Manage Server` permission to view this page."}
+
+        # Handle form submission for POST requests
+        method = kwargs.get("method", "GET")
+        if method == "POST":
+            return await self._handle_form_submission(guild, user, **kwargs)
 
         # Get current settings
         settings = await self.config.guild(guild).all()
         
-        # Generate HTML content
-        html_content = await self._generate_dashboard_html(guild, settings)
+        # Generate HTML content with form
+        html_content = await self._generate_dashboard_html(guild, settings, **kwargs)
         
         return {
             "status": 0,
             "web_content": {
                 "source": html_content,
-                "settings": settings,
+                "expanded": True,  # Use template without guild profile for more space
             },
         }
 
-    async def _generate_dashboard_html(self, guild: discord.Guild, settings: dict) -> str:
+    async def _handle_form_submission(
+        self,
+        guild: discord.Guild,
+        user: discord.User,
+        **kwargs
+    ) -> typing.Dict[str, typing.Any]:
+        """Handle POST form submissions."""
+        try:
+            # Get form data
+            data = kwargs.get("data", {})
+            form_data = data.get("form", {})
+            
+            # Process form data into settings format
+            new_settings = {}
+            
+            # Process filter settings
+            new_settings["include_thumbnails"] = "include_thumbnails" in form_data
+            new_settings["ignore_bots"] = "ignore_bots" in form_data
+            new_settings["ignore_webhooks"] = "ignore_webhooks" in form_data
+            new_settings["ignore_tupperbox"] = "ignore_tupperbox" in form_data
+            new_settings["ignore_apps"] = "ignore_apps" in form_data
+            new_settings["detect_proxy_deletes"] = "detect_proxy_deletes" in form_data
+            
+            # Process event toggles
+            events = {}
+            for key in form_data:
+                if key.startswith("event_"):
+                    event_name = key[6:]  # Remove "event_" prefix
+                    events[event_name] = True
+            new_settings["events"] = events
+            
+            # Process channel configurations
+            event_channels = {}
+            for key in form_data:
+                if key.startswith("event_channels[") and key.endswith("]"):
+                    event_name = key[15:-1]  # Extract event name from event_channels[event_name]
+                    channel_id = form_data[key]
+                    if channel_id and channel_id.isdigit():
+                        event_channels[event_name] = int(channel_id)
+                    else:
+                        event_channels[event_name] = None
+            new_settings["event_channels"] = event_channels
+            
+            # Update settings
+            await self.update_settings(guild, new_settings)
+            
+            return {
+                "status": 0,
+                "notifications": [{"message": "Settings updated successfully!", "category": "success"}],
+                "redirect_url": kwargs.get("request_url", ""),
+            }
+            
+        except Exception as e:
+            if hasattr(self, 'log') and self.log:
+                self.log.error(f"Error handling form submission: {e}")
+            return {
+                "status": 1,
+                "notifications": [{"message": f"Error updating settings: {str(e)}", "category": "error"}],
+            }
+
+    async def _generate_dashboard_html(self, guild: discord.Guild, settings: dict, **kwargs) -> str:
         """Generate the main dashboard HTML."""
+        # Get CSRF token if available
+        csrf_token = kwargs.get("csrf_token", ("", ""))
+        csrf_field = f'<input type="hidden" name="csrf_token" value="{csrf_token[0]}">' if csrf_token[0] else ""
+        
         # Generate event toggle sections
         event_sections = self._generate_event_sections(settings)
         channel_sections = self._generate_channel_sections(guild, settings)
         filter_sections = self._generate_filter_sections(guild, settings)
 
         html_content = f"""
-        <div style="padding: 1em; max-width: 1200px;">
-            <div style="background: linear-gradient(135deg, #3949ab 0%, #5e35b1 100%); color: white; padding: 2em; border-radius: 10px; margin-bottom: 2em;">
-                <h1 style="margin: 0; font-size: 2em;">⚙️ YALC Settings</h1>
-                <p style="margin: 0.5em 0 0 0; opacity: 0.9;">Configure logging for {guild.name}</p>
+        <div style="padding: 1em; max-width: 1200px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+            <div style="background: linear-gradient(135deg, #3949ab 0%, #5e35b1 100%); color: white; padding: 2em; border-radius: 10px; margin-bottom: 2em; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);">
+                <h1 style="margin: 0; font-size: 2em; font-weight: 600;">⚙️ YALC Settings</h1>
+                <p style="margin: 0.5em 0 0 0; opacity: 0.9; font-size: 1.1em;">Configure comprehensive logging for <strong>{guild.name}</strong></p>
+                <p style="margin: 0.5em 0 0 0; opacity: 0.8; font-size: 0.9em;">Monitor 40+ event types across your Discord server</p>
             </div>
 
-            <form method="POST" style="background: white; border-radius: 10px; padding: 2em; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+            <form method="POST" style="background: white; border-radius: 10px; padding: 2em; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1); border: 1px solid #e1e5e9;" id="yalc-settings-form">
+                {csrf_field}
+                {filter_sections}
                 {event_sections}
                 {channel_sections}
-                {filter_sections}
 
-                <div style="text-align: center; margin-top: 2em; padding-top: 2em; border-top: 1px solid #e0e0e0;">
-                    <button type="submit" style="background: #4caf50; color: white; border: none; padding: 1em 2em; border-radius: 5px; font-size: 1.1em; cursor: pointer;">Save Settings</button>
+                <div style="text-align: center; margin-top: 3em; padding-top: 2em; border-top: 2px solid #f0f2f5;">
+                    <button type="submit" style="background: linear-gradient(135deg, #4caf50 0%, #45a049 100%); color: white; border: none; padding: 1.2em 3em; border-radius: 8px; font-size: 1.1em; font-weight: 600; cursor: pointer; box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3); transition: all 0.3s ease;" id="save-button">
+                        💾 Save Configuration
+                    </button>
+                    <p style="margin-top: 1em; color: #666; font-size: 0.9em;">
+                        Changes are applied immediately and saved to Red's configuration system
+                    </p>
                 </div>
             </form>
 
-            <div style="margin-top: 2em; text-align: center; color: #666;">
-                <p>Changes are saved automatically to Red's configuration system.</p>
+            <div style="margin-top: 2em; padding: 1.5em; background: #f8f9fa; border-radius: 8px; border-left: 4px solid #17a2b8;">
+                <h4 style="margin: 0 0 0.5em 0; color: #17a2b8;">ℹ️ About YALC</h4>
+                <p style="margin: 0; color: #666; line-height: 1.5;">
+                    Yet Another Logging Cog provides comprehensive event logging for Discord servers.
+                    Configure which events to log, assign specific channels for different event types,
+                    and customize filtering options to suit your server's needs.
+                </p>
             </div>
+
+            <script>
+                // Add interactive enhancements
+                document.addEventListener('DOMContentLoaded', function() {{
+                    // Add hover effects to checkboxes
+                    const labels = document.querySelectorAll('label');
+                    labels.forEach(label => {{
+                        label.addEventListener('mouseenter', function() {{
+                            this.style.transform = 'translateY(-1px)';
+                            this.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.1)';
+                        }});
+                        label.addEventListener('mouseleave', function() {{
+                            this.style.transform = 'translateY(0)';
+                            this.style.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.05)';
+                        }});
+                    }});
+
+                    // Add form submission feedback
+                    const form = document.getElementById('yalc-settings-form');
+                    const saveButton = document.getElementById('save-button');
+                    
+                    if (form && saveButton) {{
+                        form.addEventListener('submit', function() {{
+                            saveButton.innerHTML = '⏳ Saving...';
+                            saveButton.disabled = true;
+                            saveButton.style.opacity = '0.7';
+                        }});
+                    }}
+
+                    // Count enabled events and update display
+                    function updateEventCounts() {{
+                        const eventCheckboxes = document.querySelectorAll('input[name^="event_"]');
+                        let totalEnabled = 0;
+                        eventCheckboxes.forEach(checkbox => {{
+                            if (checkbox.checked) totalEnabled++;
+                        }});
+                        
+                        // Update any event counter displays
+                        const counters = document.querySelectorAll('.event-counter');
+                        counters.forEach(counter => {{
+                            counter.textContent = totalEnabled;
+                        }});
+                    }}
+
+                    // Add event listeners to checkboxes
+                    const eventCheckboxes = document.querySelectorAll('input[name^="event_"]');
+                    eventCheckboxes.forEach(checkbox => {{
+                        checkbox.addEventListener('change', updateEventCounts);
+                    }});
+                    
+                    // Initial count
+                    updateEventCounts();
+                }});
+            </script>
         </div>
         """
         return html_content
@@ -230,37 +359,84 @@ class DashboardIntegration(object):
         # Get event descriptions from the main cog
         event_descriptions = getattr(self, 'event_descriptions', {})
         
+        # Expanded categories with more complete event coverage
         categories = {
-            "Message Events": ["message_delete", "message_edit", "message_bulk_delete", "message_pin", "message_unpin"],
-            "Member Events": ["member_join", "member_leave", "member_ban", "member_unban", "member_kick", "member_timeout"],
-            "Voice Events": ["voice_state_update", "voice_update"],
-            "Channel Events": ["channel_create", "channel_delete", "channel_update", "thread_create", "thread_delete", "thread_update"],
-            "Role Events": ["role_create", "role_delete", "role_update"],
-            "Server Events": ["guild_update", "emoji_update", "sticker_update", "invite_create", "invite_delete"],
-            "Moderation Events": ["automod_rule_create", "automod_rule_update", "automod_rule_delete", "automod_action"]
+            "Message Events": {
+                "events": ["message_delete", "message_edit", "message_bulk_delete", "message_pin", "message_unpin"],
+                "color": "#e74c3c",
+                "description": "Track message modifications, deletions, and pin changes"
+            },
+            "Member Events": {
+                "events": ["member_join", "member_leave", "member_ban", "member_unban", "member_kick", "member_timeout", "member_update"],
+                "color": "#3498db",
+                "description": "Monitor member activity and moderation actions"
+            },
+            "Voice Events": {
+                "events": ["voice_state_update"],
+                "color": "#9b59b6",
+                "description": "Track voice channel activity and state changes"
+            },
+            "Channel Events": {
+                "events": ["channel_create", "channel_delete", "channel_update", "thread_create", "thread_delete", "thread_update"],
+                "color": "#f39c12",
+                "description": "Monitor channel and thread management"
+            },
+            "Role Events": {
+                "events": ["role_create", "role_delete", "role_update"],
+                "color": "#e67e22",
+                "description": "Track role creation, deletion, and permission changes"
+            },
+            "Server Events": {
+                "events": ["guild_update", "emoji_update"],
+                "color": "#1abc9c",
+                "description": "Monitor server settings and emoji changes"
+            }
         }
 
         sections = []
 
-        for category_name, events in categories.items():
+        for category_name, category_info in categories.items():
+            events = category_info["events"]
+            color = category_info["color"]
+            description = category_info["description"]
+            
             event_checkboxes = []
+            enabled_count = 0
+            
             for event in events:
                 if event in event_descriptions:
                     emoji, desc = event_descriptions[event]
-                    checked = "checked" if settings.get("events", {}).get(event, False) else ""
+                    is_checked = settings.get("events", {}).get(event, False)
+                    if is_checked:
+                        enabled_count += 1
+                    
+                    checked = "checked" if is_checked else ""
                     event_checkboxes.append(f"""
-                        <label style="display: inline-block; margin-right: 15px; margin-bottom: 8px;">
+                        <label style="display: flex; align-items: center; padding: 0.6em; background: white; border-radius: 6px; border: 1px solid #e1e5e9; cursor: pointer; transition: all 0.2s ease; margin-bottom: 8px;">
                             <input type="checkbox" name="event_{event}" value="1" {checked}
-                                   style="margin-right: 5px; transform: scale(1.2);">
-                            {emoji} {desc}
+                                   style="margin-right: 10px; transform: scale(1.3); accent-color: {color};">
+                            <div style="flex: 1;">
+                                <div style="font-weight: 500; color: #2c3e50;">{emoji} {desc}</div>
+                                <div style="font-size: 0.8em; color: #7f8c8d; margin-top: 2px;">Event: {event}</div>
+                            </div>
                         </label>
                     """)
 
             if event_checkboxes:
+                status_badge = f"""
+                    <span style="background: {color}; color: white; padding: 0.3em 0.8em; border-radius: 12px; font-size: 0.85em; font-weight: 500;">
+                        {enabled_count}/{len(events)} enabled
+                    </span>
+                """
+                
                 sections.append(f"""
-                    <div style="margin-bottom: 2em; padding: 1.5em; background: #f8f9fa; border-radius: 8px;">
-                        <h3 style="color: #3949ab; margin-top: 0; border-bottom: 2px solid #3949ab; padding-bottom: 0.5em;">{category_name}</h3>
-                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 10px;">
+                    <div style="margin-bottom: 2em; padding: 1.5em; background: #f8f9fa; border-radius: 8px; border-left: 4px solid {color};">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1em;">
+                            <h3 style="color: {color}; margin: 0; font-size: 1.3em; font-weight: 600;">{category_name}</h3>
+                            {status_badge}
+                        </div>
+                        <p style="color: #666; margin-bottom: 1.5em; font-size: 0.95em;">{description}</p>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px;">
                             {"".join(event_checkboxes)}
                         </div>
                     </div>
@@ -272,78 +448,164 @@ class DashboardIntegration(object):
         """Generate HTML for channel configuration sections."""
         # Get text channels for dropdown
         text_channels = [c for c in guild.channels if isinstance(c, discord.TextChannel)]
-        channel_options = '<option value="">None</option>' + "".join(
-            f'<option value="{c.id}">{c.name}</option>' for c in text_channels
+        text_channels.sort(key=lambda c: c.name.lower())  # Sort alphabetically
+        
+        channel_options = '<option value="">📵 No logging</option>' + "".join(
+            f'<option value="{c.id}">#{c.name}</option>' for c in text_channels
         )
 
         enabled_events = [event for event, enabled in settings.get("events", {}).items() if enabled]
 
         if not enabled_events:
-            return '<div style="margin-bottom: 2em; padding: 1.5em; background: #fff3cd; border-radius: 8px; border-left: 4px solid #ffc107;"><p>⚠️ Enable some events above to configure their log channels.</p></div>'
+            return """
+            <div style="margin-bottom: 2em; padding: 2em; background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%); border-radius: 8px; border-left: 4px solid #f39c12; text-align: center;">
+                <h4 style="margin: 0 0 0.5em 0; color: #f39c12; font-size: 1.2em;">⚠️ No Events Enabled</h4>
+                <p style="margin: 0; color: #856404; font-size: 1em;">
+                    Enable some events in the sections above to configure their log channels.
+                    <br><small>Each event type can be logged to a different channel for better organization.</small>
+                </p>
+            </div>
+            """
 
         event_descriptions = getattr(self, 'event_descriptions', {})
         
-        channel_config_html = ""
-        for event in enabled_events:
-            if event in event_descriptions:
-                emoji, desc = event_descriptions[event]
-                current_channel_id = settings.get("event_channels", {}).get(event)
-                selected_value = current_channel_id if current_channel_id else ""
+        # Group events by category for better organization
+        categories = {
+            "Message Events": ["message_delete", "message_edit", "message_bulk_delete", "message_pin", "message_unpin"],
+            "Member Events": ["member_join", "member_leave", "member_ban", "member_unban", "member_kick", "member_timeout", "member_update"],
+            "Voice Events": ["voice_state_update"],
+            "Channel Events": ["channel_create", "channel_delete", "channel_update", "thread_create", "thread_delete", "thread_update"],
+            "Role Events": ["role_create", "role_delete", "role_update"],
+            "Server Events": ["guild_update", "emoji_update"]
+        }
+        
+        category_sections = []
+        configured_count = 0
+        total_enabled = len(enabled_events)
+        
+        for category_name, category_events in categories.items():
+            category_enabled = [event for event in category_events if event in enabled_events]
+            if not category_enabled:
+                continue
+                
+            channel_config_html = ""
+            for event in category_enabled:
+                if event in event_descriptions:
+                    emoji, desc = event_descriptions[event]
+                    current_channel_id = settings.get("event_channels", {}).get(event)
+                    if current_channel_id:
+                        configured_count += 1
+                    
+                    # Create options with current selection
+                    options_with_selection = channel_options
+                    if current_channel_id:
+                        options_with_selection = options_with_selection.replace(
+                            f'value="{current_channel_id}"',
+                            f'value="{current_channel_id}" selected'
+                        )
 
-                channel_config_html += f"""
-                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.5em 0; border-bottom: 1px solid #eee;">
-                        <label for="channel_{event}" style="flex: 1; margin-right: 1em;">
-                            {emoji} {desc}
-                        </label>
-                        <select name="event_channels[{event}]" id="channel_{event}" style="flex: 0 0 200px; padding: 0.5em; border-radius: 4px; border: 1px solid #ccc;">
-                            {channel_options.replace(f'value="{selected_value}"', f'value="{selected_value}" selected')}
-                        </select>
+                    channel_config_html += f"""
+                        <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.8em; background: white; border-radius: 6px; border: 1px solid #e1e5e9; margin-bottom: 8px;">
+                            <label for="channel_{event}" style="flex: 1; margin-right: 1.5em; font-weight: 500; color: #2c3e50;">
+                                {emoji} {desc}
+                                <div style="font-size: 0.8em; color: #7f8c8d; margin-top: 2px; font-weight: normal;">Event: {event}</div>
+                            </label>
+                            <select name="event_channels[{event}]" id="channel_{event}"
+                                    style="flex: 0 0 250px; padding: 0.7em; border-radius: 6px; border: 1px solid #ddd; font-size: 0.9em; background: white;">
+                                {options_with_selection}
+                            </select>
+                        </div>
+                    """
+            
+            if channel_config_html:
+                category_sections.append(f"""
+                    <div style="margin-bottom: 1.5em;">
+                        <h4 style="color: #3949ab; margin: 0 0 0.8em 0; font-size: 1.1em; font-weight: 600; border-bottom: 1px solid #e1e5e9; padding-bottom: 0.5em;">
+                            {category_name}
+                        </h4>
+                        {channel_config_html}
                     </div>
-                """
+                """)
+
+        status_text = f"{configured_count}/{total_enabled} events have channels configured"
+        status_color = "#28a745" if configured_count == total_enabled else "#ffc107" if configured_count > 0 else "#dc3545"
 
         return f"""
-            <div style="margin-bottom: 2em; padding: 1.5em; background: #f8f9fa; border-radius: 8px;">
-                <h3 style="color: #3949ab; margin-top: 0; border-bottom: 2px solid #3949ab; padding-bottom: 0.5em;">📢 Event Log Channels</h3>
-                <p style="color: #666; margin-bottom: 1em;">Select which channel each event should be logged to.</p>
-                {channel_config_html}
+            <div style="margin-bottom: 2em; padding: 1.5em; background: #f8f9fa; border-radius: 8px; border-left: 4px solid #17a2b8;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1em;">
+                    <h3 style="color: #17a2b8; margin: 0; font-size: 1.3em; font-weight: 600;">📢 Event Log Channels</h3>
+                    <span style="background: {status_color}; color: white; padding: 0.3em 0.8em; border-radius: 12px; font-size: 0.85em; font-weight: 500;">
+                        {status_text}
+                    </span>
+                </div>
+                <p style="color: #666; margin-bottom: 1.5em; font-size: 0.95em;">
+                    Assign specific channels for each enabled event type. Events without assigned channels won't be logged.
+                    <br><small style="color: #888;">💡 Tip: Use different channels for different event types to keep logs organized.</small>
+                </p>
+                {"".join(category_sections)}
             </div>
         """
 
     def _generate_filter_sections(self, guild: discord.Guild, settings: dict) -> str:
         """Generate HTML for filtering options."""
         return f"""
-            <div style="margin-bottom: 2em; padding: 1.5em; background: #f8f9fa; border-radius: 8px;">
-                <h3 style="color: #3949ab; margin-top: 0; border-bottom: 2px solid #3949ab; padding-bottom: 0.5em;">🔍 Filtering Options</h3>
+            <div style="margin-bottom: 2em; padding: 1.5em; background: #f8f9fa; border-radius: 8px; border-left: 4px solid #28a745;">
+                <h3 style="color: #28a745; margin-top: 0; margin-bottom: 1em; font-size: 1.3em; font-weight: 600;">🔍 Filtering Options</h3>
+                <p style="color: #666; margin-bottom: 1.5em; font-size: 0.95em;">Configure what types of messages and events to include or exclude from logging.</p>
 
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px;">
-                    <label style="display: flex; align-items: center;">
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px;">
+                    <label style="display: flex; align-items: center; padding: 0.8em; background: white; border-radius: 6px; border: 1px solid #e1e5e9; cursor: pointer; transition: all 0.2s ease;">
                         <input type="checkbox" name="include_thumbnails" value="1" {'checked' if settings.get('include_thumbnails', True) else ''}
-                               style="margin-right: 10px; transform: scale(1.2);">
-                        🖼️ Include user thumbnails
+                               style="margin-right: 12px; transform: scale(1.3); accent-color: #28a745;">
+                        <div>
+                            <div style="font-weight: 500;">🖼️ Include user thumbnails</div>
+                            <div style="font-size: 0.85em; color: #666; margin-top: 2px;">Show user avatars in log embeds</div>
+                        </div>
                     </label>
 
-                    <label style="display: flex; align-items: center;">
+                    <label style="display: flex; align-items: center; padding: 0.8em; background: white; border-radius: 6px; border: 1px solid #e1e5e9; cursor: pointer; transition: all 0.2s ease;">
                         <input type="checkbox" name="ignore_bots" value="1" {'checked' if settings.get('ignore_bots', False) else ''}
-                               style="margin-right: 10px; transform: scale(1.2);">
-                        🤖 Ignore bot messages
+                               style="margin-right: 12px; transform: scale(1.3); accent-color: #28a745;">
+                        <div>
+                            <div style="font-weight: 500;">🤖 Ignore bot messages</div>
+                            <div style="font-size: 0.85em; color: #666; margin-top: 2px;">Skip logging events from bots</div>
+                        </div>
                     </label>
 
-                    <label style="display: flex; align-items: center;">
+                    <label style="display: flex; align-items: center; padding: 0.8em; background: white; border-radius: 6px; border: 1px solid #e1e5e9; cursor: pointer; transition: all 0.2s ease;">
                         <input type="checkbox" name="ignore_webhooks" value="1" {'checked' if settings.get('ignore_webhooks', False) else ''}
-                               style="margin-right: 10px; transform: scale(1.2);">
-                        🪝 Ignore webhook messages
+                               style="margin-right: 12px; transform: scale(1.3); accent-color: #28a745;">
+                        <div>
+                            <div style="font-weight: 500;">🪝 Ignore webhook messages</div>
+                            <div style="font-size: 0.85em; color: #666; margin-top: 2px;">Skip logging webhook events</div>
+                        </div>
                     </label>
 
-                    <label style="display: flex; align-items: center;">
+                    <label style="display: flex; align-items: center; padding: 0.8em; background: white; border-radius: 6px; border: 1px solid #e1e5e9; cursor: pointer; transition: all 0.2s ease;">
                         <input type="checkbox" name="ignore_tupperbox" value="1" {'checked' if settings.get('ignore_tupperbox', True) else ''}
-                               style="margin-right: 10px; transform: scale(1.2);">
-                        👥 Ignore Tupperbox/proxy messages
+                               style="margin-right: 12px; transform: scale(1.3); accent-color: #28a745;">
+                        <div>
+                            <div style="font-weight: 500;">👥 Ignore Tupperbox/proxy messages</div>
+                            <div style="font-size: 0.85em; color: #666; margin-top: 2px;">Skip logging proxy bot messages</div>
+                        </div>
                     </label>
 
-                    <label style="display: flex; align-items: center;">
+                    <label style="display: flex; align-items: center; padding: 0.8em; background: white; border-radius: 6px; border: 1px solid #e1e5e9; cursor: pointer; transition: all 0.2s ease;">
                         <input type="checkbox" name="ignore_apps" value="1" {'checked' if settings.get('ignore_apps', True) else ''}
-                               style="margin-right: 10px; transform: scale(1.2);">
-                        📱 Ignore app messages
+                               style="margin-right: 12px; transform: scale(1.3); accent-color: #28a745;">
+                        <div>
+                            <div style="font-weight: 500;">📱 Ignore app messages</div>
+                            <div style="font-size: 0.85em; color: #666; margin-top: 2px;">Skip logging application events</div>
+                        </div>
+                    </label>
+
+                    <label style="display: flex; align-items: center; padding: 0.8em; background: white; border-radius: 6px; border: 1px solid #e1e5e9; cursor: pointer; transition: all 0.2s ease;">
+                        <input type="checkbox" name="detect_proxy_deletes" value="1" {'checked' if settings.get('detect_proxy_deletes', True) else ''}
+                               style="margin-right: 12px; transform: scale(1.3); accent-color: #28a745;">
+                        <div>
+                            <div style="font-weight: 500;">🔍 Detect proxy deletes</div>
+                            <div style="font-size: 0.85em; color: #666; margin-top: 2px;">Log when proxy messages are deleted</div>
+                        </div>
                     </label>
                 </div>
             </div>
