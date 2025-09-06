@@ -194,7 +194,13 @@ class DashboardIntegration(object):
             settings = await self.config.guild(guild).all()
             
             # Generate HTML content with form
-            html_content = await self._generate_dashboard_html(guild, settings, **kwargs)
+            # Only pass specific kwargs to avoid parameter conflicts
+            html_kwargs = {
+                "csrf_token": kwargs.get("csrf_token"),
+                "request_url": kwargs.get("request_url"),
+                "method": kwargs.get("method")
+            }
+            html_content = await self._generate_dashboard_html(guild, settings, **html_kwargs)
             
             return {
                 "status": 0,
