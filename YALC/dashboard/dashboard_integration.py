@@ -194,11 +194,21 @@ class DashboardIntegration(object):
 
             # Handle form submission with proper CSRF validation
             method = kwargs.get("method", "GET")
+            
+            # Enhanced diagnostic logging
+            if hasattr(self, 'log') and self.log:
+                self.log.debug(f"YALC Dashboard: method={method}, kwargs keys: {list(kwargs.keys())}")
+                if 'guild' in kwargs:
+                    self.log.warning(f"YALC Dashboard: 'guild' found in kwargs, this may cause duplicate parameter error")
+            
             if method == "POST":
                 return await self._handle_wtforms_submission(guild, user, settings, **kwargs)
             
+            # Remove 'guild' from kwargs to prevent duplicate parameter error
+            clean_kwargs = {k: v for k, v in kwargs.items() if k != 'guild'}
+            
             # Generate the dashboard using WTForms approach
-            return await self._generate_wtforms_dashboard(guild, settings, **kwargs)
+            return await self._generate_wtforms_dashboard(guild, settings, **clean_kwargs)
             
         except Exception as e:
             # Enhanced error logging
