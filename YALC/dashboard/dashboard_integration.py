@@ -650,14 +650,6 @@ class DashboardIntegration(object):
                 <p style="margin: 0.5em 0 0 0; opacity: 0.8; font-size: 0.9em;">Monitor 40+ event types across your Discord server</p>
             </div>
 
-            <div style="margin-bottom: 2em; padding: 1.5em; background: #2d1f2d; border-radius: 8px; border-left: 4px solid #4caf50;">
-                <h4 style="margin: 0 0 0.5em 0; color: #4caf50;">✅ WTForms Integration Active</h4>
-                <p style="margin: 0; color: #a5d6a7; line-height: 1.5;">
-                    CSRF protection is enabled via Red-Web-Dashboard's WTForms integration.
-                    Form fields will be rendered with proper security tokens.
-                </p>
-            </div>
-
             <!-- Manual form since WTForms template access is problematic -->
             <form method="POST" style="width: 100%;">
                 <!-- Filter Settings Section -->
