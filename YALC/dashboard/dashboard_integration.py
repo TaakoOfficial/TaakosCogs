@@ -188,73 +188,254 @@ class DashboardIntegration(object):
             # Get current settings
             settings = await self.config.guild(guild).all()
 
-            # Handle form submission according to Red-Web-Dashboard documentation
+            # Add comprehensive logging for debugging
+            if hasattr(self, 'log') and self.log:
+                self.log.info(f"YALC Dashboard accessed by {user.name} ({user.id}) for guild {guild.name} ({guild.id})")
+
+            # Handle form submission with proper CSRF validation
             method = kwargs.get("method", "GET")
             if method == "POST":
-                # Get form data from the data parameter as specified in documentation
-                data = kwargs.get("data", {})
-                
-                # Log what we received for debugging
-                if hasattr(self, 'log') and self.log:
-                    self.log.info(f"YALC POST data received: {data}")
-                
-                # Check if we have any form data to process (more permissive check)
-                if data:
-                    # Process basic filter settings with more flexible field detection
-                    new_settings = {}
-                    
-                    # Handle checkbox values (checkbox fields only appear in data if checked)
-                    new_settings["include_thumbnails"] = "include_thumbnails" in data
-                    new_settings["ignore_bots"] = "ignore_bots" in data
-                    new_settings["ignore_webhooks"] = "ignore_webhooks" in data
-                    new_settings["ignore_tupperbox"] = "ignore_tupperbox" in data
-                    new_settings["ignore_apps"] = "ignore_apps" in data
-                    new_settings["detect_proxy_deletes"] = "detect_proxy_deletes" in data
-                    
-                    # Process event toggles (look for any event_ fields)
-                    events = {}
-                    for key, value in data.items():
-                        if key.startswith("event_"):
-                            event_name = key[6:]  # Remove "event_" prefix
-                            events[event_name] = True  # If field exists, it's checked
-                    new_settings["events"] = events
-                    
-                    # Process channel configurations
-                    event_channels = {}
-                    for key, value in data.items():
-                        if key.startswith("event_channels[") and key.endswith("]"):
-                            event_name = key[15:-1]  # Extract event name from event_channels[event_name]
-                            if value and str(value).isdigit():
-                                event_channels[event_name] = int(value)
-                            else:
-                                event_channels[event_name] = None
-                    new_settings["event_channels"] = event_channels
-                    
-                    # Log what we're about to save for debugging
-                    if hasattr(self, 'log') and self.log:
-                        self.log.info(f"YALC updating settings: {new_settings}")
-                    
-                    # Update settings
-                    await self.update_settings(guild, new_settings)
-                    
-                    return {
-                        "status": 0,
-                        "notifications": [{"message": "YALC settings updated successfully! 🎉", "category": "success"}],
-                        "redirect_url": kwargs.get("request_url", ""),
-                    }
+                return await self._handle_wtforms_submission(guild, user, settings, **kwargs)
             
-            # Generate additional HTML sections for events and channels
+            # Generate the dashboard using WTForms approach
+            return await self._generate_wtforms_dashboard(guild, settings, **kwargs)
+            
+        except Exception as e:
+            # Enhanced error logging
+            if hasattr(self, 'log') and self.log:
+                self.log.error(f"Error in YALC dashboard page: {e}", exc_info=True)
+            
+            return {
+                "status": 1,
+                "error_title": "Dashboard Error",
+                "error_message": f"An error occurred while loading the dashboard: {str(e)}"
+            }
+
+    async def _handle_wtforms_submission(
+        self,
+        guild: discord.Guild,
+        user: discord.User,
+        settings: dict,
+        **kwargs
+    ) -> typing.Dict[str, typing.Any]:
+        """Handle POST form submissions with CSRF validation and proper error handling."""
+        try:
+            # Get form data and validate CSRF
+            form_data = kwargs.get("data", {})
+            
+            # Enhanced logging for debugging
+            if hasattr(self, 'log') and self.log:
+                self.log.info(f"YALC form submission from {user.name} ({user.id}) for guild {guild.name}")
+                self.log.debug(f"Form data keys: {list(form_data.keys())}")
+            
+            # Check for CSRF token (Red-Web-Dashboard should handle this automatically)
+            if not form_data:
+                if hasattr(self, 'log') and self.log:
+                    self.log.warning(f"YALC: Empty form data received from {user.name}")
+                return {
+                    "status": 1,
+                    "error_title": "Form Error",
+                    "error_message": "No form data received. This might be a CSRF token issue.",
+                    "notifications": [{"message": "❌ Form submission failed: No data received", "category": "error"}]
+                }
+            
+            # Process the form submission
+            try:
+                new_settings = await self._process_form_data(form_data)
+                
+                # Enhanced logging of what we're saving
+                if hasattr(self, 'log') and self.log:
+                    self.log.info(f"YALC: Updating settings for {guild.name}: {new_settings}")
+                
+                # Update settings with error handling
+                await self.update_settings(guild, new_settings)
+                
+                # Log successful save
+                if hasattr(self, 'log') and self.log:
+                    self.log.info(f"YALC: Settings successfully updated for {guild.name}")
+                
+                return {
+                    "status": 0,
+                    "notifications": [{"message": "✅ YALC settings updated successfully!", "category": "success"}],
+                    "redirect_url": kwargs.get("request_url", ""),
+                }
+                
+            except Exception as settings_error:
+                # Log settings update error
+                if hasattr(self, 'log') and self.log:
+                    self.log.error(f"YALC: Error updating settings for {guild.name}: {settings_error}", exc_info=True)
+                
+                return {
+                    "status": 1,
+                    "error_title": "Settings Update Error",
+                    "error_message": f"Failed to save settings: {str(settings_error)}",
+                    "notifications": [{"message": f"❌ Error saving settings: {str(settings_error)}", "category": "error"}]
+                }
+            
+        except Exception as e:
+            # Log submission handling error
+            if hasattr(self, 'log') and self.log:
+                self.log.error(f"YALC: Error handling form submission: {e}", exc_info=True)
+            
+            return {
+                "status": 1,
+                "error_title": "Form Processing Error",
+                "error_message": f"Error processing form submission: {str(e)}",
+                "notifications": [{"message": f"❌ Form processing failed: {str(e)}", "category": "error"}]
+            }
+
+    async def _process_form_data(self, form_data: dict) -> dict:
+        """Process form data into settings format with validation."""
+        new_settings = {}
+        
+        # Process basic filter settings (checkboxes only appear if checked)
+        checkbox_settings = [
+            "include_thumbnails", "ignore_bots", "ignore_webhooks",
+            "ignore_tupperbox", "ignore_apps", "detect_proxy_deletes"
+        ]
+        
+        for setting in checkbox_settings:
+            # Check both prefixed and non-prefixed versions for compatibility
+            new_settings[setting] = (
+                setting in form_data or
+                f"yalc_settings_{setting}" in form_data
+            )
+        
+        # Process event toggles
+        events = {}
+        for key, value in form_data.items():
+            if key.startswith("event_"):
+                event_name = key[6:]  # Remove "event_" prefix
+                events[event_name] = True  # If field exists, it's checked
+        new_settings["events"] = events
+        
+        # Process channel configurations
+        event_channels = {}
+        for key, value in form_data.items():
+            if key.startswith("event_channels[") and key.endswith("]"):
+                event_name = key[15:-1]  # Extract event name
+                if value and str(value).isdigit():
+                    event_channels[event_name] = int(value)
+                else:
+                    event_channels[event_name] = None
+        new_settings["event_channels"] = event_channels
+        
+        return new_settings
+
+    async def _generate_wtforms_dashboard(
+        self,
+        guild: discord.Guild,
+        settings: dict,
+        **kwargs
+    ) -> typing.Dict[str, typing.Any]:
+        """Generate dashboard using WTForms approach with proper CSRF handling."""
+        try:
+            # Check if WTForms is available in kwargs (passed by Red-Web-Dashboard)
+            Form = kwargs.get("Form")
+            if not Form:
+                # Fallback to manual form with warning about CSRF
+                if hasattr(self, 'log') and self.log:
+                    self.log.warning("YALC: WTForms not available, falling back to manual form")
+                return await self._generate_fallback_dashboard(guild, settings, **kwargs)
+            
+            # Create WTForms class with CSRF protection
+            import wtforms
+            
+            class YALCSettingsForm(Form):
+                def __init__(self, *args, **kwargs):
+                    super().__init__(prefix="yalc_settings_", *args, **kwargs)
+                
+                # Filter settings
+                include_thumbnails = wtforms.BooleanField(
+                    "Include user thumbnails",
+                    default=settings.get("include_thumbnails", True),
+                    description="Show user avatars in log embeds"
+                )
+                ignore_bots = wtforms.BooleanField(
+                    "Ignore bot messages",
+                    default=settings.get("ignore_bots", False),
+                    description="Skip logging events from bots"
+                )
+                ignore_webhooks = wtforms.BooleanField(
+                    "Ignore webhook messages",
+                    default=settings.get("ignore_webhooks", False),
+                    description="Skip logging webhook events"
+                )
+                ignore_tupperbox = wtforms.BooleanField(
+                    "Ignore Tupperbox/proxy messages",
+                    default=settings.get("ignore_tupperbox", True),
+                    description="Skip logging proxy bot messages"
+                )
+                ignore_apps = wtforms.BooleanField(
+                    "Ignore app messages",
+                    default=settings.get("ignore_apps", True),
+                    description="Skip logging application events"
+                )
+                detect_proxy_deletes = wtforms.BooleanField(
+                    "Detect proxy deletes",
+                    default=settings.get("detect_proxy_deletes", True),
+                    description="Log when proxy messages are deleted"
+                )
+                
+                submit = wtforms.SubmitField("💾 Save Configuration")
+            
+            # Create form instance
+            form = YALCSettingsForm()
+            
+            # Generate additional sections for events and channels
             event_sections = self._generate_event_sections(settings)
             channel_sections = self._generate_channel_sections(guild, settings)
-
-            # Create manual HTML form with current values
-            include_thumbnails_checked = "checked" if settings.get("include_thumbnails", True) else ""
-            ignore_bots_checked = "checked" if settings.get("ignore_bots", False) else ""
-            ignore_webhooks_checked = "checked" if settings.get("ignore_webhooks", False) else ""
-            ignore_tupperbox_checked = "checked" if settings.get("ignore_tupperbox", True) else ""
-            ignore_apps_checked = "checked" if settings.get("ignore_apps", True) else ""
-            detect_proxy_deletes_checked = "checked" if settings.get("detect_proxy_deletes", True) else ""
             
+            # Use WTForms template rendering (Red-Web-Dashboard will handle CSRF automatically)
+            return {
+                "status": 0,
+                "web_content": {
+                    "source": await self._generate_wtforms_html(guild, settings, event_sections, channel_sections),
+                    "form": form,  # Pass form to template for CSRF handling
+                    "expanded": True,
+                },
+            }
+            
+        except Exception as e:
+            if hasattr(self, 'log') and self.log:
+                self.log.error(f"YALC: Error generating WTForms dashboard: {e}", exc_info=True)
+            
+            # Fallback to basic dashboard
+            return await self._generate_fallback_dashboard(guild, settings, **kwargs)
+
+    async def _generate_fallback_dashboard(
+        self,
+        guild: discord.Guild,
+        settings: dict,
+        **kwargs
+    ) -> typing.Dict[str, typing.Any]:
+        """Generate fallback dashboard when WTForms is not available."""
+        try:
+            # Generate sections
+            event_sections = self._generate_event_sections(settings)
+            channel_sections = self._generate_channel_sections(guild, settings)
+            
+            # Warning message about CSRF
+            csrf_warning = """
+                <div style="margin-bottom: 2em; padding: 1.5em; background: #2d1f2d; border-radius: 8px; border-left: 4px solid #ff5722;">
+                    <h4 style="margin: 0 0 0.5em 0; color: #ff5722;">⚠️ CSRF Protection Warning</h4>
+                    <p style="margin: 0; color: #ffab91; line-height: 1.5;">
+                        WTForms is not available - using fallback form without full CSRF protection.
+                        If settings don't save properly, please ensure Red-Web-Dashboard is properly configured.
+                    </p>
+                </div>
+            """
+            
+            # Create checkbox values
+            checkbox_values = {
+                "include_thumbnails": "checked" if settings.get("include_thumbnails", True) else "",
+                "ignore_bots": "checked" if settings.get("ignore_bots", False) else "",
+                "ignore_webhooks": "checked" if settings.get("ignore_webhooks", False) else "",
+                "ignore_tupperbox": "checked" if settings.get("ignore_tupperbox", True) else "",
+                "ignore_apps": "checked" if settings.get("ignore_apps", True) else "",
+                "detect_proxy_deletes": "checked" if settings.get("detect_proxy_deletes", True) else "",
+            }
+
             source = f"""
             <div style="padding: 1em; max-width: 1200px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #1a1a1a; color: #e0e0e0; min-height: 100vh;">
                 <div style="background: linear-gradient(135deg, #2c5aa0 0%, #4a148c 100%); color: white; padding: 2em; border-radius: 10px; margin-bottom: 2em; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);">
@@ -262,6 +443,8 @@ class DashboardIntegration(object):
                     <p style="margin: 0.5em 0 0 0; opacity: 0.9; font-size: 1.1em;">Configure comprehensive logging for <strong>{guild.name}</strong></p>
                     <p style="margin: 0.5em 0 0 0; opacity: 0.8; font-size: 0.9em;">Monitor 40+ event types across your Discord server</p>
                 </div>
+
+                {csrf_warning}
 
                 <form method="POST" style="width: 100%;">
                     <!-- Filter Settings Section -->
@@ -271,7 +454,7 @@ class DashboardIntegration(object):
 
                         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px;">
                             <label style="display: flex; align-items: center; padding: 0.8em; background: #3a3a3a; border-radius: 6px; border: 1px solid #4a4a4a; cursor: pointer; transition: all 0.2s ease;">
-                                <input type="checkbox" name="include_thumbnails" value="1" {include_thumbnails_checked}
+                                <input type="checkbox" name="include_thumbnails" value="1" {checkbox_values["include_thumbnails"]}
                                        style="margin-right: 12px; transform: scale(1.3); accent-color: #4caf50;">
                                 <div>
                                     <div style="font-weight: 500; color: #e0e0e0;">🖼️ Include user thumbnails</div>
@@ -280,7 +463,7 @@ class DashboardIntegration(object):
                             </label>
 
                             <label style="display: flex; align-items: center; padding: 0.8em; background: #3a3a3a; border-radius: 6px; border: 1px solid #4a4a4a; cursor: pointer; transition: all 0.2s ease;">
-                                <input type="checkbox" name="ignore_bots" value="1" {ignore_bots_checked}
+                                <input type="checkbox" name="ignore_bots" value="1" {checkbox_values["ignore_bots"]}
                                        style="margin-right: 12px; transform: scale(1.3); accent-color: #4caf50;">
                                 <div>
                                     <div style="font-weight: 500; color: #e0e0e0;">🤖 Ignore bot messages</div>
@@ -289,7 +472,7 @@ class DashboardIntegration(object):
                             </label>
 
                             <label style="display: flex; align-items: center; padding: 0.8em; background: #3a3a3a; border-radius: 6px; border: 1px solid #4a4a4a; cursor: pointer; transition: all 0.2s ease;">
-                                <input type="checkbox" name="ignore_webhooks" value="1" {ignore_webhooks_checked}
+                                <input type="checkbox" name="ignore_webhooks" value="1" {checkbox_values["ignore_webhooks"]}
                                        style="margin-right: 12px; transform: scale(1.3); accent-color: #4caf50;">
                                 <div>
                                     <div style="font-weight: 500; color: #e0e0e0;">🪝 Ignore webhook messages</div>
@@ -298,7 +481,7 @@ class DashboardIntegration(object):
                             </label>
 
                             <label style="display: flex; align-items: center; padding: 0.8em; background: #3a3a3a; border-radius: 6px; border: 1px solid #4a4a4a; cursor: pointer; transition: all 0.2s ease;">
-                                <input type="checkbox" name="ignore_tupperbox" value="1" {ignore_tupperbox_checked}
+                                <input type="checkbox" name="ignore_tupperbox" value="1" {checkbox_values["ignore_tupperbox"]}
                                        style="margin-right: 12px; transform: scale(1.3); accent-color: #4caf50;">
                                 <div>
                                     <div style="font-weight: 500; color: #e0e0e0;">👥 Ignore Tupperbox/proxy messages</div>
@@ -307,7 +490,7 @@ class DashboardIntegration(object):
                             </label>
 
                             <label style="display: flex; align-items: center; padding: 0.8em; background: #3a3a3a; border-radius: 6px; border: 1px solid #4a4a4a; cursor: pointer; transition: all 0.2s ease;">
-                                <input type="checkbox" name="ignore_apps" value="1" {ignore_apps_checked}
+                                <input type="checkbox" name="ignore_apps" value="1" {checkbox_values["ignore_apps"]}
                                        style="margin-right: 12px; transform: scale(1.3); accent-color: #4caf50;">
                                 <div>
                                     <div style="font-weight: 500; color: #e0e0e0;">📱 Ignore app messages</div>
@@ -316,7 +499,7 @@ class DashboardIntegration(object):
                             </label>
 
                             <label style="display: flex; align-items: center; padding: 0.8em; background: #3a3a3a; border-radius: 6px; border: 1px solid #4a4a4a; cursor: pointer; transition: all 0.2s ease;">
-                                <input type="checkbox" name="detect_proxy_deletes" value="1" {detect_proxy_deletes_checked}
+                                <input type="checkbox" name="detect_proxy_deletes" value="1" {checkbox_values["detect_proxy_deletes"]}
                                        style="margin-right: 12px; transform: scale(1.3); accent-color: #4caf50;">
                                 <div>
                                     <div style="font-weight: 500; color: #e0e0e0;">🔍 Detect proxy deletes</div>
@@ -352,9 +535,8 @@ class DashboardIntegration(object):
                 </div>
 
                 <script>
-                    // Add interactive enhancements
                     document.addEventListener('DOMContentLoaded', function() {{
-                        // Add hover effects to labels
+                        // Add interactive enhancements
                         const labels = document.querySelectorAll('label');
                         labels.forEach(label => {{
                             label.addEventListener('mouseenter', function() {{
@@ -376,30 +558,6 @@ class DashboardIntegration(object):
                                 this.style.opacity = '0.7';
                             }});
                         }}
-
-                        // Count enabled events and update display
-                        function updateEventCounts() {{
-                            const eventCheckboxes = document.querySelectorAll('input[name^="event_"]');
-                            let totalEnabled = 0;
-                            eventCheckboxes.forEach(checkbox => {{
-                                if (checkbox.checked) totalEnabled++;
-                            }});
-                            
-                            // Update any event counter displays
-                            const counters = document.querySelectorAll('.event-counter');
-                            counters.forEach(counter => {{
-                                counter.textContent = totalEnabled;
-                            }});
-                        }}
-
-                        // Add event listeners to checkboxes
-                        const eventCheckboxes = document.querySelectorAll('input[name^="event_"]');
-                        eventCheckboxes.forEach(checkbox => {{
-                            checkbox.addEventListener('change', updateEventCounts);
-                        }});
-                        
-                        // Initial count
-                        updateEventCounts();
                     }});
                 </script>
             </div>
@@ -409,297 +567,149 @@ class DashboardIntegration(object):
                 "status": 0,
                 "web_content": {
                     "source": source,
-                    "expanded": True,  # Use template without guild profile for more space
+                    "expanded": True,
                 },
             }
             
         except Exception as e:
-            # Log the error if we have access to the logger
             if hasattr(self, 'log') and self.log:
-                self.log.error(f"Error in YALC dashboard page: {e}", exc_info=True)
+                self.log.error(f"YALC: Error generating fallback dashboard: {e}", exc_info=True)
             
             return {
                 "status": 1,
-                "error_title": "Dashboard Error",
-                "error_message": f"An error occurred while loading the dashboard: {str(e)}"
+                "error_title": "Dashboard Generation Error",
+                "error_message": f"Failed to generate dashboard: {str(e)}"
             }
 
-    async def _handle_form_submission(
+    async def _generate_wtforms_html(
         self,
         guild: discord.Guild,
-        user: discord.User,
-        **kwargs
-    ) -> typing.Dict[str, typing.Any]:
-        """Handle POST form submissions."""
-        try:
-            # Get raw form data from the request
-            data = kwargs.get("data", {})
+        settings: dict,
+        event_sections: str,
+        channel_sections: str
+    ) -> str:
+        """Generate HTML template for WTForms rendering."""
+        return f"""
+        <div style="padding: 1em; max-width: 1200px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #1a1a1a; color: #e0e0e0; min-height: 100vh;">
+            <div style="background: linear-gradient(135deg, #2c5aa0 0%, #4a148c 100%); color: white; padding: 2em; border-radius: 10px; margin-bottom: 2em; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);">
+                <h1 style="margin: 0; font-size: 2em; font-weight: 600;">⚙️ YALC Settings</h1>
+                <p style="margin: 0.5em 0 0 0; opacity: 0.9; font-size: 1.1em;">Configure comprehensive logging for <strong>{guild.name}</strong></p>
+                <p style="margin: 0.5em 0 0 0; opacity: 0.8; font-size: 0.9em;">Monitor 40+ event types across your Discord server</p>
+            </div>
+
+            <!-- WTForms will be rendered here by Red-Web-Dashboard -->
+            {{{{ form_start }}}}
             
-            # Debug: Log what we received
-            if hasattr(self, 'log') and self.log:
-                self.log.info(f"YALC Form submission data: {data}")
-            
-            # Check if this is a form submission
-            if data and ("yalc_settings_submit" in data or "submit" in data):
-                # Process form data into settings format
-                new_settings = {
-                    "include_thumbnails": bool(data.get("yalc_settings_include_thumbnails")),
-                    "ignore_bots": bool(data.get("yalc_settings_ignore_bots")),
-                    "ignore_webhooks": bool(data.get("yalc_settings_ignore_webhooks")),
-                    "ignore_tupperbox": bool(data.get("yalc_settings_ignore_tupperbox")),
-                    "ignore_apps": bool(data.get("yalc_settings_ignore_apps")),
-                    "detect_proxy_deletes": bool(data.get("yalc_settings_detect_proxy_deletes")),
-                }
-                
-                # Process event toggles
-                events = {}
-                for key, value in data.items():
-                    if key.startswith("event_"):
-                        event_name = key[6:]  # Remove "event_" prefix
-                        events[event_name] = bool(value)
-                new_settings["events"] = events
-                
-                # Process channel configurations
-                event_channels = {}
-                for key, value in data.items():
-                    if key.startswith("event_channels[") and key.endswith("]"):
-                        event_name = key[15:-1]  # Extract event name from event_channels[event_name]
-                        if value and str(value).isdigit():
-                            event_channels[event_name] = int(value)
-                        else:
-                            event_channels[event_name] = None
-                new_settings["event_channels"] = event_channels
-                
-                # Debug: Log what we're about to save
-                if hasattr(self, 'log') and self.log:
-                    self.log.info(f"YALC Saving settings: {new_settings}")
-                
-                # Update settings
-                await self.update_settings(guild, new_settings)
-                
-                return {
-                    "status": 0,
-                    "notifications": [{"message": "YALC settings updated successfully! 🎉", "category": "success"}],
-                    "redirect_url": kwargs.get("request_url", ""),
-                }
-            else:
-                # No valid form submission detected
-                return {
-                    "status": 1,
-                    "notifications": [{"message": "No valid form submission detected", "category": "error"}],
-                }
-            
-        except Exception as e:
-            if hasattr(self, 'log') and self.log:
-                self.log.error(f"Error handling form submission: {e}", exc_info=True)
-            return {
-                "status": 1,
-                "notifications": [{"message": f"Error updating settings: {str(e)}", "category": "error"}],
-            }
+            <!-- Filter Settings Section using WTForms -->
+            <div style="margin-bottom: 2em; padding: 1.5em; background: #2d2d2d; border-radius: 8px; border-left: 4px solid #4caf50;">
+                <h3 style="color: #4caf50; margin-top: 0; margin-bottom: 1em; font-size: 1.3em; font-weight: 600;">🔍 Filtering Options</h3>
+                <p style="color: #b0b0b0; margin-bottom: 1.5em; font-size: 0.95em;">Configure what types of messages and events to include or exclude from logging.</p>
 
-    async def _generate_dashboard_html(self, guild: discord.Guild, settings: dict, **kwargs) -> str:
-        """Generate the main dashboard HTML using WTForms."""
-        try:
-            # Use the Red-Web-Dashboard Form utility for proper CSRF handling
-            import wtforms
-            
-            class YALCSettingsForm(kwargs["Form"]):
-                def __init__(self):
-                    super().__init__(prefix="yalc_settings_")
-                
-                # Filter settings with current values from settings
-                include_thumbnails = wtforms.BooleanField(
-                    "Include user thumbnails",
-                    default=settings.get("include_thumbnails", True)
-                )
-                ignore_bots = wtforms.BooleanField(
-                    "Ignore bot messages",
-                    default=settings.get("ignore_bots", False)
-                )
-                ignore_webhooks = wtforms.BooleanField(
-                    "Ignore webhook messages",
-                    default=settings.get("ignore_webhooks", False)
-                )
-                ignore_tupperbox = wtforms.BooleanField(
-                    "Ignore Tupperbox/proxy messages",
-                    default=settings.get("ignore_tupperbox", True)
-                )
-                ignore_apps = wtforms.BooleanField(
-                    "Ignore app messages",
-                    default=settings.get("ignore_apps", True)
-                )
-                detect_proxy_deletes = wtforms.BooleanField(
-                    "Detect proxy deletes",
-                    default=settings.get("detect_proxy_deletes", True)
-                )
-                
-                submit = wtforms.SubmitField("💾 Save Configuration")
-            
-            # Create form instance with current data
-            form = YALCSettingsForm()
-            
-            # Set form data to current settings
-            form.include_thumbnails.data = settings.get("include_thumbnails", True)
-            form.ignore_bots.data = settings.get("ignore_bots", False)
-            form.ignore_webhooks.data = settings.get("ignore_webhooks", False)
-            form.ignore_tupperbox.data = settings.get("ignore_tupperbox", True)
-            form.ignore_apps.data = settings.get("ignore_apps", True)
-            form.detect_proxy_deletes.data = settings.get("detect_proxy_deletes", True)
-            
-            # Generate additional HTML sections for events and channels (non-WTForms)
-            event_sections = self._generate_event_sections(settings)
-            channel_sections = self._generate_channel_sections(guild, settings)
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px;">
+                    <div style="display: flex; align-items: center; padding: 0.8em; background: #3a3a3a; border-radius: 6px; border: 1px solid #4a4a4a;">
+                        {{{{ form.yalc_settings_include_thumbnails }}}}
+                        <label for="{{{{ form.yalc_settings_include_thumbnails.id }}}}" style="margin-left: 12px; cursor: pointer; color: #e0e0e0;">
+                            <div style="font-weight: 500;">🖼️ Include user thumbnails</div>
+                            <div style="font-size: 0.85em; color: #b0b0b0; margin-top: 2px;">Show user avatars in log embeds</div>
+                        </label>
+                    </div>
 
-            # Create the main HTML content using form rendering
-            html_content = f"""
-            <div style="padding: 1em; max-width: 1200px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
-                <div style="background: linear-gradient(135deg, #3949ab 0%, #5e35b1 100%); color: white; padding: 2em; border-radius: 10px; margin-bottom: 2em; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);">
-                    <h1 style="margin: 0; font-size: 2em; font-weight: 600;">⚙️ YALC Settings</h1>
-                    <p style="margin: 0.5em 0 0 0; opacity: 0.9; font-size: 1.1em;">Configure comprehensive logging for <strong>{guild.name}</strong></p>
-                    <p style="margin: 0.5em 0 0 0; opacity: 0.8; font-size: 0.9em;">Monitor 40+ event types across your Discord server</p>
-                </div>
+                    <div style="display: flex; align-items: center; padding: 0.8em; background: #3a3a3a; border-radius: 6px; border: 1px solid #4a4a4a;">
+                        {{{{ form.yalc_settings_ignore_bots }}}}
+                        <label for="{{{{ form.yalc_settings_ignore_bots.id }}}}" style="margin-left: 12px; cursor: pointer; color: #e0e0e0;">
+                            <div style="font-weight: 500;">🤖 Ignore bot messages</div>
+                            <div style="font-size: 0.85em; color: #b0b0b0; margin-top: 2px;">Skip logging events from bots</div>
+                        </label>
+                    </div>
 
-                <!-- Use form template variable for WTForms rendering -->
-                {{{{ form_start }}}}
-                
-                <!-- Filter Settings Section -->
-                <div style="margin-bottom: 2em; padding: 1.5em; background: #f8f9fa; border-radius: 8px; border-left: 4px solid #28a745;">
-                    <h3 style="color: #28a745; margin-top: 0; margin-bottom: 1em; font-size: 1.3em; font-weight: 600;">🔍 Filtering Options</h3>
-                    <p style="color: #666; margin-bottom: 1.5em; font-size: 0.95em;">Configure what types of messages and events to include or exclude from logging.</p>
+                    <div style="display: flex; align-items: center; padding: 0.8em; background: #3a3a3a; border-radius: 6px; border: 1px solid #4a4a4a;">
+                        {{{{ form.yalc_settings_ignore_webhooks }}}}
+                        <label for="{{{{ form.yalc_settings_ignore_webhooks.id }}}}" style="margin-left: 12px; cursor: pointer; color: #e0e0e0;">
+                            <div style="font-weight: 500;">🪝 Ignore webhook messages</div>
+                            <div style="font-size: 0.85em; color: #b0b0b0; margin-top: 2px;">Skip logging webhook events</div>
+                        </label>
+                    </div>
 
-                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px;">
-                        <div style="display: flex; align-items: center; padding: 0.8em; background: white; border-radius: 6px; border: 1px solid #e1e5e9;">
-                            {{{{ form.include_thumbnails }}}} <label for="{{{{ form.include_thumbnails.id }}}}" style="margin-left: 12px; cursor: pointer;">
-                                <div style="font-weight: 500;">🖼️ {{{{ form.include_thumbnails.label.text }}}}</div>
-                                <div style="font-size: 0.85em; color: #666; margin-top: 2px;">Show user avatars in log embeds</div>
-                            </label>
-                        </div>
+                    <div style="display: flex; align-items: center; padding: 0.8em; background: #3a3a3a; border-radius: 6px; border: 1px solid #4a4a4a;">
+                        {{{{ form.yalc_settings_ignore_tupperbox }}}}
+                        <label for="{{{{ form.yalc_settings_ignore_tupperbox.id }}}}" style="margin-left: 12px; cursor: pointer; color: #e0e0e0;">
+                            <div style="font-weight: 500;">👥 Ignore Tupperbox/proxy messages</div>
+                            <div style="font-size: 0.85em; color: #b0b0b0; margin-top: 2px;">Skip logging proxy bot messages</div>
+                        </label>
+                    </div>
 
-                        <div style="display: flex; align-items: center; padding: 0.8em; background: white; border-radius: 6px; border: 1px solid #e1e5e9;">
-                            {{{{ form.ignore_bots }}}} <label for="{{{{ form.ignore_bots.id }}}}" style="margin-left: 12px; cursor: pointer;">
-                                <div style="font-weight: 500;">🤖 {{{{ form.ignore_bots.label.text }}}}</div>
-                                <div style="font-size: 0.85em; color: #666; margin-top: 2px;">Skip logging events from bots</div>
-                            </label>
-                        </div>
+                    <div style="display: flex; align-items: center; padding: 0.8em; background: #3a3a3a; border-radius: 6px; border: 1px solid #4a4a4a;">
+                        {{{{ form.yalc_settings_ignore_apps }}}}
+                        <label for="{{{{ form.yalc_settings_ignore_apps.id }}}}" style="margin-left: 12px; cursor: pointer; color: #e0e0e0;">
+                            <div style="font-weight: 500;">📱 Ignore app messages</div>
+                            <div style="font-size: 0.85em; color: #b0b0b0; margin-top: 2px;">Skip logging application events</div>
+                        </label>
+                    </div>
 
-                        <div style="display: flex; align-items: center; padding: 0.8em; background: white; border-radius: 6px; border: 1px solid #e1e5e9;">
-                            {{{{ form.ignore_webhooks }}}} <label for="{{{{ form.ignore_webhooks.id }}}}" style="margin-left: 12px; cursor: pointer;">
-                                <div style="font-weight: 500;">🪝 {{{{ form.ignore_webhooks.label.text }}}}</div>
-                                <div style="font-size: 0.85em; color: #666; margin-top: 2px;">Skip logging webhook events</div>
-                            </label>
-                        </div>
-
-                        <div style="display: flex; align-items: center; padding: 0.8em; background: white; border-radius: 6px; border: 1px solid #e1e5e9;">
-                            {{{{ form.ignore_tupperbox }}}} <label for="{{{{ form.ignore_tupperbox.id }}}}" style="margin-left: 12px; cursor: pointer;">
-                                <div style="font-weight: 500;">👥 {{{{ form.ignore_tupperbox.label.text }}}}</div>
-                                <div style="font-size: 0.85em; color: #666; margin-top: 2px;">Skip logging proxy bot messages</div>
-                            </label>
-                        </div>
-
-                        <div style="display: flex; align-items: center; padding: 0.8em; background: white; border-radius: 6px; border: 1px solid #e1e5e9;">
-                            {{{{ form.ignore_apps }}}} <label for="{{{{ form.ignore_apps.id }}}}" style="margin-left: 12px; cursor: pointer;">
-                                <div style="font-weight: 500;">📱 {{{{ form.ignore_apps.label.text }}}}</div>
-                                <div style="font-size: 0.85em; color: #666; margin-top: 2px;">Skip logging application events</div>
-                            </label>
-                        </div>
-
-                        <div style="display: flex; align-items: center; padding: 0.8em; background: white; border-radius: 6px; border: 1px solid #e1e5e9;">
-                            {{{{ form.detect_proxy_deletes }}}} <label for="{{{{ form.detect_proxy_deletes.id }}}}" style="margin-left: 12px; cursor: pointer;">
-                                <div style="font-weight: 500;">🔍 {{{{ form.detect_proxy_deletes.label.text }}}}</div>
-                                <div style="font-size: 0.85em; color: #666; margin-top: 2px;">Log when proxy messages are deleted</div>
-                            </label>
-                        </div>
+                    <div style="display: flex; align-items: center; padding: 0.8em; background: #3a3a3a; border-radius: 6px; border: 1px solid #4a4a4a;">
+                        {{{{ form.yalc_settings_detect_proxy_deletes }}}}
+                        <label for="{{{{ form.yalc_settings_detect_proxy_deletes.id }}}}" style="margin-left: 12px; cursor: pointer; color: #e0e0e0;">
+                            <div style="font-weight: 500;">🔍 Detect proxy deletes</div>
+                            <div style="font-size: 0.85em; color: #b0b0b0; margin-top: 2px;">Log when proxy messages are deleted</div>
+                        </label>
                     </div>
                 </div>
-
+            </div>
+        
+            <!-- Additional event and channel sections -->
+            <div style="margin-top: 2em;">
                 {event_sections}
                 {channel_sections}
+            </div>
 
-                <div style="text-align: center; margin-top: 3em; padding-top: 2em; border-top: 2px solid #f0f2f5;">
-                    {{{{ form.submit(style="background: linear-gradient(135deg, #4caf50 0%, #45a049 100%); color: white; border: none; padding: 1.2em 3em; border-radius: 8px; font-size: 1.1em; font-weight: 600; cursor: pointer; box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3); transition: all 0.3s ease;") }}}}
-                    <p style="margin-top: 1em; color: #666; font-size: 0.9em;">
-                        Changes are applied immediately and saved to Red's configuration system
-                    </p>
-                </div>
-                
-                {{{{ form_end }}}}
+            <!-- Submit button using WTForms -->
+            <div style="text-align: center; margin-top: 3em; padding-top: 2em; border-top: 2px solid #4a4a4a;">
+                {{{{ form.yalc_settings_submit(style="background: linear-gradient(135deg, #4caf50 0%, #45a049 100%); color: white; border: none; padding: 1.2em 3em; border-radius: 8px; font-size: 1.1em; font-weight: 600; cursor: pointer; box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3); transition: all 0.3s ease;") }}}}
+                <p style="margin-top: 1em; color: #b0b0b0; font-size: 0.9em;">
+                    Changes are applied immediately and saved to Red's configuration system
+                </p>
+            </div>
+            
+            {{{{ form_end }}}}
 
-                <div style="margin-top: 2em; padding: 1.5em; background: #f8f9fa; border-radius: 8px; border-left: 4px solid #17a2b8;">
-                    <h4 style="margin: 0 0 0.5em 0; color: #17a2b8;">ℹ️ About YALC</h4>
-                    <p style="margin: 0; color: #666; line-height: 1.5;">
-                        Yet Another Logging Cog provides comprehensive event logging for Discord servers.
-                        Configure which events to log, assign specific channels for different event types,
-                        and customize filtering options to suit your server's needs.
-                    </p>
-                </div>
+            <div style="margin-top: 2em; padding: 1.5em; background: #2d2d2d; border-radius: 8px; border-left: 4px solid #00bcd4;">
+                <h4 style="margin: 0 0 0.5em 0; color: #00bcd4;">ℹ️ About YALC</h4>
+                <p style="margin: 0; color: #b0b0b0; line-height: 1.5;">
+                    Yet Another Logging Cog provides comprehensive event logging for Discord servers.
+                    Configure which events to log, assign specific channels for different event types,
+                    and customize filtering options to suit your server's needs.
+                </p>
+            </div>
 
-                <script>
+            <script>
+                document.addEventListener('DOMContentLoaded', function() {{
                     // Add interactive enhancements
-                    document.addEventListener('DOMContentLoaded', function() {{
-                        // Add hover effects to labels
-                        const labels = document.querySelectorAll('label');
-                        labels.forEach(label => {{
-                            label.addEventListener('mouseenter', function() {{
-                                this.style.transform = 'translateY(-1px)';
-                                this.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.1)';
-                            }});
-                            label.addEventListener('mouseleave', function() {{
-                                this.style.transform = 'translateY(0)';
-                                this.style.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.05)';
-                            }});
+                    const labels = document.querySelectorAll('label');
+                    labels.forEach(label => {{
+                        label.addEventListener('mouseenter', function() {{
+                            this.style.transform = 'translateY(-1px)';
+                            this.style.boxShadow = '0 4px 8px rgba(255, 255, 255, 0.1)';
                         }});
-
-                        // Add form submission feedback
-                        const submitButton = document.querySelector('input[type="submit"]');
-                        if (submitButton) {{
-                            submitButton.addEventListener('click', function() {{
-                                this.value = '⏳ Saving...';
-                                this.disabled = true;
-                                this.style.opacity = '0.7';
-                            }});
-                        }}
-
-                        // Count enabled events and update display
-                        function updateEventCounts() {{
-                            const eventCheckboxes = document.querySelectorAll('input[name^="event_"]');
-                            let totalEnabled = 0;
-                            eventCheckboxes.forEach(checkbox => {{
-                                if (checkbox.checked) totalEnabled++;
-                            }});
-                            
-                            // Update any event counter displays
-                            const counters = document.querySelectorAll('.event-counter');
-                            counters.forEach(counter => {{
-                                counter.textContent = totalEnabled;
-                            }});
-                        }}
-
-                        // Add event listeners to checkboxes
-                        const eventCheckboxes = document.querySelectorAll('input[name^="event_"]');
-                        eventCheckboxes.forEach(checkbox => {{
-                            checkbox.addEventListener('change', updateEventCounts);
+                        label.addEventListener('mouseleave', function() {{
+                            this.style.transform = 'translateY(0)';
+                            this.style.boxShadow = '0 1px 3px rgba(255, 255, 255, 0.05)';
                         }});
-                        
-                        // Initial count
-                        updateEventCounts();
                     }});
-                </script>
-            </div>
-            """
-            return html_content
-            
-        except Exception as e:
-            # Fallback to basic HTML if WTForms fails
-            if hasattr(self, 'log') and self.log:
-                self.log.error(f"Error generating WTForms HTML: {e}")
-            
-            return f"""
-            <div style="padding: 2em; text-align: center;">
-                <h2>⚠️ Dashboard Error</h2>
-                <p>Unable to load the dashboard form. Please check the logs for details.</p>
-                <p style="color: #666; font-size: 0.9em;">Error: {str(e)}</p>
-            </div>
-            """
+
+                    // Add form submission feedback
+                    const submitButton = document.querySelector('input[type="submit"]');
+                    if (submitButton) {{
+                        submitButton.addEventListener('click', function() {{
+                            this.value = '⏳ Saving...';
+                            this.disabled = true;
+                            this.style.opacity = '0.7';
+                        }});
+                    }}
+                }});
+            </script>
+        </div>
+        """
+
 
     def _generate_event_sections(self, settings: dict) -> str:
         """Generate HTML for event toggle sections with dark mode styling."""
