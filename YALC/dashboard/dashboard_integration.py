@@ -20,43 +20,8 @@ class DashboardIntegration(object):
         # Don't call super().__init__() as this could interfere with multiple inheritance
         self.bot = bot
         
-        # Initialize event descriptions if not already set by main cog
-        if not hasattr(self, 'event_descriptions'):
-            self.event_descriptions = {
-                # Message events
-                "message_delete": ("🗑️", "Message Deletions"),
-                "message_edit": ("✏️", "Message Edits"),
-                "message_bulk_delete": ("♻️", "Bulk Message Deletions"),
-                "message_pin": ("📌", "Message Pins"),
-                "message_unpin": ("📍", "Message Unpins"),
-                
-                # Member events
-                "member_join": ("👋", "Member Joins"),
-                "member_leave": ("🚪", "Member Leaves"),
-                "member_ban": ("🔨", "Member Bans"),
-                "member_unban": ("🔓", "Member Unbans"),
-                "member_update": ("👤", "Member Updates"),
-                "member_kick": ("👢", "Member Kicks"),
-                "member_timeout": ("⏰", "Member Timeouts"),
-                
-                # Channel events
-                "channel_create": ("📝", "Channel Creation"),
-                "channel_delete": ("🗑️", "Channel Deletion"),
-                "channel_update": ("🔄", "Channel Updates"),
-                "thread_create": ("🧵", "Thread Creation"),
-                "thread_delete": ("🗑️", "Thread Deletion"),
-                "thread_update": ("🔄", "Thread Updates"),
-                
-                # Role events
-                "role_create": ("✨", "Role Creation"),
-                "role_delete": ("🗑️", "Role Deletion"),
-                "role_update": ("🔄", "Role Updates"),
-                
-                # Guild events
-                "guild_update": ("⚙️", "Server Updates"),
-                "emoji_update": ("😀", "Emoji Updates"),
-                "voice_state_update": ("🎧", "Voice State Changes"),
-            }
+        # Note: event_descriptions will be provided by the main YALC class
+        # No fallback is needed since this is a mixin that requires the main cog
 
     async def format_settings(
         self,
@@ -774,7 +739,7 @@ class DashboardIntegration(object):
         # Get event descriptions from the main cog
         event_descriptions = getattr(self, 'event_descriptions', {})
         
-        # Expanded categories with more complete event coverage and dark mode colors
+        # Complete categories with all 52 event types and dark mode colors
         categories = {
             "Message Events": {
                 "events": ["message_delete", "message_edit", "message_bulk_delete", "message_pin", "message_unpin"],
@@ -802,9 +767,44 @@ class DashboardIntegration(object):
                 "description": "Track role creation, deletion, and permission changes"
             },
             "Server Events": {
-                "events": ["guild_update", "emoji_update"],
+                "events": ["guild_update", "emoji_update", "sticker_update", "scheduled_event_create", "scheduled_event_delete", "scheduled_event_update"],
                 "color": "#009688",
-                "description": "Monitor server settings and emoji changes"
+                "description": "Monitor server settings, emoji, sticker, and scheduled event changes"
+            },
+            "Command Events": {
+                "events": ["slash_command_completion"],
+                "color": "#4caf50",
+                "description": "Track slash command usage and completion"
+            },
+            "Reaction Events": {
+                "events": ["reaction_add", "reaction_remove", "reaction_clear", "reaction_clear_emoji"],
+                "color": "#e91e63",
+                "description": "Monitor message reactions and emoji interactions"
+            },
+            "Integration Events": {
+                "events": ["integration_create", "integration_delete", "integration_update"],
+                "color": "#673ab7",
+                "description": "Track server integrations and connected services"
+            },
+            "Webhook Events": {
+                "events": ["webhook_update"],
+                "color": "#607d8b",
+                "description": "Monitor webhook configuration changes"
+            },
+            "AutoMod Events": {
+                "events": ["automod_rule_create", "automod_rule_delete", "automod_rule_update", "automod_action_execution"],
+                "color": "#795548",
+                "description": "Track AutoMod rule changes and moderation actions"
+            },
+            "Invite Events": {
+                "events": ["invite_create", "invite_delete"],
+                "color": "#3f51b5",
+                "description": "Monitor server invite creation and deletion"
+            },
+            "Permission Events": {
+                "events": ["app_command_permissions_update"],
+                "color": "#ff6f00",
+                "description": "Track application command permission changes"
             }
         }
 
@@ -884,14 +884,21 @@ class DashboardIntegration(object):
 
         event_descriptions = getattr(self, 'event_descriptions', {})
         
-        # Group events by category for better organization
+        # Group events by category for better organization - complete list
         categories = {
             "Message Events": ["message_delete", "message_edit", "message_bulk_delete", "message_pin", "message_unpin"],
             "Member Events": ["member_join", "member_leave", "member_ban", "member_unban", "member_kick", "member_timeout", "member_update"],
             "Voice Events": ["voice_state_update"],
             "Channel Events": ["channel_create", "channel_delete", "channel_update", "thread_create", "thread_delete", "thread_update"],
             "Role Events": ["role_create", "role_delete", "role_update"],
-            "Server Events": ["guild_update", "emoji_update"]
+            "Server Events": ["guild_update", "emoji_update", "sticker_update", "scheduled_event_create", "scheduled_event_delete", "scheduled_event_update"],
+            "Command Events": ["slash_command_completion"],
+            "Reaction Events": ["reaction_add", "reaction_remove", "reaction_clear", "reaction_clear_emoji"],
+            "Integration Events": ["integration_create", "integration_delete", "integration_update"],
+            "Webhook Events": ["webhook_update"],
+            "AutoMod Events": ["automod_rule_create", "automod_rule_delete", "automod_rule_update", "automod_action_execution"],
+            "Invite Events": ["invite_create", "invite_delete"],
+            "Permission Events": ["app_command_permissions_update"]
         }
         
         category_sections = []
