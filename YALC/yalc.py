@@ -136,6 +136,7 @@ class YALC(DashboardIntegration, commands.Cog):
             "ignored_roles": [],
             "ignored_channels": [],
             "ignored_categories": [],
+            "granular_ignores": [],  # New granular ignore rules
             "ignore_bots": False,
             "ignore_webhooks": False,
             "ignore_tupperbox": True,
@@ -301,6 +302,16 @@ class YALC(DashboardIntegration, commands.Cog):
                 if settings.get("ignore_apps", True) and getattr(message, "application", None):
                     self.log.debug(f"Message {message.id} is from app {message.application.id} and apps are ignored")
                     return False
+            
+            # 5. Granular ignore checks - check for specific event+user+channel combinations
+            granular_ignores = settings.get("granular_ignores", [])
+            if granular_ignores and user and channel:
+                for rule in granular_ignores:
+                    if (rule["event_type"] == event_type and
+                        rule["user_id"] == user.id and
+                        rule["channel_id"] == channel.id):
+                        self.log.debug(f"Event {event_type} from user {user.id} in channel {channel.id} is granularly ignored")
+                        return False
             
             # If we've passed all ignore checks, we should log this event
             return True
@@ -4978,16 +4989,56 @@ class YALC(DashboardIntegration, commands.Cog):
         )
         if ignore_settings:
             embed_ignore.add_field(
-                name="⚙️ Ignore Settings",
+                name="⚙️ Broad Ignore Settings",
                 value="\n".join(ignore_settings),
                 inline=False
             )
         else:
             embed_ignore.add_field(
-                name="⚙️ Ignore Settings",
-                value="No ignore settings configured",
+                name="⚙️ Broad Ignore Settings",
+                value="No broad ignore settings configured",
                 inline=False
             )
+        
+        # Add granular ignore rules
+        granular_ignores = settings.get("granular_ignores", [])
+        if granular_ignores:
+            granular_rules = []
+            for rule in granular_ignores[:5]:  # Show first 5
+                # Get user
+                user = ctx.guild.get_member(rule["user_id"])
+                user_display = user.mention if user else f"ID: {rule['user_id']}"
+                
+                # Get channel
+                channel = ctx.guild.get_channel(rule["channel_id"])
+                channel_display = channel.mention if channel else f"ID: {rule['channel_id']}"
+                
+                # Get event info
+                event_type = rule["event_type"]
+                emoji, description = self.event_descriptions.get(event_type, ("📝", event_type))
+                
+                # Format rule
+                rule_text = f"{emoji} **{event_type}** from {user_display} in {channel_display}"
+                if rule.get("reason"):
+                    rule_text += f" *(Reason: {rule['reason']})*"
+                
+                granular_rules.append(rule_text)
+            
+            if len(granular_ignores) > 5:
+                granular_rules.append(f"*...and {len(granular_ignores) - 5} more rules*")
+            
+            embed_ignore.add_field(
+                name=f"🎯 Granular Ignore Rules ({len(granular_ignores)})",
+                value="\n".join(granular_rules),
+                inline=False
+            )
+        else:
+            embed_ignore.add_field(
+                name="🎯 Granular Ignore Rules",
+                value="*No granular ignore rules set*",
+                inline=False
+            )
+        
         embeds.append(embed_ignore)
 
         # Add footer to all embeds
@@ -5170,6 +5221,245 @@ class YALC(DashboardIntegration, commands.Cog):
             
         await ctx.send(f"✅ No longer ignoring events from channels in the '{category.name}' category.")
 
+    @yalc_ignore.command(name="specific")
+    async def yalc_ignore_specific(self, ctx: commands.Context, event_type: str, user: discord.Member, channel: discord.TextChannel, *, reason: Optional[str] = None):
+        """
+        Ignore a specific event type from a specific user in a specific channel.
+        
+        This allows granular control - for example, ignoring message edits from a particular
+        user in a particular channel while still logging their other events.
+        
+        Parameters
+        ----------
+        event_type: str
+            The event type to ignore (e.g., message_edit, message_delete)
+        user: discord.Member
+            The user to ignore for this event type in this channel
+        channel: discord.TextChannel
+            The channel where this user's events of this type should be ignored
+        reason: str, optional
+            Optional reason for this ignore rule
+        """
+        # Check if the event type exists
+        if event_type not in self.event_descriptions:
+            await ctx.send(f"❌ Unknown event type: `{event_type}`. Use `{ctx.prefix}yalc enable` to see all available event types.")
+            return
+            
+        # Check if this rule already exists
+        async with self.config.guild(ctx.guild).granular_ignores() as granular_ignores:
+            existing_rule = None
+            for rule in granular_ignores:
+                if (rule["event_type"] == event_type and
+                    rule["user_id"] == user.id and
+                    rule["channel_id"] == channel.id):
+                    existing_rule = rule
+                    break
+                    
+            if existing_rule:
+                await ctx.send(f"❌ Already ignoring `{event_type}` events from {user.mention} in {channel.mention}.")
+                return
+                
+            # Create the new rule
+            new_rule = {
+                "event_type": event_type,
+                "user_id": user.id,
+                "channel_id": channel.id,
+                "created_by": ctx.author.id,
+                "created_at": datetime.datetime.now(datetime.UTC).isoformat(),
+                "reason": reason
+            }
+            
+            granular_ignores.append(new_rule)
+            
+        # Get description for confirmation message
+        emoji, description = self.event_descriptions[event_type]
+        reason_text = f" (Reason: {reason})" if reason else ""
+        await ctx.send(f"✅ {emoji} Now ignoring **{description}** events from {user.mention} in {channel.mention}.{reason_text}")
+
+    @yalc_unignore.command(name="specific")
+    async def yalc_unignore_specific(self, ctx: commands.Context, event_type: str, user: discord.Member, channel: discord.TextChannel):
+        """
+        Remove a specific granular ignore rule.
+        
+        Parameters
+        ----------
+        event_type: str
+            The event type to stop ignoring
+        user: discord.Member
+            The user to stop ignoring for this event type in this channel
+        channel: discord.TextChannel
+            The channel where this user's events should no longer be ignored
+        """
+        # Check if the event type exists
+        if event_type not in self.event_descriptions:
+            await ctx.send(f"❌ Unknown event type: `{event_type}`. Use `{ctx.prefix}yalc enable` to see all available event types.")
+            return
+            
+        # Find and remove the rule
+        async with self.config.guild(ctx.guild).granular_ignores() as granular_ignores:
+            rule_found = False
+            for i, rule in enumerate(granular_ignores):
+                if (rule["event_type"] == event_type and
+                    rule["user_id"] == user.id and
+                    rule["channel_id"] == channel.id):
+                    granular_ignores.pop(i)
+                    rule_found = True
+                    break
+                    
+            if not rule_found:
+                await ctx.send(f"❌ No granular ignore rule found for `{event_type}` events from {user.mention} in {channel.mention}.")
+                return
+                
+        # Get description for confirmation message
+        emoji, description = self.event_descriptions[event_type]
+        await ctx.send(f"✅ {emoji} No longer ignoring **{description}** events from {user.mention} in {channel.mention}.")
+
+    @yalc_ignore.command(name="list")
+    async def yalc_ignore_list(self, ctx: commands.Context, list_type: str = "all"):
+        """
+        List all ignore rules (broad and granular).
+        
+        Parameters
+        ----------
+        list_type: str
+            Type of ignore rules to show: 'all', 'broad', 'specific', or 'granular'
+        """
+        settings = await self.config.guild(ctx.guild).all()
+        
+        embed = discord.Embed(
+            title="🚫 YALC Ignore Rules",
+            description=f"All ignore rules for {ctx.guild.name}",
+            color=discord.Color.orange()
+        )
+        
+        if list_type in ["all", "broad"]:
+            # Show broad ignore rules
+            broad_rules = []
+            
+            # Ignored users
+            ignored_users = settings.get("ignored_users", [])
+            if ignored_users:
+                user_mentions = []
+                for user_id in ignored_users[:5]:  # Show first 5
+                    user = ctx.guild.get_member(user_id)
+                    if user:
+                        user_mentions.append(user.mention)
+                    else:
+                        user_mentions.append(f"ID: {user_id}")
+                broad_rules.append(f"**👤 Ignored Users ({len(ignored_users)}):** {', '.join(user_mentions)}" +
+                                 (f" *and {len(ignored_users) - 5} more*" if len(ignored_users) > 5 else ""))
+            
+            # Ignored channels
+            ignored_channels = settings.get("ignored_channels", [])
+            if ignored_channels:
+                channel_mentions = []
+                for channel_id in ignored_channels[:5]:  # Show first 5
+                    channel = ctx.guild.get_channel(channel_id)
+                    if channel:
+                        channel_mentions.append(channel.mention)
+                    else:
+                        channel_mentions.append(f"ID: {channel_id}")
+                broad_rules.append(f"**📢 Ignored Channels ({len(ignored_channels)}):** {', '.join(channel_mentions)}" +
+                                 (f" *and {len(ignored_channels) - 5} more*" if len(ignored_channels) > 5 else ""))
+            
+            # Ignored roles
+            ignored_roles = settings.get("ignored_roles", [])
+            if ignored_roles:
+                role_mentions = []
+                for role_id in ignored_roles[:5]:  # Show first 5
+                    role = ctx.guild.get_role(role_id)
+                    if role:
+                        role_mentions.append(role.mention)
+                    else:
+                        role_mentions.append(f"ID: {role_id}")
+                broad_rules.append(f"**🎭 Ignored Roles ({len(ignored_roles)}):** {', '.join(role_mentions)}" +
+                                 (f" *and {len(ignored_roles) - 5} more*" if len(ignored_roles) > 5 else ""))
+            
+            # Other ignore settings
+            other_ignores = []
+            if settings.get("ignore_bots", False):
+                other_ignores.append("🤖 All bots")
+            if settings.get("ignore_webhooks", False):
+                other_ignores.append("🔗 All webhooks")
+            if settings.get("ignore_tupperbox", True):
+                other_ignores.append("👥 Tupperbox/proxy messages")
+            if settings.get("ignore_apps", True):
+                other_ignores.append("📱 Application messages")
+            
+            if other_ignores:
+                broad_rules.append(f"**⚙️ System Ignores:** {', '.join(other_ignores)}")
+            
+            if broad_rules:
+                embed.add_field(
+                    name="📋 Broad Ignore Rules",
+                    value="\n".join(broad_rules),
+                    inline=False
+                )
+            else:
+                embed.add_field(
+                    name="📋 Broad Ignore Rules",
+                    value="*No broad ignore rules set*",
+                    inline=False
+                )
+        
+        if list_type in ["all", "specific", "granular"]:
+            # Show granular ignore rules
+            granular_ignores = settings.get("granular_ignores", [])
+            
+            if granular_ignores:
+                granular_rules = []
+                for rule in granular_ignores[:10]:  # Show first 10
+                    # Get user
+                    user = ctx.guild.get_member(rule["user_id"])
+                    user_display = user.mention if user else f"ID: {rule['user_id']}"
+                    
+                    # Get channel
+                    channel = ctx.guild.get_channel(rule["channel_id"])
+                    channel_display = channel.mention if channel else f"ID: {rule['channel_id']}"
+                    
+                    # Get event info
+                    event_type = rule["event_type"]
+                    emoji, description = self.event_descriptions.get(event_type, ("📝", event_type))
+                    
+                    # Format rule
+                    rule_text = f"{emoji} **{event_type}** from {user_display} in {channel_display}"
+                    if rule.get("reason"):
+                        rule_text += f" *(Reason: {rule['reason']})*"
+                    
+                    granular_rules.append(rule_text)
+                
+                if len(granular_ignores) > 10:
+                    granular_rules.append(f"*...and {len(granular_ignores) - 10} more rules*")
+                
+                embed.add_field(
+                    name=f"🎯 Granular Ignore Rules ({len(granular_ignores)})",
+                    value="\n".join(granular_rules),
+                    inline=False
+                )
+            else:
+                embed.add_field(
+                    name="🎯 Granular Ignore Rules",
+                    value="*No granular ignore rules set*",
+                    inline=False
+                )
+        
+        # Add summary
+        total_broad = (len(settings.get("ignored_users", [])) +
+                      len(settings.get("ignored_channels", [])) +
+                      len(settings.get("ignored_roles", [])) +
+                      len(settings.get("ignored_categories", [])))
+        total_granular = len(settings.get("granular_ignores", []))
+        
+        embed.add_field(
+            name="📊 Summary",
+            value=f"• **Broad rules:** {total_broad}\n• **Granular rules:** {total_granular}\n• **Total:** {total_broad + total_granular}",
+            inline=False
+        )
+        
+        embed.set_footer(text=f"Use '{ctx.prefix}yalc ignore list specific' to see only granular rules")
+        
+        await ctx.send(embed=embed)
+
     @yalc_group.command(name="bulk_enable")
     @commands.admin_or_permissions(manage_guild=True)
     async def yalc_bulk_enable(self, ctx: commands.Context, category: Optional[str] = None):
@@ -5346,6 +5636,48 @@ class YALC(DashboardIntegration, commands.Cog):
                 if not channel:
                     warnings.append(f"Ignored channel ID {channel_id} not found in server")
             
+            # Check granular ignore rules
+            granular_ignores = settings.get("granular_ignores", [])
+            for i, rule in enumerate(granular_ignores):
+                # Check if rule has required fields
+                required_fields = ["event_type", "user_id", "channel_id"]
+                missing_fields = [field for field in required_fields if field not in rule]
+                if missing_fields:
+                    issues.append(f"Granular ignore rule #{i+1} is missing required fields: {', '.join(missing_fields)}")
+                    continue
+                
+                # Check if event type is valid
+                event_type = rule.get("event_type")
+                if event_type and event_type not in self.event_descriptions:
+                    issues.append(f"Granular ignore rule #{i+1} has invalid event type: `{event_type}`")
+                
+                # Check if user exists
+                user_id = rule.get("user_id")
+                if user_id:
+                    user = ctx.guild.get_member(user_id)
+                    if not user:
+                        # Try to fetch user from API as fallback
+                        try:
+                            fetched_user = await self.bot.fetch_user(user_id)
+                            if not fetched_user:
+                                warnings.append(f"Granular ignore rule #{i+1} references unknown user ID {user_id}")
+                        except Exception:
+                            warnings.append(f"Granular ignore rule #{i+1} references unknown user ID {user_id}")
+                
+                # Check if channel exists
+                channel_id = rule.get("channel_id")
+                if channel_id:
+                    channel = ctx.guild.get_channel(channel_id)
+                    if not channel:
+                        warnings.append(f"Granular ignore rule #{i+1} references unknown channel ID {channel_id}")
+                
+                # Check rule structure integrity
+                if rule.get("created_at"):
+                    try:
+                        datetime.datetime.fromisoformat(rule["created_at"].replace('Z', '+00:00'))
+                    except (ValueError, TypeError):
+                        warnings.append(f"Granular ignore rule #{i+1} has invalid created_at timestamp")
+            
             # Create validation report
             embed = discord.Embed(
                 title="🔍 YALC Configuration Validation",
@@ -5380,7 +5712,8 @@ class YALC(DashboardIntegration, commands.Cog):
                       f"• Configured channels: {len(configured_channels)}\n"
                       f"• Ignored users: {len(settings.get('ignored_users', []))}\n"
                       f"• Ignored roles: {len(settings.get('ignored_roles', []))}\n"
-                      f"• Ignored channels: {len(settings.get('ignored_channels', []))}",
+                      f"• Ignored channels: {len(settings.get('ignored_channels', []))}\n"
+                      f"• Granular ignore rules: {len(settings.get('granular_ignores', []))}",
                 inline=False
             )
             
