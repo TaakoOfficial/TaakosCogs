@@ -306,6 +306,16 @@ class YALC(DashboardIntegration, commands.Cog):
             # 5. Granular ignore checks - check for specific event+user+channel combinations
             granular_ignores = settings.get("granular_ignores", [])
             if granular_ignores and user and channel:
+                # Thread-specific logic: check if this is a thread and parent channel is granularly ignored
+                if isinstance(channel, discord.Thread) and channel.parent:
+                    for rule in granular_ignores:
+                        if (rule["event_type"] == event_type and
+                            rule["user_id"] == user.id and
+                            rule["channel_id"] == channel.parent.id):
+                            self.log.debug(f"Event {event_type} from user {user.id} in thread {channel.id} (parent channel {channel.parent.id} granularly ignored)")
+                            return False
+
+                # Regular granular ignore checks
                 for rule in granular_ignores:
                     if (rule["event_type"] == event_type and
                         rule["user_id"] == user.id and
@@ -336,10 +346,92 @@ class YALC(DashboardIntegration, commands.Cog):
         self.log.debug(f"[get_log_channel] Resolved channel: {channel}")
         return channel if isinstance(channel, discord.TextChannel) else None
 
-    def create_embed(self, event_type: str, description: str, **kwargs) -> discord.Embed:
+    def _calculate_embed_size(self, embed: discord.Embed, additional_fields: List[tuple] = None) -> int:
         """
-        Create a standardized, visually appealing embed for logging.
-        
+        Calculate the total character count of an embed including all fields.
+
+        Parameters
+        ----------
+        embed: discord.Embed
+            The embed to calculate size for
+        additional_fields: List[tuple], optional
+            Additional fields to include in the calculation (name, value)
+
+        Returns
+        -------
+        int
+            Total character count of the embed
+        """
+        total_chars = 0
+
+        # Title (max 256 chars)
+        if embed.title:
+            total_chars += min(len(embed.title), 256)
+
+        # Description (max 4096 chars)
+        if embed.description:
+            total_chars += min(len(embed.description), 4096)
+
+        # Author name (max 256 chars)
+        if embed.author and embed.author.name:
+            total_chars += min(len(embed.author.name), 256)
+
+        # Footer text (max 2048 chars)
+        if embed.footer and embed.footer.text:
+            total_chars += min(len(embed.footer.text), 2048)
+
+        # Add any additional fields
+        if additional_fields:
+            for name, value in additional_fields:
+                # Field name (max 256 chars)
+                total_chars += min(len(str(name)), 256)
+                # Field value (max 1024 chars)
+                total_chars += min(len(str(value)), 1024)
+
+        return total_chars
+
+    def _smart_truncate(self, text: str, max_length: int, suffix: str = "...") -> str:
+        """
+        Truncate text at word boundaries while respecting the maximum length.
+
+        Parameters
+        ----------
+        text: str
+            The text to truncate
+        max_length: int
+            Maximum length including suffix
+        suffix: str
+            Suffix to add when text is truncated
+
+        Returns
+        -------
+        str
+            Truncated text with suffix if applicable
+        """
+        if len(text) <= max_length:
+            return text
+
+        # Reserve space for suffix
+        available_length = max_length - len(suffix)
+
+        # Find the last space before the limit
+        truncated = text[:available_length]
+        last_space = truncated.rfind(' ')
+
+        if last_space > 0:
+            return text[:last_space] + suffix
+        else:
+            # No spaces found, truncate at exact limit
+            return text[:available_length] + suffix
+
+    def _try_single_embed(self, event_type: str, description: str, **kwargs) -> discord.Embed:
+        """
+        Try to create a single embed with all fields, checking Discord limits.
+
+        This method creates an embed with all the provided fields and checks if it exceeds
+        Discord's character limits. If it does, it will truncate fields intelligently
+        to fit within the limits.
+
         Parameters
         ----------
         event_type: str
@@ -348,154 +440,253 @@ class YALC(DashboardIntegration, commands.Cog):
             Primary description for the embed
         **kwargs
             Additional fields to include in the embed
-            
+
         Returns
         -------
         discord.Embed
-            A formatted embed ready for sending
+            An embed that fits within Discord's character limits
         """
-        # Comprehensive color coding for visual differentiation of event types
-        color_map = {
-            # Message events - Blues
-            "message_delete": discord.Color(0xE74C3C),      # Red
-            "message_edit": discord.Color(0x3498DB),        # Blue
-            "message_bulk_delete": discord.Color(0xC0392B), # Dark Red
-            "message_pin": discord.Color(0x1ABC9C),         # Teal
-            "message_unpin": discord.Color(0x16A085),       # Dark Teal
-            
-            # Member events - Greens and oranges
-            "member_join": discord.Color(0x2ECC71),         # Green
-            "member_leave": discord.Color(0xF39C12),        # Orange
-            "member_ban": discord.Color(0xC0392B),          # Dark Red
-            "member_unban": discord.Color(0x27AE60),        # Dark Green
-            "member_update": discord.Color(0x3498DB),       # Blue
-            "member_kick": discord.Color(0xE67E22),         # Dark Orange
-            "member_timeout": discord.Color(0xD35400),      # Very Dark Orange
-            
-            # Channel events - Purples
-            "channel_create": discord.Color(0x9B59B6),      # Purple
-            "channel_delete": discord.Color(0x8E44AD),      # Dark Purple
-            "channel_update": discord.Color(0x9B59B6),      # Purple
-            "thread_create": discord.Color(0x9B59B6),       # Purple
-            "thread_delete": discord.Color(0x8E44AD),       # Dark Purple
-            "thread_update": discord.Color(0x9B59B6),       # Purple
-            "thread_member_join": discord.Color(0xAF7AC5),  # Light Purple
-            "thread_member_leave": discord.Color(0x884EA0), # Medium Purple
-            "forum_post_create": discord.Color(0x9B59B6),   # Purple
-            "forum_post_delete": discord.Color(0x8E44AD),   # Dark Purple
-            "forum_post_update": discord.Color(0x9B59B6),   # Purple
-            
-            # Role events - Yellows
-            "role_create": discord.Color(0xF1C40F),         # Yellow
-            "role_delete": discord.Color(0xF39C12),         # Orange
-            "role_update": discord.Color(0xF1C40F),         # Yellow
-            
-            # Guild events - Blues
-            "guild_update": discord.Color(0x3498DB),        # Blue
-            "emoji_update": discord.Color(0xF1C40F),        # Yellow
-            "sticker_update": discord.Color(0xF1C40F),      # Yellow
-            "invite_create": discord.Color(0x2ECC71),       # Green
-            "invite_delete": discord.Color(0xE74C3C),       # Red
-            
-            # Event management - Teals
-            "guild_scheduled_event_create": discord.Color(0x1ABC9C),  # Teal
-            "guild_scheduled_event_update": discord.Color(0x16A085),  # Dark Teal
-            "guild_scheduled_event_delete": discord.Color(0xE74C3C),  # Red
-            "stage_instance_create": discord.Color(0x1ABC9C),         # Teal
-            "stage_instance_update": discord.Color(0x16A085),         # Dark Teal
-            "stage_instance_delete": discord.Color(0xE74C3C),         # Red
-            
-            # Voice events - Blues
-            "voice_update": discord.Color(0x3498DB),        # Blue
-            "voice_state_update": discord.Color(0x2980B9),  # Dark Blue
-            
-            # Command events - Grays
-            "command_use": discord.Color(0x95A5A6),         # Light Gray
-            "command_error": discord.Color(0xE74C3C),       # Red
-            "application_cmd": discord.Color(0x7F8C8D),     # Gray
-            
-            # Reaction events - Yellows
-            "reaction_add": discord.Color(0xF1C40F),        # Yellow
-            "reaction_remove": discord.Color(0xF39C12),     # Orange
-            "reaction_clear": discord.Color(0xE67E22),      # Dark Orange
-            
-            # Integration events - Teals
-            "integration_create": discord.Color(0x1ABC9C),  # Teal
-            "integration_update": discord.Color(0x16A085),  # Dark Teal
-            "integration_delete": discord.Color(0xE74C3C),  # Red
-            
-            # Webhook/AutoMod - Grays and Reds
-            "webhook_update": discord.Color(0x7F8C8D),      # Gray
-            "automod_rule_create": discord.Color(0x2ECC71), # Green
-            "automod_rule_update": discord.Color(0x27AE60), # Dark Green
-            "automod_rule_delete": discord.Color(0xE74C3C), # Red
-            "automod_action": discord.Color(0xE67E22),      # Dark Orange
-        }
-        
-        # Get appropriate emoji for the event type
-        emoji, _ = self.event_descriptions.get(event_type, ("📝", "Event"))
-        
-        # Format the title with a cleaner presentation
-        title = f"{emoji} {event_type.replace('_', ' ').title()}"
-        
-        # Create the base embed with appropriate styling
+        # Create the base embed
         embed = discord.Embed(
-            title=title,
-            description=description + "\n\u200b",  # Add spacing after description
-            color=color_map.get(event_type, discord.Color.blurple()),
+            title=f"{self.event_descriptions.get(event_type, ('📝', 'Event'))[0]} {event_type.replace('_', ' ').title()}",
+            description=description,
+            color=self._get_event_color(event_type),
             timestamp=datetime.datetime.now(datetime.UTC)
         )
+
+        # Add all fields from kwargs with truncation
+        for field_name, field_value in kwargs.items():
+            if field_value is not None:
+                # Convert to string and apply smart truncation to field values
+                field_value_str = str(field_value)
+                
+                # Check individual field limits
+                if len(field_value_str) > 1024:
+                    field_value_str = self._smart_truncate(field_value_str, 1021) + "..."
+                elif field_name.lower() in ['content', 'message_content'] and len(field_value_str) > 512:
+                    # Be more conservative with content fields
+                    field_value_str = self._smart_truncate(field_value_str, 509) + "..."
+
+                embed.add_field(
+                    name=str(field_name).title()[:256],  # Ensure field name fits
+                    value=field_value_str,
+                    inline=len(field_value_str) < 100  # Auto-inline for short values
+                )
+
+        return embed
+
+    def _get_event_color(self, event_type: str) -> int:
+        """
+        Get the appropriate color for an event type.
+
+        Parameters
+        ----------
+        event_type: str
+            The type of event
+
+        Returns
+        -------
+        int
+            Discord color value
+        """
+        color_map = {
+            # Message events
+            "message_delete": 0xe74c3c,      # Red
+            "message_edit": 0xf39c12,        # Orange
+            "message_bulk_delete": 0x9b59b6, # Purple
+            "message_pin": 0x3498db,         # Blue
+            "message_unpin": 0x3498db,       # Blue
+
+            # Member events
+            "member_join": 0x2ecc71,         # Green
+            "member_leave": 0xe67e22,        # Dark orange
+            "member_ban": 0xc0392b,          # Dark red
+            "member_unban": 0x27ae60,        # Dark green
+            "member_update": 0x3498db,       # Blue
+            "member_kick": 0xe74c3c,         # Red
+            "member_timeout": 0xf39c12,      # Orange
+
+            # Channel events
+            "channel_create": 0x2ecc71,      # Green
+            "channel_delete": 0xe74c3c,      # Red
+            "channel_update": 0xf39c12,      # Orange
+            "thread_create": 0x2ecc71,       # Green
+            "thread_delete": 0xe74c3c,       # Red
+            "thread_update": 0x3498db,       # Blue
+
+            # Role events
+            "role_create": 0x9b59b6,         # Purple
+            "role_delete": 0xe74c3c,         # Red
+            "role_update": 0xf39c12,         # Orange
+
+            # Guild events
+            "guild_update": 0x3498db,        # Blue
+            "emoji_update": 0xf39c12,        # Orange
+            "sticker_update": 0x9b59b6,      # Purple
+
+            # Command events
+            "command_use": 0x2ecc71,         # Green
+            "command_error": 0xe74c3c,       # Red
+            "application_cmd": 0x3498db,     # Blue
+
+            # Voice events
+            "voice_state_update": 0x9b59b6,  # Purple
+            "voice_update": 0x3498db,        # Blue
+
+            # Reaction events
+            "reaction_add": 0x2ecc71,        # Green
+            "reaction_remove": 0xe67e22,     # Dark orange
+            "reaction_clear": 0xf39c12,      # Orange
+
+            # Default
+            "default": 0x3498db              # Blue
+        }
+
+        return color_map.get(event_type, color_map["default"])
+
+    def create_embed(self, event_type: str, description: str, **kwargs) -> discord.Embed:
+        """
+        Create a standardized, visually appealing embed for logging with Discord limit handling.
+
+        This method now includes comprehensive size checking and will intelligently handle
+        content that exceeds Discord's character limits by truncating fields and descriptions.
+
+        Parameters
+        ----------
+        event_type: str
+            The type of event being logged
+        description: str
+            Primary description for the embed
+        **kwargs
+            Additional fields to include in the embed
+
+        Returns
+        -------
+        discord.Embed
+            A formatted embed ready for sending that fits within Discord limits
+        """
+        # Try to create the embed with all content first
+        embed = self._try_single_embed(event_type, description, **kwargs)
         
-        # Add fields with improved formatting for better readability
-        for key, value in kwargs.items():
-            if value is None:
-                continue
-                
-            field_name = key.replace('_', ' ').title()
-            
-            # Format field values based on content type
-            if isinstance(value, list):
-                # Format lists as bulleted items
-                if not value:  # Empty list
-                    continue
-                if len(value) == 1:
-                    formatted_value = value[0]
-                else:
-                    formatted_value = "\n".join(f"• {v}" for v in value)
-                    
-            elif isinstance(value, (int, float, bool)):
-                # Simple representation for primitives
-                formatted_value = str(value)
-                
-            elif isinstance(value, str):
-                if not value.strip():  # Empty or whitespace-only string
-                    continue
-                    
-                # Format long or multi-line strings appropriately
-                if "\n" in value or len(value) > 60:
-                    # For code blocks or already formatted text, preserve formatting
-                    if value.startswith("```") and value.endswith("```"):
-                        formatted_value = value
-                    # For long text that isn't a code block, use blockquotes for readability
-                    else:
-                        formatted_value = value.replace("\n", "\n> ")
-                        formatted_value = f"> {formatted_value}"
-                else:
-                    formatted_value = value
-            else:
-                # For any other types, convert to string
-                formatted_value = str(value)
-                
-            # Truncate extremely long values to avoid hitting Discord limits
-            if isinstance(formatted_value, str) and len(formatted_value) > 1024:
-                formatted_value = formatted_value[:1021] + "..."
-                
-            # Add the formatted field to the embed
-            embed.add_field(name=field_name, value=formatted_value, inline=False)
-            
         # Set the footer with the YALC branding
         self.set_embed_footer(embed)
+
+        # Check if the embed exceeds Discord limits after footer is added
+        total_size = self._calculate_embed_size(embed)
+        DISCORD_EMBED_LIMIT = 6000  # Discord's total embed character limit
+
+        if total_size <= DISCORD_EMBED_LIMIT:
+            return embed
+
+        # If we're over the limit, we need to intelligently truncate content
+        self.log.warning(f"Embed size ({total_size}) exceeds Discord limit ({DISCORD_EMBED_LIMIT}) for event_type: {event_type}. Applying intelligent truncation.")
+
+        # Create a new embed with more aggressive truncation
+        embed = discord.Embed(
+            title=f"{self.event_descriptions.get(event_type, ('📝', 'Event'))[0]} {event_type.replace('_', ' ').title()}"[:256],
+            description=self._smart_truncate(description, 3500) if description else None,  # Reserve space for fields
+            color=self._get_event_color(event_type),
+            timestamp=datetime.datetime.now(datetime.UTC)
+        )
+
+        # Add fields with more aggressive truncation, prioritizing important fields
+        important_fields = ['user', 'author', 'member', 'channel', 'role', 'reason']
+        regular_fields = []
+        content_fields = []
+
+        # Categorize fields by importance
+        for field_name, field_value in kwargs.items():
+            if field_value is not None:
+                field_name_lower = field_name.lower()
+                if any(important in field_name_lower for important in important_fields):
+                    # Important fields get priority and moderate truncation
+                    if isinstance(field_value, str) and len(field_value) > 512:
+                        field_value = self._smart_truncate(field_value, 509) + "..."
+                    embed.add_field(
+                        name=str(field_name).title()[:256],
+                        value=str(field_value)[:1024],
+                        inline=True
+                    )
+                elif field_name_lower in ['content', 'message_content', 'changes']:
+                    # Content fields get saved for later with heavy truncation
+                    content_fields.append((field_name, field_value))
+                else:
+                    # Regular fields
+                    regular_fields.append((field_name, field_value))
+
+        # Add regular fields if we have space
+        current_size = self._calculate_embed_size(embed)
+        remaining_space = DISCORD_EMBED_LIMIT - current_size - 500  # Reserve space for footer and safety
+
+        for field_name, field_value in regular_fields:
+            field_value_str = str(field_value)
+            if len(field_value_str) > 256:
+                field_value_str = self._smart_truncate(field_value_str, 253) + "..."
+            
+            # Estimate field size (name + value + some overhead)
+            field_size = len(str(field_name).title()[:256]) + len(field_value_str) + 10
+            
+            if current_size + field_size < DISCORD_EMBED_LIMIT - 200:  # Safety margin
+                embed.add_field(
+                    name=str(field_name).title()[:256],
+                    value=field_value_str,
+                    inline=len(field_value_str) < 100
+                )
+                current_size += field_size
+            else:
+                break  # No more space
+
+        # Add content fields if we still have space
+        for field_name, field_value in content_fields[:1]:  # Only add one content field
+            current_size = self._calculate_embed_size(embed)
+            available_space = DISCORD_EMBED_LIMIT - current_size - 200  # Safety margin
+            
+            if available_space > 100:  # Only if we have reasonable space
+                max_content_length = min(available_space - 50, 800)  # Cap content length
+                field_value_str = str(field_value)
+                if len(field_value_str) > max_content_length:
+                    field_value_str = self._smart_truncate(field_value_str, max_content_length - 3) + "..."
+                
+                embed.add_field(
+                    name=str(field_name).title()[:256],
+                    value=field_value_str,
+                    inline=False
+                )
+                break
+
+        # Add truncation notice if we had to skip fields
+        total_fields_available = len(kwargs)
+        fields_added = len(embed.fields)
         
+        if fields_added < total_fields_available:
+            # Try to add a notice about truncated content
+            current_size = self._calculate_embed_size(embed)
+            if current_size + 100 < DISCORD_EMBED_LIMIT:
+                skipped_count = total_fields_available - fields_added
+                embed.add_field(
+                    name="⚠️ Content Truncated",
+                    value=f"Some content was truncated due to Discord limits. {skipped_count} field(s) omitted.",
+                    inline=False
+                )
+
+        # Set the footer
+        self.set_embed_footer(embed)
+
+        # Final size check and emergency truncation
+        final_size = self._calculate_embed_size(embed)
+        if final_size > DISCORD_EMBED_LIMIT:
+            # Emergency truncation - remove fields from the end until we fit
+            while len(embed.fields) > 0 and self._calculate_embed_size(embed) > DISCORD_EMBED_LIMIT:
+                embed.remove_field(-1)
+            
+            # If we still don't fit, truncate the description more aggressively
+            if self._calculate_embed_size(embed) > DISCORD_EMBED_LIMIT and embed.description:
+                available_desc_space = DISCORD_EMBED_LIMIT - (self._calculate_embed_size(embed) - len(embed.description)) - 100
+                if available_desc_space > 50:
+                    embed.description = self._smart_truncate(embed.description, available_desc_space - 30) + "\n*...truncated*"
+                else:
+                    embed.description = "*Content truncated due to size limits*"
+
         return embed
 
     def set_embed_footer(self, embed: discord.Embed, event_time: Optional[datetime.datetime] = None, label: str = "YALC Logger") -> None:
@@ -5312,6 +5503,109 @@ class YALC(DashboardIntegration, commands.Cog):
                 
         # Get description for confirmation message
         emoji, description = self.event_descriptions[event_type]
+    @yalc_ignore.command(name="thread")
+    async def yalc_ignore_thread(self, ctx: commands.Context, event_type: str, user: discord.Member, thread: discord.Thread, *, reason: Optional[str] = None):
+        """
+        Ignore a specific event type from a specific user in a specific thread.
+
+        This allows granular control for threads - for example, ignoring message edits from a particular
+        user in a particular thread while still logging their events in other threads or channels.
+
+        Parameters
+        ----------
+        event_type: str
+            The event type to ignore (e.g., message_edit, message_delete)
+        user: discord.Member
+            The user to ignore for this event type in this thread
+        thread: discord.Thread
+            The thread where this user's events of this type should be ignored
+        reason: str, optional
+            Optional reason for this ignore rule
+        """
+        # Check if the event type exists
+        if event_type not in self.event_descriptions:
+            await ctx.send(f"❌ Unknown event type: `{event_type}`. Use `{ctx.prefix}yalc enable` to see all available event types.")
+            return
+
+        # Validate that the thread exists and is accessible
+        if not isinstance(thread, discord.Thread):
+            await ctx.send("❌ The specified thread is not a valid thread.")
+            return
+
+        # Check if this rule already exists
+        async with self.config.guild(ctx.guild).granular_ignores() as granular_ignores:
+            existing_rule = None
+            for rule in granular_ignores:
+                if (rule["event_type"] == event_type and
+                    rule["user_id"] == user.id and
+                    rule.get("thread_id") == thread.id):
+                    existing_rule = rule
+                    break
+
+            if existing_rule:
+                await ctx.send(f"❌ Already ignoring `{event_type}` events from {user.mention} in {thread.mention}.")
+                return
+
+            # Create the new rule
+            new_rule = {
+                "event_type": event_type,
+                "user_id": user.id,
+                "thread_id": thread.id,
+                "parent_channel_id": thread.parent_id,
+                "created_by": ctx.author.id,
+                "created_at": datetime.datetime.now(datetime.UTC).isoformat(),
+                "reason": reason
+            }
+
+            granular_ignores.append(new_rule)
+
+        # Get description for confirmation message
+        emoji, description = self.event_descriptions[event_type]
+        reason_text = f" (Reason: {reason})" if reason else ""
+        await ctx.send(f"✅ {emoji} Now ignoring **{description}** events from {user.mention} in {thread.mention}.{reason_text}")
+
+    @yalc_unignore.command(name="thread")
+    async def yalc_unignore_thread(self, ctx: commands.Context, event_type: str, user: discord.Member, thread: discord.Thread):
+        """
+        Remove a specific granular ignore rule for a thread.
+
+        Parameters
+        ----------
+        event_type: str
+            The event type to stop ignoring
+        user: discord.Member
+            The user to stop ignoring for this event type in this thread
+        thread: discord.Thread
+            The thread where this user's events should no longer be ignored
+        """
+        # Check if the event type exists
+        if event_type not in self.event_descriptions:
+            await ctx.send(f"❌ Unknown event type: `{event_type}`. Use `{ctx.prefix}yalc enable` to see all available event types.")
+            return
+
+        # Validate that the thread exists and is accessible
+        if not isinstance(thread, discord.Thread):
+            await ctx.send("❌ The specified thread is not a valid thread.")
+            return
+
+        # Find and remove the rule
+        async with self.config.guild(ctx.guild).granular_ignores() as granular_ignores:
+            rule_found = False
+            for i, rule in enumerate(granular_ignores):
+                if (rule["event_type"] == event_type and
+                    rule["user_id"] == user.id and
+                    rule.get("thread_id") == thread.id):
+                    granular_ignores.pop(i)
+                    rule_found = True
+                    break
+
+            if not rule_found:
+                await ctx.send(f"❌ No granular ignore rule found for `{event_type}` events from {user.mention} in {thread.mention}.")
+                return
+
+        # Get description for confirmation message
+        emoji, description = self.event_descriptions[event_type]
+        await ctx.send(f"✅ {emoji} No longer ignoring **{description}** events from {user.mention} in {thread.mention}.")
         await ctx.send(f"✅ {emoji} No longer ignoring **{description}** events from {user.mention} in {channel.mention}.")
 
     @yalc_ignore.command(name="list")
