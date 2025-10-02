@@ -1715,15 +1715,18 @@ class YALC(DashboardIntegration, commands.Cog):
         elif seconds < 3600:
             minutes = int(seconds // 60)
             secs = int(seconds % 60)
-            return f"{minutes} minute{'s' if minutes != 1 else ''}{f' {secs} second{"s" if secs != 1 else ""}' if secs > 0 else ''}"
+            sec_part = f" {secs} second{'s' if secs != 1 else ''}" if secs > 0 else ""
+            return f"{minutes} minute{'s' if minutes != 1 else ''}{sec_part}"
         elif seconds < 86400:
             hours = int(seconds // 3600)
             minutes = int((seconds % 3600) // 60)
-            return f"{hours} hour{'s' if hours != 1 else ''}{f' {minutes} minute{"s" if minutes != 1 else ""}' if minutes > 0 else ''}"
+            min_part = f" {minutes} minute{'s' if minutes != 1 else ''}" if minutes > 0 else ""
+            return f"{hours} hour{'s' if hours != 1 else ''}{min_part}"
         else:
             days = int(seconds // 86400)
             hours = int((seconds % 86400) // 3600)
-            return f"{days} day{'s' if days != 1 else ''}{f' {hours} hour{"s" if hours != 1 else ""}' if hours > 0 else ''}"
+            hour_part = f" {hours} hour{'s' if hours != 1 else ''}" if hours > 0 else ""
+            return f"{days} day{'s' if days != 1 else ''}{hour_part}"
 
     @commands.Cog.listener()
     async def on_presence_update(self, before: discord.Member, after: discord.Member):
