@@ -1706,6 +1706,25 @@ class YALC(DashboardIntegration, commands.Cog):
             minutes = int((seconds % 3600) // 60)
             return f"{hours}h {minutes}m"
 
+    def _format_timeout_duration(self, timeout_duration: datetime.timedelta) -> str:
+        """Format timeout duration to a human-readable string."""
+        seconds = timeout_duration.total_seconds()
+
+        if seconds < 60:
+            return f"{int(seconds)} second{'s' if int(seconds) != 1 else ''}"
+        elif seconds < 3600:
+            minutes = int(seconds // 60)
+            secs = int(seconds % 60)
+            return f"{minutes} minute{'s' if minutes != 1 else ''}{f' {secs} second{"s" if secs != 1 else ""}' if secs > 0 else ''}"
+        elif seconds < 86400:
+            hours = int(seconds // 3600)
+            minutes = int((seconds % 3600) // 60)
+            return f"{hours} hour{'s' if hours != 1 else ''}{f' {minutes} minute{"s" if minutes != 1 else ""}' if minutes > 0 else ''}"
+        else:
+            days = int(seconds // 86400)
+            hours = int((seconds % 86400) // 3600)
+            return f"{days} day{'s' if days != 1 else ''}{f' {hours} hour{"s" if hours != 1 else ""}' if hours > 0 else ''}"
+
     @commands.Cog.listener()
     async def on_presence_update(self, before: discord.Member, after: discord.Member):
         """Log presence/status updates."""
@@ -2858,6 +2877,120 @@ class YALC(DashboardIntegration, commands.Cog):
             user=f"{user} ({user.id})",
             channel_name=guild.name if guild else "Unknown"
         )
+        await self.safe_send(channel, embed=embed)
+
+    @commands.Cog.listener()
+    async def on_member_kick(self, guild: discord.Guild, user: discord.User) -> None:
+        """Log member kick events with audit log integration."""
+        self.log.debug("Listener triggered: on_member_kick")
+        if not guild or not await self.should_log_event(guild, "member_kick"):
+            return
+        channel = await self.get_log_channel(guild, "member_kick")
+        self.log.debug(f"About to send to channel: {channel}")
+        if not channel:
+            return
+
+        # Try to get audit log information about who kicked the member
+        entry = await self._get_audit_log_entry(guild, discord.AuditLogAction.kick, target=user, timeout_seconds=10)
+
+        # Create the embed with enhanced information
+        description = f"👢 {user.mention if hasattr(user, 'mention') else user} has been kicked.\n\u200b"
+
+        embed = self.create_embed(
+            "member_kick",
+            description,
+            user=f"{user} ({user.id})",
+            channel_name=guild.name if guild else "Unknown"
+        )
+
+        # Add kicker information if available
+        if entry and entry.user:
+            embed.add_field(
+                name="Kicked By",
+                value=f"{entry.user.mention} (`{entry.user}`, ID: `{entry.user.id}`)",
+                inline=True
+            )
+
+            # Add reason if provided
+            if getattr(entry, "reason", None):
+                embed.add_field(
+                    name="Reason",
+                    value=entry.reason,
+                    inline=False
+                )
+        else:
+            # If no audit log info available, indicate unknown
+            embed.add_field(
+                name="Kicked By",
+                value="Unknown (audit log unavailable)",
+                inline=True
+            )
+
+        await self.safe_send(channel, embed=embed)
+
+    @commands.Cog.listener()
+    async def on_member_timeout(self, guild: discord.Guild, user: discord.User, until: Optional[datetime.datetime] = None) -> None:
+        """Log member timeout events with audit log integration."""
+        self.log.debug("Listener triggered: on_member_timeout")
+        if not guild or not await self.should_log_event(guild, "member_timeout"):
+            return
+        channel = await self.get_log_channel(guild, "member_timeout")
+        self.log.debug(f"About to send to channel: {channel}")
+        if not channel:
+            return
+
+        # Try to get audit log information about who timed out the member
+        entry = await self._get_audit_log_entry(guild, discord.AuditLogAction.member_update, target=user, timeout_seconds=10)
+
+        # Create the embed with enhanced information
+        description = f"⏰ {user.mention if hasattr(user, 'mention') else user} has been timed out.\n\u200b"
+
+        embed = self.create_embed(
+            "member_timeout",
+            description,
+            user=f"{user} ({user.id})",
+            channel_name=guild.name if guild else "Unknown"
+        )
+
+        # Add timeout information
+        if until:
+            timeout_duration = until - datetime.datetime.now(datetime.UTC)
+            duration_text = self._format_timeout_duration(timeout_duration)
+            embed.add_field(
+                name="Duration",
+                value=duration_text,
+                inline=True
+            )
+
+            embed.add_field(
+                name="Expires",
+                value=discord.utils.format_dt(until, style="F"),
+                inline=True
+            )
+
+        # Add moderator information if available
+        if entry and entry.user and entry.user != user:  # Don't show if user timed themselves out
+            embed.add_field(
+                name="Timed Out By",
+                value=f"{entry.user.mention} (`{entry.user}`, ID: `{entry.user.id}`)",
+                inline=True
+            )
+
+            # Add reason if provided
+            if getattr(entry, "reason", None):
+                embed.add_field(
+                    name="Reason",
+                    value=entry.reason,
+                    inline=False
+                )
+        else:
+            # If no audit log info available, indicate unknown
+            embed.add_field(
+                name="Timed Out By",
+                value="Unknown (audit log unavailable or self-timeout)",
+                inline=True
+            )
+
         await self.safe_send(channel, embed=embed)
 
     @commands.Cog.listener()
@@ -5606,7 +5739,6 @@ class YALC(DashboardIntegration, commands.Cog):
         # Get description for confirmation message
         emoji, description = self.event_descriptions[event_type]
         await ctx.send(f"✅ {emoji} No longer ignoring **{description}** events from {user.mention} in {thread.mention}.")
-        await ctx.send(f"✅ {emoji} No longer ignoring **{description}** events from {user.mention} in {channel.mention}.")
 
     @yalc_ignore.command(name="list")
     async def yalc_ignore_list(self, ctx: commands.Context, list_type: str = "all"):
