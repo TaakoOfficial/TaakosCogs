@@ -208,7 +208,7 @@ class WHMCS(commands.Cog):
             )
             await ctx.send(embed=embed)
     
-    @whmcs_client.command(name="list")
+    @whmcs_client.hybrid_command(name="list")
     async def client_list(self, ctx: commands.Context, page: int = 1):
         """List clients with pagination.
         
