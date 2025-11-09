@@ -1750,6 +1750,29 @@ class WHMCS(commands.Cog):
                 channel = await self._get_or_create_ticket_channel(ctx.guild, str(found_ticket.get("tid") or found_ticket.get("ticketnum") or found_ticket.get("maskid")), found_ticket)
                 if channel:
                     await self._send_success(ctx, f"Channel <#{channel.id}> created for ticket {ticket_id}.")
+                    # Post a message in the new channel mentioning the user
+                    await channel.send(f"Channel created for ticket {ticket_id} by {ctx.author.mention}")
+                    # Add a reply to the WHMCS ticket noting the Discord channel creation
+                    try:
+                        admin_username = f"Discord-{ctx.author.display_name}"
+                        channel_url = f"https://discord.com/channels/{ctx.guild.id}/{channel.id}"
+                        note_message = f"A Discord channel has been created for this ticket: {channel_url} (created by {ctx.author})"
+                        # Try all possible ticket ID fields for reply
+                        reply_success = False
+                        for id_field in ['ticketnum', 'tid', 'maskid']:
+                            ticket_id_value = found_ticket.get(id_field)
+                            if ticket_id_value:
+                                try:
+                                    response = await api_client.add_ticket_reply(str(ticket_id_value), note_message, admin_username)
+                                    if response.get("result") == "success":
+                                        reply_success = True
+                                        break
+                                except Exception as e:
+                                    log.warning(f"Failed to add reply using {id_field}: {e}")
+                        if not reply_success:
+                            await channel.send("⚠️ Failed to add a note to the WHMCS ticket. Please check ticket ID and API permissions.")
+                    except Exception as e:
+                        log.exception("Failed to add Discord channel creation note to WHMCS ticket")
                 else:
                     await self._send_error(ctx, "Failed to create ticket channel. Check category and permissions.")
         except Exception as e:
