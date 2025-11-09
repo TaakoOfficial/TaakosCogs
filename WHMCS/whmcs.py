@@ -1072,7 +1072,7 @@ class WHMCS(commands.Cog):
         
         try:
             async with api_client:
-                limit = 10
+                limit = 5  # Reduced from 10 to match client list formatting
                 offset = (page - 1) * limit
                 response = await api_client.get_tickets(client_id=client_id, limit=limit, offset=offset)
                 
@@ -1081,8 +1081,12 @@ class WHMCS(commands.Cog):
                     await self._send_error(ctx, f"No tickets found{filter_text}.")
                     return
                 
+                total = response.get("totalresults", 0)
+                total_pages = (total + limit - 1) // limit
+                
                 filter_text = f" for Client {client_id}" if client_id else ""
-                embed = self._create_embed(f"🎫 Support Tickets{filter_text} (Page {page})")
+                embed = self._create_embed(f"🎫 Support Tickets Directory")
+                embed.description = f"**Page {page} of {total_pages}**{filter_text} • {total} total tickets"
                 
                 tickets = response["tickets"]["ticket"]
                 if not isinstance(tickets, list):
@@ -1103,6 +1107,7 @@ class WHMCS(commands.Cog):
                     }.get(ticket.get("priority"), "➡️")
                     
                     ticket_info = (
+                        f"🆔 **ID:** {ticket.get('tid')}\n"
                         f"📊 **Status:** {status_emoji} {ticket.get('status')}\n"
                         f"⚡ **Priority:** {priority_emoji} {ticket.get('priority')}\n"
                         f"🏢 **Department:** {ticket.get('department', 'N/A')}\n"
@@ -1110,18 +1115,31 @@ class WHMCS(commands.Cog):
                     )
                     
                     subject = ticket.get('subject', 'No Subject')
-                    if len(subject) > 40:  # Shorter for full-width display
-                        subject = subject[:37] + "..."
+                    if len(subject) > 35:  # Shorter for full-width display
+                        subject = subject[:32] + "..."
                     
                     embed.add_field(
-                        name=f"🎫 #{ticket.get('tid')} - {subject}",
+                        name=f"🎫 {subject}",
                         value=ticket_info,
                         inline=False  # Full width for better readability
                     )
                 
-                total = response.get("totalresults", 0)
-                total_pages = (total + limit - 1) // limit
-                embed.set_footer(text=f"WHMCS Integration • Page {page}/{total_pages} • {total} total tickets")
+                # Add navigation hints in footer if multiple pages
+                if total_pages > 1:
+                    navigation_text = f"WHMCS Integration • Page {page}/{total_pages}"
+                    if page > 1:
+                        navigation_text += f" • Use `{ctx.prefix}whmcs support tickets"
+                        if client_id:
+                            navigation_text += f" {client_id}"
+                        navigation_text += f" {page-1}` for previous"
+                    if page < total_pages:
+                        navigation_text += f" • Use `{ctx.prefix}whmcs support tickets"
+                        if client_id:
+                            navigation_text += f" {client_id}"
+                        navigation_text += f" {page+1}` for next"
+                    embed.set_footer(text=navigation_text)
+                else:
+                    embed.set_footer(text=f"WHMCS Integration • {total} total tickets")
                 
                 await ctx.send(embed=embed)
                 

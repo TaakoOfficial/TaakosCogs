@@ -23,11 +23,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - Applied full-width field formatting for less crowded display
     - Added consistent emoji indicators (🎫, 📊, ⚡, 🏢, 💬, 📅, 🆔)
     - Better status and priority visualization
+    - **Fixed ticket ID display**: Now prominently shows ticket ID in embed content
+    - **Added pagination navigation**: Navigation hints in footer for multi-page ticket lists
+    - Reduced tickets per page from 10 to 5 for better readability
   - **Universal Improvements**:
     - All embeds now use description field for key information
     - Consistent emoji usage across all commands
     - Better visual hierarchy and information organization
     - Enhanced readability on both desktop and mobile Discord clients
+
+### Fixed
+- **Ticket List Display**:
+  - Ticket ID now properly displayed in embed field content with 🆔 indicator
+  - Added pagination navigation hints in footer (similar to client list)
+  - Improved command syntax hints for navigating between pages
+  - Better visual organization with consistent formatting
 
 ### Technical Details
 - Modified all embed-generating commands in `whmcs.py`
@@ -36,6 +46,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Improved visual hierarchy with better field organization
 - Enhanced UX with clearer navigation instructions
 - Consistent formatting between embed and plain text modes
+- Fixed ticket pagination to match client list behavior
 
 ## [1.0.0] - 2025-11-09
 
