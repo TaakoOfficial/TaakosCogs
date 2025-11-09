@@ -122,12 +122,16 @@ class WHMCS(commands.Cog):
                         date = reply.get("date")
                         if last_reply_time is None or (date and date > last_reply_time):
                             new_replies.append(reply)
+                    # Try to match ticket/channel using all possible ticket ID fields
+                    id_fields = ["id", "ticketid", "ticketnum", "tid", "maskid"]
                     for reply in new_replies:
-                        author = reply.get("admin", reply.get("name", "Unknown"))
+                        # Only post replies from end users (not admin)
+                        author = reply.get("admin") or reply.get("name", "Unknown")
                         date = reply.get("date", "N/A")
                         rmsg = reply.get("message", "")
                         if len(rmsg) > 1000:
                             rmsg = rmsg[:997] + "..."
+                        # Compose embed for end user reply
                         reply_embed = self._create_embed(
                             f"💬 Reply by {author}",
                             f"On {date}",
