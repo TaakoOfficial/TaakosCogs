@@ -2403,7 +2403,7 @@ class WHMCS(commands.Cog):
                     if ticket_id_value:
                         tried_ids.append(f"{id_field}={ticket_id_value}")
                         try:
-                            response = await api_client.add_ticket_reply(str(ticket_id_value), message, admin_username)
+                            response = await api_client.add_ticket_reply(str(ticket_id_value), message, admin_username, id_field=id_field)
                             log.info(f"Attempted add_ticket_reply with {id_field}={ticket_id_value}, response: {response}")
                             if response.get("result") == "success":
                                 reply_success = True

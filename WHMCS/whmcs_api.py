@@ -349,47 +349,56 @@ class WHMCSAPIClient:
         # If all fail, return empty dict (not found)
         return {}
     
-    async def add_ticket_reply(self, ticket_id: str, message: str, admin_username: Optional[str] = None) -> Dict[str, Any]:
+    async def add_ticket_reply(self, ticket_id: str, message: str, admin_username: Optional[str] = None, id_field: str = None) -> Dict[str, Any]:
         """Add a reply to a support ticket.
-        
+
         Args:
-            ticket_id: The ticket ID (can be numeric, alphanumeric like GLY-907775, or with # prefix like #WYI-894412)
+            ticket_id: The ticket ID value (string)
             message: Reply message
             admin_username: Optional admin username for the reply
-            
+            id_field: The WHMCS ticket field to use (e.g., 'id', 'ticketid', 'ticketnum', 'tid', 'maskid')
+
         Returns:
             Dictionary containing the result
         """
         parameters = {
             'message': message
         }
-        
+        if admin_username:
+            parameters['adminusername'] = admin_username
+
         # Clean up ticket ID - remove # prefix if present
         clean_ticket_id = ticket_id.lstrip('#').strip()
-        
-        # Try ticketid if numeric, else ticketnum (per WHMCS API docs)
-        if clean_ticket_id.isdigit():
-            parameters['ticketid'] = clean_ticket_id
-            if admin_username:
-                parameters['adminusername'] = admin_username
+
+        # Use explicit id_field if provided, else fallback to old logic
+        if id_field:
+            parameters[id_field] = clean_ticket_id
             try:
                 resp = await self._make_request('AddTicketReply', parameters)
                 if resp.get("result") == "success":
                     return resp
             except Exception:
                 pass
-            # If numeric fails, try as ticketnum as fallback (rare, but for edge cases)
-            parameters.pop('ticketid', None)
-        parameters['ticketnum'] = clean_ticket_id
-        if admin_username:
-            parameters['adminusername'] = admin_username
-        try:
-            resp = await self._make_request('AddTicketReply', parameters)
-            if resp.get("result") == "success":
-                return resp
-        except Exception:
-            pass
-        return {"result": "error", "message": "Failed to add reply with either ticketid or ticketnum"}
+            return {"result": "error", "message": f"Failed to add reply with {id_field}={clean_ticket_id}"}
+        else:
+            # Legacy fallback: try ticketid if numeric, else ticketnum
+            if clean_ticket_id.isdigit():
+                parameters['ticketid'] = clean_ticket_id
+                try:
+                    resp = await self._make_request('AddTicketReply', parameters)
+                    if resp.get("result") == "success":
+                        return resp
+                except Exception:
+                    pass
+                parameters.pop('ticketid', None)
+            parameters['ticketnum'] = clean_ticket_id
+            try:
+                resp = await self._make_request('AddTicketReply', parameters)
+                if resp.get("result") == "success":
+                    return resp
+            except Exception:
+                pass
+            return {"result": "error", "message": "Failed to add reply with either ticketid or ticketnum"}
     
     # System Methods
     async def test_connection(self) -> Dict[str, Any]:
