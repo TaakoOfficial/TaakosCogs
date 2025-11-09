@@ -1780,7 +1780,8 @@ class WHMCS(commands.Cog):
                         note_message = f"A Discord channel has been created for this ticket: {channel_url} (created by {ctx.author})"
                         # Try all possible ticket ID fields for reply
                         reply_success = False
-                        for id_field in ['ticketnum', 'tid', 'maskid']:
+                        # Try both ticketid (internal numeric) and ticketnum (public) for reply, per WHMCS API docs
+                        for id_field in ['id', 'ticketid', 'ticketnum']:
                             ticket_id_value = found_ticket.get(id_field)
                             if ticket_id_value:
                                 try:
