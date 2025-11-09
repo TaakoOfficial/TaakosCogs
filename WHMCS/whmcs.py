@@ -1737,7 +1737,55 @@ class WHMCS(commands.Cog):
     @whmcs_support.command(name="closed")
     async def support_closed_tickets(self, ctx: commands.Context, client_id: Optional[int] = None, page: int = 1):
         """List closed support tickets only, optionally filtered by client.
-        
+    
+        @whmcs_support.command(name="channel")
+        async def support_ticket_channel(self, ctx: commands.Context, ticket_id: str):
+            """Explicitly create a Discord channel for a WHMCS ticket.
+    
+            Example:
+                [p]whmcs support channel GLY-907775
+            """
+            if not await self._check_permissions(ctx, "support"):
+                await self._send_error(ctx, "You don't have permission to create ticket channels.")
+                return
+            api_client = await self._get_api_client(ctx.guild)
+            if not api_client:
+                await self._send_error(ctx, "WHMCS is not configured. Use `[p]whmcs admin config` to set up.")
+                return
+            try:
+                async with api_client:
+                    # Use the same robust lookup logic as support_ticket
+                    response = await api_client.get_ticket(ticket_id)
+                    found_ticket = None
+                    if not response.get("ticket"):
+                        tickets_response = await api_client.get_tickets(limit=50)
+                        if tickets_response.get("tickets") and tickets_response["tickets"].get("ticket"):
+                            tickets = tickets_response["tickets"]["ticket"]
+                            if not isinstance(tickets, list):
+                                tickets = [tickets]
+                            search_lower = ticket_id.lower().lstrip('#').strip()
+                            for ticket in tickets:
+                                for id_field in ['tid', 'ticketnum', 'maskid']:
+                                    if ticket.get(id_field) and search_lower == str(ticket[id_field]).lower().lstrip('#').strip():
+                                        found_ticket = ticket
+                                        break
+                                if found_ticket:
+                                    break
+                    else:
+                        found_ticket = response["ticket"]
+                    if not found_ticket:
+                        await self._send_error(ctx, f"Ticket {ticket_id} not found.")
+                        return
+                    # Attempt to create the channel
+                    channel = await self._get_or_create_ticket_channel(ctx.guild, str(found_ticket.get("tid") or found_ticket.get("ticketnum") or found_ticket.get("maskid")), found_ticket)
+                    if channel:
+                        await self._send_success(ctx, f"Channel <#{channel.id}> created for ticket {ticket_id}.")
+                    else:
+                        await self._send_error(ctx, "Failed to create ticket channel. Check category and permissions.")
+            except Exception as e:
+                import logging
+                logging.getLogger("red.WHMCS").exception("Error in support_ticket_channel command")
+                await self._send_error(ctx, f"An unexpected error occurred: {e}")
         Args:
             client_id: Optional client ID to filter tickets
             page: Page number (default: 1)
