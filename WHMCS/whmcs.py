@@ -2083,14 +2083,31 @@ class WHMCS(commands.Cog):
                         inline=False
                     )
                 
-                # Reply count
+                # Reply count and reply details
                 if ticket.get("replies"):
-                    reply_count = len(ticket["replies"]) if isinstance(ticket["replies"], list) else 1
+                    replies = ticket["replies"]
+                    if isinstance(replies, dict) and "reply" in replies:
+                        replies = replies["reply"]
+                    if not isinstance(replies, list):
+                        replies = [replies]
+                    reply_count = len(replies)
                     embed.add_field(
                         name="💬 Replies",
                         value=f"{reply_count} reply(s)",
                         inline=True
                     )
+                    # Show up to 3 most recent replies
+                    for reply in replies[-3:]:
+                        author = reply.get("admin", reply.get("name", "Unknown"))
+                        date = reply.get("date", "N/A")
+                        message = reply.get("message", "")
+                        if len(message) > 300:
+                            message = message[:297] + "..."
+                        embed.add_field(
+                            name=f"💬 Reply by {author} on {date}",
+                            value=f"```{message}```",
+                            inline=False
+                        )
                 
                 embed.set_footer(text=f"WHMCS Integration • Ticket ID: {ticket_id}")
                 
