@@ -1739,7 +1739,7 @@ class WHMCS(commands.Cog):
         """List closed support tickets only, optionally filtered by client.
     
     @whmcs_support.command(name="channel")
-    async def support_ticket_channel(self, ctx: commands.Context, ticket_id: str):
+    async def support_ticket_channel(self, ctx, ticket_id):
         # Explicitly create a Discord channel for a WHMCS ticket.
         if not await self._check_permissions(ctx, "support"):
             await self._send_error(ctx, "You don't have permission to create ticket channels.")
