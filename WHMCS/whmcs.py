@@ -1998,11 +1998,30 @@ class WHMCS(commands.Cog):
             async with api_client:
                 response = await api_client.get_ticket(ticket_id)
                 
+                # Fallback: If not found, search recent tickets for a match (admin_find_ticket logic)
                 if not response.get("ticket"):
-                    await self._send_error(ctx, f"Ticket {ticket_id} not found.")
-                    return
-                
-                ticket = response["ticket"]
+                    # Try to find in recent tickets
+                    tickets_response = await api_client.get_tickets(limit=50)
+                    found_ticket = None
+                    if tickets_response.get("tickets") and tickets_response["tickets"].get("ticket"):
+                        tickets = tickets_response["tickets"]["ticket"]
+                        if not isinstance(tickets, list):
+                            tickets = [tickets]
+                        search_lower = ticket_id.lower().lstrip('#').strip()
+                        for ticket in tickets:
+                            for id_field in ['tid', 'ticketnum', 'maskid']:
+                                if ticket.get(id_field) and search_lower == str(ticket[id_field]).lower().lstrip('#').strip():
+                                    found_ticket = ticket
+                                    break
+                            if found_ticket:
+                                break
+                    if found_ticket:
+                        ticket = found_ticket
+                    else:
+                        await self._send_error(ctx, f"Ticket {ticket_id} not found.")
+                        return
+                else:
+                    ticket = response["ticket"]
                 
                 status_emoji = {
                     "Open": "🟢",
