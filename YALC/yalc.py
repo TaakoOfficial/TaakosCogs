@@ -1962,6 +1962,28 @@ class YALC(DashboardIntegration, commands.Cog):
             minutes = int((seconds % 3600) // 60)
             return f"{hours}h {minutes}m"
 
+    def _format_timeout_duration(self, timeout_duration: datetime.timedelta) -> str:
+        """Format timeout duration to a human-readable string."""
+        seconds = timeout_duration.total_seconds()
+
+        if seconds < 60:
+            return f"{int(seconds)} second{'s' if int(seconds) != 1 else ''}"
+        elif seconds < 3600:
+            minutes = int(seconds // 60)
+            secs = int(seconds % 60)
+            sec_part = f" {secs} second{'s' if secs != 1 else ''}" if secs > 0 else ""
+            return f"{minutes} minute{'s' if minutes != 1 else ''}{sec_part}"
+        elif seconds < 86400:
+            hours = int(seconds // 3600)
+            minutes = int((seconds % 3600) // 60)
+            min_part = f" {minutes} minute{'s' if minutes != 1 else ''}" if minutes > 0 else ""
+            return f"{hours} hour{'s' if hours != 1 else ''}{min_part}"
+        else:
+            days = int(seconds // 86400)
+            hours = int((seconds % 86400) // 3600)
+            hour_part = f" {hours} hour{'s' if hours != 1 else ''}" if hours > 0 else ""
+            return f"{days} day{'s' if days != 1 else ''}{hour_part}"
+
     @commands.Cog.listener()
     async def on_presence_update(self, before: discord.Member, after: discord.Member):
         """Log presence/status updates."""
@@ -6035,7 +6057,6 @@ class YALC(DashboardIntegration, commands.Cog):
         # Get description for confirmation message
         emoji, description = self.event_descriptions[event_type]
         await ctx.send(f"✅ {emoji} No longer ignoring **{description}** events from {user.mention} in {thread.mention}.")
-        await ctx.send(f"✅ {emoji} No longer ignoring **{description}** events from {user.mention} in {channel.mention}.")
 
     @yalc_ignore.command(name="list")
     async def yalc_ignore_list(self, ctx: commands.Context, list_type: str = "all"):
