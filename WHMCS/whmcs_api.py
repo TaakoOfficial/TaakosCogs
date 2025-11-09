@@ -331,37 +331,21 @@ class WHMCSAPIClient:
         # Clean up ticket ID - remove # prefix if present
         clean_ticket_id = ticket_id.lstrip('#').strip()
 
-        # Try all possible ID fields, just like the findticket admin command logic
-        # 1. Try as ticketnum (alphanumeric/public)
-        # 2. Try as ticketid (internal numeric)
-        # 3. Try as tid (sometimes used by WHMCS)
-        # Return the first successful result
-
-        # 1. Try ticketnum
+        # Try ticketid if numeric, else ticketnum (per WHMCS API docs)
+        if clean_ticket_id.isdigit():
+            try:
+                resp = await self._make_request('GetTicket', {'ticketid': clean_ticket_id})
+                if resp.get("ticket"):
+                    return resp
+            except Exception:
+                pass
+        # Always try ticketnum as fallback (for alphanumeric or if numeric fails)
         try:
             resp = await self._make_request('GetTicket', {'ticketnum': clean_ticket_id})
             if resp.get("ticket"):
                 return resp
         except Exception:
             pass
-
-        # 2. Try ticketid (if numeric or if previous failed)
-        try:
-            if clean_ticket_id.isdigit():
-                resp = await self._make_request('GetTicket', {'ticketid': clean_ticket_id})
-                if resp.get("ticket"):
-                    return resp
-        except Exception:
-            pass
-
-        # 3. Try tid (rare, but seen in some WHMCS setups)
-        try:
-            resp = await self._make_request('GetTicket', {'tid': clean_ticket_id})
-            if resp.get("ticket"):
-                return resp
-        except Exception:
-            pass
-
         # If all fail, return empty dict (not found)
         return {}
     
@@ -383,17 +367,29 @@ class WHMCSAPIClient:
         # Clean up ticket ID - remove # prefix if present
         clean_ticket_id = ticket_id.lstrip('#').strip()
         
-        # Determine if this is a numeric ID (use ticketid) or alphanumeric (use ticketnum)
-        # Use ticketid (internal numeric) if available, else ticketnum (public alphanumeric)
+        # Try ticketid if numeric, else ticketnum (per WHMCS API docs)
         if clean_ticket_id.isdigit():
             parameters['ticketid'] = clean_ticket_id
-        else:
-            parameters['ticketnum'] = clean_ticket_id
-        
+            if admin_username:
+                parameters['adminusername'] = admin_username
+            try:
+                resp = await self._make_request('AddTicketReply', parameters)
+                if resp.get("result") == "success":
+                    return resp
+            except Exception:
+                pass
+            # If numeric fails, try as ticketnum as fallback (rare, but for edge cases)
+            parameters.pop('ticketid', None)
+        parameters['ticketnum'] = clean_ticket_id
         if admin_username:
             parameters['adminusername'] = admin_username
-        
-        return await self._make_request('AddTicketReply', parameters)
+        try:
+            resp = await self._make_request('AddTicketReply', parameters)
+            if resp.get("result") == "success":
+                return resp
+        except Exception:
+            pass
+        return {"result": "error", "message": "Failed to add reply with either ticketid or ticketnum"}
     
     # System Methods
     async def test_connection(self) -> Dict[str, Any]:

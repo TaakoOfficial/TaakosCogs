@@ -294,13 +294,7 @@ class WHMCS(commands.Cog):
             return None
     
     async def _send_ticket_info_to_channel(self, channel: discord.TextChannel, ticket_id: str, ticket_data: Dict[str, Any]):
-        """Send ticket information to the newly created channel.
-        
-        Args:
-            channel: Discord channel
-            ticket_id: WHMCS ticket ID
-            ticket_data: Ticket information
-        """
+        """Send ticket information to the newly created channel, and post all replies as individual embeds."""
         try:
             status = ticket_data.get("status", "Unknown")
             status_emoji = {
@@ -309,17 +303,14 @@ class WHMCS(commands.Cog):
                 "Customer-Reply": "🟡",
                 "Closed": "🔴"
             }.get(status, "❓")
-            
             priority = ticket_data.get("priority", "Medium")
             priority_emoji = {
                 "Low": "🔽",
                 "Medium": "➡️",
                 "High": "🔼"
             }.get(priority, "➡️")
-            
             embed = self._create_embed(f"🎫 Ticket {ticket_id} Channel Created")
             embed.description = f"**{ticket_data.get('subject', 'No Subject')}**"
-            
             embed.add_field(
                 name="📊 Ticket Information",
                 value=(
@@ -332,7 +323,6 @@ class WHMCS(commands.Cog):
                 ),
                 inline=False
             )
-            
             if ticket_data.get('message'):
                 message = ticket_data['message']
                 if len(message) > 1000:
@@ -342,7 +332,6 @@ class WHMCS(commands.Cog):
                     value=f"```{message}```",
                     inline=False
                 )
-            
             embed.add_field(
                 name="🔧 Channel Usage",
                 value=(
@@ -353,9 +342,31 @@ class WHMCS(commands.Cog):
                 ),
                 inline=False
             )
-            
             await channel.send(embed=embed)
-            
+            # Post all replies as individual embeds
+            replies = ticket_data.get("replies")
+            if replies:
+                if isinstance(replies, dict) and "reply" in replies:
+                    replies = replies["reply"]
+                if not isinstance(replies, list):
+                    replies = [replies]
+                for reply in replies:
+                    author = reply.get("admin", reply.get("name", "Unknown"))
+                    date = reply.get("date", "N/A")
+                    rmsg = reply.get("message", "")
+                    if len(rmsg) > 1000:
+                        rmsg = rmsg[:997] + "..."
+                    reply_embed = self._create_embed(
+                        f"💬 Reply by {author}",
+                        f"On {date}",
+                        color=0x00BFFF
+                    )
+                    reply_embed.add_field(
+                        name="Message",
+                        value=f"```{rmsg}```",
+                        inline=False
+                    )
+                    await channel.send(embed=reply_embed)
         except Exception as e:
             log.exception(f"Failed to send ticket info to channel {channel.id}")
     
@@ -2193,7 +2204,18 @@ class WHMCS(commands.Cog):
                 
                 subject = ticket.get('subject', 'No Subject')
                 embed = self._create_embed(f"🎫 Ticket Details")
-                embed.description = f"**#{ticket.get('tid')} - {subject}**"
+                # Show all available ticket IDs for clarity
+                id_lines = []
+                if ticket.get('ticketid'):
+                    id_lines.append(f"**ticketid:** {ticket['ticketid']}")
+                if ticket.get('ticketnum'):
+                    id_lines.append(f"**ticketnum:** {ticket['ticketnum']}")
+                if ticket.get('tid'):
+                    id_lines.append(f"**tid:** {ticket['tid']}")
+                if ticket.get('maskid'):
+                    id_lines.append(f"**maskid:** {ticket['maskid']}")
+                id_block = "\n".join(id_lines) if id_lines else "No ID fields found"
+                embed.description = f"{id_block}\n\n**#{ticket.get('tid')} - {subject}**"
                 
                 # Status and priority with consistent emoji formatting
                 embed.add_field(
@@ -2303,11 +2325,14 @@ class WHMCS(commands.Cog):
             async with api_client:
                 # Add the reply with the Discord user's name as admin username
                 admin_username = f"Discord-{ctx.author.display_name}"
+                # Determine correct ticket ID field for reply (numeric = ticketid, else ticketnum)
+                clean_ticket_id = ticket_id.lstrip('#').strip()
+                id_type = "ticketid" if clean_ticket_id.isdigit() else "ticketnum"
                 response = await api_client.add_ticket_reply(ticket_id, message, admin_username)
                 if response.get("result") != "success":
                     await ctx.send(
                         f"⚠️ Failed to add your reply to the WHMCS ticket.\n"
-                        f"Tried ticket ID: {ticket_id}\n"
+                        f"Tried {id_type}: {clean_ticket_id}\n"
                         f"API user: {admin_username}\n"
                         f"API response: {response}\n"
                         f"Please verify the ticket exists in WHMCS and the API user has department access."
