@@ -5,6 +5,20 @@ All notable changes to the WHMCS COG will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.11] - 2025-11-09
+
+### Added
+- **NEW DIAGNOSTIC TOOL**: Added `[p]whmcs admin debug <ticket_id>` command for troubleshooting ticket API issues
+- Comprehensive API parameter testing (ticketid, ticketnum, tid) to identify WHMCS configuration problems
+- Detailed diagnosis and recommendations for common WHMCS API permission and configuration issues
+- Helps identify if the problem is with API credentials, IP whitelisting, or WHMCS ticket numbering settings
+
+### Technical Details
+- Tests all three possible GetTicket API parameters with detailed success/failure reporting
+- Provides specific WHMCS configuration recommendations based on test results
+- Helps distinguish between COG bugs and WHMCS configuration issues
+- Essential tool for troubleshooting "Ticket not found" errors
+
 ## [1.0.10] - 2025-11-09
 
 ### Fixed

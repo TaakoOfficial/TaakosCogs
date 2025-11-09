@@ -730,6 +730,7 @@ class WHMCS(commands.Cog):
                 "**Available Commands:**\n"
                 "• `config` - Configure WHMCS settings\n"
                 "• `test` - Test API connectivity\n"
+                "• `debug <ticket_id>` - Debug ticket API issues\n"
                 "• `permissions` - Manage role permissions\n"
                 "• `channels` - Configure automatic ticket channels\n"
                 "\n*Requires: Admin role*"
@@ -1194,6 +1195,132 @@ class WHMCS(commands.Cog):
         except WHMCSRateLimitError:
             await self._send_error(ctx, "❌ Rate limit exceeded. Please try again later.")
         except WHMCSAPIError as e:
+    @whmcs_admin.command(name="debug")
+    async def admin_debug(self, ctx: commands.Context, ticket_id: str):
+        """Debug ticket API calls to identify WHMCS configuration issues.
+        
+        Args:
+            ticket_id: The ticket ID to debug (e.g., GLY-907775)
+        """
+        if not await self._check_permissions(ctx, "admin"):
+            await self._send_error(ctx, "You don't have permission to debug API calls.")
+            return
+        
+        api_client = await self._get_api_client(ctx.guild)
+        if not api_client:
+            await self._send_error(ctx, "WHMCS is not configured. Use `[p]whmcs admin config` to set up.")
+            return
+        
+        embed = self._create_embed("🔍 WHMCS API Debug Report", f"Debugging ticket ID: **{ticket_id}**")
+        
+        try:
+            async with api_client:
+                # Clean up ticket ID - remove # prefix if present
+                clean_ticket_id = ticket_id.lstrip('#').strip()
+                
+                debug_info = []
+                debug_info.append(f"**Original ID:** {ticket_id}")
+                debug_info.append(f"**Cleaned ID:** {clean_ticket_id}")
+                debug_info.append(f"**Is Numeric:** {clean_ticket_id.isdigit()}")
+                
+                # Try both API parameter methods
+                success_count = 0
+                
+                # Test 1: Try with ticketid parameter (for numeric IDs)
+                try:
+                    response1 = await api_client._make_request('GetTicket', {'ticketid': clean_ticket_id})
+                    if response1.get("ticket"):
+                        debug_info.append("✅ **ticketid parameter:** SUCCESS")
+                        success_count += 1
+                    else:
+                        debug_info.append("❌ **ticketid parameter:** No ticket returned")
+                except Exception as e:
+                    debug_info.append(f"❌ **ticketid parameter:** Error - {e}")
+                
+                # Test 2: Try with ticketnum parameter (for alphanumeric IDs)
+                try:
+                    response2 = await api_client._make_request('GetTicket', {'ticketnum': clean_ticket_id})
+                    if response2.get("ticket"):
+                        debug_info.append("✅ **ticketnum parameter:** SUCCESS")
+                        success_count += 1
+                    else:
+                        debug_info.append("❌ **ticketnum parameter:** No ticket returned")
+                except Exception as e:
+                    debug_info.append(f"❌ **ticketnum parameter:** Error - {e}")
+                
+                # Test 3: Try with tid parameter (some WHMCS versions)
+                try:
+                    response3 = await api_client._make_request('GetTicket', {'tid': clean_ticket_id})
+                    if response3.get("ticket"):
+                        debug_info.append("✅ **tid parameter:** SUCCESS")
+                        success_count += 1
+                    else:
+                        debug_info.append("❌ **tid parameter:** No ticket returned")
+                except Exception as e:
+                    debug_info.append(f"❌ **tid parameter:** Error - {e}")
+                
+                embed.add_field(
+                    name="🧪 API Parameter Tests",
+                    value="\n".join(debug_info),
+                    inline=False
+                )
+                
+                # Diagnosis and recommendations
+                if success_count == 0:
+                    diagnosis = [
+                        "🚨 **No API methods worked!**",
+                        "",
+                        "**Possible WHMCS Issues:**",
+                        "• API credentials lack ticket access permissions",
+                        "• Ticket doesn't exist or is from different department",
+                        "• WHMCS API version compatibility issue",
+                        "• IP address not whitelisted for API access",
+                        "",
+                        "**Recommended WHMCS Settings to Check:**",
+                        "• Admin → API Credentials → Allowed Functions",
+                        "• Ensure 'GetTicket' is enabled",
+                        "• Check department access permissions",
+                        "• Verify IP whitelist includes your server"
+                    ]
+                elif success_count == 1:
+                    diagnosis = [
+                        "⚠️ **Partial Success - Configuration Issue**",
+                        "",
+                        "One method worked, but the COG is using the wrong one.",
+                        "This suggests a WHMCS configuration inconsistency.",
+                        "",
+                        "**Next Steps:**",
+                        "• Note which parameter worked above",
+                        "• Check WHMCS ticket numbering format settings",
+                        "• Verify 'Support → Settings → General' configuration"
+                    ]
+                else:
+                    diagnosis = [
+                        "✅ **Multiple Methods Work**",
+                        "",
+                        "The API is working correctly with multiple parameters.",
+                        "The issue might be in the COG's detection logic.",
+                        "",
+                        "**This is useful debugging info - please share these results!**"
+                    ]
+                
+                embed.add_field(
+                    name="💡 Diagnosis & Recommendations",
+                    value="\n".join(diagnosis),
+                    inline=False
+                )
+                
+                await ctx.send(embed=embed)
+                
+        except WHMCSAuthenticationError:
+            await self._send_error(ctx, "❌ Authentication failed. Check your API credentials.")
+        except WHMCSRateLimitError:
+            await self._send_error(ctx, "❌ Rate limit exceeded. Please try again later.")
+        except WHMCSAPIError as e:
+            await self._send_error(ctx, f"❌ API debug failed: {e}")
+        except Exception as e:
+            log.exception("Error in admin_debug command")
+            await self._send_error(ctx, f"❌ Debug test failed: {e}")
             await self._send_error(ctx, f"❌ API connection failed: {e}")
         except Exception as e:
             log.exception("Error in admin_test command")
