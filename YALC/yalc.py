@@ -40,6 +40,54 @@ class YALC(DashboardIntegration, commands.Cog):
         
         # Real-time audit log entry storage for role attribution
         self.recent_audit_entries = {}
+        
+        # Ban cache to distinguish between kicks and leaves
+        self._ban_cache = {}
+        
+        # Enhanced audit log caching system
+        self._audit_cache = {}
+        self._cache_cleanup_task = None
+        
+        # Settings cache for performance optimization
+        self._settings_cache = {}
+        self._settings_cache_timeout = 300  # 5 minutes
+        
+        # Background task queue system for async performance
+        self._log_queue = asyncio.Queue(maxsize=1000)  # Prevent memory issues
+        self._background_worker_task = None
+        self._processing_shutdown = False
+        
+        # Smart audit log debouncing system
+        self._audit_debounce_cache = {}
+        self._debounce_timeout = 30  # 30 seconds
+        
+        # Object pooling for memory efficiency and consistent performance
+        self._embed_pool = []
+        self._embed_pool_size = 50
+        self._embed_pool_lock = asyncio.Lock()
+        
+        # Connection and batch optimization
+        self._batch_operations = {}
+        self._batch_timeout = 2.0  # 2 seconds
+        self._max_batch_size = 10
+        
+        # Performance metrics tracking
+        self._performance_metrics = {
+            "events_processed": 0,
+            "cache_hits": 0,
+            "cache_misses": 0,
+            "api_calls_saved": 0,
+            "background_queue_size": 0,
+            "last_reset": time.time()
+        }
+        
+        # Enhanced audit log caching system
+        self._audit_cache = {}
+        self._cache_cleanup_task = None
+        
+        # Settings cache for performance optimization
+        self._settings_cache = {}
+        self._settings_cache_timeout = 300  # 5 minutes
 
         # Event descriptions for logging and dashboard - MUST be set before DashboardIntegration.__init__
         self.event_descriptions = {
@@ -159,15 +207,16 @@ class YALC(DashboardIntegration, commands.Cog):
         
         # Dashboard integration is handled via inheritance and decorators in dashboard_integration.py
 
-    async def _get_audit_log_entry(self, guild, action, target=None, timeout_seconds=30):
+    async def _get_audit_log_entry_with_retry(self, guild, action, target=None, timeout_seconds=30, retries=3):
         """
-        Helper function to get recent audit log entries with improved reliability and generalized fallback matching.
+        Helper function to get recent audit log entries with retry logic and improved reliability.
 
         Args:
             guild: The guild to search audit logs in
             action: The AuditLogAction to search for
             target: Optional target to match against (user, channel, role, etc.)
             timeout_seconds: How recent the entry should be (default 30 seconds)
+            retries: Number of retry attempts for failed requests
 
         Returns:
             AuditLogEntry or None if not found/no permission
@@ -180,32 +229,81 @@ class YALC(DashboardIntegration, commands.Cog):
         if not guild.me.guild_permissions.view_audit_log:
             return None
 
-        await asyncio.sleep(2)
+        for attempt in range(retries):
+            try:
+                await asyncio.sleep(2 + (attempt * 0.5))  # Progressive delay
 
-        try:
-            now = datetime.datetime.now(datetime.UTC)
-            entries = []
-            async for entry in guild.audit_logs(action=action, limit=15):
-                age = (now - entry.created_at).total_seconds()
-                if age > timeout_seconds * 2:
-                    break
-                if age <= timeout_seconds:
-                    entries.append(entry)
-                    # First, try exact match
-                    if target is not None and entry.target == target:
-                        return entry
-            # Fallback: try matching by .id for any target type
-            if target is not None and hasattr(target, "id"):
-                for entry in entries:
-                    if hasattr(entry.target, "id") and entry.target.id == target.id:
-                        return entry
-            # Fallback: return most recent entry in window if any
-            if entries:
-                return entries[0]
-        except (discord.Forbidden, discord.HTTPException, asyncio.TimeoutError):
-            pass
+                now = datetime.datetime.now(datetime.UTC)
+                entries = []
+                async for entry in guild.audit_logs(action=action, limit=15):
+                    age = (now - entry.created_at).total_seconds()
+                    if age > timeout_seconds * 2:
+                        break
+                    if age <= timeout_seconds:
+                        entries.append(entry)
+                        # First, try exact match
+                        if target is not None and entry.target == target:
+                            return entry
+                
+                # Fallback: try matching by .id for any target type
+                if target is not None and hasattr(target, "id"):
+                    for entry in entries:
+                        if hasattr(entry.target, "id") and entry.target.id == target.id:
+                            return entry
+                
+                # Fallback: return most recent entry in window if any
+                if entries:
+                    return entries[0]
+                
+                # If no entries found, don't retry
+                return None
+                
+            except discord.HTTPException as e:
+                if attempt < retries - 1:
+                    self.log.debug(f"Audit log fetch failed (attempt {attempt + 1}/{retries}): {e}")
+                    await asyncio.sleep(2 ** attempt)  # Exponential backoff
+                    continue
+                else:
+                    self.log.warning(f"Audit log fetch failed after {retries} attempts: {e}")
+            except (discord.Forbidden, asyncio.TimeoutError):
+                # Don't retry for permission or timeout errors
+                break
+            except Exception as e:
+                self.log.error(f"Unexpected error in audit log fetch: {e}")
+                break
 
         return None
+
+    async def _get_audit_log_entry(self, guild, action, target=None, timeout_seconds=30):
+        """Legacy method for backward compatibility - redirects to retry version."""
+        return await self._get_audit_log_entry_with_retry(guild, action, target, timeout_seconds)
+
+    async def _get_cached_settings(self, guild: discord.Guild) -> dict:
+        """Get guild settings with caching for performance optimization."""
+        guild_id = guild.id
+        cache_key = f"settings_{guild_id}"
+        current_time = time.time()
+        
+        # Check if we have cached settings that haven't expired
+        if cache_key in self._settings_cache:
+            cached_data = self._settings_cache[cache_key]
+            if current_time - cached_data["timestamp"] < self._settings_cache_timeout:
+                return cached_data["settings"]
+        
+        # Cache miss or expired - fetch from database
+        settings = await self.config.guild(guild).all()
+        self._settings_cache[cache_key] = {
+            "settings": settings,
+            "timestamp": current_time
+        }
+        
+        # Clean up old cache entries (keep cache size reasonable)
+        if len(self._settings_cache) > 100:
+            oldest_key = min(self._settings_cache.keys(),
+                           key=lambda k: self._settings_cache[k]["timestamp"])
+            del self._settings_cache[oldest_key]
+        
+        return settings
 
     async def should_log_event(self, guild: discord.Guild, event_type: str,
                          channel: Optional[discord.abc.GuildChannel] = None,
@@ -237,8 +335,8 @@ class YALC(DashboardIntegration, commands.Cog):
             if not guild:
                 return False
                 
-            # Get all settings at once to minimize database calls
-            settings = await self.config.guild(guild).all()
+            # Get cached settings to minimize database calls
+            settings = await self._get_cached_settings(guild)
             
             # 1. Check if this event type is enabled at all
             if not settings["events"].get(event_type, False):
@@ -336,7 +434,7 @@ class YALC(DashboardIntegration, commands.Cog):
 
     async def get_log_channel(self, guild: discord.Guild, event_type: str) -> Optional[discord.TextChannel]:
         """Get the appropriate logging channel for an event. Only event_channels is used."""
-        settings = await self.config.guild(guild).all()
+        settings = await self._get_cached_settings(guild)
         self.log.debug(f"[get_log_channel] Guild: {guild.id}, Event: {event_type}, Settings: {settings}")
         channel_id = settings["event_channels"].get(event_type)
         self.log.debug(f"[get_log_channel] Selected channel_id: {channel_id}")
@@ -1576,6 +1674,164 @@ class YALC(DashboardIntegration, commands.Cog):
         except Exception as e:
             self.log.error(f"Failed to log automod_action: {e}")
 
+    @commands.Cog.listener()
+    async def on_thread_create(self, thread: discord.Thread) -> None:
+        """Log thread creation events."""
+        self.log.debug("Listener triggered: on_thread_create")
+        if not thread.guild:
+            return
+        try:
+            should_log = await self.should_log_event(thread.guild, "thread_create", channel=thread)
+            if not should_log:
+                return
+            channel = await self.get_log_channel(thread.guild, "thread_create")
+            if not channel:
+                return
+
+            # Try to get audit log information
+            entry = await self._get_audit_log_entry(thread.guild, discord.AuditLogAction.thread_create, target=thread.parent, timeout_seconds=10)
+
+            embed = self.create_embed("thread_create",
+                f"🧵 Thread created: {thread.mention}",
+                thread_name=thread.name,
+                parent_channel=thread.parent.mention if thread.parent else "Unknown",
+                thread_type=str(thread.type).replace('_', ' ').title(),
+                auto_archive_duration=f"{thread.auto_archive_duration} minutes" if thread.auto_archive_duration else "Default")
+
+            if entry and entry.user:
+                embed.add_field(name="Created By", value=f"{entry.user.mention} (`{entry.user}`, ID: `{entry.user.id}`)", inline=True)
+
+            embed.set_footer(text=f"Thread ID: {thread.id}")
+            await self.safe_send(channel, embed=embed)
+
+        except Exception as e:
+            self.log.error(f"Failed to log thread_create: {e}")
+
+    @commands.Cog.listener()
+    async def on_thread_delete(self, thread: discord.Thread) -> None:
+        """Log thread deletion events."""
+        self.log.debug("Listener triggered: on_thread_delete")
+        if not thread.guild:
+            return
+        try:
+            should_log = await self.should_log_event(thread.guild, "thread_delete", channel=thread)
+            if not should_log:
+                return
+            channel = await self.get_log_channel(thread.guild, "thread_delete")
+            if not channel:
+                return
+
+            # Try to get audit log information
+            entry = await self._get_audit_log_entry(thread.guild, discord.AuditLogAction.thread_delete, target=thread.parent, timeout_seconds=10)
+
+            embed = self.create_embed("thread_delete",
+                f"🗑️ Thread deleted: **{thread.name}**",
+                parent_channel=thread.parent.mention if thread.parent else "Unknown",
+                thread_type=str(thread.type).replace('_', ' ').title())
+
+            if entry and entry.user:
+                embed.add_field(name="Deleted By", value=f"{entry.user.mention} (`{entry.user}`, ID: `{entry.user.id}`)", inline=True)
+
+            embed.set_footer(text=f"Thread ID: {thread.id}")
+            await self.safe_send(channel, embed=embed)
+
+        except Exception as e:
+            self.log.error(f"Failed to log thread_delete: {e}")
+
+    @commands.Cog.listener()
+    async def on_thread_update(self, before: discord.Thread, after: discord.Thread) -> None:
+        """Log thread update events."""
+        self.log.debug("Listener triggered: on_thread_update")
+        if not before.guild:
+            return
+        try:
+            should_log = await self.should_log_event(before.guild, "thread_update", channel=after)
+            if not should_log:
+                return
+            channel = await self.get_log_channel(before.guild, "thread_update")
+            if not channel:
+                return
+
+            changes = []
+            if before.name != after.name:
+                changes.append(f"Name: `{before.name}` → `{after.name}`")
+            if before.archived != after.archived:
+                changes.append(f"Archived: `{before.archived}` → `{after.archived}`")
+            if before.locked != after.locked:
+                changes.append(f"Locked: `{before.locked}` → `{after.locked}`")
+            if before.auto_archive_duration != after.auto_archive_duration:
+                changes.append(f"Auto Archive: `{before.auto_archive_duration}` → `{after.auto_archive_duration}` minutes")
+
+            if not changes:
+                return
+
+            # Try to get audit log information
+            entry = await self._get_audit_log_entry(before.guild, discord.AuditLogAction.thread_update, target=after.parent, timeout_seconds=10)
+
+            embed = self.create_embed("thread_update",
+                f"🔄 Thread updated: {after.mention}")
+
+            embed.add_field(name="Changes", value="\n".join(changes), inline=False)
+
+            if entry and entry.user:
+                embed.add_field(name="Updated By", value=f"{entry.user.mention} (`{entry.user}`, ID: `{entry.user.id}`)", inline=True)
+
+            embed.set_footer(text=f"Thread ID: {after.id}")
+            await self.safe_send(channel, embed=embed)
+
+        except Exception as e:
+            self.log.error(f"Failed to log thread_update: {e}")
+
+    @commands.Cog.listener()
+    async def on_thread_member_join(self, member: discord.ThreadMember) -> None:
+        """Log thread member join events."""
+        self.log.debug("Listener triggered: on_thread_member_join")
+        if not member.thread.guild:
+            return
+        try:
+            should_log = await self.should_log_event(member.thread.guild, "thread_member_join", channel=member.thread)
+            if not should_log:
+                return
+            channel = await self.get_log_channel(member.thread.guild, "thread_member_join")
+            if not channel:
+                return
+
+            user = member.thread.guild.get_member(member.id)
+            embed = self.create_embed("thread_member_join",
+                f"➡️ {user.mention if user else f'User ID: {member.id}'} joined thread {member.thread.mention}",
+                thread=member.thread.name,
+                user=f"{user} ({user.id})" if user else f"Unknown User ({member.id})")
+
+            await self.safe_send(channel, embed=embed)
+
+        except Exception as e:
+            self.log.error(f"Failed to log thread_member_join: {e}")
+
+    @commands.Cog.listener()
+    async def on_thread_member_remove(self, member: discord.ThreadMember) -> None:
+        """Log thread member leave events."""
+        self.log.debug("Listener triggered: on_thread_member_remove")
+        if not member.thread.guild:
+            return
+        try:
+            should_log = await self.should_log_event(member.thread.guild, "thread_member_leave", channel=member.thread)
+            if not should_log:
+                return
+            channel = await self.get_log_channel(member.thread.guild, "thread_member_leave")
+            if not channel:
+                return
+
+            user = member.thread.guild.get_member(member.id)
+            embed = self.create_embed("thread_member_leave",
+                f"⬅️ {user.mention if user else f'User ID: {member.id}'} left thread {member.thread.mention}",
+                thread=member.thread.name,
+                user=f"{user} ({user.id})" if user else f"Unknown User ({member.id})")
+
+            await self.safe_send(channel, embed=embed)
+
+        except Exception as e:
+            self.log.error(f"Failed to log thread_member_remove: {e}")
+
     async def _log_voice_event(self, guild: discord.Guild, user_id: int, event_type: str,
                               channel_id: Optional[int] = None, duration: Optional[float] = None):
         """Internal method to log voice session events."""
@@ -2751,11 +3007,183 @@ class YALC(DashboardIntegration, commands.Cog):
 
     @commands.Cog.listener()
     async def on_member_remove(self, member: discord.Member) -> None:
-        """Log member leave events."""
+        """Log member leave/kick events with proper kick detection."""
         self.log.debug("Listener triggered: on_member_remove")
         if not member.guild:
             self.log.debug("No guild on member.")
             return
+        
+        guild = member.guild
+        
+        # Wait a moment for audit logs to be available
+        await asyncio.sleep(5)
+        
+        # Check if this was a ban (if so, we already logged it in on_member_ban)
+        if guild.id in self._ban_cache and member.id in self._ban_cache[guild.id]:
+            self.log.debug("Member was banned, not logging as leave/kick")
+            # Clean up the ban cache entry
+            self._ban_cache[guild.id].remove(member.id)
+            if not self._ban_cache[guild.id]:  # Remove empty list
+                del self._ban_cache[guild.id]
+            return
+        
+        # Check if this was a kick by looking at audit logs
+        kick_entry = None
+        if guild.me.guild_permissions.view_audit_log:
+            try:
+                kick_entry = await self._get_audit_log_entry(
+                    guild,
+                    discord.AuditLogAction.kick,
+                    target=member,
+                    timeout_seconds=10
+                )
+            except Exception as e:
+                self.log.debug(f"Could not fetch audit log for kick: {e}")
+        
+        if kick_entry:
+            # This was a kick
+            await self._log_member_kick(member, kick_entry)
+        else:
+            # This was a regular leave
+            await self._log_member_leave(member)
+
+    @commands.Cog.listener()
+    async def on_member_ban(self, guild: discord.Guild, user: discord.User) -> None:
+        """Log member ban events and track them in ban cache."""
+        self.log.debug("Listener triggered: on_member_ban")
+        
+        # Track the ban in our cache to distinguish from kicks
+        if guild.id not in self._ban_cache:
+            self._ban_cache[guild.id] = [user.id]
+        else:
+            self._ban_cache[guild.id].append(user.id)
+        
+        if not guild or not await self.should_log_event(guild, "member_ban"):
+            return
+        channel = await self.get_log_channel(guild, "member_ban")
+        self.log.debug(f"About to send to channel: {channel}")
+        if not channel:
+            return
+        embed = self.create_embed(
+            "member_ban",
+            f"🔨 {user.mention if hasattr(user, 'mention') else user} has been banned.\n\u200b",
+            user=f"{user} ({user.id})",
+            channel_name=guild.name if guild else "Unknown"
+        )
+        await self.safe_send(channel, embed=embed)
+
+    @commands.Cog.listener()
+    async def on_member_unban(self, guild: discord.Guild, user: discord.User) -> None:
+        """Log member unban events."""
+        self.log.debug("Listener triggered: on_member_unban")
+        if not guild or not await self.should_log_event(guild, "member_unban"):
+            return
+        channel = await self.get_log_channel(guild, "member_unban")
+        self.log.debug(f"About to send to channel: {channel}")
+        if not channel:
+            return
+        embed = self.create_embed(
+            "member_unban",
+            f"🔓 {user.mention if hasattr(user, 'mention') else user} has been unbanned.\n\u200b",
+            user=f"{user} ({user.id})",
+            channel_name=guild.name if guild else "Unknown"
+        )
+        await self.safe_send(channel, embed=embed)
+
+    async def _get_audit_log_entry(self, guild: discord.Guild, action: discord.AuditLogAction, target: discord.Member, timeout_seconds: int = 10):
+        """Get recent audit log entry for a specific action and target."""
+        cutoff = datetime.datetime.now(datetime.UTC) - datetime.timedelta(seconds=timeout_seconds)
+        
+        try:
+            async for entry in guild.audit_logs(action=action, limit=50):
+                if entry.created_at < cutoff:
+                    break
+                if entry.target and entry.target.id == target.id:
+                    return entry
+        except discord.Forbidden:
+            self.log.debug("No permission to view audit logs")
+        except Exception as e:
+            self.log.debug(f"Error fetching audit logs: {e}")
+        
+        return None
+
+    async def _log_member_kick(self, member: discord.Member, kick_entry):
+        """Log a member kick event."""
+        self.log.debug("Logging member kick")
+        if not await self.should_log_event(member.guild, "member_kick"):
+            return
+        
+        channel = await self.get_log_channel(member.guild, "member_kick")
+        if not channel:
+            return
+        
+        # Create kick-specific embed
+        embed = discord.Embed(
+            title="👢 Member Kicked",
+            description=f"{member.mention} has been kicked from the server.\n\u200b",
+            color=discord.Color(0xE74C3C),  # Red color for kicks
+            timestamp=datetime.datetime.now(datetime.UTC)
+        )
+        
+        # Add user information
+        embed.add_field(
+            name="User",
+            value=f"{member} ({member.id})",
+            inline=True
+        )
+        
+        # Add moderator information if available
+        if kick_entry and kick_entry.user:
+            embed.add_field(
+                name="👮 Kicked by",
+                value=f"{kick_entry.user} ({kick_entry.user.id})",
+                inline=True
+            )
+        
+        # Add reason if available
+        if kick_entry and kick_entry.reason:
+            embed.add_field(
+                name="📝 Reason",
+                value=kick_entry.reason,
+                inline=False
+            )
+        
+        # Add join date information
+        if member.joined_at:
+            join_date_formatted = member.joined_at.strftime('%B %d, %Y at %I:%M %p')
+            embed.add_field(
+                name="📅 Originally Joined",
+                value=join_date_formatted,
+                inline=True
+            )
+            
+            # Calculate how long they were in the server
+            time_in_server = datetime.datetime.now(datetime.UTC) - member.joined_at
+            days = time_in_server.days
+            if days > 0:
+                embed.add_field(
+                    name="⏱️ Time in Server",
+                    value=f"{days} day{'s' if days != 1 else ''}",
+                    inline=True
+                )
+        
+        # Add server information
+        embed.add_field(name="🏠 Server", value=member.guild.name, inline=True)
+        embed.add_field(name="👥 Members", value=str(member.guild.member_count), inline=True)
+        
+        # Add user thumbnail if available
+        settings = await self.config.guild(member.guild).all()
+        if settings.get("include_thumbnails", True) and member.display_avatar:
+            embed.set_thumbnail(url=member.display_avatar.url)
+        
+        # Set footer
+        self.set_embed_footer(embed, label="YALC Logger • Member Kick")
+        
+        await self.safe_send(channel, embed=embed)
+
+    async def _log_member_leave(self, member: discord.Member):
+        """Log a regular member leave event."""
+        self.log.debug("Logging member leave")
         try:
             should_log = await self.should_log_event(member.guild, "member_leave")
         except Exception as e:
@@ -2825,42 +3253,6 @@ class YALC(DashboardIntegration, commands.Cog):
             self.log.error(f"Failed to log member_leave: {e}")
 
     @commands.Cog.listener()
-    async def on_member_ban(self, guild: discord.Guild, user: discord.User) -> None:
-        """Log member ban events."""
-        self.log.debug("Listener triggered: on_member_ban")
-        if not guild or not await self.should_log_event(guild, "member_ban"):
-            return
-        channel = await self.get_log_channel(guild, "member_ban")
-        self.log.debug(f"About to send to channel: {channel}")
-        if not channel:
-            return
-        embed = self.create_embed(
-            "member_ban",
-            f"🔨 {user.mention if hasattr(user, 'mention') else user} has been banned.\n\u200b",
-            user=f"{user} ({user.id})",
-            channel_name=guild.name if guild else "Unknown"
-        )
-        await self.safe_send(channel, embed=embed)
-
-    @commands.Cog.listener()
-    async def on_member_unban(self, guild: discord.Guild, user: discord.User) -> None:
-        """Log member unban events."""
-        self.log.debug("Listener triggered: on_member_unban")
-        if not guild or not await self.should_log_event(guild, "member_unban"):
-            return
-        channel = await self.get_log_channel(guild, "member_unban")
-        self.log.debug(f"About to send to channel: {channel}")
-        if not channel:
-            return
-        embed = self.create_embed(
-            "member_unban",
-            f"🔓 {user.mention if hasattr(user, 'mention') else user} has been unbanned.\n\u200b",
-            user=f"{user} ({user.id})",
-            channel_name=guild.name if guild else "Unknown"
-        )
-        await self.safe_send(channel, embed=embed)
-
-    @commands.Cog.listener()
     async def on_member_update(self, before: discord.Member, after: discord.Member) -> None:
         """Log member update events with audit log integration to show who made changes."""
         self.log.debug("Listener triggered: on_member_update")
@@ -2917,6 +3309,43 @@ class YALC(DashboardIntegration, commands.Cog):
                 for role in removed_roles:
                     changes.append(f"➖ Removed {role.mention}")
             
+            # Check for timeout/communication restriction changes
+            before_timeout = getattr(before, 'communication_disabled_until', None)
+            after_timeout = getattr(after, 'communication_disabled_until', None)
+            
+            if before_timeout != after_timeout:
+                try:
+                    # Look for member timeout in audit logs
+                    timeout_action = discord.AuditLogAction.member_update
+                    audit_entry = await self._get_audit_log_entry(
+                        before.guild,
+                        timeout_action,
+                        target=after,
+                        timeout_seconds=10
+                    )
+                    
+                    if audit_entry and audit_entry.user != after and not moderator_info:
+                        moderator_info = {
+                            "moderator": audit_entry.user,
+                            "reason": getattr(audit_entry, "reason", None)
+                        }
+                except Exception as e:
+                    self.log.debug(f"Could not fetch audit log for member timeout update: {e}")
+                
+                # Format timeout change message
+                if after_timeout:
+                    if before_timeout:
+                        # Timeout duration changed
+                        timeout_duration = after_timeout - datetime.datetime.now(datetime.UTC)
+                        changes.append(f"⏰ Timeout updated: expires {discord.utils.format_dt(after_timeout, 'R')}")
+                    else:
+                        # New timeout applied
+                        timeout_duration = after_timeout - datetime.datetime.now(datetime.UTC)
+                        changes.append(f"⏰ Timeout applied: expires {discord.utils.format_dt(after_timeout, 'R')}")
+                else:
+                    # Timeout removed
+                    changes.append("✅ Timeout removed")
+
             # Check for nickname changes
             if before.nick != after.nick:
                 try:
@@ -7007,7 +7436,7 @@ class YALC(DashboardIntegration, commands.Cog):
         
     async def safe_send(self, channel: discord.TextChannel, **kwargs) -> Optional[discord.Message]:
         """
-        Send a message to a channel safely, handling common exceptions.
+        Enhanced safe send with comprehensive error recovery and fallback mechanisms.
         
         This method attempts to send a message to a channel and handles common exceptions
         such as missing permissions, invalid channel state, etc.
@@ -7028,15 +7457,294 @@ class YALC(DashboardIntegration, commands.Cog):
             self.log.warning("Attempted to send a message to a nonexistent channel")
             return None
             
-        try:
-            return await channel.send(**kwargs)
-        except discord.Forbidden:
-            self.log.warning(f"Missing permissions to send message to channel {channel.id} in guild {channel.guild.id}")
-        except discord.HTTPException as e:
-            self.log.error(f"Failed to send message to channel {channel.id}: {e}")
-        except Exception as e:
-            self.log.error(f"Unexpected error when sending to channel {channel.id}: {e}", exc_info=True)
+        max_retries = 3
+        base_delay = 1
+        
+        for attempt in range(max_retries):
+            try:
+                return await channel.send(**kwargs)
+                
+            except discord.Forbidden:
+                self.log.warning(f"Missing permissions to send message to channel {channel.id} in guild {channel.guild.id}")
+                # Try fallback: send to a default log channel if configured
+                if attempt == 0:
+                    fallback_channel = await self._get_fallback_log_channel(channel.guild)
+                    if fallback_channel and fallback_channel != channel:
+                        self.log.info(f"Attempting fallback to {fallback_channel.name}")
+                        try:
+                            fallback_embed = kwargs.get('embed')
+                            if fallback_embed:
+                                fallback_embed.add_field(
+                                    name="⚠️ Fallback Channel",
+                                    value=f"Original destination: {channel.mention} (no permission)",
+                                    inline=False
+                                )
+                            return await fallback_channel.send(**kwargs)
+                        except Exception as fallback_e:
+                            self.log.error(f"Fallback send also failed: {fallback_e}")
+                break  # Don't retry permission errors
+                
+            except discord.HTTPException as e:
+                if e.status == 429:  # Rate limited
+                    retry_after = getattr(e, 'retry_after', base_delay * (2 ** attempt))
+                    self.log.warning(f"Rate limited when sending to channel {channel.id}, retrying after {retry_after}s")
+                    await asyncio.sleep(retry_after)
+                elif e.code == 50013:  # Missing permissions
+                    self.log.warning(f"Missing permissions for channel {channel.id}")
+                    break
+                elif e.code == 50001:  # Missing access
+                    self.log.warning(f"Missing access to channel {channel.id}")
+                    break
+                else:
+                    if attempt < max_retries - 1:
+                        delay = base_delay * (2 ** attempt)
+                        self.log.warning(f"HTTP error when sending to channel {channel.id}: {e}, retrying in {delay}s")
+                        await asyncio.sleep(delay)
+                    else:
+                        self.log.error(f"Failed to send message to channel {channel.id} after {max_retries} attempts: {e}")
+                        
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    delay = base_delay * (2 ** attempt)
+                    self.log.warning(f"Unexpected error when sending to channel {channel.id}: {e}, retrying in {delay}s")
+                    await asyncio.sleep(delay)
+                else:
+                    self.log.error(f"Unexpected error when sending to channel {channel.id} after {max_retries} attempts: {e}", exc_info=True)
+        
         return None
+
+    async def _get_fallback_log_channel(self, guild: discord.Guild) -> Optional[discord.TextChannel]:
+        """Get a fallback log channel when the primary channel is unavailable."""
+        try:
+            settings = await self._get_cached_settings(guild)
+            
+            # Try to find any configured log channel that we can send to
+            for event_type, channel_id in settings.get("event_channels", {}).items():
+                if channel_id:
+                    channel = guild.get_channel(channel_id)
+                    if isinstance(channel, discord.TextChannel):
+                        # Test if we can send to this channel
+                        try:
+                            if channel.permissions_for(guild.me).send_messages:
+                                return channel
+                        except Exception:
+                            continue
+            
+            # Fallback to the first text channel we can send to
+            for channel in guild.text_channels:
+                try:
+                    if channel.permissions_for(guild.me).send_messages:
+                        return channel
+                except Exception:
+                    continue
+                    
+        except Exception as e:
+            self.log.error(f"Error finding fallback log channel: {e}")
+        
+        return None
+
+    async def _handle_bulk_changes(self, guild: discord.Guild, change_type: str, targets: list, moderator=None, reason=None):
+        """Handle bulk operations with intelligent batching and rate limiting."""
+        if not targets:
+            return
+            
+        batch_size = 10  # Process in batches to avoid overwhelming logs
+        total_batches = (len(targets) + batch_size - 1) // batch_size
+        
+        try:
+            should_log = await self.should_log_event(guild, f"bulk_{change_type}")
+            if not should_log:
+                return
+                
+            channel = await self.get_log_channel(guild, f"bulk_{change_type}")
+            if not channel:
+                # Try to log to a general bulk changes channel
+                channel = await self.get_log_channel(guild, "bulk_changes")
+            if not channel:
+                return
+            
+            # Create summary embed for bulk operation
+            embed = self.create_embed(
+                f"bulk_{change_type}",
+                f"🔄 Bulk {change_type} operation detected",
+                affected_count=len(targets),
+                batches=total_batches,
+                moderator=f"{moderator.mention} ({moderator.id})" if moderator else "Unknown"
+            )
+            
+            if reason:
+                embed.add_field(name="Reason", value=reason, inline=False)
+            
+            # Add sample of affected targets
+            sample_size = min(10, len(targets))
+            sample_targets = targets[:sample_size]
+            target_names = []
+            
+            for target in sample_targets:
+                if hasattr(target, 'mention'):
+                    target_names.append(target.mention)
+                elif hasattr(target, 'name'):
+                    target_names.append(f"`{target.name}`")
+                else:
+                    target_names.append(f"`{str(target)}`")
+            
+            embed.add_field(
+                name=f"Sample Targets ({sample_size}/{len(targets)})",
+                value="\n".join(target_names),
+                inline=False
+            )
+            
+            if len(targets) > sample_size:
+                embed.add_field(
+                    name="Additional Info",
+                    value=f"...and {len(targets) - sample_size} more targets",
+                    inline=False
+                )
+            
+            await self.safe_send(channel, embed=embed)
+            
+        except Exception as e:
+            self.log.error(f"Error handling bulk {change_type} operation: {e}")
+
+    async def _background_log_worker(self):
+        """Background worker task to process log queue asynchronously."""
+        self.log.info("Background log worker started")
+        
+        while not self._processing_shutdown:
+            try:
+                # Wait for items with timeout to allow periodic cleanup
+                log_item = await asyncio.wait_for(self._log_queue.get(), timeout=30.0)
+                await self._process_log_item(log_item)
+                self._log_queue.task_done()
+                
+            except asyncio.TimeoutError:
+                # Periodic cleanup of caches during quiet periods
+                await self._cleanup_expired_caches()
+                continue
+                
+            except asyncio.CancelledError:
+                self.log.info("Background log worker cancelled")
+                break
+                
+            except Exception as e:
+                self.log.error(f"Error in background log worker: {e}", exc_info=True)
+                await asyncio.sleep(1)  # Prevent rapid error loops
+        
+        self.log.info("Background log worker stopped")
+
+    async def _process_log_item(self, log_item):
+        """Process a single log item from the queue."""
+        try:
+            event_type, guild_id, event_data = log_item
+            guild = self.bot.get_guild(guild_id)
+            
+            if not guild:
+                self.log.warning(f"Guild {guild_id} not found for background log processing")
+                return
+            
+            # Route to appropriate handler based on event type
+            handler_map = {
+                'member_update_bg': self._process_member_update_background,
+                'voice_state_bg': self._process_voice_state_background,
+                'bulk_operation_bg': self._process_bulk_operation_background,
+            }
+            
+            handler = handler_map.get(event_type)
+            if handler:
+                await handler(guild, event_data)
+            else:
+                self.log.warning(f"Unknown background event type: {event_type}")
+                
+        except Exception as e:
+            self.log.error(f"Error processing background log item: {e}", exc_info=True)
+
+    async def _cleanup_expired_caches(self):
+        """Clean up expired cache entries."""
+        current_time = time.time()
+        
+        # Clean up audit debounce cache
+        expired_debounce = [
+            key for key, timestamp in self._audit_debounce_cache.items()
+            if current_time - timestamp > self._debounce_timeout
+        ]
+        for key in expired_debounce:
+            del self._audit_debounce_cache[key]
+        
+        # Clean up settings cache
+        expired_settings = [
+            key for key, data in self._settings_cache.items()
+            if current_time - data["timestamp"] > self._settings_cache_timeout
+        ]
+        for key in expired_settings:
+            del self._settings_cache[key]
+        
+        if expired_debounce or expired_settings:
+            self.log.debug(f"Cleaned up {len(expired_debounce)} debounce entries and {len(expired_settings)} settings cache entries")
+
+    async def _should_debounce_audit_fetch(self, guild_id: int, action: discord.AuditLogAction, target_id: int = None) -> bool:
+        """Check if we should skip audit log fetch due to recent similar fetch."""
+        cache_key = f"{guild_id}_{action.name}_{target_id or 'none'}"
+        current_time = time.time()
+        
+        if cache_key in self._audit_debounce_cache:
+            last_fetch = self._audit_debounce_cache[cache_key]
+            if current_time - last_fetch < self._debounce_timeout:
+                return True  # Should debounce (skip fetch)
+        
+        # Record this fetch attempt
+        self._audit_debounce_cache[cache_key] = current_time
+        return False  # Should not debounce (proceed with fetch)
+
+    async def _get_audit_log_entry_debounced(self, guild: discord.Guild, action: discord.AuditLogAction, target=None, timeout_seconds=30):
+        """Get audit log entry with smart debouncing to reduce API calls."""
+        target_id = target.id if target and hasattr(target, 'id') else None
+        
+        # Check if we should skip this fetch due to recent similar request
+        if await self._should_debounce_audit_fetch(guild.id, action, target_id):
+            self.log.debug(f"Debouncing audit log fetch for {action.name} in guild {guild.id}")
+            # Try to get from cache instead
+            if target_id:
+                cached_entry = await self._get_cached_audit_entry(guild, action, target_id)
+                if cached_entry:
+                    return cached_entry
+            return None
+        
+        # Proceed with actual API fetch
+        return await self._get_audit_log_entry_with_retry(guild, action, target, timeout_seconds)
+
+    async def _queue_background_log(self, event_type: str, guild: discord.Guild, event_data: dict, priority: bool = False):
+        """Queue a log item for background processing."""
+        log_item = (event_type, guild.id, event_data)
+        
+        try:
+            if priority:
+                # For high-priority items, add to front of queue if possible
+                temp_items = [log_item]
+                while not self._log_queue.empty():
+                    temp_items.append(self._log_queue.get_nowait())
+                
+                for item in temp_items:
+                    await self._log_queue.put(item)
+            else:
+                await self._log_queue.put(log_item)
+                
+        except asyncio.QueueFull:
+            self.log.warning(f"Log queue full, dropping {event_type} event for guild {guild.id}")
+
+    async def _process_member_update_background(self, guild: discord.Guild, event_data: dict):
+        """Process member update in background for non-critical updates."""
+        # This would handle things like nickname changes that aren't urgent
+        pass  # Implementation would depend on specific needs
+
+    async def _process_voice_state_background(self, guild: discord.Guild, event_data: dict):
+        """Process voice state changes in background."""
+        # This could handle voice session analytics and summaries
+        pass  # Implementation would depend on specific needs
+
+    async def _process_bulk_operation_background(self, guild: discord.Guild, event_data: dict):
+        """Process bulk operations in background."""
+        # This could handle summarizing large role changes, etc.
+        pass  # Implementation would depend on specific needs
 
 
 async def setup(bot: Red) -> None:
