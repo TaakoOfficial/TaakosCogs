@@ -1816,6 +1816,9 @@ class WHMCS(commands.Cog):
                     page_tickets = tickets[start_idx:end_idx]
                     
                     for ticket in page_tickets:
+                        # Auto-create ticket channel if enabled and not already created
+                        if ctx.guild and await self.config.guild(ctx.guild).ticket_channels.enabled():
+                            await self._get_or_create_ticket_channel(ctx.guild, str(ticket.get("tid") or ticket.get("ticketnum") or ticket.get("maskid")), ticket)
                         status_emoji = {
                             "Open": "🟢",
                             "Answered": "🔵",
@@ -1864,6 +1867,34 @@ class WHMCS(commands.Cog):
                             value=ticket_info,
                             inline=False  # Full width for better readability
                         )
+
+                        # Show initial message and up to 2 most recent replies for each ticket
+                        if ticket.get("message"):
+                            message = ticket["message"]
+                            if len(message) > 300:
+                                message = message[:297] + "..."
+                            embed.add_field(
+                                name="💬 Initial Message",
+                                value=f"```{message}```",
+                                inline=False
+                            )
+                        if ticket.get("replies"):
+                            replies = ticket["replies"]
+                            if isinstance(replies, dict) and "reply" in replies:
+                                replies = replies["reply"]
+                            if not isinstance(replies, list):
+                                replies = [replies]
+                            for reply in replies[-2:]:
+                                author = reply.get("admin", reply.get("name", "Unknown"))
+                                date = reply.get("date", "N/A")
+                                rmsg = reply.get("message", "")
+                                if len(rmsg) > 200:
+                                    rmsg = rmsg[:197] + "..."
+                                embed.add_field(
+                                    name=f"💬 Reply by {author} on {date}",
+                                    value=f"```{rmsg}```",
+                                    inline=False
+                                )
                     
                     # Add navigation hints in footer if multiple pages
                     if total_pages > 1:
