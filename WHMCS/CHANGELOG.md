@@ -5,6 +5,37 @@ All notable changes to the WHMCS COG will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.13] - 2025-11-09
+
+### Added
+- **NEW DIAGNOSTIC TOOL**: Added `[p]whmcs admin findticket <search>` command for advanced ticket searching
+- Enhanced debug tool with improved WHMCS configuration troubleshooting recommendations
+- Comprehensive ticket search that matches email addresses, ticket IDs, subjects, and client names
+- Displays ALL available ticket ID fields (tid, ticketnum, maskid, id) to help identify correct IDs
+
+### Improved
+- **Enhanced Debug Recommendations**: Updated debug tool with advanced WHMCS troubleshooting steps
+- Added specific guidance for department restrictions, ticket numbering format mismatches, and database sync issues
+- Better diagnosis of WHMCS version-specific API inconsistencies and imported ticket problems
+
+### Technical Details
+- Added client-side filtering for ticket search across multiple fields
+- Enhanced diagnostic tool with targeted WHMCS configuration recommendations
+- Improved troubleshooting workflow for "Ticket not found" errors
+- Provides alternative identification methods when direct lookup fails
+
+## [1.0.12] - 2025-11-09
+
+### Fixed
+- **CRITICAL**: Fixed syntax error that prevented COG from loading due to incorrectly placed debug command
+- Restored proper exception handling in admin_test command
+- Debug command now properly placed and functional
+
+### Technical Details
+- Removed debug command that was incorrectly inserted in middle of admin_test exception handler
+- Added debug command back in correct location after admin_test command
+- COG can now load successfully without syntax errors
+
 ## [1.0.11] - 2025-11-09
 
 ### Added

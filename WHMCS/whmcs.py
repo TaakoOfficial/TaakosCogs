@@ -731,6 +731,7 @@ class WHMCS(commands.Cog):
                 "• `config` - Configure WHMCS settings\n"
                 "• `test` - Test API connectivity\n"
                 "• `debug <ticket_id>` - Debug ticket API issues\n"
+                "• `findticket <search>` - Search for tickets by email/ID\n"
                 "• `permissions` - Manage role permissions\n"
                 "• `channels` - Configure automatic ticket channels\n"
                 "\n*Requires: Admin role*"
@@ -1275,17 +1276,32 @@ class WHMCS(commands.Cog):
                     diagnosis = [
                         "🚨 **No API methods worked!**",
                         "",
-                        "**Possible WHMCS Issues:**",
-                        "• API credentials lack ticket access permissions",
-                        "• Ticket doesn't exist or is from different department",
-                        "• WHMCS API version compatibility issue",
-                        "• IP address not whitelisted for API access",
+                        "**Advanced WHMCS Troubleshooting:**",
                         "",
-                        "**Recommended WHMCS Settings to Check:**",
-                        "• Admin → API Credentials → Allowed Functions",
-                        "• Ensure 'GetTicket' is enabled",
-                        "• Check department access permissions",
-                        "• Verify IP whitelist includes your server"
+                        "**1. Department Restriction Issues:**",
+                        "• Check if API credentials are restricted to specific departments",
+                        "• Go to: Admin → API Credentials → Edit → Department Access",
+                        "• Try setting 'All Departments' or add the ticket's department",
+                        "",
+                        "**2. Ticket Numbering Format Mismatch:**",
+                        "• Check: Admin → Support → Settings → General",
+                        "• Look for 'Ticket Number Format' settings",
+                        "• Verify ticket numbering sequence configuration",
+                        "",
+                        "**3. Database/API Synchronization:**",
+                        "• The ticket may exist in interface but not accessible via API",
+                        "• Check if ticket was imported from another system",
+                        "• Verify ticket exists in tbltickets database table",
+                        "",
+                        "**4. WHMCS Version-Specific Issues:**",
+                        "• Some WHMCS versions have API inconsistencies",
+                        "• Try: Admin → Support → Tickets → Search for GLY-907775",
+                        "• Note the exact Ticket ID shown in WHMCS interface",
+                        "",
+                        "**5. Alternative Identification Methods:**",
+                        "• Try searching by client email in ticket listing",
+                        "• Use mask ID if different from ticket number",
+                        "• Check if ticket has been merged or moved"
                     ]
                 elif success_count == 1:
                     diagnosis = [
@@ -1326,6 +1342,125 @@ class WHMCS(commands.Cog):
         except Exception as e:
             log.exception("Error in admin_debug command")
             await self._send_error(ctx, f"❌ Debug test failed: {e}")
+
+    @whmcs_admin.command(name="findticket")
+    async def admin_find_ticket(self, ctx: commands.Context, search_term: str):
+        """Find tickets by searching client email or partial ticket number.
+        
+        This helps locate tickets when direct ID lookup fails.
+        
+        Args:
+            search_term: Email address or partial ticket identifier to search for
+        """
+        if not await self._check_permissions(ctx, "admin"):
+            await self._send_error(ctx, "You don't have permission to search tickets.")
+            return
+        
+        api_client = await self._get_api_client(ctx.guild)
+        if not api_client:
+            await self._send_error(ctx, "WHMCS is not configured. Use `[p]whmcs admin config` to set up.")
+            return
+        
+        try:
+            async with api_client:
+                # Get recent tickets and filter for matches
+                response = await api_client.get_tickets(limit=50)
+                
+                if not response.get("tickets") or not response["tickets"].get("ticket"):
+                    await self._send_error(ctx, f"No tickets found matching '{search_term}'.")
+                    return
+                
+                tickets = response["tickets"]["ticket"]
+                if not isinstance(tickets, list):
+                    tickets = [tickets]
+                
+                # Filter tickets that match the search term
+                search_lower = search_term.lower()
+                matching_tickets = []
+                
+                for ticket in tickets:
+                    # Check if search term matches email, subject, ticket IDs, or client name
+                    matches = []
+                    
+                    # Check email
+                    if ticket.get('email') and search_lower in ticket['email'].lower():
+                        matches.append(f"email: {ticket['email']}")
+                    
+                    # Check subject
+                    if ticket.get('subject') and search_lower in ticket['subject'].lower():
+                        matches.append(f"subject: {ticket['subject']}")
+                    
+                    # Check ticket IDs
+                    for id_field in ['tid', 'ticketnum', 'maskid']:
+                        if ticket.get(id_field) and search_lower in str(ticket[id_field]).lower():
+                            matches.append(f"{id_field}: {ticket[id_field]}")
+                    
+                    # Check client name
+                    if ticket.get('name') and search_lower in ticket['name'].lower():
+                        matches.append(f"name: {ticket['name']}")
+                    
+                    if matches:
+                        matching_tickets.append((ticket, matches))
+                
+                if not matching_tickets:
+                    await self._send_error(ctx, f"No tickets found matching '{search_term}' in recent tickets.")
+                    return
+                
+                embed = self._create_embed("🔍 Ticket Search Results", f"Search term: **{search_term}** • Found {len(matching_tickets)} matches")
+                
+                for ticket_data, matches in matching_tickets[:5]:  # Limit to first 5 results
+                    ticket = ticket_data
+                    # Show ALL possible ID fields to help identify the correct one
+                    id_info = []
+                    
+                    if ticket.get('tid'):
+                        id_info.append(f"**tid:** {ticket['tid']}")
+                    if ticket.get('ticketnum'):
+                        id_info.append(f"**ticketnum:** {ticket['ticketnum']}")
+                    if ticket.get('maskid'):
+                        id_info.append(f"**maskid:** {ticket['maskid']}")
+                    if ticket.get('id'):
+                        id_info.append(f"**id:** {ticket['id']}")
+                    
+                    status_emoji = {
+                        "Open": "🟢",
+                        "Answered": "🔵",
+                        "Customer-Reply": "🟡",
+                        "Closed": "🔴"
+                    }.get(ticket.get("status"), "❓")
+                    
+                    ticket_info = (
+                        f"📊 **Status:** {status_emoji} {ticket.get('status')}\n"
+                        f"🏢 **Department:** {ticket.get('department', 'N/A')}\n"
+                        f"📧 **Email:** {ticket.get('email', 'N/A')}\n"
+                        f"📅 **Date:** {ticket.get('date', 'N/A')}"
+                    )
+                    
+                    if id_info:
+                        ticket_info = "\n".join(id_info) + "\n" + ticket_info
+                    
+                    subject = ticket.get('subject', 'No Subject')
+                    if len(subject) > 40:
+                        subject = subject[:37] + "..."
+                    
+                    embed.add_field(
+                        name=f"🎫 {subject}",
+                        value=ticket_info,
+                        inline=False
+                    )
+                
+                embed.set_footer(text="WHMCS Integration • Use any of the ID values with ticket commands")
+                await ctx.send(embed=embed)
+                
+        except WHMCSAuthenticationError:
+            await self._send_error(ctx, "❌ Authentication failed. Check your API credentials.")
+        except WHMCSRateLimitError:
+            await self._send_error(ctx, "❌ Rate limit exceeded. Please try again later.")
+        except WHMCSAPIError as e:
+            await self._send_error(ctx, f"❌ API search failed: {e}")
+        except Exception as e:
+            log.exception("Error in admin_find_ticket command")
+            await self._send_error(ctx, f"❌ Ticket search failed: {e}")
     
     # Billing management group
     @whmcs.group(name="billing", description="Billing management commands")
