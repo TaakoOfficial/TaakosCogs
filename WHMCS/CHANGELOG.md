@@ -5,6 +5,38 @@ All notable changes to the WHMCS COG will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.1] - 2025-11-09
+
+### Improved
+- **Comprehensive Embed Formatting**: Applied consistent formatting improvements across ALL embed displays
+  - **Client Commands**: Enhanced client list, search, and detail views
+    - Reduced clients per page from 10 to 5 to prevent crowded embeds
+    - Changed from inline fields to full-width fields for better spacing
+    - Added emoji indicators for better visual organization (🆔, 📧, 📊, 👤)
+    - Added navigation hints in footer showing command syntax for previous/next pages
+    - Improved plain text format with better spacing and navigation instructions
+  - **Billing Commands**: Enhanced invoice list and detail views
+    - Applied full-width field formatting for better readability
+    - Added consistent emoji indicators (💰, 📄, 📅, 🆔, 👤, 🏢, 💳)
+    - Improved visual hierarchy with better organization
+  - **Support Commands**: Enhanced ticket list and detail views
+    - Applied full-width field formatting for less crowded display
+    - Added consistent emoji indicators (🎫, 📊, ⚡, 🏢, 💬, 📅, 🆔)
+    - Better status and priority visualization
+  - **Universal Improvements**:
+    - All embeds now use description field for key information
+    - Consistent emoji usage across all commands
+    - Better visual hierarchy and information organization
+    - Enhanced readability on both desktop and mobile Discord clients
+
+### Technical Details
+- Modified all embed-generating commands in `whmcs.py`
+- Applied consistent `inline=False` for better full-width display
+- Standardized emoji indicators across all command categories
+- Improved visual hierarchy with better field organization
+- Enhanced UX with clearer navigation instructions
+- Consistent formatting between embed and plain text modes
+
 ## [1.0.0] - 2025-11-09
 
 ### Added

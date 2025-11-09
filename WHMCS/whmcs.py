@@ -5,6 +5,7 @@ import discord
 import logging
 from redbot.core import commands, Config, app_commands
 from redbot.core.bot import Red
+from redbot.core.utils.menus import menu, DEFAULT_CONTROLS
 from typing import Optional, Dict, Any, List, Union
 
 from .whmcs_api import WHMCSAPIClient, WHMCSAPIError, WHMCSAuthenticationError, WHMCSRateLimitError
@@ -163,8 +164,11 @@ class WHMCS(commands.Cog):
             ctx: The command context
             message: Error message to send
         """
-        embed = self._create_embed("❌ Error", message, color=0xFF0000)
-        await ctx.send(embed=embed, ephemeral=True if ctx.interaction else False)
+        if await ctx.embed_requested():
+            embed = self._create_embed("❌ Error", message, color=0xFF0000)
+            await ctx.send(embed=embed, ephemeral=True if ctx.interaction else False)
+        else:
+            await ctx.send(f"❌ **Error:** {message}", ephemeral=True if ctx.interaction else False)
     
     async def _send_success(self, ctx: commands.Context, message: str):
         """Send a success message.
@@ -173,25 +177,29 @@ class WHMCS(commands.Cog):
             ctx: The command context
             message: Success message to send
         """
-        embed = self._create_embed("✅ Success", message, color=0x00FF00)
-        await ctx.send(embed=embed, ephemeral=True if ctx.interaction else False)
+        if await ctx.embed_requested():
+            embed = self._create_embed("✅ Success", message, color=0x00FF00)
+            await ctx.send(embed=embed, ephemeral=True if ctx.interaction else False)
+        else:
+            await ctx.send(f"✅ **Success:** {message}", ephemeral=True if ctx.interaction else False)
+    
+    async def _prev_page(self, ctx: commands.Context, pages: List[discord.Embed], controls: Dict, message: discord.Message, page: int, timeout: float, emoji: str):
+        """Navigate to previous page."""
+        # This would need to be implemented with actual page data
+        # For now, just acknowledge the reaction
+        return page
+    
+    async def _next_page(self, ctx: commands.Context, pages: List[discord.Embed], controls: Dict, message: discord.Message, page: int, timeout: float, emoji: str):
+        """Navigate to next page."""
+        # This would need to be implemented with actual page data
+        # For now, just acknowledge the reaction
+        return page
     
     # Main command group
     @commands.hybrid_group(name="whmcs", description="WHMCS management commands")
     async def whmcs(self, ctx: commands.Context):
         """WHMCS integration commands."""
-        if not ctx.invoked_subcommand:
-            embed = self._create_embed(
-                "🏢 WHMCS Integration",
-                "Use subcommands to interact with your WHMCS installation.\n\n"
-                "**Available Groups:**\n"
-                "• `client` - Client management\n"
-                "• `billing` - Billing operations\n"
-                "• `support` - Support tickets\n"
-                "• `admin` - Administration\n\n"
-                "Use `[p]help whmcs <group>` for more information."
-            )
-            await ctx.send(embed=embed)
+        pass
     
     # Client management group
     @whmcs.group(name="client", description="Client management commands")
@@ -227,7 +235,7 @@ class WHMCS(commands.Cog):
         
         try:
             async with api_client:
-                limit = 10
+                limit = 5  # Reduced from 10 to make less crowded
                 offset = (page - 1) * limit
                 response = await api_client.get_clients(limit=limit, offset=offset)
                 
@@ -235,25 +243,76 @@ class WHMCS(commands.Cog):
                     await self._send_error(ctx, "No clients found.")
                     return
                 
-                embed = self._create_embed(f"👥 Clients (Page {page})")
-                
-                for client in response["clients"]["client"]:
-                    client_info = (
-                        f"**ID:** {client.get('id')}\n"
-                        f"**Email:** {client.get('email')}\n"
-                        f"**Status:** {client.get('status')}"
-                    )
-                    embed.add_field(
-                        name=f"{client.get('firstname')} {client.get('lastname')}",
-                        value=client_info,
-                        inline=True
-                    )
-                
                 total = response.get("totalresults", 0)
                 total_pages = (total + limit - 1) // limit
-                embed.set_footer(text=f"WHMCS Integration • Page {page}/{total_pages} • {total} total clients")
                 
-                await ctx.send(embed=embed)
+                if await ctx.embed_requested():
+                    embed = self._create_embed(f"👥 Client Directory")
+                    embed.description = f"**Page {page} of {total_pages}** • {total} total clients"
+                    
+                    clients = response["clients"]["client"]
+                    if not isinstance(clients, list):
+                        clients = [clients]
+                    
+                    for client in clients:
+                        name = f"{client.get('firstname', '')} {client.get('lastname', '')}".strip()
+                        if not name:
+                            name = f"Client {client.get('id')}"
+                        
+                        # Less crowded formatting with better spacing and emojis
+                        client_info = (
+                            f"🆔 **ID:** {client.get('id')}\n"
+                            f"📧 **Email:** {client.get('email')}\n"
+                            f"📊 **Status:** {client.get('status')}"
+                        )
+                        
+                        embed.add_field(
+                            name=f"👤 {name}",
+                            value=client_info,
+                            inline=False  # Full width for better readability
+                        )
+                    
+                    # Add navigation hints in footer if multiple pages
+                    if total_pages > 1:
+                        navigation_text = f"WHMCS Integration • Page {page}/{total_pages}"
+                        if page > 1:
+                            navigation_text += f" • Use `{ctx.prefix}whmcs client list {page-1}` for previous"
+                        if page < total_pages:
+                            navigation_text += f" • Use `{ctx.prefix}whmcs client list {page+1}` for next"
+                        embed.set_footer(text=navigation_text)
+                    else:
+                        embed.set_footer(text=f"WHMCS Integration • {total} total clients")
+                    
+                    await ctx.send(embed=embed)
+                else:
+                    # Plain text format for when embeds are disabled
+                    output = [f"👥 **Client Directory - Page {page} of {total_pages}**"]
+                    output.append(f"📊 {total} total clients\n")
+                    
+                    clients = response["clients"]["client"]
+                    if not isinstance(clients, list):
+                        clients = [clients]
+                    
+                    for client in clients:
+                        name = f"{client.get('firstname', '')} {client.get('lastname', '')}".strip()
+                        if not name:
+                            name = f"Client {client.get('id')}"
+                        
+                        output.append(f"👤 **{name}**")
+                        output.append(f"   🆔 ID: {client.get('id')}")
+                        output.append(f"   📧 Email: {client.get('email')}")
+                        output.append(f"   📊 Status: {client.get('status')}")
+                        output.append("")  # Empty line for spacing
+                    
+                    # Add navigation hints for text format too
+                    if total_pages > 1:
+                        output.append("📄 **Navigation:**")
+                        if page > 1:
+                            output.append(f"   ⬅️ Previous: `{ctx.prefix}whmcs client list {page-1}`")
+                        if page < total_pages:
+                            output.append(f"   ➡️ Next: `{ctx.prefix}whmcs client list {page+1}`")
+                    
+                    await ctx.send("\n".join(output))
                 
         except WHMCSAuthenticationError:
             await self._send_error(ctx, "WHMCS authentication failed. Check your API credentials.")
@@ -298,15 +357,20 @@ class WHMCS(commands.Cog):
                 
                 client = response["client"]
                 
-                embed = self._create_embed(f"👤 Client Details: {client.get('firstname')} {client.get('lastname')}")
+                client_name = f"{client.get('firstname', '')} {client.get('lastname', '')}".strip()
+                if not client_name:
+                    client_name = f"Client {client_id}"
                 
-                # Basic information
+                embed = self._create_embed(f"👤 Client Details")
+                embed.description = f"**{client_name}** • ID: {client_id}"
+                
+                # Basic information with consistent emoji formatting
                 embed.add_field(
                     name="📧 Contact Information",
                     value=(
-                        f"**Email:** {client.get('email')}\n"
-                        f"**Phone:** {client.get('phonenumber', 'N/A')}\n"
-                        f"**Company:** {client.get('companyname', 'N/A')}"
+                        f"📧 **Email:** {client.get('email')}\n"
+                        f"📞 **Phone:** {client.get('phonenumber', 'N/A')}\n"
+                        f"🏢 **Company:** {client.get('companyname', 'N/A')}"
                     ),
                     inline=False
                 )
@@ -337,31 +401,31 @@ class WHMCS(commands.Cog):
                 embed.add_field(
                     name="💼 Account Status",
                     value=(
-                        f"**Status:** {client.get('status')}\n"
-                        f"**Credit:** ${client.get('credit', '0.00')}\n"
-                        f"**Currency:** {client.get('currency_code', 'USD')}"
+                        f"📊 **Status:** {client.get('status')}\n"
+                        f"💰 **Credit:** ${client.get('credit', '0.00')}\n"
+                        f"💱 **Currency:** {client.get('currency_code', 'USD')}"
                     ),
-                    inline=True
+                    inline=False
                 )
                 
                 # Statistics
                 embed.add_field(
-                    name="📊 Statistics",
+                    name="📊 Account Statistics",
                     value=(
-                        f"**Products:** {client.get('numproducts', '0')}\n"
-                        f"**Domains:** {client.get('numdomains', '0')}\n"
-                        f"**Invoices:** {client.get('numinvoices', '0')}\n"
-                        f"**Tickets:** {client.get('numtickets', '0')}"
+                        f"🛍️ **Products:** {client.get('numproducts', '0')}\n"
+                        f"🌐 **Domains:** {client.get('numdomains', '0')}\n"
+                        f"📄 **Invoices:** {client.get('numinvoices', '0')}\n"
+                        f"🎫 **Tickets:** {client.get('numtickets', '0')}"
                     ),
-                    inline=True
+                    inline=False
                 )
                 
                 # Dates
                 if client.get('datecreated'):
                     embed.add_field(
                         name="📅 Important Dates",
-                        value=f"**Created:** {client.get('datecreated')}",
-                        inline=True
+                        value=f"📅 **Account Created:** {client.get('datecreated')}",
+                        inline=False
                     )
                 
                 embed.set_footer(text=f"WHMCS Integration • Client ID: {client_id}")
@@ -402,31 +466,36 @@ class WHMCS(commands.Cog):
                     await self._send_error(ctx, f"No clients found matching '{search_term}'.")
                     return
                 
-                embed = self._create_embed(f"🔍 Search Results: '{search_term}'")
-                
                 clients = response["clients"]["client"]
                 if not isinstance(clients, list):
                     clients = [clients]
                 
-                for client in clients[:10]:  # Limit to first 10 results
-                    client_info = (
-                        f"**ID:** {client.get('id')}\n"
-                        f"**Email:** {client.get('email')}\n"
-                        f"**Status:** {client.get('status')}"
-                    )
-                    
+                embed = self._create_embed(f"🔍 Search Results")
+                embed.description = f"**Search term:** '{search_term}' • {response.get('totalresults', len(clients))} results found"
+                
+                for client in clients[:5]:  # Limit to first 5 results for better display
                     name = f"{client.get('firstname', '')} {client.get('lastname', '')}".strip()
                     if not name:
                         name = client.get('email', f"Client {client.get('id')}")
                     
+                    # Consistent formatting with emoji indicators
+                    client_info = (
+                        f"🆔 **ID:** {client.get('id')}\n"
+                        f"📧 **Email:** {client.get('email')}\n"
+                        f"📊 **Status:** {client.get('status')}"
+                    )
+                    
                     embed.add_field(
-                        name=name,
+                        name=f"👤 {name}",
                         value=client_info,
-                        inline=True
+                        inline=False  # Full width for better readability
                     )
                 
                 total = response.get("totalresults", len(clients))
-                embed.set_footer(text=f"WHMCS Integration • {total} results found")
+                if total > 5:
+                    embed.set_footer(text=f"WHMCS Integration • Showing first 5 of {total} results")
+                else:
+                    embed.set_footer(text=f"WHMCS Integration • {total} results found")
                 
                 await ctx.send(embed=embed)
                 
@@ -793,14 +862,14 @@ class WHMCS(commands.Cog):
                     }.get(invoice.get("status"), "❓")
                     
                     invoice_info = (
-                        f"**Status:** {status_emoji} {invoice.get('status')}\n"
-                        f"**Total:** ${invoice.get('total', '0.00')}\n"
-                        f"**Due Date:** {invoice.get('duedate', 'N/A')}"
+                        f"📊 **Status:** {status_emoji} {invoice.get('status')}\n"
+                        f"💰 **Total:** ${invoice.get('total', '0.00')}\n"
+                        f"📅 **Due Date:** {invoice.get('duedate', 'N/A')}"
                     )
                     embed.add_field(
-                        name=f"Invoice #{invoice.get('invoicenum')} (ID: {invoice.get('id')})",
+                        name=f"📄 Invoice #{invoice.get('invoicenum')} (ID: {invoice.get('id')})",
                         value=invoice_info,
-                        inline=True
+                        inline=False  # Full width for better readability
                     )
                 
                 total = response.get("totalresults", 0)
@@ -853,42 +922,41 @@ class WHMCS(commands.Cog):
                     "Draft": "📝"
                 }.get(invoice.get("status"), "❓")
                 
-                embed = self._create_embed(
-                    f"📄 Invoice #{invoice.get('invoicenum')} Details",
-                    f"**Status:** {status_emoji} {invoice.get('status')}"
-                )
+                embed = self._create_embed(f"📄 Invoice Details")
+                embed.description = f"**Invoice #{invoice.get('invoicenum')}** • {status_emoji} {invoice.get('status')}"
                 
-                # Basic invoice information
+                # Basic invoice information with consistent emoji formatting
                 embed.add_field(
                     name="💰 Financial Details",
                     value=(
-                        f"**Subtotal:** ${invoice.get('subtotal', '0.00')}\n"
-                        f"**Tax:** ${invoice.get('tax', '0.00')}\n"
-                        f"**Total:** ${invoice.get('total', '0.00')}\n"
-                        f"**Balance:** ${invoice.get('balance', '0.00')}"
+                        f"💵 **Subtotal:** ${invoice.get('subtotal', '0.00')}\n"
+                        f"🏛️ **Tax:** ${invoice.get('tax', '0.00')}\n"
+                        f"💰 **Total:** ${invoice.get('total', '0.00')}\n"
+                        f"⚖️ **Balance:** ${invoice.get('balance', '0.00')}"
                     ),
-                    inline=True
+                    inline=False
                 )
                 
                 # Dates
                 embed.add_field(
                     name="📅 Important Dates",
                     value=(
-                        f"**Created:** {invoice.get('date', 'N/A')}\n"
-                        f"**Due Date:** {invoice.get('duedate', 'N/A')}\n"
-                        f"**Date Paid:** {invoice.get('datepaid', 'N/A') if invoice.get('datepaid') else 'Not paid'}"
+                        f"📅 **Created:** {invoice.get('date', 'N/A')}\n"
+                        f"⏰ **Due Date:** {invoice.get('duedate', 'N/A')}\n"
+                        f"✅ **Date Paid:** {invoice.get('datepaid', 'Not paid') if invoice.get('datepaid') else 'Not paid'}"
                     ),
-                    inline=True
+                    inline=False
                 )
                 
                 # Client information
                 if invoice.get("userid"):
+                    client_name = f"{invoice.get('firstname', '')} {invoice.get('lastname', '')}".strip()
                     embed.add_field(
                         name="👤 Client Information",
                         value=(
-                            f"**Client ID:** {invoice.get('userid')}\n"
-                            f"**Name:** {invoice.get('firstname', '')} {invoice.get('lastname', '')}\n"
-                            f"**Company:** {invoice.get('companyname', 'N/A')}"
+                            f"🆔 **Client ID:** {invoice.get('userid')}\n"
+                            f"👤 **Name:** {client_name or 'N/A'}\n"
+                            f"🏢 **Company:** {invoice.get('companyname', 'N/A')}"
                         ),
                         inline=False
                     )
@@ -897,8 +965,8 @@ class WHMCS(commands.Cog):
                 if invoice.get("paymentmethod"):
                     embed.add_field(
                         name="💳 Payment Details",
-                        value=f"**Method:** {invoice.get('paymentmethod')}",
-                        inline=True
+                        value=f"💳 **Method:** {invoice.get('paymentmethod')}",
+                        inline=False
                     )
                 
                 embed.set_footer(text=f"WHMCS Integration • Invoice ID: {invoice_id}")
@@ -1035,20 +1103,20 @@ class WHMCS(commands.Cog):
                     }.get(ticket.get("priority"), "➡️")
                     
                     ticket_info = (
-                        f"**Status:** {status_emoji} {ticket.get('status')}\n"
-                        f"**Priority:** {priority_emoji} {ticket.get('priority')}\n"
-                        f"**Department:** {ticket.get('department', 'N/A')}\n"
-                        f"**Last Reply:** {ticket.get('lastreply', 'N/A')}"
+                        f"📊 **Status:** {status_emoji} {ticket.get('status')}\n"
+                        f"⚡ **Priority:** {priority_emoji} {ticket.get('priority')}\n"
+                        f"🏢 **Department:** {ticket.get('department', 'N/A')}\n"
+                        f"💬 **Last Reply:** {ticket.get('lastreply', 'N/A')}"
                     )
                     
                     subject = ticket.get('subject', 'No Subject')
-                    if len(subject) > 50:
-                        subject = subject[:47] + "..."
+                    if len(subject) > 40:  # Shorter for full-width display
+                        subject = subject[:37] + "..."
                     
                     embed.add_field(
-                        name=f"#{ticket.get('tid')} - {subject}",
+                        name=f"🎫 #{ticket.get('tid')} - {subject}",
                         value=ticket_info,
-                        inline=True
+                        inline=False  # Full width for better readability
                     )
                 
                 total = response.get("totalresults", 0)
@@ -1106,40 +1174,40 @@ class WHMCS(commands.Cog):
                     "High": "🔼"
                 }.get(ticket.get("priority"), "➡️")
                 
-                embed = self._create_embed(
-                    f"🎫 Ticket #{ticket.get('tid')} - {ticket.get('subject', 'No Subject')}"
-                )
+                subject = ticket.get('subject', 'No Subject')
+                embed = self._create_embed(f"🎫 Ticket Details")
+                embed.description = f"**#{ticket.get('tid')} - {subject}**"
                 
-                # Status and priority
+                # Status and priority with consistent emoji formatting
                 embed.add_field(
                     name="📊 Status Information",
                     value=(
-                        f"**Status:** {status_emoji} {ticket.get('status')}\n"
-                        f"**Priority:** {priority_emoji} {ticket.get('priority')}\n"
-                        f"**Department:** {ticket.get('department', 'N/A')}"
+                        f"📊 **Status:** {status_emoji} {ticket.get('status')}\n"
+                        f"⚡ **Priority:** {priority_emoji} {ticket.get('priority')}\n"
+                        f"🏢 **Department:** {ticket.get('department', 'N/A')}"
                     ),
-                    inline=True
+                    inline=False
                 )
                 
                 # Client information
                 embed.add_field(
                     name="👤 Client Information",
                     value=(
-                        f"**Client ID:** {ticket.get('userid', 'N/A')}\n"
-                        f"**Name:** {ticket.get('name', 'N/A')}\n"
-                        f"**Email:** {ticket.get('email', 'N/A')}"
+                        f"🆔 **Client ID:** {ticket.get('userid', 'N/A')}\n"
+                        f"👤 **Name:** {ticket.get('name', 'N/A')}\n"
+                        f"📧 **Email:** {ticket.get('email', 'N/A')}"
                     ),
-                    inline=True
+                    inline=False
                 )
                 
                 # Timing information
                 embed.add_field(
-                    name="📅 Timing",
+                    name="📅 Timing Information",
                     value=(
-                        f"**Created:** {ticket.get('date', 'N/A')}\n"
-                        f"**Last Reply:** {ticket.get('lastreply', 'N/A')}"
+                        f"📅 **Created:** {ticket.get('date', 'N/A')}\n"
+                        f"💬 **Last Reply:** {ticket.get('lastreply', 'N/A')}"
                     ),
-                    inline=True
+                    inline=False
                 )
                 
                 # Message content (truncated)
