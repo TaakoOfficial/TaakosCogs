@@ -384,12 +384,8 @@ class WHMCSAPIClient:
         clean_ticket_id = ticket_id.lstrip('#').strip()
         
         # Determine if this is a numeric ID (use ticketid) or alphanumeric (use ticketnum)
-        if clean_ticket_id.isdigit():
-            # Numeric ticket ID - use internal ticketid parameter
-            parameters['ticketid'] = clean_ticket_id
-        else:
-            # Alphanumeric ticket number - use ticketnum parameter
-            parameters['ticketnum'] = clean_ticket_id
+        # Always use tid for ticket replies, as this instance expects it
+        parameters['tid'] = clean_ticket_id
         
         if admin_username:
             parameters['adminusername'] = admin_username

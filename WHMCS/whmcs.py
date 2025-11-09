@@ -393,6 +393,14 @@ class WHMCS(commands.Cog):
             async with api_client:
                 admin_username = f"Discord-{message.author.display_name}"
                 response = await api_client.add_ticket_reply(ticket_id, message.content, admin_username)
+                if response.get("result") != "success":
+                    await message.channel.send(
+                        f"⚠️ Failed to add your reply to the WHMCS ticket.\n"
+                        f"Tried ticket ID: {ticket_id}\n"
+                        f"API user: {admin_username}\n"
+                        f"API response: {response}\n"
+                        f"Please verify the ticket exists in WHMCS and the API user has department access."
+                    )
                 
                 if response.get("result") == "success":
                     # Add reaction to confirm the message was sent to WHMCS
@@ -2296,6 +2304,14 @@ class WHMCS(commands.Cog):
                 # Add the reply with the Discord user's name as admin username
                 admin_username = f"Discord-{ctx.author.display_name}"
                 response = await api_client.add_ticket_reply(ticket_id, message, admin_username)
+                if response.get("result") != "success":
+                    await ctx.send(
+                        f"⚠️ Failed to add your reply to the WHMCS ticket.\n"
+                        f"Tried ticket ID: {ticket_id}\n"
+                        f"API user: {admin_username}\n"
+                        f"API response: {response}\n"
+                        f"Please verify the ticket exists in WHMCS and the API user has department access."
+                    )
                 
                 if response.get("result") == "success":
                     embed = self._create_embed(
