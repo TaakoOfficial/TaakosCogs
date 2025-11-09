@@ -2378,36 +2378,40 @@ class WHMCS(commands.Cog):
         if len(message) < 10:
             await self._send_error(ctx, "Reply message must be at least 10 characters long.")
             return
-        
+
         api_client = await self._get_api_client(ctx.guild)
         if not api_client:
             await self._send_error(ctx, "WHMCS is not configured. Use `[p]whmcs admin config` to set up.")
             return
-        
+
         try:
             async with api_client:
-                # Add the reply with the Discord user's name as admin username
                 admin_username = f"Discord-{ctx.author.display_name}"
-                # Determine correct ticket ID field for reply (numeric = ticketid, else ticketnum)
-                clean_ticket_id = ticket_id.lstrip('#').strip()
-                id_type = "ticketid" if clean_ticket_id.isdigit() else "ticketnum"
-                response = await api_client.add_ticket_reply(ticket_id, message, admin_username)
-                if response.get("result") != "success":
-                    await ctx.send(
-                        f"⚠️ Failed to add your reply to the WHMCS ticket.\n"
-                        f"Tried {id_type}: {clean_ticket_id}\n"
-                        f"API user: {admin_username}\n"
-                        f"API response: {response}\n"
-                        f"Ticket fields: "
-                        f"ticketid={getattr(ctx, 'ticketid', None)}, "
-                        f"ticketnum={getattr(ctx, 'ticketnum', None)}, "
-                        f"tid={getattr(ctx, 'tid', None)}, "
-                        f"maskid={getattr(ctx, 'maskid', None)}, "
-                        f"id={getattr(ctx, 'id', None)}\n"
-                        f"Please verify the ticket exists in WHMCS and the API user has department access."
-                    )
-                
-                if response.get("result") == "success":
+                # Lookup the ticket to get all possible ID fields
+                ticket_resp = await api_client.get_ticket(ticket_id)
+                ticket = ticket_resp.get("ticket")
+                if not ticket:
+                    await self._send_error(ctx, f"Ticket {ticket_id} not found.")
+                    return
+
+                # Try all possible ticket ID fields for reply
+                reply_success = False
+                tried_ids = []
+                id_fields = ["id", "ticketid", "ticketnum", "tid", "maskid"]
+                for id_field in id_fields:
+                    ticket_id_value = ticket.get(id_field)
+                    if ticket_id_value:
+                        tried_ids.append(f"{id_field}={ticket_id_value}")
+                        try:
+                            response = await api_client.add_ticket_reply(str(ticket_id_value), message, admin_username)
+                            log.info(f"Attempted add_ticket_reply with {id_field}={ticket_id_value}, response: {response}")
+                            if response.get("result") == "success":
+                                reply_success = True
+                                break
+                        except Exception as e:
+                            log.warning(f"Failed to add reply using {id_field}={ticket_id_value}: {e}")
+
+                if reply_success:
                     embed = self._create_embed(
                         "✅ Reply Added Successfully",
                         f"Your reply has been added to ticket #{ticket_id}",
@@ -2422,7 +2426,6 @@ class WHMCS(commands.Cog):
                         ),
                         inline=False
                     )
-                    
                     # Show preview of message (truncated)
                     preview = message if len(message) <= 200 else message[:197] + "..."
                     embed.add_field(
@@ -2430,11 +2433,15 @@ class WHMCS(commands.Cog):
                         value=f"```{preview}```",
                         inline=False
                     )
-                    
                     await ctx.send(embed=embed)
                 else:
-                    await self._send_error(ctx, f"Failed to add reply: {response.get('message', 'Unknown error')}")
-                
+                    await ctx.send(
+                        f"⚠️ Failed to add your reply to the WHMCS ticket.\n"
+                        f"Tried ticket IDs: {tried_ids}\n"
+                        f"API user: {admin_username}\n"
+                        f"Please verify the ticket exists in WHMCS and the API user has department access."
+                    )
+
         except WHMCSAuthenticationError:
             await self._send_error(ctx, "WHMCS authentication failed. Check your API credentials.")
         except WHMCSRateLimitError:
