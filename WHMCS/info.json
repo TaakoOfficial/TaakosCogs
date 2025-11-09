@@ -10,5 +10,5 @@
   "disabled": false,
   "type": "COG",
   "short": "Integrate Discord with WHMCS billing and client management.",
-  "version": "1.0.7"
+  "version": "1.0.8"
 }

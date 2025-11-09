@@ -323,18 +323,21 @@ class WHMCSAPIClient:
         """Get details for a specific ticket.
         
         Args:
-            ticket_id: The ticket ID to retrieve (can be numeric or alphanumeric like GLY-907775)
+            ticket_id: The ticket ID to retrieve (can be numeric, alphanumeric like GLY-907775, or with # prefix like #WYI-894412)
             
         Returns:
             Dictionary containing ticket details
         """
+        # Clean up ticket ID - remove # prefix if present
+        clean_ticket_id = ticket_id.lstrip('#').strip()
+        
         # Determine if this is a numeric ID (use ticketid) or alphanumeric (use ticketnum)
-        if ticket_id.isdigit():
+        if clean_ticket_id.isdigit():
             # Numeric ticket ID - use internal ticketid parameter
-            parameters = {'ticketid': ticket_id}
+            parameters = {'ticketid': clean_ticket_id}
         else:
             # Alphanumeric ticket number - use ticketnum parameter
-            parameters = {'ticketnum': ticket_id}
+            parameters = {'ticketnum': clean_ticket_id}
         
         return await self._make_request('GetTicket', parameters)
     
@@ -342,7 +345,7 @@ class WHMCSAPIClient:
         """Add a reply to a support ticket.
         
         Args:
-            ticket_id: The ticket ID (can be numeric or alphanumeric like GLY-907775)
+            ticket_id: The ticket ID (can be numeric, alphanumeric like GLY-907775, or with # prefix like #WYI-894412)
             message: Reply message
             admin_username: Optional admin username for the reply
             
@@ -353,13 +356,16 @@ class WHMCSAPIClient:
             'message': message
         }
         
+        # Clean up ticket ID - remove # prefix if present
+        clean_ticket_id = ticket_id.lstrip('#').strip()
+        
         # Determine if this is a numeric ID (use ticketid) or alphanumeric (use ticketnum)
-        if ticket_id.isdigit():
+        if clean_ticket_id.isdigit():
             # Numeric ticket ID - use internal ticketid parameter
-            parameters['ticketid'] = ticket_id
+            parameters['ticketid'] = clean_ticket_id
         else:
             # Alphanumeric ticket number - use ticketnum parameter
-            parameters['ticketnum'] = ticket_id
+            parameters['ticketnum'] = clean_ticket_id
         
         if admin_username:
             parameters['adminusername'] = admin_username

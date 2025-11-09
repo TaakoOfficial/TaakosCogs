@@ -245,8 +245,11 @@ class WHMCS(commands.Cog):
                 category = guild.get_channel(config["category_id"])
             
             # Create channel name
-            prefix = config.get("channel_prefix", "ticket-")
-            channel_name = f"{prefix}{ticket_id.lower()}"
+            prefix = config.get("channel_prefix", "whmcs-ticket-")
+            
+            # Clean ticket ID for channel name (remove # prefix if present)
+            clean_ticket_id = ticket_id.lstrip('#').strip()
+            channel_name = f"{prefix}{clean_ticket_id.lower()}"
             
             # Ensure channel name is valid (alphanumeric and hyphens only)
             import re

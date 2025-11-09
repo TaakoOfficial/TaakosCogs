@@ -5,15 +5,33 @@ All notable changes to the WHMCS COG will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.8] - 2025-11-09
+
+### Fixed
+
+- **CRITICAL**: Fixed ticket ID handling for IDs with `#` prefix (e.g., `#WYI-894412`)
+- Fixed inconsistency in channel name creation where old "ticket-" prefix was still being used as fallback
+- Updated channel creation logic to properly strip `#` prefix from ticket IDs when creating Discord channel names
+- Ensured consistent use of "whmcs-ticket-" prefix throughout the application
+
+### Technical Details
+
+- Enhanced `_get_or_create_ticket_channel()` method to handle `#` prefix in ticket IDs
+- API client already supported `#` prefix stripping in `get_ticket()` and `add_ticket_reply()` methods
+- All ticket ID formats now properly supported: numeric (123), alphanumeric (GLY-907775), and prefixed (#WYI-894412)
+- Fixed channel name creation fallback to use correct "whmcs-ticket-" default prefix
+
 ## [1.0.7] - 2025-11-09
 
 ### Changed
+
 - **IMPROVEMENT**: Changed default ticket channel prefix from "ticket-" to "whmcs-ticket-"
 - Ticket channels now named `#whmcs-ticket-[ticket-id]` for better clarity and organization
 - Updated all documentation examples to reflect new default prefix
 - Enhanced channel identification for better Discord server organization
 
 ### Technical Details
+
 - Updated default `channel_prefix` configuration value
 - Updated admin channels view command to show correct default
 - All documentation examples now use the new prefix format
@@ -21,17 +39,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.0.6] - 2025-11-09
 
 ### Added
+
 - **NEW FEATURE**: Dedicated admin commands for ticket channel configuration
 - Added `[p]whmcs admin channels` command group for easy setup
 - User-friendly commands: `view`, `enable`, `disable`, `set category`, `set prefix`, etc.
 - Comprehensive configuration interface with validation and helpful error messages
 
 ### Changed
+
 - Updated README documentation to use correct WHMCS COG commands instead of generic Red-Bot config
 - Improved setup instructions with proper command examples
 - Enhanced troubleshooting section with accurate command references
 
 ### Technical Details
+
 - Added `admin_channels()` command method with full configuration management
 - Category validation ensures Discord categories exist and are accessible
 - Smart prefix sanitization for Discord channel name compatibility
@@ -40,12 +61,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.0.5] - 2025-11-09
 
 ### Fixed
+
 - **CRITICAL**: Fixed "Ticket ID Not Found" error when using alphanumeric ticket IDs (e.g., GLY-907775)
 - API client now correctly uses `ticketnum` parameter for alphanumeric ticket IDs and `ticketid` for numeric IDs
 - Both GetTicket and AddTicketReply API calls now handle both ticket ID formats properly
 - Automatic channel creation now works with all WHMCS ticket ID formats
 
 ### Technical Details
+
 - Updated `get_ticket()` method to detect ticket ID format and use appropriate API parameter
 - Updated `add_ticket_reply()` method to use the same format detection logic
 - Ticket ID format detection: numeric IDs use `ticketid`, alphanumeric use `ticketnum`
@@ -53,6 +76,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.0.4] - 2025-11-09
 
 ### Added
+
 - **🚀 Automatic Discord Channel Integration**: Revolutionary ticket-to-channel system
   - **Auto-Channel Creation**: Automatically creates Discord channels for WHMCS tickets
   - **Message Listener Integration**: Messages sent in ticket channels automatically reply to WHMCS tickets
@@ -62,6 +86,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Visual Feedback**: ✅ reactions confirm successful WHMCS updates, ❌ for errors
 
 ### Technical Implementation
+
 - **Channel Configuration System**: Complete admin interface for channel settings
 - **Message Event Listener**: `on_message()` handler for automatic reply processing
 - **Channel-Ticket Mapping**: Persistent storage linking Discord channels to WHMCS tickets
@@ -70,6 +95,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Memory Management**: Efficient channel ID caching and cleanup
 
 ### Configuration Options
+
 - **Enable/Disable**: Toggle automatic channel creation
 - **Category Management**: Set categories for active and archived ticket channels
 - **Channel Naming**: Customizable channel name prefixes (default: "ticket-")
@@ -77,6 +103,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Manual Creation**: Admin command to manually create channels for existing tickets
 
 ### Usage Workflow
+
 1. **View Ticket**: Use `[p]whmcs support ticket GLY-907775`
 2. **Auto-Channel**: System creates `#ticket-gly-907775` channel
 3. **Team Collaboration**: Support team discusses in dedicated channel
@@ -87,6 +114,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.0.3] - 2025-11-09
 
 ### Fixed
+
 - **Ticket ID Parameter Type**: Fixed ticket commands to accept alphanumeric ticket IDs
   - `[p]whmcs support ticket <ticket_id>` now accepts IDs like "GLY-907775"
   - `[p]whmcs support reply <ticket_id> <message>` now accepts alphanumeric ticket IDs
@@ -94,6 +122,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Resolved "Converting to int failed" error for alphanumeric ticket identifiers
 
 ### Technical Details
+
 - Changed `ticket_id` parameter type from `int` to `str` in support commands
 - Updated `get_ticket()` and `add_ticket_reply()` API methods to accept string parameters
 - Enhanced parameter documentation to clarify alphanumeric ID support
@@ -102,6 +131,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.0.2] - 2025-11-09
 
 ### Added
+
 - **Ticket Status Filtering**: New commands to filter tickets by status
   - `[p]whmcs support open [client_id] [page]` - List open tickets only
   - `[p]whmcs support closed [client_id] [page]` - List closed tickets only
@@ -111,11 +141,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Client-side filtering ensures accurate results across all ticket statuses
 
 ### Improved
+
 - **Support Command Help**: Updated help text to show all available ticket filtering options
 - **Navigation Consistency**: Pagination commands now maintain status filters
 - **Visual Indicators**: Status-specific emoji icons for better visual distinction
 
 ### Technical Details
+
 - Refactored ticket listing into shared `_list_tickets_with_status` method
 - Added client-side status filtering for precise control
 - Enhanced pagination logic to work with filtered results
@@ -124,6 +156,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.0.1] - 2025-11-09
 
 ### Improved
+
 - **Comprehensive Embed Formatting**: Applied consistent formatting improvements across ALL embed displays
   - **Client Commands**: Enhanced client list, search, and detail views
     - Reduced clients per page from 10 to 5 to prevent crowded embeds
@@ -149,6 +182,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - Enhanced readability on both desktop and mobile Discord clients
 
 ### Fixed
+
 - **Ticket List Display**:
   - Ticket ID now properly displayed in embed field content with 🆔 indicator
   - Added pagination navigation hints in footer (similar to client list)
@@ -156,6 +190,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Better visual organization with consistent formatting
 
 ### Technical Details
+
 - Modified all embed-generating commands in `whmcs.py`
 - Applied consistent `inline=False` for better full-width display
 - Standardized emoji indicators across all command categories
@@ -167,6 +202,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.0.0] - 2025-11-09
 
 ### Added
+
 - Initial release of WHMCS integration COG
 - Client management functionality
   - List clients with pagination
@@ -196,6 +232,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Clear error messaging and user feedback
 
 ### Security
+
 - All API credentials stored encrypted using Red-Bot's secure config system
 - Role-based permission checks on all commands
 - Input validation and sanitization for all user inputs
@@ -203,6 +240,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Comprehensive audit logging
 
 ### Technical
+
 - Async HTTP client with connection pooling
 - Automatic retry logic with exponential backoff
 - Memory-efficient pagination for large datasets
@@ -213,6 +251,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Planned Features
+
 - Advanced billing operations
   - Create invoices
   - Process payments
@@ -241,14 +280,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Custom business rule integration
 
 ### Known Issues
+
 - None at this time
 
 ### Dependencies
+
 - aiohttp>=3.8.0
 - redbot.core (Red-DiscordBot framework)
 - discord.py (included with Red-Bot)
 
 ### Compatibility
+
 - Red-DiscordBot 3.0.0+
 - Python 3.8+
 - WHMCS 7.0+ (tested with 8.x)
