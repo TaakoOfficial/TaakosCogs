@@ -1,0 +1,14 @@
+{
+  "name": "WHMCS",
+  "description": "A Red DiscordBot cog for integrating with WHMCS billing and client management system.",
+  "author": ["Taako"],
+  "install_msg": "WHMCS cog loaded. Configure your WHMCS API credentials with [p]whmcs admin config before using.",
+  "requirements": ["aiohttp>=3.8.0"],
+  "tags": ["whmcs", "billing", "hosting", "client-management", "api", "business"],
+  "min_bot_version": "3.0.0",
+  "hidden": false,
+  "disabled": false,
+  "type": "COG",
+  "short": "Integrate Discord with WHMCS billing and client management.",
+  "version": "1.0.0"
+}
