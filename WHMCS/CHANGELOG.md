@@ -5,6 +5,43 @@ All notable changes to the WHMCS COG will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.3] - 2025-11-09
+
+### Fixed
+- **Ticket ID Parameter Type**: Fixed ticket commands to accept alphanumeric ticket IDs
+  - `[p]whmcs support ticket <ticket_id>` now accepts IDs like "GLY-907775"
+  - `[p]whmcs support reply <ticket_id> <message>` now accepts alphanumeric ticket IDs
+  - Updated API client methods to handle string ticket IDs instead of integers only
+  - Resolved "Converting to int failed" error for alphanumeric ticket identifiers
+
+### Technical Details
+- Changed `ticket_id` parameter type from `int` to `str` in support commands
+- Updated `get_ticket()` and `add_ticket_reply()` API methods to accept string parameters
+- Enhanced parameter documentation to clarify alphanumeric ID support
+- Maintains backward compatibility with numeric-only ticket IDs
+
+## [1.0.2] - 2025-11-09
+
+### Added
+- **Ticket Status Filtering**: New commands to filter tickets by status
+  - `[p]whmcs support open [client_id] [page]` - List open tickets only
+  - `[p]whmcs support closed [client_id] [page]` - List closed tickets only
+  - Enhanced `[p]whmcs support tickets` command with improved filtering display
+  - Status-specific icons in embed titles (🟢 for open, 🔴 for closed)
+  - Smart navigation hints that preserve status filter in pagination
+  - Client-side filtering ensures accurate results across all ticket statuses
+
+### Improved
+- **Support Command Help**: Updated help text to show all available ticket filtering options
+- **Navigation Consistency**: Pagination commands now maintain status filters
+- **Visual Indicators**: Status-specific emoji icons for better visual distinction
+
+### Technical Details
+- Refactored ticket listing into shared `_list_tickets_with_status` method
+- Added client-side status filtering for precise control
+- Enhanced pagination logic to work with filtered results
+- Improved command help documentation
+
 ## [1.0.1] - 2025-11-09
 
 ### Improved

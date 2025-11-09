@@ -1046,7 +1046,9 @@ class WHMCS(commands.Cog):
             embed = self._create_embed(
                 "🎫 Support Management",
                 "**Available Commands:**\n"
-                "• `tickets <client_id>` - List client tickets\n"
+                "• `tickets [client_id] [page]` - List all tickets\n"
+                "• `open [client_id] [page]` - List open tickets only\n"
+                "• `closed [client_id] [page]` - List closed tickets only\n"
                 "• `ticket <ticket_id>` - View ticket details\n"
                 "• `reply <ticket_id> <message>` - Reply to ticket\n"
                 "\n*Requires: Support role or higher*"
@@ -1061,6 +1063,37 @@ class WHMCS(commands.Cog):
             client_id: Optional client ID to filter tickets
             page: Page number (default: 1)
         """
+        await self._list_tickets_with_status(ctx, client_id, page, None)
+    
+    @whmcs_support.command(name="open")
+    async def support_open_tickets(self, ctx: commands.Context, client_id: Optional[int] = None, page: int = 1):
+        """List open support tickets only, optionally filtered by client.
+        
+        Args:
+            client_id: Optional client ID to filter tickets
+            page: Page number (default: 1)
+        """
+        await self._list_tickets_with_status(ctx, client_id, page, "Open")
+    
+    @whmcs_support.command(name="closed")
+    async def support_closed_tickets(self, ctx: commands.Context, client_id: Optional[int] = None, page: int = 1):
+        """List closed support tickets only, optionally filtered by client.
+        
+        Args:
+            client_id: Optional client ID to filter tickets
+            page: Page number (default: 1)
+        """
+        await self._list_tickets_with_status(ctx, client_id, page, "Closed")
+    
+    async def _list_tickets_with_status(self, ctx: commands.Context, client_id: Optional[int], page: int, status_filter: Optional[str]):
+        """Internal method to list tickets with optional status filtering.
+        
+        Args:
+            ctx: The command context
+            client_id: Optional client ID to filter tickets
+            page: Page number
+            status_filter: Optional status to filter by (Open, Closed, etc.)
+        """
         if not await self._check_permissions(ctx, "support"):
             await self._send_error(ctx, "You don't have permission to view support tickets.")
             return
@@ -1074,74 +1107,171 @@ class WHMCS(commands.Cog):
             async with api_client:
                 limit = 5  # Reduced from 10 to match client list formatting
                 offset = (page - 1) * limit
+                
+                # Get tickets (status filtering will be done client-side)
                 response = await api_client.get_tickets(client_id=client_id, limit=limit, offset=offset)
                 
                 if not response.get("tickets"):
-                    filter_text = f" for client {client_id}" if client_id else ""
+                    filter_parts = []
+                    if client_id:
+                        filter_parts.append(f"client {client_id}")
+                    if status_filter:
+                        filter_parts.append(f"status '{status_filter}'")
+                    filter_text = f" for {' and '.join(filter_parts)}" if filter_parts else ""
                     await self._send_error(ctx, f"No tickets found{filter_text}.")
                     return
                 
-                total = response.get("totalresults", 0)
-                total_pages = (total + limit - 1) // limit
-                
-                filter_text = f" for Client {client_id}" if client_id else ""
-                embed = self._create_embed(f"🎫 Support Tickets Directory")
-                embed.description = f"**Page {page} of {total_pages}**{filter_text} • {total} total tickets"
-                
+                # Handle both single ticket and list response
                 tickets = response["tickets"]["ticket"]
                 if not isinstance(tickets, list):
                     tickets = [tickets]
                 
-                for ticket in tickets:
-                    status_emoji = {
-                        "Open": "🟢",
-                        "Answered": "🔵",
-                        "Customer-Reply": "🟡",
-                        "Closed": "🔴"
-                    }.get(ticket.get("status"), "❓")
-                    
-                    priority_emoji = {
-                        "Low": "🔽",
-                        "Medium": "➡️",
-                        "High": "🔼"
-                    }.get(ticket.get("priority"), "➡️")
-                    
-                    ticket_info = (
-                        f"🆔 **ID:** {ticket.get('tid')}\n"
-                        f"📊 **Status:** {status_emoji} {ticket.get('status')}\n"
-                        f"⚡ **Priority:** {priority_emoji} {ticket.get('priority')}\n"
-                        f"🏢 **Department:** {ticket.get('department', 'N/A')}\n"
-                        f"💬 **Last Reply:** {ticket.get('lastreply', 'N/A')}"
-                    )
-                    
-                    subject = ticket.get('subject', 'No Subject')
-                    if len(subject) > 35:  # Shorter for full-width display
-                        subject = subject[:32] + "..."
-                    
-                    embed.add_field(
-                        name=f"🎫 {subject}",
-                        value=ticket_info,
-                        inline=False  # Full width for better readability
-                    )
+                # Filter tickets by status if specified (client-side filtering as backup)
+                if status_filter:
+                    tickets = [ticket for ticket in tickets if ticket.get("status") == status_filter]
                 
-                # Add navigation hints in footer if multiple pages
-                if total_pages > 1:
-                    navigation_text = f"WHMCS Integration • Page {page}/{total_pages}"
-                    if page > 1:
-                        navigation_text += f" • Use `{ctx.prefix}whmcs support tickets"
-                        if client_id:
-                            navigation_text += f" {client_id}"
-                        navigation_text += f" {page-1}` for previous"
-                    if page < total_pages:
-                        navigation_text += f" • Use `{ctx.prefix}whmcs support tickets"
-                        if client_id:
-                            navigation_text += f" {client_id}"
-                        navigation_text += f" {page+1}` for next"
-                    embed.set_footer(text=navigation_text)
+                total = len(tickets)  # Use filtered count for more accurate pagination
+                total_pages = (total + limit - 1) // limit if total > 0 else 1
+                
+                # Build filter description
+                filter_parts = []
+                if client_id:
+                    filter_parts.append(f"Client {client_id}")
+                if status_filter:
+                    filter_parts.append(f"{status_filter} Status")
+                filter_text = f" • {' & '.join(filter_parts)}" if filter_parts else ""
+                
+                if await ctx.embed_requested():
+                    status_icon = "🎫"
+                    if status_filter == "Open":
+                        status_icon = "🟢"
+                    elif status_filter == "Closed":
+                        status_icon = "🔴"
+                    
+                    embed = self._create_embed(f"{status_icon} Support Tickets Directory")
+                    embed.description = f"**Page {page} of {total_pages}**{filter_text} • {total} total tickets"
+                    
+                    # Show tickets for current page
+                    start_idx = (page - 1) * limit
+                    end_idx = start_idx + limit
+                    page_tickets = tickets[start_idx:end_idx]
+                    
+                    for ticket in page_tickets:
+                        status_emoji = {
+                            "Open": "🟢",
+                            "Answered": "🔵",
+                            "Customer-Reply": "🟡",
+                            "Closed": "🔴"
+                        }.get(ticket.get("status"), "❓")
+                        
+                        priority_emoji = {
+                            "Low": "🔽",
+                            "Medium": "➡️",
+                            "High": "🔼"
+                        }.get(ticket.get("priority"), "➡️")
+                        
+                        ticket_info = (
+                            f"🆔 **ID:** {ticket.get('tid')}\n"
+                            f"📊 **Status:** {status_emoji} {ticket.get('status')}\n"
+                            f"⚡ **Priority:** {priority_emoji} {ticket.get('priority')}\n"
+                            f"🏢 **Department:** {ticket.get('department', 'N/A')}\n"
+                            f"💬 **Last Reply:** {ticket.get('lastreply', 'N/A')}"
+                        )
+                        
+                        subject = ticket.get('subject', 'No Subject')
+                        if len(subject) > 35:  # Shorter for full-width display
+                            subject = subject[:32] + "..."
+                        
+                        embed.add_field(
+                            name=f"🎫 {subject}",
+                            value=ticket_info,
+                            inline=False  # Full width for better readability
+                        )
+                    
+                    # Add navigation hints in footer if multiple pages
+                    if total_pages > 1:
+                        # Determine which command was used for navigation hints
+                        cmd_name = "tickets"
+                        if status_filter == "Open":
+                            cmd_name = "open"
+                        elif status_filter == "Closed":
+                            cmd_name = "closed"
+                        
+                        navigation_text = f"WHMCS Integration • Page {page}/{total_pages}"
+                        if page > 1:
+                            navigation_text += f" • Use `{ctx.prefix}whmcs support {cmd_name}"
+                            if client_id:
+                                navigation_text += f" {client_id}"
+                            navigation_text += f" {page-1}` for previous"
+                        if page < total_pages:
+                            navigation_text += f" • Use `{ctx.prefix}whmcs support {cmd_name}"
+                            if client_id:
+                                navigation_text += f" {client_id}"
+                            navigation_text += f" {page+1}` for next"
+                        embed.set_footer(text=navigation_text)
+                    else:
+                        embed.set_footer(text=f"WHMCS Integration • {total} total tickets")
+                    
+                    await ctx.send(embed=embed)
                 else:
-                    embed.set_footer(text=f"WHMCS Integration • {total} total tickets")
-                
-                await ctx.send(embed=embed)
+                    # Plain text format for when embeds are disabled
+                    output = [f"🎫 **Support Tickets Directory - Page {page} of {total_pages}**"]
+                    if filter_text:
+                        output[0] += filter_text
+                    output.append(f"📊 {total} total tickets\n")
+                    
+                    # Show tickets for current page
+                    start_idx = (page - 1) * limit
+                    end_idx = start_idx + limit
+                    page_tickets = tickets[start_idx:end_idx]
+                    
+                    for ticket in page_tickets:
+                        status_emoji = {
+                            "Open": "🟢",
+                            "Answered": "🔵",
+                            "Customer-Reply": "🟡",
+                            "Closed": "🔴"
+                        }.get(ticket.get("status"), "❓")
+                        
+                        priority_emoji = {
+                            "Low": "🔽",
+                            "Medium": "➡️",
+                            "High": "🔼"
+                        }.get(ticket.get("priority"), "➡️")
+                        
+                        subject = ticket.get('subject', 'No Subject')
+                        output.append(f"🎫 **{subject}**")
+                        output.append(f"   🆔 ID: {ticket.get('tid')}")
+                        output.append(f"   📊 Status: {status_emoji} {ticket.get('status')}")
+                        output.append(f"   ⚡ Priority: {priority_emoji} {ticket.get('priority')}")
+                        output.append(f"   🏢 Department: {ticket.get('department', 'N/A')}")
+                        output.append(f"   💬 Last Reply: {ticket.get('lastreply', 'N/A')}")
+                        output.append("")  # Empty line for spacing
+                    
+                    # Add navigation hints for text format too
+                    if total_pages > 1:
+                        # Determine which command was used for navigation hints
+                        cmd_name = "tickets"
+                        if status_filter == "Open":
+                            cmd_name = "open"
+                        elif status_filter == "Closed":
+                            cmd_name = "closed"
+                        
+                        output.append("📄 **Navigation:**")
+                        if page > 1:
+                            cmd = f"{ctx.prefix}whmcs support {cmd_name}"
+                            if client_id:
+                                cmd += f" {client_id}"
+                            cmd += f" {page-1}"
+                            output.append(f"   ⬅️ Previous: `{cmd}`")
+                        if page < total_pages:
+                            cmd = f"{ctx.prefix}whmcs support {cmd_name}"
+                            if client_id:
+                                cmd += f" {client_id}"
+                            cmd += f" {page+1}"
+                            output.append(f"   ➡️ Next: `{cmd}`")
+                    
+                    await ctx.send("\n".join(output))
                 
         except WHMCSAuthenticationError:
             await self._send_error(ctx, "WHMCS authentication failed. Check your API credentials.")
@@ -1154,11 +1284,11 @@ class WHMCS(commands.Cog):
             await self._send_error(ctx, f"An unexpected error occurred: {e}")
 
     @whmcs_support.command(name="ticket")
-    async def support_ticket(self, ctx: commands.Context, ticket_id: int):
+    async def support_ticket(self, ctx: commands.Context, ticket_id: str):
         """View detailed information for a specific support ticket.
         
         Args:
-            ticket_id: The ticket ID to view
+            ticket_id: The ticket ID to view (e.g., GLY-907775 or 123456)
         """
         if not await self._check_permissions(ctx, "support"):
             await self._send_error(ctx, "You don't have permission to view support tickets.")
@@ -1263,11 +1393,11 @@ class WHMCS(commands.Cog):
             await self._send_error(ctx, f"An unexpected error occurred: {e}")
 
     @whmcs_support.command(name="reply")
-    async def support_reply(self, ctx: commands.Context, ticket_id: int, *, message: str):
+    async def support_reply(self, ctx: commands.Context, ticket_id: str, *, message: str):
         """Reply to a support ticket.
         
         Args:
-            ticket_id: The ticket ID to reply to
+            ticket_id: The ticket ID to reply to (e.g., GLY-907775 or 123456)
             message: The reply message
         """
         if not await self._check_permissions(ctx, "support"):

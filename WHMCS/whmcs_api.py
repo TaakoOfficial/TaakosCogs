@@ -319,11 +319,11 @@ class WHMCSAPIClient:
         
         return await self._make_request('GetTickets', parameters)
     
-    async def get_ticket(self, ticket_id: int) -> Dict[str, Any]:
+    async def get_ticket(self, ticket_id: str) -> Dict[str, Any]:
         """Get details for a specific ticket.
         
         Args:
-            ticket_id: The ticket ID to retrieve
+            ticket_id: The ticket ID to retrieve (can be numeric or alphanumeric like GLY-907775)
             
         Returns:
             Dictionary containing ticket details
@@ -331,11 +331,11 @@ class WHMCSAPIClient:
         parameters = {'ticketid': ticket_id}
         return await self._make_request('GetTicket', parameters)
     
-    async def add_ticket_reply(self, ticket_id: int, message: str, admin_username: Optional[str] = None) -> Dict[str, Any]:
+    async def add_ticket_reply(self, ticket_id: str, message: str, admin_username: Optional[str] = None) -> Dict[str, Any]:
         """Add a reply to a support ticket.
         
         Args:
-            ticket_id: The ticket ID
+            ticket_id: The ticket ID (can be numeric or alphanumeric like GLY-907775)
             message: Reply message
             admin_username: Optional admin username for the reply
             
