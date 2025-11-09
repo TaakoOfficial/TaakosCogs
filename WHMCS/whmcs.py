@@ -1773,7 +1773,14 @@ class WHMCS(commands.Cog):
                                 except Exception as e:
                                     log.warning(f"Failed to add reply using {id_field}={ticket_id_value}: {e}")
                         if not reply_success:
-                            await channel.send("⚠️ Failed to add a note to the WHMCS ticket. Please check ticket ID and API permissions.")
+                            await channel.send(
+                                f"⚠️ Failed to add a note to the WHMCS ticket.\n"
+                                f"Tried ticket IDs: {[str(found_ticket.get(f)) for f in ['ticketnum','tid','maskid']]}\n"
+                                f"API user: {admin_username}\n"
+                                f"Ticket status: {found_ticket.get('status')}\n"
+                                f"Ticket department: {found_ticket.get('department')}\n"
+                                f"Please verify the ticket exists in WHMCS and the API user has department access."
+                            )
                     except Exception as e:
                         log.exception("Failed to add Discord channel creation note to WHMCS ticket")
                 else:
