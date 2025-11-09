@@ -328,7 +328,14 @@ class WHMCSAPIClient:
         Returns:
             Dictionary containing ticket details
         """
-        parameters = {'ticketid': ticket_id}
+        # Determine if this is a numeric ID (use ticketid) or alphanumeric (use ticketnum)
+        if ticket_id.isdigit():
+            # Numeric ticket ID - use internal ticketid parameter
+            parameters = {'ticketid': ticket_id}
+        else:
+            # Alphanumeric ticket number - use ticketnum parameter
+            parameters = {'ticketnum': ticket_id}
+        
         return await self._make_request('GetTicket', parameters)
     
     async def add_ticket_reply(self, ticket_id: str, message: str, admin_username: Optional[str] = None) -> Dict[str, Any]:
@@ -343,9 +350,16 @@ class WHMCSAPIClient:
             Dictionary containing the result
         """
         parameters = {
-            'ticketid': ticket_id,
             'message': message
         }
+        
+        # Determine if this is a numeric ID (use ticketid) or alphanumeric (use ticketnum)
+        if ticket_id.isdigit():
+            # Numeric ticket ID - use internal ticketid parameter
+            parameters['ticketid'] = ticket_id
+        else:
+            # Alphanumeric ticket number - use ticketnum parameter
+            parameters['ticketnum'] = ticket_id
         
         if admin_username:
             parameters['adminusername'] = admin_username

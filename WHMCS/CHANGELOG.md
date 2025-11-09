@@ -5,6 +5,85 @@ All notable changes to the WHMCS COG will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.7] - 2025-11-09
+
+### Changed
+- **IMPROVEMENT**: Changed default ticket channel prefix from "ticket-" to "whmcs-ticket-"
+- Ticket channels now named `#whmcs-ticket-[ticket-id]` for better clarity and organization
+- Updated all documentation examples to reflect new default prefix
+- Enhanced channel identification for better Discord server organization
+
+### Technical Details
+- Updated default `channel_prefix` configuration value
+- Updated admin channels view command to show correct default
+- All documentation examples now use the new prefix format
+
+## [1.0.6] - 2025-11-09
+
+### Added
+- **NEW FEATURE**: Dedicated admin commands for ticket channel configuration
+- Added `[p]whmcs admin channels` command group for easy setup
+- User-friendly commands: `view`, `enable`, `disable`, `set category`, `set prefix`, etc.
+- Comprehensive configuration interface with validation and helpful error messages
+
+### Changed
+- Updated README documentation to use correct WHMCS COG commands instead of generic Red-Bot config
+- Improved setup instructions with proper command examples
+- Enhanced troubleshooting section with accurate command references
+
+### Technical Details
+- Added `admin_channels()` command method with full configuration management
+- Category validation ensures Discord categories exist and are accessible
+- Smart prefix sanitization for Discord channel name compatibility
+- Enhanced admin command help to include new channels configuration
+
+## [1.0.5] - 2025-11-09
+
+### Fixed
+- **CRITICAL**: Fixed "Ticket ID Not Found" error when using alphanumeric ticket IDs (e.g., GLY-907775)
+- API client now correctly uses `ticketnum` parameter for alphanumeric ticket IDs and `ticketid` for numeric IDs
+- Both GetTicket and AddTicketReply API calls now handle both ticket ID formats properly
+- Automatic channel creation now works with all WHMCS ticket ID formats
+
+### Technical Details
+- Updated `get_ticket()` method to detect ticket ID format and use appropriate API parameter
+- Updated `add_ticket_reply()` method to use the same format detection logic
+- Ticket ID format detection: numeric IDs use `ticketid`, alphanumeric use `ticketnum`
+
+## [1.0.4] - 2025-11-09
+
+### Added
+- **🚀 Automatic Discord Channel Integration**: Revolutionary ticket-to-channel system
+  - **Auto-Channel Creation**: Automatically creates Discord channels for WHMCS tickets
+  - **Message Listener Integration**: Messages sent in ticket channels automatically reply to WHMCS tickets
+  - **Smart Channel Management**: Configurable channel categories, prefixes, and archiving
+  - **Seamless Workflow**: View ticket → Channel created → Reply in Discord → Updates WHMCS
+  - **Permission Integration**: Respects WHMCS role permissions for channel access
+  - **Visual Feedback**: ✅ reactions confirm successful WHMCS updates, ❌ for errors
+
+### Technical Implementation
+- **Channel Configuration System**: Complete admin interface for channel settings
+- **Message Event Listener**: `on_message()` handler for automatic reply processing
+- **Channel-Ticket Mapping**: Persistent storage linking Discord channels to WHMCS tickets
+- **Auto-Permission Setup**: Automatic channel permissions based on WHMCS roles
+- **Error Handling**: Graceful handling of channel creation and API failures
+- **Memory Management**: Efficient channel ID caching and cleanup
+
+### Configuration Options
+- **Enable/Disable**: Toggle automatic channel creation
+- **Category Management**: Set categories for active and archived ticket channels
+- **Channel Naming**: Customizable channel name prefixes (default: "ticket-")
+- **Auto-Archiving**: Automatically archive channels when tickets are closed
+- **Manual Creation**: Admin command to manually create channels for existing tickets
+
+### Usage Workflow
+1. **View Ticket**: Use `[p]whmcs support ticket GLY-907775`
+2. **Auto-Channel**: System creates `#ticket-gly-907775` channel
+3. **Team Collaboration**: Support team discusses in dedicated channel
+4. **Auto-Reply**: Type messages in channel → automatically posted to WHMCS
+5. **Visual Confirmation**: ✅ reaction confirms message was sent to WHMCS
+6. **Seamless Integration**: No need to switch between Discord and WHMCS interface
+
 ## [1.0.3] - 2025-11-09
 
 ### Fixed

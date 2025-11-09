@@ -52,13 +52,24 @@ class WHMCS(commands.Cog):
                 "embed_color": 0x7289DA,
                 "show_sensitive": False,
                 "auto_sync": False
-            }
+            },
+            "ticket_channels": {
+                "enabled": False,      # Enable automatic channel creation
+                "category_id": None,   # Category for ticket channels
+                "archive_category_id": None,  # Category for closed tickets
+                "channel_prefix": "whmcs-ticket-",  # Prefix for channel names
+                "auto_archive": True   # Archive channels when tickets are closed
+            },
+            "ticket_mappings": {}      # Map ticket IDs to channel IDs
         }
         
         self.config.register_guild(**default_guild)
         
         # Cache for API clients per guild
         self._api_clients: Dict[int, WHMCSAPIClient] = {}
+        
+        # Cache for ticket channels per guild
+        self._ticket_channels: Dict[int, Dict[str, int]] = {}  # {guild_id: {ticket_id: channel_id}}
     
     async def cog_unload(self):
         """Clean up when cog is unloaded."""
@@ -194,6 +205,203 @@ class WHMCS(commands.Cog):
         # This would need to be implemented with actual page data
         # For now, just acknowledge the reaction
         return page
+    
+    async def _get_or_create_ticket_channel(self, guild: discord.Guild, ticket_id: str, ticket_data: Dict[str, Any]) -> Optional[discord.TextChannel]:
+        """Get existing ticket channel or create a new one.
+        
+        Args:
+            guild: Discord guild
+            ticket_id: WHMCS ticket ID
+            ticket_data: Ticket information from WHMCS
+            
+        Returns:
+            Discord text channel for the ticket or None if disabled/failed
+        """
+        config = await self.config.guild(guild).ticket_channels()
+        if not config.get("enabled", False):
+            return None
+        
+        # Check if channel already exists
+        if guild.id not in self._ticket_channels:
+            self._ticket_channels[guild.id] = {}
+        
+        # Load existing mappings from config
+        ticket_mappings = await self.config.guild(guild).ticket_mappings()
+        
+        if ticket_id in ticket_mappings:
+            channel = guild.get_channel(ticket_mappings[ticket_id])
+            if channel:
+                return channel
+            else:
+                # Channel was deleted, remove from mappings
+                async with self.config.guild(guild).ticket_mappings() as mappings:
+                    if ticket_id in mappings:
+                        del mappings[ticket_id]
+        
+        # Create new channel
+        try:
+            category = None
+            if config.get("category_id"):
+                category = guild.get_channel(config["category_id"])
+            
+            # Create channel name
+            prefix = config.get("channel_prefix", "ticket-")
+            channel_name = f"{prefix}{ticket_id.lower()}"
+            
+            # Ensure channel name is valid (alphanumeric and hyphens only)
+            import re
+            channel_name = re.sub(r'[^a-z0-9\-]', '-', channel_name.lower())
+            
+            # Create the channel
+            overwrites = {
+                guild.default_role: discord.PermissionOverwrite(read_messages=False),
+                guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True, manage_messages=True)
+            }
+            
+            # Add permissions for support roles
+            permissions = await self.config.guild(guild).permissions()
+            for role_level in ["admin_roles", "support_roles"]:
+                for role_id in permissions.get(role_level, []):
+                    role = guild.get_role(role_id)
+                    if role:
+                        overwrites[role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
+            
+            channel = await guild.create_text_channel(
+                name=channel_name,
+                category=category,
+                overwrites=overwrites,
+                topic=f"WHMCS Support Ticket {ticket_id} - {ticket_data.get('subject', 'No Subject')}"
+            )
+            
+            # Store mapping
+            async with self.config.guild(guild).ticket_mappings() as mappings:
+                mappings[ticket_id] = channel.id
+            
+            self._ticket_channels[guild.id][ticket_id] = channel.id
+            
+            # Send initial ticket information to channel
+            await self._send_ticket_info_to_channel(channel, ticket_id, ticket_data)
+            
+            return channel
+            
+        except Exception as e:
+            log.exception(f"Failed to create ticket channel for {ticket_id}")
+            return None
+    
+    async def _send_ticket_info_to_channel(self, channel: discord.TextChannel, ticket_id: str, ticket_data: Dict[str, Any]):
+        """Send ticket information to the newly created channel.
+        
+        Args:
+            channel: Discord channel
+            ticket_id: WHMCS ticket ID
+            ticket_data: Ticket information
+        """
+        try:
+            status = ticket_data.get("status", "Unknown")
+            status_emoji = {
+                "Open": "🟢",
+                "Answered": "🔵",
+                "Customer-Reply": "🟡",
+                "Closed": "🔴"
+            }.get(status, "❓")
+            
+            priority = ticket_data.get("priority", "Medium")
+            priority_emoji = {
+                "Low": "🔽",
+                "Medium": "➡️",
+                "High": "🔼"
+            }.get(priority, "➡️")
+            
+            embed = self._create_embed(f"🎫 Ticket {ticket_id} Channel Created")
+            embed.description = f"**{ticket_data.get('subject', 'No Subject')}**"
+            
+            embed.add_field(
+                name="📊 Ticket Information",
+                value=(
+                    f"🆔 **ID:** {ticket_id}\n"
+                    f"📊 **Status:** {status_emoji} {status}\n"
+                    f"⚡ **Priority:** {priority_emoji} {priority}\n"
+                    f"🏢 **Department:** {ticket_data.get('department', 'N/A')}\n"
+                    f"👤 **Client:** {ticket_data.get('name', 'N/A')}\n"
+                    f"📧 **Email:** {ticket_data.get('email', 'N/A')}"
+                ),
+                inline=False
+            )
+            
+            if ticket_data.get('message'):
+                message = ticket_data['message']
+                if len(message) > 1000:
+                    message = message[:997] + "..."
+                embed.add_field(
+                    name="💬 Original Message",
+                    value=f"```{message}```",
+                    inline=False
+                )
+            
+            embed.add_field(
+                name="🔧 Channel Usage",
+                value=(
+                    "**Messages sent in this channel will automatically be added as replies to the WHMCS ticket.**\n\n"
+                    "📝 Simply type your response and it will be posted to WHMCS\n"
+                    "🎫 Use `/whmcs support ticket " + ticket_id + "` to view full ticket details\n"
+                    "🔒 Channel will be archived when ticket is closed"
+                ),
+                inline=False
+            )
+            
+            await channel.send(embed=embed)
+            
+        except Exception as e:
+            log.exception(f"Failed to send ticket info to channel {channel.id}")
+    
+    @commands.Cog.listener()
+    async def on_message(self, message: discord.Message):
+        """Listen for messages in ticket channels and auto-reply to WHMCS tickets."""
+        # Ignore bot messages and DMs
+        if not message.guild or message.author.bot:
+            return
+        
+        # Check if this is a ticket channel
+        ticket_mappings = await self.config.guild(message.guild).ticket_mappings()
+        ticket_id = None
+        
+        for tid, channel_id in ticket_mappings.items():
+            if channel_id == message.channel.id:
+                ticket_id = tid
+                break
+        
+        if not ticket_id:
+            return
+        
+        # Check if user has permission to reply to tickets
+        ctx = await self.bot.get_context(message)
+        if not await self._check_permissions(ctx, "support"):
+            return
+        
+        # Get API client
+        api_client = await self._get_api_client(message.guild)
+        if not api_client:
+            return
+        
+        try:
+            # Add reply to WHMCS ticket
+            async with api_client:
+                admin_username = f"Discord-{message.author.display_name}"
+                response = await api_client.add_ticket_reply(ticket_id, message.content, admin_username)
+                
+                if response.get("result") == "success":
+                    # Add reaction to confirm the message was sent to WHMCS
+                    await message.add_reaction("✅")
+                else:
+                    # Add error reaction
+                    await message.add_reaction("❌")
+                    
+        except Exception as e:
+            log.exception(f"Failed to auto-reply to ticket {ticket_id}")
+            try:
+                await message.add_reaction("❌")
+            except:
+                pass
     
     # Main command group
     @commands.hybrid_group(name="whmcs", description="WHMCS management commands")
@@ -520,6 +728,7 @@ class WHMCS(commands.Cog):
                 "• `config` - Configure WHMCS settings\n"
                 "• `test` - Test API connectivity\n"
                 "• `permissions` - Manage role permissions\n"
+                "• `channels` - Configure automatic ticket channels\n"
                 "\n*Requires: Admin role*"
             )
             await ctx.send(embed=embed)
@@ -761,6 +970,190 @@ class WHMCS(commands.Cog):
         
         else:
             await self._send_error(ctx, f"Unknown action: {action}. Use 'view', 'add', or 'remove'.")
+
+    @whmcs_admin.command(name="channels")
+    async def admin_channels(self, ctx: commands.Context, action: Optional[str] = None, setting: Optional[str] = None, *, value: Optional[str] = None):
+        """Configure automatic ticket channel settings.
+        
+        Args:
+            action: Action to perform (view, enable, disable, set)
+            setting: Setting to configure (category, archive_category, prefix, auto_archive)
+            value: Value to set (required for set actions)
+        """
+        if not await self._check_permissions(ctx, "admin"):
+            await self._send_error(ctx, "You don't have permission to configure ticket channel settings.")
+            return
+        
+        if not action:
+            # Show configuration help
+            embed = self._create_embed(
+                "🎫 Ticket Channel Configuration",
+                "**Available Actions:**\n"
+                "• `view` - View current ticket channel settings\n"
+                "• `enable` - Enable automatic ticket channel creation\n"
+                "• `disable` - Disable automatic ticket channel creation\n"
+                "• `set category <category_id>` - Set active tickets category\n"
+                "• `set archive_category <category_id>` - Set archive category (optional)\n"
+                "• `set prefix <prefix>` - Set channel name prefix\n"
+                "• `set auto_archive <true/false>` - Enable/disable auto-archiving\n\n"
+                "**Examples:**\n"
+                "`[p]whmcs admin channels enable`\n"
+                "`[p]whmcs admin channels set category 123456789012345678`\n"
+                "`[p]whmcs admin channels set prefix support-`"
+            )
+            await ctx.send(embed=embed)
+            return
+        
+        action = action.lower()
+        
+        if action == "view":
+            # Show current configuration
+            config = await self.config.guild(ctx.guild).ticket_channels()
+            
+            embed = self._create_embed("🎫 Current Ticket Channel Settings")
+            
+            # Channel Configuration
+            enabled_status = "🟢 Enabled" if config.get("enabled", False) else "🔴 Disabled"
+            
+            category_info = "Not set"
+            if config.get("category_id"):
+                category = ctx.guild.get_channel(config["category_id"])
+                if category:
+                    category_info = f"{category.name} ({config['category_id']})"
+                else:
+                    category_info = f"Unknown Category ({config['category_id']})"
+            
+            archive_category_info = "Not set"
+            if config.get("archive_category_id"):
+                archive_category = ctx.guild.get_channel(config["archive_category_id"])
+                if archive_category:
+                    archive_category_info = f"{archive_category.name} ({config['archive_category_id']})"
+                else:
+                    archive_category_info = f"Unknown Category ({config['archive_category_id']})"
+            
+            embed.add_field(
+                name="🎫 Channel Settings",
+                value=(
+                    f"**Status:** {enabled_status}\n"
+                    f"**Active Category:** {category_info}\n"
+                    f"**Archive Category:** {archive_category_info}\n"
+                    f"**Channel Prefix:** {config.get('channel_prefix', 'whmcs-ticket-')}\n"
+                    f"**Auto-Archive:** {'Yes' if config.get('auto_archive', True) else 'No'}"
+                ),
+                inline=False
+            )
+            
+            if not config.get("enabled", False):
+                embed.add_field(
+                    name="💡 Getting Started",
+                    value=(
+                        "To enable ticket channels:\n"
+                        f"1. `{ctx.prefix}whmcs admin channels set category <category_id>`\n"
+                        f"2. `{ctx.prefix}whmcs admin channels enable`"
+                    ),
+                    inline=False
+                )
+            
+            await ctx.send(embed=embed)
+            
+        elif action == "enable":
+            config = await self.config.guild(ctx.guild).ticket_channels()
+            if not config.get("category_id"):
+                await self._send_error(ctx, "Please set a category ID first with `[p]whmcs admin channels set category <category_id>`")
+                return
+            
+            async with self.config.guild(ctx.guild).ticket_channels() as channels_config:
+                channels_config["enabled"] = True
+            
+            await self._send_success(ctx, "✅ Automatic ticket channel creation has been enabled!")
+            
+        elif action == "disable":
+            async with self.config.guild(ctx.guild).ticket_channels() as channels_config:
+                channels_config["enabled"] = False
+            
+            await self._send_success(ctx, "✅ Automatic ticket channel creation has been disabled.")
+            
+        elif action == "set":
+            if not setting:
+                await self._send_error(ctx, "Please specify a setting to configure.")
+                return
+            
+            setting = setting.lower()
+            valid_settings = ["category", "archive_category", "prefix", "auto_archive"]
+            
+            if setting not in valid_settings:
+                await self._send_error(ctx, f"Invalid setting. Valid settings: {', '.join(valid_settings)}")
+                return
+            
+            if not value:
+                await self._send_error(ctx, f"Please provide a value for {setting}.")
+                return
+            
+            async with self.config.guild(ctx.guild).ticket_channels() as channels_config:
+                if setting == "category":
+                    try:
+                        category_id = int(value)
+                        category = ctx.guild.get_channel(category_id)
+                        if not category:
+                            await self._send_error(ctx, f"Category with ID {category_id} not found in this server.")
+                            return
+                        if not isinstance(category, discord.CategoryChannel):
+                            await self._send_error(ctx, f"Channel {category.name} is not a category.")
+                            return
+                        
+                        channels_config["category_id"] = category_id
+                        await self._send_success(ctx, f"✅ Active tickets category set to: {category.name}")
+                        
+                    except ValueError:
+                        await self._send_error(ctx, "Category ID must be a number.")
+                        
+                elif setting == "archive_category":
+                    if value.lower() in ["none", "null", "remove"]:
+                        channels_config["archive_category_id"] = None
+                        await self._send_success(ctx, "✅ Archive category has been removed.")
+                    else:
+                        try:
+                            category_id = int(value)
+                            category = ctx.guild.get_channel(category_id)
+                            if not category:
+                                await self._send_error(ctx, f"Category with ID {category_id} not found in this server.")
+                                return
+                            if not isinstance(category, discord.CategoryChannel):
+                                await self._send_error(ctx, f"Channel {category.name} is not a category.")
+                                return
+                            
+                            channels_config["archive_category_id"] = category_id
+                            await self._send_success(ctx, f"✅ Archive category set to: {category.name}")
+                            
+                        except ValueError:
+                            await self._send_error(ctx, "Archive category ID must be a number.")
+                            
+                elif setting == "prefix":
+                    if len(value) > 20:
+                        await self._send_error(ctx, "Channel prefix must be 20 characters or less.")
+                        return
+                    
+                    # Sanitize prefix for Discord channel names
+                    import re
+                    sanitized_prefix = re.sub(r'[^a-z0-9\-]', '-', value.lower())
+                    if not sanitized_prefix.endswith('-'):
+                        sanitized_prefix += '-'
+                    
+                    channels_config["channel_prefix"] = sanitized_prefix
+                    await self._send_success(ctx, f"✅ Channel prefix set to: {sanitized_prefix}")
+                    
+                elif setting == "auto_archive":
+                    if value.lower() in ["true", "yes", "1", "on", "enable"]:
+                        channels_config["auto_archive"] = True
+                        await self._send_success(ctx, "✅ Auto-archiving enabled.")
+                    elif value.lower() in ["false", "no", "0", "off", "disable"]:
+                        channels_config["auto_archive"] = False
+                        await self._send_success(ctx, "✅ Auto-archiving disabled.")
+                    else:
+                        await self._send_error(ctx, "Auto-archive value must be true or false.")
+        
+        else:
+            await self._send_error(ctx, f"Unknown action: {action}. Use 'view', 'enable', 'disable', or 'set'.")
 
     @whmcs_admin.command(name="test")
     async def admin_test(self, ctx: commands.Context):
