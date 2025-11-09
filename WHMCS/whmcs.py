@@ -1566,8 +1566,19 @@ class WHMCS(commands.Cog):
                             "High": "🔼"
                         }.get(ticket.get("priority"), "➡️")
                         
+                        # Build ticket ID display - show all available ID formats
+                        id_display_parts = []
+                        if ticket.get('tid'):
+                            id_display_parts.append(f"Internal: {ticket.get('tid')}")
+                        if ticket.get('ticketnum'):
+                            id_display_parts.append(f"Number: {ticket.get('ticketnum')}")
+                        if ticket.get('maskid'):
+                            id_display_parts.append(f"Mask: {ticket.get('maskid')}")
+                        
+                        id_display = " • ".join(id_display_parts) if id_display_parts else ticket.get('tid', 'N/A')
+                        
                         ticket_info = (
-                            f"🆔 **ID:** {ticket.get('tid')}\n"
+                            f"🆔 **IDs:** {id_display}\n"
                             f"📊 **Status:** {status_emoji} {ticket.get('status')}\n"
                             f"⚡ **Priority:** {priority_emoji} {ticket.get('priority')}\n"
                             f"🏢 **Department:** {ticket.get('department', 'N/A')}\n"
@@ -1635,9 +1646,20 @@ class WHMCS(commands.Cog):
                             "High": "🔼"
                         }.get(ticket.get("priority"), "➡️")
                         
+                        # Build ticket ID display - show all available ID formats
+                        id_display_parts = []
+                        if ticket.get('tid'):
+                            id_display_parts.append(f"Internal: {ticket.get('tid')}")
+                        if ticket.get('ticketnum'):
+                            id_display_parts.append(f"Number: {ticket.get('ticketnum')}")
+                        if ticket.get('maskid'):
+                            id_display_parts.append(f"Mask: {ticket.get('maskid')}")
+                        
+                        id_display = " • ".join(id_display_parts) if id_display_parts else ticket.get('tid', 'N/A')
+                        
                         subject = ticket.get('subject', 'No Subject')
                         output.append(f"🎫 **{subject}**")
-                        output.append(f"   🆔 ID: {ticket.get('tid')}")
+                        output.append(f"   🆔 IDs: {id_display}")
                         output.append(f"   📊 Status: {status_emoji} {ticket.get('status')}")
                         output.append(f"   ⚡ Priority: {priority_emoji} {ticket.get('priority')}")
                         output.append(f"   🏢 Department: {ticket.get('department', 'N/A')}")

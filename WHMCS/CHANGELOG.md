@@ -5,6 +5,21 @@ All notable changes to the WHMCS COG will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.9] - 2025-11-09
+
+### Improved
+- **MAJOR**: Enhanced ticket listing to show ALL available ticket ID formats
+- Ticket listings now display: Internal ID, Ticket Number, and Mask ID (when available)
+- Format: `🆔 IDs: Internal: 123 • Number: GLY-907775 • Mask: #WYI-894412`
+- Users can now see exactly which ID format to use with `[p]whmcs support ticket <id>` command
+- Resolves confusion about which ticket ID to use when viewing individual tickets
+
+### Technical Details
+- Updated ticket listing display logic in both embed and plain text formats
+- Enhanced ID display to show `tid`, `ticketnum`, and `maskid` fields from WHMCS API
+- Improved user experience by showing all available identifier options
+- Maintains backward compatibility with existing ticket ID handling
+
 ## [1.0.8] - 2025-11-09
 
 ### Fixed
