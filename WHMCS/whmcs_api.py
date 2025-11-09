@@ -330,16 +330,40 @@ class WHMCSAPIClient:
         """
         # Clean up ticket ID - remove # prefix if present
         clean_ticket_id = ticket_id.lstrip('#').strip()
-        
-        # Determine if this is a numeric ID (use ticketid) or alphanumeric (use ticketnum)
-        if clean_ticket_id.isdigit():
-            # Numeric ticket ID - use internal ticketid parameter
-            parameters = {'ticketid': clean_ticket_id}
-        else:
-            # Alphanumeric ticket number - use ticketnum parameter
-            parameters = {'ticketnum': clean_ticket_id}
-        
-        return await self._make_request('GetTicket', parameters)
+
+        # Try all possible ID fields, just like the findticket admin command logic
+        # 1. Try as ticketnum (alphanumeric/public)
+        # 2. Try as ticketid (internal numeric)
+        # 3. Try as tid (sometimes used by WHMCS)
+        # Return the first successful result
+
+        # 1. Try ticketnum
+        try:
+            resp = await self._make_request('GetTicket', {'ticketnum': clean_ticket_id})
+            if resp.get("ticket"):
+                return resp
+        except Exception:
+            pass
+
+        # 2. Try ticketid (if numeric or if previous failed)
+        try:
+            if clean_ticket_id.isdigit():
+                resp = await self._make_request('GetTicket', {'ticketid': clean_ticket_id})
+                if resp.get("ticket"):
+                    return resp
+        except Exception:
+            pass
+
+        # 3. Try tid (rare, but seen in some WHMCS setups)
+        try:
+            resp = await self._make_request('GetTicket', {'tid': clean_ticket_id})
+            if resp.get("ticket"):
+                return resp
+        except Exception:
+            pass
+
+        # If all fail, return empty dict (not found)
+        return {}
     
     async def add_ticket_reply(self, ticket_id: str, message: str, admin_username: Optional[str] = None) -> Dict[str, Any]:
         """Add a reply to a support ticket.
