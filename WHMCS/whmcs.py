@@ -2335,6 +2335,12 @@ class WHMCS(commands.Cog):
                         f"Tried {id_type}: {clean_ticket_id}\n"
                         f"API user: {admin_username}\n"
                         f"API response: {response}\n"
+                        f"Ticket fields: "
+                        f"ticketid={getattr(ctx, 'ticketid', None)}, "
+                        f"ticketnum={getattr(ctx, 'ticketnum', None)}, "
+                        f"tid={getattr(ctx, 'tid', None)}, "
+                        f"maskid={getattr(ctx, 'maskid', None)}, "
+                        f"id={getattr(ctx, 'id', None)}\n"
                         f"Please verify the ticket exists in WHMCS and the API user has department access."
                     )
                 
