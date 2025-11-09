@@ -1195,6 +1195,11 @@ class WHMCS(commands.Cog):
         except WHMCSRateLimitError:
             await self._send_error(ctx, "❌ Rate limit exceeded. Please try again later.")
         except WHMCSAPIError as e:
+            await self._send_error(ctx, f"❌ API connection failed: {e}")
+        except Exception as e:
+            log.exception("Error in admin_test command")
+            await self._send_error(ctx, f"❌ Connection test failed: {e}")
+
     @whmcs_admin.command(name="debug")
     async def admin_debug(self, ctx: commands.Context, ticket_id: str):
         """Debug ticket API calls to identify WHMCS configuration issues.
@@ -1321,10 +1326,6 @@ class WHMCS(commands.Cog):
         except Exception as e:
             log.exception("Error in admin_debug command")
             await self._send_error(ctx, f"❌ Debug test failed: {e}")
-            await self._send_error(ctx, f"❌ API connection failed: {e}")
-        except Exception as e:
-            log.exception("Error in admin_test command")
-            await self._send_error(ctx, f"❌ Connection test failed: {e}")
     
     # Billing management group
     @whmcs.group(name="billing", description="Billing management commands")
