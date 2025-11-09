@@ -2402,18 +2402,25 @@ class WHMCS(commands.Cog):
                 reply_success = False
                 tried_ids = []
                 id_fields = ["id", "ticketid", "ticketnum", "tid", "maskid"]
+                debug_ticket_fields = "\n".join([f"{k}: {v}" for k, v in ticket.items()])
                 for id_field in id_fields:
                     ticket_id_value = ticket.get(id_field)
                     if ticket_id_value:
                         tried_ids.append(f"{id_field}={ticket_id_value}")
                         try:
+                            debug_payload = {
+                                "id_field": id_field,
+                                "ticket_id_value": ticket_id_value,
+                                "admin_username": admin_username,
+                                "message": message[:100] + ("..." if len(message) > 100 else "")
+                            }
                             response = await api_client.add_ticket_reply(str(ticket_id_value), message, admin_username, id_field=id_field)
-                            log.info(f"Attempted add_ticket_reply with {id_field}={ticket_id_value}, response: {response}")
+                            log.info(f"Attempted add_ticket_reply with {id_field}={ticket_id_value}, payload={debug_payload}, response={response}")
                             if response.get("result") == "success":
                                 reply_success = True
                                 break
                         except Exception as e:
-                            log.warning(f"Failed to add reply using {id_field}={ticket_id_value}: {e}")
+                            log.warning(f"Failed to add reply using {id_field}={ticket_id_value}: {e}\nTicket fields:\n{debug_ticket_fields}")
 
                 if reply_success:
                     embed = self._create_embed(
