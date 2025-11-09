@@ -1566,16 +1566,23 @@ class WHMCS(commands.Cog):
                             "High": "🔼"
                         }.get(ticket.get("priority"), "➡️")
                         
-                        # Build ticket ID display - show all available ID formats
+                        # Build ticket ID display - intelligently categorize the IDs
                         id_display_parts = []
-                        if ticket.get('tid'):
-                            id_display_parts.append(f"Internal: {ticket.get('tid')}")
-                        if ticket.get('ticketnum'):
+                        tid_value = ticket.get('tid')
+                        
+                        if tid_value:
+                            # Determine if tid is actually numeric (internal) or alphanumeric (ticket number)
+                            if str(tid_value).isdigit():
+                                id_display_parts.append(f"Internal: {tid_value}")
+                            else:
+                                id_display_parts.append(f"Ticket Number: {tid_value}")
+                        
+                        if ticket.get('ticketnum') and ticket.get('ticketnum') != str(tid_value):
                             id_display_parts.append(f"Number: {ticket.get('ticketnum')}")
                         if ticket.get('maskid'):
                             id_display_parts.append(f"Mask: {ticket.get('maskid')}")
                         
-                        id_display = " • ".join(id_display_parts) if id_display_parts else ticket.get('tid', 'N/A')
+                        id_display = " • ".join(id_display_parts) if id_display_parts else str(tid_value) if tid_value else 'N/A'
                         
                         ticket_info = (
                             f"🆔 **IDs:** {id_display}\n"
@@ -1646,16 +1653,23 @@ class WHMCS(commands.Cog):
                             "High": "🔼"
                         }.get(ticket.get("priority"), "➡️")
                         
-                        # Build ticket ID display - show all available ID formats
+                        # Build ticket ID display - intelligently categorize the IDs
                         id_display_parts = []
-                        if ticket.get('tid'):
-                            id_display_parts.append(f"Internal: {ticket.get('tid')}")
-                        if ticket.get('ticketnum'):
+                        tid_value = ticket.get('tid')
+                        
+                        if tid_value:
+                            # Determine if tid is actually numeric (internal) or alphanumeric (ticket number)
+                            if str(tid_value).isdigit():
+                                id_display_parts.append(f"Internal: {tid_value}")
+                            else:
+                                id_display_parts.append(f"Ticket Number: {tid_value}")
+                        
+                        if ticket.get('ticketnum') and ticket.get('ticketnum') != str(tid_value):
                             id_display_parts.append(f"Number: {ticket.get('ticketnum')}")
                         if ticket.get('maskid'):
                             id_display_parts.append(f"Mask: {ticket.get('maskid')}")
                         
-                        id_display = " • ".join(id_display_parts) if id_display_parts else ticket.get('tid', 'N/A')
+                        id_display = " • ".join(id_display_parts) if id_display_parts else str(tid_value) if tid_value else 'N/A'
                         
                         subject = ticket.get('subject', 'No Subject')
                         output.append(f"🎫 **{subject}**")

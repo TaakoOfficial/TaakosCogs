@@ -5,9 +5,26 @@ All notable changes to the WHMCS COG will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.10] - 2025-11-09
+
+### Fixed
+
+- **CRITICAL**: Fixed ticket ID categorization issue where alphanumeric ticket numbers were incorrectly labeled as "Internal" IDs
+- Improved intelligent ID detection to properly categorize numeric vs alphanumeric ticket identifiers
+- Fixed "Ticket not found" errors when WHMCS returns alphanumeric ticket numbers in the `tid` field
+- Enhanced display logic to show correct ID type: "Internal: 123" for numeric, "Ticket Number: GLY-907775" for alphanumeric
+
+### Technical Details
+
+- Updated ticket listing display logic to use `str(tid_value).isdigit()` for accurate ID type detection
+- Fixed edge case where WHMCS `GetTickets` API returns alphanumeric ticket numbers in `tid` field
+- Ensures users see the correct ID category and can successfully use any displayed ID with ticket commands
+- Maintains backward compatibility with all existing ticket ID formats
+
 ## [1.0.9] - 2025-11-09
 
 ### Improved
+
 - **MAJOR**: Enhanced ticket listing to show ALL available ticket ID formats
 - Ticket listings now display: Internal ID, Ticket Number, and Mask ID (when available)
 - Format: `🆔 IDs: Internal: 123 • Number: GLY-907775 • Mask: #WYI-894412`
@@ -15,6 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Resolves confusion about which ticket ID to use when viewing individual tickets
 
 ### Technical Details
+
 - Updated ticket listing display logic in both embed and plain text formats
 - Enhanced ID display to show `tid`, `ticketnum`, and `maskid` fields from WHMCS API
 - Improved user experience by showing all available identifier options
