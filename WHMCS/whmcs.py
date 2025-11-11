@@ -1523,8 +1523,19 @@ class WHMCS(commands.Cog):
                 
                 # Test 1: Try with ticketid parameter (for numeric IDs)
                 try:
-                    response1 = await api_client._make_request('GetTicket', {'ticketid': clean_ticket_id})
+                    response1 = await api_client.get_ticket(clean_ticket_id)
                     if response1.get("ticket"):
+                        debug_info.append("✅ **get_ticket() wrapper:** SUCCESS")
+                        success_count += 1
+                    else:
+                        debug_info.append("❌ **get_ticket() wrapper:** No ticket returned")
+                except Exception as e:
+                    debug_info.append(f"❌ **get_ticket() wrapper:** Error - {e}")
+                
+                # Test 2: Try direct API call with ticketid parameter
+                try:
+                    response2 = await api_client._make_request('GetTicket', {'ticketid': clean_ticket_id})
+                    if response2.get("ticket"):
                         debug_info.append("✅ **ticketid parameter:** SUCCESS")
                         success_count += 1
                     else:
@@ -1532,10 +1543,10 @@ class WHMCS(commands.Cog):
                 except Exception as e:
                     debug_info.append(f"❌ **ticketid parameter:** Error - {e}")
                 
-                # Test 2: Try with ticketnum parameter (for alphanumeric IDs)
+                # Test 3: Try direct API call with ticketnum parameter
                 try:
-                    response2 = await api_client._make_request('GetTicket', {'ticketnum': clean_ticket_id})
-                    if response2.get("ticket"):
+                    response3 = await api_client._make_request('GetTicket', {'ticketnum': clean_ticket_id})
+                    if response3.get("ticket"):
                         debug_info.append("✅ **ticketnum parameter:** SUCCESS")
                         success_count += 1
                     else:
@@ -1543,10 +1554,10 @@ class WHMCS(commands.Cog):
                 except Exception as e:
                     debug_info.append(f"❌ **ticketnum parameter:** Error - {e}")
                 
-                # Test 3: Try with tid parameter (some WHMCS versions)
+                # Test 4: Try direct API call with tid parameter (some WHMCS versions)
                 try:
-                    response3 = await api_client._make_request('GetTicket', {'tid': clean_ticket_id})
-                    if response3.get("ticket"):
+                    response4 = await api_client._make_request('GetTicket', {'tid': clean_ticket_id})
+                    if response4.get("ticket"):
                         debug_info.append("✅ **tid parameter:** SUCCESS")
                         success_count += 1
                     else:
@@ -1584,7 +1595,7 @@ class WHMCS(commands.Cog):
                         "",
                         "**4. WHMCS Version-Specific Issues:**",
                         "• Some WHMCS versions have API inconsistencies",
-                        "• Try: Admin → Support → Tickets → Search for GLY-907775",
+                        "• Try: Admin → Support → Tickets → Search for the ticket",
                         "• Note the exact Ticket ID shown in WHMCS interface",
                         "",
                         "**5. Alternative Identification Methods:**",
@@ -1596,7 +1607,7 @@ class WHMCS(commands.Cog):
                     diagnosis = [
                         "⚠️ **Partial Success - Configuration Issue**",
                         "",
-                        "One method worked, but the COG is using the wrong one.",
+                        "One method worked, but the COG may be using the wrong parameter.",
                         "This suggests a WHMCS configuration inconsistency.",
                         "",
                         "**Next Steps:**",
@@ -1609,7 +1620,7 @@ class WHMCS(commands.Cog):
                         "✅ **Multiple Methods Work**",
                         "",
                         "The API is working correctly with multiple parameters.",
-                        "The issue might be in the COG's detection logic.",
+                        "The issue might be in the COG's detection logic or ticket channel mapping.",
                         "",
                         "**This is useful debugging info - please share these results!**"
                     ]

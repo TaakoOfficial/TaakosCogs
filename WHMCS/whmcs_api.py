@@ -199,8 +199,8 @@ class WHMCSAPIClient:
             Dictionary containing client data
         """
         parameters = {
-            'limitstart': offset,
-            'limitnum': min(limit, 100)
+            'limitstart': str(offset),
+            'limitnum': str(min(limit, 100))
         }
         
         if search:
@@ -217,7 +217,7 @@ class WHMCSAPIClient:
         Returns:
             Dictionary containing client details
         """
-        parameters = {'clientid': client_id}
+        parameters = {'clientid': str(client_id)}
         return await self._make_request('GetClientsDetails', parameters)
     
     async def add_client(self, client_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -241,7 +241,7 @@ class WHMCSAPIClient:
         Returns:
             Dictionary containing update result
         """
-        parameters = {'clientid': client_id}
+        parameters = {'clientid': str(client_id)}
         parameters.update(client_data)
         return await self._make_request('UpdateClient', parameters)
     
@@ -258,12 +258,12 @@ class WHMCSAPIClient:
             Dictionary containing invoice data
         """
         parameters = {
-            'limitstart': offset,
-            'limitnum': min(limit, 100)
+            'limitstart': str(offset),
+            'limitnum': str(min(limit, 100))
         }
         
         if client_id:
-            parameters['userid'] = client_id
+            parameters['userid'] = str(client_id)
         
         return await self._make_request('GetInvoices', parameters)
     
@@ -291,8 +291,8 @@ class WHMCSAPIClient:
             Dictionary containing the result
         """
         parameters = {
-            'clientid': client_id,
-            'amount': amount,
+            'clientid': str(client_id),
+            'amount': str(amount),
             'description': description
         }
         return await self._make_request('AddCredit', parameters)
@@ -310,12 +310,12 @@ class WHMCSAPIClient:
             Dictionary containing ticket data
         """
         parameters = {
-            'limitstart': offset,
-            'limitnum': min(limit, 100)
+            'limitstart': str(offset),
+            'limitnum': str(min(limit, 100))
         }
         
         if client_id:
-            parameters['clientid'] = client_id
+            parameters['clientid'] = str(client_id)
         
         return await self._make_request('GetTickets', parameters)
     
@@ -349,7 +349,7 @@ class WHMCSAPIClient:
         # If all fail, return empty dict (not found)
         return {}
     
-    async def add_ticket_reply(self, ticket_id: str, message: str, admin_username: Optional[str] = None, id_field: str = None) -> Dict[str, Any]:
+    async def add_ticket_reply(self, ticket_id: str, message: str, admin_username: Optional[str] = None, id_field: Optional[str] = None) -> Dict[str, Any]:
         """Add a reply to a support ticket.
 
         Args:
