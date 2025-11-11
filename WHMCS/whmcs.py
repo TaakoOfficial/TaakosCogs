@@ -163,16 +163,18 @@ class WHMCS(commands.Cog):
                 log.info(f"[WHMCS SYNC] After cleanup, guild {guild.id} has {len(ticket_mappings)} mappings: {list(ticket_mappings.keys())}")
             # New format: {channel_id: {"ticket_ids": {...}}}
             for channel_id, info in ticket_mappings.items():
-                # Only process integer channel IDs
-                if not isinstance(channel_id, int):
-                    log.warning(f"Skipping invalid ticket_mappings key (not int): {channel_id}")
+                # Always convert channel_id to int
+                try:
+                    channel_id_int = int(channel_id)
+                except (ValueError, TypeError):
+                    log.warning(f"Skipping invalid ticket_mappings key (cannot convert to int): {channel_id}")
                     continue
-                if isinstance(channel_id, dict) or (isinstance(info, dict) and not "ticket_ids" in info):
+                if isinstance(channel_id_int, dict) or (isinstance(info, dict) and not "ticket_ids" in info):
                     log.warning(f"Skipping corrupted ticket_mappings entry: key={channel_id}, value={info}")
                     continue
                 if isinstance(info, dict) and "ticket_ids" in info:
                     ticket_ids = info["ticket_ids"]
-                    channel = guild.get_channel(channel_id)
+                    channel = guild.get_channel(channel_id_int)
                     if not isinstance(channel, discord.TextChannel):
                         log.warning(f"Skipping mapping: channel_id={channel_id} does not resolve to a TextChannel.")
                         continue
@@ -711,14 +713,14 @@ class WHMCS(commands.Cog):
                         log.info(f"[WHMCS Discord Auto-Reply] Trying {id_field}={ticket_id_value}")
                         ticket_resp = await api_client.get_ticket(str(ticket_id_value))
                         log.info(f"[WHMCS Discord Auto-Reply] API response for {id_field}={ticket_id_value}: {ticket_resp}")
-                        ticket = ticket_resp.get("ticket")
-                        if ticket:
-                            found_ticket = ticket
+                        # Check if API call was successful
+                        if ticket_resp.get("result") == "success":
+                            found_ticket = ticket_resp
                             log.info(f"[WHMCS Discord Auto-Reply] Found ticket using {id_field}={ticket_id_value}")
-                            log.info(f"[WHMCS Discord Auto-Reply] Ticket data: {ticket}")
+                            log.info(f"[WHMCS Discord Auto-Reply] Ticket data: {ticket_resp}")
                             break
                         else:
-                            # Enhanced debugging for empty responses
+                            # Enhanced debugging for failed responses
                             if not ticket_resp:
                                 log.warning(f"[WHMCS Discord Auto-Reply] Empty response for {id_field}={ticket_id_value}")
                             else:
@@ -727,7 +729,7 @@ class WHMCS(commands.Cog):
                                 if error_msg:
                                     log.warning(f"[WHMCS Discord Auto-Reply] Error for {id_field}={ticket_id_value}: {error_msg}")
                                 else:
-                                    log.warning(f"[WHMCS Discord Auto-Reply] No ticket found for {id_field}={ticket_id_value}, response: {ticket_resp}")
+                                    log.warning(f"[WHMCS Discord Auto-Reply] Failed API call for {id_field}={ticket_id_value}, response: {ticket_resp}")
 
                 if not found_ticket:
                     log.error(f"[WHMCS Discord Auto-Reply] No ticket found using any ID: {ticket_ids}")
