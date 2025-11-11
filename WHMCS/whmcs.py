@@ -1648,6 +1648,50 @@ class WHMCS(commands.Cog):
                     current += block
             if current.strip():
                 await ctx.send(f"```py\n{current.strip()}```")
+    @whmcs_admin.command(name="showreplies")
+    async def admin_showreplies(self, ctx: commands.Context, ticket_id: str):
+        """
+        TEMPORARY: Fetch and send the raw 'replies' field for a ticket as a plain message.
+
+        Usage: [p]whmcs admin showreplies <ticket_id>
+        """
+        if not await self._check_permissions(ctx, "admin"):
+            await self._send_error(ctx, "You don't have permission to use this command.")
+            return
+
+        api_client = await self._get_api_client(ctx.guild)
+        if not api_client:
+            await self._send_error(ctx, "WHMCS is not configured. Use `[p]whmcs admin config` to set up.")
+            return
+
+        try:
+            async with api_client:
+                resp = await api_client.get_ticket(ticket_id)
+                ticket = resp.get("ticket")
+                if not ticket:
+                    await self._send_error(ctx, f"Ticket {ticket_id} not found.")
+                    return
+                replies = ticket.get("replies")
+                import pprint
+                pp = pprint.PrettyPrinter(width=120, compact=True)
+                raw = pp.pformat(replies)
+                # Discord message limit is 2000 chars; split if needed
+                max_len = 1900
+                if not raw:
+                    await ctx.send("No replies field found.")
+                    return
+                if len(raw) <= 2000:
+                    await ctx.send(f"```py\n{raw[:1990]}```")
+                else:
+                    # Split into multiple messages if too long
+                    blocks = [raw[i:i+max_len] for i in range(0, len(raw), max_len)]
+                    for block in blocks:
+                        await ctx.send(f"```py\n{block.strip()}```")
+        except Exception as e:
+            import logging
+            logging.getLogger("red.WHMCS").exception("Error in admin_showreplies command")
+            await ctx.send(f"❌ Error: {e}")
+
     @whmcs_admin.command(name="debug")
     async def admin_debug(self, ctx: commands.Context, ticket_id: str):
         """Debug ticket API calls to identify WHMCS configuration issues.
