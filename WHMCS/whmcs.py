@@ -466,26 +466,49 @@ class WHMCS(commands.Cog):
             return
         
         try:
-            # Add reply to WHMCS ticket
+            # Add reply to WHMCS ticket (robust: try all possible ticket ID fields)
             async with api_client:
                 admin_username = f"Discord-{message.author.display_name}"
-                response = await api_client.add_ticket_reply(ticket_id, message.content, admin_username)
-                if response.get("result") != "success":
+                # Lookup the ticket to get all possible ID fields
+                ticket_resp = await api_client.get_ticket(ticket_id)
+                ticket = ticket_resp.get("ticket")
+                if not ticket:
                     await message.channel.send(
                         f"⚠️ Failed to add your reply to the WHMCS ticket.\n"
-                        f"Tried ticket ID: {ticket_id}\n"
+                        f"Ticket {ticket_id} not found in WHMCS.\n"
                         f"API user: {admin_username}\n"
-                        f"API response: {response}\n"
                         f"Please verify the ticket exists in WHMCS and the API user has department access."
                     )
-                
-                if response.get("result") == "success":
-                    # Add reaction to confirm the message was sent to WHMCS
+                    await message.add_reaction("❌")
+                    return
+
+                reply_success = False
+                tried_ids = []
+                id_fields = ["id", "ticketid", "ticketnum", "tid", "maskid"]
+                for id_field in id_fields:
+                    ticket_id_value = ticket.get(id_field)
+                    if ticket_id_value:
+                        tried_ids.append(f"{id_field}={ticket_id_value}")
+                        try:
+                            response = await api_client.add_ticket_reply(str(ticket_id_value), message.content, admin_username, id_field=id_field)
+                            log.info(f"Attempted add_ticket_reply with {id_field}={ticket_id_value}, response={response}")
+                            if response.get("result") == "success":
+                                reply_success = True
+                                break
+                        except Exception as e:
+                            log.warning(f"Failed to add reply using {id_field}={ticket_id_value}: {e}")
+
+                if reply_success:
                     await message.add_reaction("✅")
                 else:
-                    # Add error reaction
+                    await message.channel.send(
+                        f"⚠️ Failed to add your reply to the WHMCS ticket.\n"
+                        f"Tried ticket IDs: {tried_ids}\n"
+                        f"API user: {admin_username}\n"
+                        f"Please verify the ticket exists in WHMCS and the API user has department access."
+                    )
                     await message.add_reaction("❌")
-                    
+
         except Exception as e:
             log.exception(f"Failed to auto-reply to ticket {ticket_id}")
             try:
