@@ -98,19 +98,31 @@ class WHMCS(commands.Cog):
             if not api_client:
                 continue
             ticket_mappings = await self.config.guild(guild).ticket_mappings()
-            for ticket_id, channel_id in ticket_mappings.items():
-                channel = guild.get_channel(channel_id)
-                if not channel:
-                    continue
-                # Get last posted reply timestamp from channel history or config
-                last_reply_time = await self.config.guild(guild).get_raw(f"last_reply_time_{ticket_id}", default=None)
-                async with api_client:
-                    ticket = None
-                    try:
-                        resp = await api_client.get_ticket(ticket_id)
-                        ticket = resp.get("ticket")
-                    except Exception:
+            # New format: {channel_id: {"ticket_ids": {...}}}
+            for channel_id, info in ticket_mappings.items():
+                if isinstance(info, dict) and "ticket_ids" in info:
+                    ticket_ids = info["ticket_ids"]
+                    channel = guild.get_channel(channel_id)
+                    if not channel:
                         continue
+                    # Try all mapped ticket IDs for lookup
+                    found_ticket = None
+                    for id_field in ["ticketid", "ticketnum", "tid", "maskid"]:
+                        ticket_id_value = ticket_ids.get(id_field)
+                        if ticket_id_value:
+                            try:
+                                resp = await api_client.get_ticket(str(ticket_id_value))
+                                ticket = resp.get("ticket")
+                                if ticket:
+                                    found_ticket = (ticket_id_value, ticket)
+                                    break
+                            except Exception:
+                                continue
+                    if not found_ticket:
+                        continue
+                    ticket_id, ticket = found_ticket
+                    # Get last posted reply timestamp from channel history or config
+                    last_reply_time = await self.config.guild(guild).get_raw(f"last_reply_time_{ticket_id}", default=None)
                     if not ticket or not ticket.get("replies"):
                         continue
                     replies = ticket["replies"]
@@ -123,16 +135,13 @@ class WHMCS(commands.Cog):
                         date = reply.get("date")
                         if last_reply_time is None or (date and date > last_reply_time):
                             new_replies.append(reply)
-                    # Try to match ticket/channel using all possible ticket ID fields
                     id_fields = ["id", "ticketid", "ticketnum", "tid", "maskid"]
                     for reply in new_replies:
-                        # Only post replies from end users (not admin)
                         author = reply.get("admin") or reply.get("name", "Unknown")
                         date = reply.get("date", "N/A")
                         rmsg = reply.get("message", "")
                         if len(rmsg) > 1000:
                             rmsg = rmsg[:997] + "..."
-                        # Compose embed for end user reply
                         reply_embed = self._create_embed(
                             f"💬 Reply by {author}",
                             f"On {date}",
@@ -145,6 +154,51 @@ class WHMCS(commands.Cog):
                         )
                         await channel.send(embed=reply_embed)
                         await self.config.guild(guild).set_raw(f"last_reply_time_{ticket_id}", value=date)
+                else:
+                    # Backward compatibility: old format {ticket_id: channel_id}
+                    ticket_id = channel_id
+                    channel = guild.get_channel(info)
+                    if not channel:
+                        continue
+                    last_reply_time = await self.config.guild(guild).get_raw(f"last_reply_time_{ticket_id}", default=None)
+                    async with api_client:
+                        ticket = None
+                        try:
+                            resp = await api_client.get_ticket(ticket_id)
+                            ticket = resp.get("ticket")
+                        except Exception:
+                            continue
+                        if not ticket or not ticket.get("replies"):
+                            continue
+                        replies = ticket["replies"]
+                        if isinstance(replies, dict) and "reply" in replies:
+                            replies = replies["reply"]
+                        if not isinstance(replies, list):
+                            replies = [replies]
+                        new_replies = []
+                        for reply in replies:
+                            date = reply.get("date")
+                            if last_reply_time is None or (date and date > last_reply_time):
+                                new_replies.append(reply)
+                        id_fields = ["id", "ticketid", "ticketnum", "tid", "maskid"]
+                        for reply in new_replies:
+                            author = reply.get("admin") or reply.get("name", "Unknown")
+                            date = reply.get("date", "N/A")
+                            rmsg = reply.get("message", "")
+                            if len(rmsg) > 1000:
+                                rmsg = rmsg[:997] + "..."
+                            reply_embed = self._create_embed(
+                                f"💬 Reply by {author}",
+                                f"On {date}",
+                                color=0x00BFFF
+                            )
+                            reply_embed.add_field(
+                                name="Message",
+                                value=f"```{rmsg}```",
+                                inline=False
+                            )
+                            await channel.send(embed=reply_embed)
+                            await self.config.guild(guild).set_raw(f"last_reply_time_{ticket_id}", value=date)
     async def _get_api_client(self, guild: discord.Guild) -> Optional[WHMCSAPIClient]:
         """Get or create an API client for the guild.
         
