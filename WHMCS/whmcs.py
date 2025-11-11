@@ -118,15 +118,18 @@ class WHMCS(commands.Cog):
                 ticket_mappings = await self.config.guild(guild).ticket_mappings()
             # New format: {channel_id: {"ticket_ids": {...}}}
             for channel_id, info in ticket_mappings.items():
+                # Only process integer channel IDs
                 if not isinstance(channel_id, int):
+                    log.warning(f"Skipping invalid ticket_mappings key (not int): {channel_id}")
                     continue
-                if isinstance(channel_id, dict) or isinstance(info, dict) and not "ticket_ids" in info:
+                if isinstance(channel_id, dict) or (isinstance(info, dict) and not "ticket_ids" in info):
                     log.warning(f"Skipping corrupted ticket_mappings entry: key={channel_id}, value={info}")
                     continue
                 if isinstance(info, dict) and "ticket_ids" in info:
                     ticket_ids = info["ticket_ids"]
                     channel = guild.get_channel(channel_id)
-                    if not channel:
+                    if not isinstance(channel, discord.TextChannel):
+                        log.warning(f"Skipping mapping: channel_id={channel_id} does not resolve to a TextChannel.")
                         continue
                     # Try all mapped ticket IDs for lookup
                     found_ticket = None
