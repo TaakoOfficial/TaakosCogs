@@ -101,6 +101,30 @@ class WHMCS(commands.Cog):
                 continue
             ticket_mappings = await self.config.guild(guild).ticket_mappings()
             log.info(f"[WHMCS SYNC] Guild {guild.id} has {len(ticket_mappings)} ticket mappings: {list(ticket_mappings.keys())}")
+            log.info(f"[WHMCS SYNC] Ticket mappings types: {[type(k) for k in ticket_mappings.keys()]}")
+            log.info(f"[WHMCS SYNC] Ticket mappings before cleanup: {ticket_mappings}")
+            
+            # Convert string keys to integers if needed (Config system may convert ints to strings)
+            converted_mappings = {}
+            for key, value in ticket_mappings.items():
+                try:
+                    if isinstance(key, str):
+                        int_key = int(key)
+                        converted_mappings[int_key] = value
+                        log.info(f"[WHMCS SYNC] Converting string key {key} to integer {int_key}")
+                    else:
+                        converted_mappings[key] = value
+                except (ValueError, TypeError):
+                    log.warning(f"[WHMCS SYNC] Skipping invalid mapping key: {key}")
+            
+            # Update the mappings if any conversions were made
+            if converted_mappings != ticket_mappings:
+                async with self.config.guild(guild).ticket_mappings() as mappings:
+                    mappings.clear()
+                    mappings.update(converted_mappings)
+                log.info(f"[WHMCS SYNC] Updated ticket mappings with integer keys")
+                ticket_mappings = converted_mappings
+            
             ticket_mappings = await self.config.guild(guild).ticket_mappings()
             # Clean up corrupted mappings at runtime
             cleaned = False
@@ -131,6 +155,8 @@ class WHMCS(commands.Cog):
                             log.warning(f"Removing corrupted ticket mapping key: {k}")
                             del mappings[k]
                 cleaned = True
+                # Reload after cleaning to get the updated mappings
+                ticket_mappings = await self.config.guild(guild).ticket_mappings()
             if cleaned:
                 # Reload after cleaning
                 ticket_mappings = await self.config.guild(guild).ticket_mappings()
@@ -509,10 +535,13 @@ class WHMCS(commands.Cog):
                 "tid": ticket_data.get("tid"),
                 "maskid": ticket_data.get("maskid"),
             }
+            # Ensure channel.id is stored as integer
+            channel_id_int = int(channel.id)
             async with self.config.guild(guild).ticket_mappings() as mappings:
-                mappings[int(channel.id)] = {"ticket_ids": ticket_ids}
+                mappings[channel_id_int] = {"ticket_ids": ticket_ids}
+                log.info(f"Created ticket mapping for channel {channel_id_int} (type: {type(channel_id_int)})")
 
-            self._ticket_channels.setdefault(guild.id, {})[int(channel.id)] = {"ticket_ids": ticket_ids}
+            self._ticket_channels.setdefault(guild.id, {})[channel_id_int] = {"ticket_ids": ticket_ids}
 
             # Send initial ticket information to channel
             await self._send_ticket_info_to_channel(channel, ticket_id, ticket_data)
