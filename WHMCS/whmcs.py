@@ -104,63 +104,52 @@ class WHMCS(commands.Cog):
             log.info(f"[WHMCS SYNC] Ticket mappings types: {[type(k) for k in ticket_mappings.keys()]}")
             log.info(f"[WHMCS SYNC] Ticket mappings before cleanup: {ticket_mappings}")
             
-            # Convert string keys to integers if needed (Config system may convert ints to strings)
+            # Normalize ticket mapping keys: always store as int if possible, never remove if convertible
             converted_mappings = {}
             for key, value in ticket_mappings.items():
                 try:
                     if isinstance(key, str):
                         int_key = int(key)
+                        # Once a key is converted to int, always keep it
                         converted_mappings[int_key] = value
                         log.info(f"[WHMCS SYNC] Converting string key {key} to integer {int_key}")
                     else:
                         converted_mappings[key] = value
                 except (ValueError, TypeError):
                     log.warning(f"[WHMCS SYNC] Skipping invalid mapping key: {key}")
-            
-            # Update the mappings if any conversions were made
+
+            # Only update if normalization changed the mapping
             if converted_mappings != ticket_mappings:
                 async with self.config.guild(guild).ticket_mappings() as mappings:
                     mappings.clear()
                     mappings.update(converted_mappings)
                 log.info(f"[WHMCS SYNC] Updated ticket mappings with integer keys")
                 ticket_mappings = converted_mappings
-            
-            ticket_mappings = await self.config.guild(guild).ticket_mappings()
-            # Clean up corrupted mappings at runtime
-            cleaned = False
+
+            # After normalization, do not remove any mapping that can be converted to int
+            # Only remove keys that are not int and not convertible to int
             keys_to_remove = []
-            keys_to_convert = []
             for channel_id in list(ticket_mappings.keys()):
                 if isinstance(channel_id, int):
                     continue
-                # Try to convert string channel IDs to int if possible
                 if isinstance(channel_id, str):
                     try:
-                        int_id = int(channel_id)
-                        keys_to_convert.append((channel_id, int_id))
+                        int(channel_id)
+                        # Convertible, already handled above, skip removal
                         continue
                     except Exception:
                         pass
-                log.warning(f"Removing invalid ticket_mappings key (not int): {channel_id}")
+                # Only remove if not int and not convertible to int
+                log.warning(f"Removing invalid ticket_mappings key (not int or convertible): {channel_id}")
                 keys_to_remove.append(channel_id)
-            if keys_to_convert or keys_to_remove:
+            if keys_to_remove:
                 async with self.config.guild(guild).ticket_mappings() as mappings:
-                    for old, new in keys_to_convert:
-                        if new not in mappings:
-                            mappings[new] = mappings[old]
-                            log.info(f"Converted ticket mapping from string key {old} to integer key {new}")
-                        del mappings[old]
                     for k in keys_to_remove:
                         if k in mappings:
                             log.warning(f"Removing corrupted ticket mapping key: {k}")
                             del mappings[k]
-                cleaned = True
-                # Reload after cleaning to get the updated mappings
                 ticket_mappings = await self.config.guild(guild).ticket_mappings()
-            if cleaned:
-                # Reload after cleaning
-                ticket_mappings = await self.config.guild(guild).ticket_mappings()
-                log.info(f"[WHMCS SYNC] After cleanup, guild {guild.id} has {len(ticket_mappings)} mappings: {list(ticket_mappings.keys())}")
+            # Do not reassign or clean further; int keys persist
             # New format: {channel_id: {"ticket_ids": {...}}}
             for channel_id, info in ticket_mappings.items():
                 # Always convert channel_id to int
@@ -449,7 +438,7 @@ class WHMCS(commands.Cog):
         # ticket_mappings: {channel_id: {"ticket_ids": {...}}}
         # Backward compatibility: if mapping is str, convert to new format
         for k, v in list(ticket_mappings.items()):
-            # Convert string channel IDs to integers if possible
+            # Convert string channel IDs to integers if possible, never remove if convertible
             try:
                 if isinstance(k, str):
                     int_key = int(k)
@@ -460,7 +449,7 @@ class WHMCS(commands.Cog):
                     log.info(f"Converted string channel ID {k} to integer")
             except (ValueError, TypeError):
                 pass
-            
+
             if isinstance(v, int):
                 # Old format: {ticket_id: channel_id}
                 channel = guild.get_channel(v)
@@ -645,26 +634,28 @@ class WHMCS(commands.Cog):
         log.info(f"[WHMCS Discord Auto-Reply] Current ticket_mappings keys: {list(ticket_mappings.keys())}")
         log.info(f"[WHMCS Discord Auto-Reply] Current ticket_mappings types: {[type(k) for k in ticket_mappings.keys()]}")
 
-        # Convert string keys to integers if needed (Config system may convert ints to strings)
+        # Normalize ticket mapping keys: always store as int if possible, never remove if convertible
         converted_mappings = {}
         for key, value in ticket_mappings.items():
             try:
                 if isinstance(key, str):
                     int_key = int(key)
+                    # Once a key is converted to int, always keep it
                     converted_mappings[int_key] = value
                     log.info(f"[WHMCS Discord Auto-Reply] Converting string key {key} to integer {int_key}")
                 else:
                     converted_mappings[key] = value
             except (ValueError, TypeError):
                 log.warning(f"[WHMCS Discord Auto-Reply] Skipping invalid mapping key: {key}")
-        
-        # Update the mappings if any conversions were made
+
+        # Only update if normalization changed the mapping
         if converted_mappings != ticket_mappings:
             async with self.config.guild(message.guild).ticket_mappings() as mappings:
                 mappings.clear()
                 mappings.update(converted_mappings)
             log.info(f"[WHMCS Discord Auto-Reply] Updated ticket mappings with integer keys")
             ticket_mappings = converted_mappings
+        # Do not remove any mapping that is int or convertible to int; int keys persist
 
         # New format: {channel_id: {"ticket_ids": {...}}}
         info = ticket_mappings.get(message.channel.id)
