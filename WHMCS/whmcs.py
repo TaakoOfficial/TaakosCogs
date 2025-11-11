@@ -124,9 +124,11 @@ class WHMCS(commands.Cog):
                     for old, new in keys_to_convert:
                         if new not in mappings:
                             mappings[new] = mappings[old]
+                            log.info(f"Converted ticket mapping from string key {old} to integer key {new}")
                         del mappings[old]
                     for k in keys_to_remove:
                         if k in mappings:
+                            log.warning(f"Removing corrupted ticket mapping key: {k}")
                             del mappings[k]
                 cleaned = True
             if cleaned:
@@ -217,7 +219,12 @@ class WHMCS(commands.Cog):
                 else:
                     # Backward compatibility: old format {ticket_id: channel_id}
                     ticket_id = channel_id
-                    channel = guild.get_channel(info)
+                    # Ensure info is converted to int if it's a string
+                    try:
+                        channel_id_int = int(info) if isinstance(info, str) else info
+                        channel = guild.get_channel(channel_id_int)
+                    except (ValueError, TypeError):
+                        channel = None
                     if not channel:
                         continue
                     last_reply_time = await self.config.guild(guild).get_raw(f"last_reply_time_{ticket_id}", default=None)
@@ -414,6 +421,18 @@ class WHMCS(commands.Cog):
         # ticket_mappings: {channel_id: {"ticket_ids": {...}}}
         # Backward compatibility: if mapping is str, convert to new format
         for k, v in list(ticket_mappings.items()):
+            # Convert string channel IDs to integers if possible
+            try:
+                if isinstance(k, str):
+                    int_key = int(k)
+                    async with self.config.guild(guild).ticket_mappings() as mappings:
+                        mappings[int_key] = mappings[k]
+                        del mappings[k]
+                    k = int_key
+                    log.info(f"Converted string channel ID {k} to integer")
+            except (ValueError, TypeError):
+                pass
+            
             if isinstance(v, int):
                 # Old format: {ticket_id: channel_id}
                 channel = guild.get_channel(v)
@@ -491,9 +510,9 @@ class WHMCS(commands.Cog):
                 "maskid": ticket_data.get("maskid"),
             }
             async with self.config.guild(guild).ticket_mappings() as mappings:
-                mappings[channel.id] = {"ticket_ids": ticket_ids}
+                mappings[int(channel.id)] = {"ticket_ids": ticket_ids}
 
-            self._ticket_channels.setdefault(guild.id, {})[channel.id] = {"ticket_ids": ticket_ids}
+            self._ticket_channels.setdefault(guild.id, {})[int(channel.id)] = {"ticket_ids": ticket_ids}
 
             # Send initial ticket information to channel
             await self._send_ticket_info_to_channel(channel, ticket_id, ticket_data)
@@ -592,6 +611,8 @@ class WHMCS(commands.Cog):
         ticket_mappings = await self.config.guild(message.guild).ticket_mappings()
         ticket_ids = None
         log.info(f"[WHMCS Discord Auto-Reply] Checking channel {message.channel.id} in ticket_mappings")
+        log.info(f"[WHMCS Discord Auto-Reply] Current ticket_mappings keys: {list(ticket_mappings.keys())}")
+        log.info(f"[WHMCS Discord Auto-Reply] Current ticket_mappings types: {[type(k) for k in ticket_mappings.keys()]}")
 
         # New format: {channel_id: {"ticket_ids": {...}}}
         info = ticket_mappings.get(message.channel.id)
@@ -602,10 +623,15 @@ class WHMCS(commands.Cog):
             # Backward compatibility: old mapping
             log.info(f"[WHMCS Discord Auto-Reply] Checking old format mappings: {ticket_mappings}")
             for tid, channel_id in ticket_mappings.items():
-                if channel_id == message.channel.id:
-                    ticket_ids = {"tid": tid}
-                    log.info(f"[WHMCS Discord Auto-Reply] Found old format ticket_ids: {ticket_ids}")
-                    break
+                # Ensure channel_id is converted to int for comparison
+                try:
+                    channel_id_int = int(channel_id) if isinstance(channel_id, str) else channel_id
+                    if channel_id_int == message.channel.id:
+                        ticket_ids = {"tid": tid}
+                        log.info(f"[WHMCS Discord Auto-Reply] Found old format ticket_ids: {ticket_ids}")
+                        break
+                except (ValueError, TypeError):
+                    continue
         if not ticket_ids:
             log.info(f"[WHMCS Discord Auto-Reply] No ticket_ids found for channel {message.channel.id}")
             return
