@@ -101,17 +101,29 @@ class WHMCS(commands.Cog):
             # Clean up corrupted mappings at runtime
             cleaned = False
             keys_to_remove = []
+            keys_to_convert = []
             for channel_id in list(ticket_mappings.keys()):
-                if not isinstance(channel_id, int):
-                    log.warning(f"Removing invalid ticket_mappings key (not int): {channel_id}")
-                    keys_to_remove.append(channel_id)
-                elif isinstance(channel_id, dict):
-                    log.warning(f"Removing corrupted ticket_mappings key (dict): {channel_id}")
-                    keys_to_remove.append(channel_id)
-            if keys_to_remove:
+                if isinstance(channel_id, int):
+                    continue
+                # Try to convert string channel IDs to int if possible
+                if isinstance(channel_id, str):
+                    try:
+                        int_id = int(channel_id)
+                        keys_to_convert.append((channel_id, int_id))
+                        continue
+                    except Exception:
+                        pass
+                log.warning(f"Removing invalid ticket_mappings key (not int): {channel_id}")
+                keys_to_remove.append(channel_id)
+            if keys_to_convert or keys_to_remove:
                 async with self.config.guild(guild).ticket_mappings() as mappings:
+                    for old, new in keys_to_convert:
+                        if new not in mappings:
+                            mappings[new] = mappings[old]
+                        del mappings[old]
                     for k in keys_to_remove:
-                        del mappings[k]
+                        if k in mappings:
+                            del mappings[k]
                 cleaned = True
             if cleaned:
                 # Reload after cleaning
