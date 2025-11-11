@@ -356,7 +356,7 @@ class WHMCSAPIClient:
             ticket_id: The ticket ID value (string)
             message: Reply message
             admin_username: Optional admin username for the reply
-            id_field: The WHMCS ticket field to use (e.g., 'id', 'ticketid', 'ticketnum', 'tid', 'maskid')
+            id_field: The WHMCS ticket field to use (should be 'ticketid' - the internal numeric ID)
 
         Returns:
             Dictionary containing the result
@@ -370,35 +370,37 @@ class WHMCSAPIClient:
         # Clean up ticket ID - remove # prefix if present
         clean_ticket_id = ticket_id.lstrip('#').strip()
 
-        # Use explicit id_field if provided, else fallback to old logic
-        if id_field:
-            parameters[id_field] = clean_ticket_id
-            try:
-                resp = await self._make_request('AddTicketReply', parameters)
-                if resp.get("result") == "success":
-                    return resp
-            except Exception:
-                pass
-            return {"result": "error", "message": f"Failed to add reply with {id_field}={clean_ticket_id}"}
+        # According to WHMCS API docs, AddTicketReply requires 'ticketid' (internal numeric ID)
+        # Not ticketnum, tid, or maskid. We must use the internal database ID.
+        if id_field and id_field == 'ticketid':
+            # Use provided ticketid directly
+            parameters['ticketid'] = clean_ticket_id
+        elif clean_ticket_id.isdigit():
+            # If clean_ticket_id is numeric, assume it's the internal ticketid
+            parameters['ticketid'] = clean_ticket_id
         else:
-            # Legacy fallback: try ticketid if numeric, else ticketnum
-            if clean_ticket_id.isdigit():
-                parameters['ticketid'] = clean_ticket_id
-                try:
-                    resp = await self._make_request('AddTicketReply', parameters)
-                    if resp.get("result") == "success":
-                        return resp
-                except Exception:
-                    pass
-                parameters.pop('ticketid', None)
-            parameters['ticketnum'] = clean_ticket_id
+            # If not numeric, we need to look up the internal ticketid first
+            # This is the correct approach according to WHMCS API documentation
             try:
-                resp = await self._make_request('AddTicketReply', parameters)
-                if resp.get("result") == "success":
-                    return resp
-            except Exception:
-                pass
-            return {"result": "error", "message": "Failed to add reply with either ticketid or ticketnum"}
+                ticket_resp = await self.get_ticket(clean_ticket_id)
+                if ticket_resp.get("ticket"):
+                    internal_id = ticket_resp["ticket"].get("id") or ticket_resp["ticket"].get("ticketid")
+                    if internal_id:
+                        parameters['ticketid'] = str(internal_id)
+                        log.info(f"Resolved ticket ID {clean_ticket_id} to internal ID {internal_id}")
+                    else:
+                        return {"result": "error", "message": f"Could not find internal ticket ID for {clean_ticket_id}"}
+                else:
+                    return {"result": "error", "message": f"Ticket {clean_ticket_id} not found"}
+            except Exception as e:
+                return {"result": "error", "message": f"Failed to lookup ticket {clean_ticket_id}: {e}"}
+
+        try:
+            resp = await self._make_request('AddTicketReply', parameters)
+            return resp
+        except Exception as e:
+            log.warning(f"AddTicketReply failed with parameters {parameters}: {e}")
+            return {"result": "error", "message": f"AddTicketReply failed: {e}"}
     
     # System Methods
     async def test_connection(self) -> Dict[str, Any]:

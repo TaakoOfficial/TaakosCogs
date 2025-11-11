@@ -654,27 +654,26 @@ class WHMCS(commands.Cog):
 
                 reply_success = False
                 tried_ids = []
-                # Prefer visible ticket IDs for reply (not just internal 'id')
-                id_fields = ["ticketnum", "tid", "maskid", "id", "ticketid"]
-                log.info(f"[WHMCS Discord Auto-Reply] Found ticket, trying to add reply with message: {message.content[:100]}")
-                for id_field in id_fields:
-                    ticket_id_value = found_ticket.get(id_field)
-                    if ticket_id_value:
-                        tried_ids.append(f"{id_field}={ticket_id_value}")
-                        payload_preview = message.content[:100] + ("..." if len(message.content) > 100 else "")
-                        log.info(f"[WHMCS Discord Auto-Reply] Attempting add_ticket_reply: id_field={id_field}, ticket_id_value={ticket_id_value}, admin_username={admin_username}, message_preview={payload_preview}")
-                        try:
-                            response = await api_client.add_ticket_reply(str(ticket_id_value), message.content, admin_username, id_field=id_field)
-                            log.info(f"[WHMCS Discord Auto-Reply] API response for {id_field}={ticket_id_value}: {response}")
-                            if response.get("result") == "success":
-                                log.info(f"[WHMCS Discord Auto-Reply] Reply successfully added using {id_field}={ticket_id_value}")
-                                reply_success = True
-                                break
-                            else:
-                                error_msg = response.get("message", "No error message")
-                                log.warning(f"[WHMCS Discord Auto-Reply] API call failed for {id_field}={ticket_id_value}: {error_msg}")
-                        except Exception as e:
-                            log.warning(f"[WHMCS Discord Auto-Reply] Exception for {id_field}={ticket_id_value}: {e}")
+                # IMPORTANT: AddTicketReply API requires internal ticketid (database ID)
+                # We should always use the internal 'id' or 'ticketid' field, not ticketnum/tid/maskid
+                internal_id = found_ticket.get("id") or found_ticket.get("ticketid")
+                if internal_id:
+                    tried_ids.append(f"internal_id={internal_id}")
+                    payload_preview = message.content[:100] + ("..." if len(message.content) > 100 else "")
+                    log.info(f"[WHMCS Discord Auto-Reply] Attempting add_ticket_reply using internal ID: {internal_id}, admin_username={admin_username}, message_preview={payload_preview}")
+                    try:
+                        response = await api_client.add_ticket_reply(str(internal_id), message.content, admin_username)
+                        log.info(f"[WHMCS Discord Auto-Reply] API response for internal_id={internal_id}: {response}")
+                        if response.get("result") == "success":
+                            log.info(f"[WHMCS Discord Auto-Reply] Reply successfully added using internal_id={internal_id}")
+                            reply_success = True
+                        else:
+                            error_msg = response.get("message", "No error message")
+                            log.warning(f"[WHMCS Discord Auto-Reply] API call failed for internal_id={internal_id}: {error_msg}")
+                    except Exception as e:
+                        log.warning(f"[WHMCS Discord Auto-Reply] Exception for internal_id={internal_id}: {e}")
+                else:
+                    log.error(f"[WHMCS Discord Auto-Reply] No internal ticket ID found in ticket data: {found_ticket}")
 
                 if reply_success:
                     log.info(f"[WHMCS Discord Auto-Reply] Reply successfully added to WHMCS, adding ✅ reaction")
@@ -2604,26 +2603,27 @@ class WHMCS(commands.Cog):
                 # Try all possible ticket ID fields for reply
                 reply_success = False
                 tried_ids = []
-                id_fields = ["id", "ticketid", "ticketnum", "tid", "maskid"]
+                # IMPORTANT: AddTicketReply API requires internal ticketid (database ID)
+                internal_id = ticket.get("id") or ticket.get("ticketid")
                 debug_ticket_fields = "\n".join([f"{k}: {v}" for k, v in ticket.items()])
-                for id_field in id_fields:
-                    ticket_id_value = ticket.get(id_field)
-                    if ticket_id_value:
-                        tried_ids.append(f"{id_field}={ticket_id_value}")
-                        try:
-                            debug_payload = {
-                                "id_field": id_field,
-                                "ticket_id_value": ticket_id_value,
-                                "admin_username": admin_username,
-                                "message": message[:100] + ("..." if len(message) > 100 else "")
-                            }
-                            response = await api_client.add_ticket_reply(str(ticket_id_value), message, admin_username, id_field=id_field)
-                            log.info(f"Attempted add_ticket_reply with {id_field}={ticket_id_value}, payload={debug_payload}, response={response}")
-                            if response.get("result") == "success":
-                                reply_success = True
-                                break
-                        except Exception as e:
-                            log.warning(f"Failed to add reply using {id_field}={ticket_id_value}: {e}\nTicket fields:\n{debug_ticket_fields}")
+                if internal_id:
+                    tried_ids.append(f"internal_id={internal_id}")
+                    try:
+                        debug_payload = {
+                            "internal_id": internal_id,
+                            "admin_username": admin_username,
+                            "message": message[:100] + ("..." if len(message) > 100 else "")
+                        }
+                        response = await api_client.add_ticket_reply(str(internal_id), message, admin_username)
+                        log.info(f"Attempted add_ticket_reply with internal_id={internal_id}, payload={debug_payload}, response={response}")
+                        if response.get("result") == "success":
+                            reply_success = True
+                        else:
+                            log.warning(f"Failed to add reply using internal_id={internal_id}: {response}")
+                    except Exception as e:
+                        log.warning(f"Failed to add reply using internal_id={internal_id}: {e}\nTicket fields:\n{debug_ticket_fields}")
+                else:
+                    log.error(f"No internal ticket ID found in ticket data: {debug_ticket_fields}")
 
                 if reply_success:
                     embed = self._create_embed(
