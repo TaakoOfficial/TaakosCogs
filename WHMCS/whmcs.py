@@ -100,6 +100,9 @@ class WHMCS(commands.Cog):
             ticket_mappings = await self.config.guild(guild).ticket_mappings()
             # New format: {channel_id: {"ticket_ids": {...}}}
             for channel_id, info in ticket_mappings.items():
+                if not isinstance(channel_id, int):
+                    log.warning(f"Skipping invalid ticket_mappings key (not int): {channel_id}")
+                    continue
                 if isinstance(info, dict) and "ticket_ids" in info:
                     ticket_ids = info["ticket_ids"]
                     channel = guild.get_channel(channel_id)
