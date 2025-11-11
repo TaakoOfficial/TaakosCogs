@@ -1587,22 +1587,51 @@ class WHMCS(commands.Cog):
             log.exception("Error in admin_test command")
             await self._send_error(ctx, f"❌ Connection test failed: {e}")
 
-    @whmcs_admin.command(name="logticketmappings")
-    async def admin_logticketmappings(self, ctx: commands.Context):
+    @whmcs_admin.command(name="showticketmappings")
+    async def admin_showticketmappings(self, ctx: commands.Context):
         """
-        Log the raw ticket_mappings config and the types of its keys and values for the current guild.
+        Send the raw ticket_mappings config and the types of its keys and values for the current guild as a message.
         """
         if not await self._check_permissions(ctx, "admin"):
             await ctx.send("You don't have permission to use this command.", ephemeral=True if ctx.interaction else False)
             return
         ticket_mappings = await self.config.guild(ctx.guild).ticket_mappings()
-        log.info(f"[WHMCS LOGTICKETMAPPINGS] Raw ticket_mappings: {ticket_mappings!r}")
-        log.info(f"[WHMCS LOGTICKETMAPPINGS] Key types: {[type(k) for k in ticket_mappings.keys()]}")
-        log.info(f"[WHMCS LOGTICKETMAPPINGS] Value types: {[type(v) for v in ticket_mappings.values()]}")
-        # Also log key-value type pairs for clarity
-        log.info(f"[WHMCS LOGTICKETMAPPINGS] Key/Value type pairs: {[(type(k), type(v)) for k, v in ticket_mappings.items()]}")
-        # Do not send anything to Discord
+        key_types = [type(k).__name__ for k in ticket_mappings.keys()]
+        value_types = [type(v).__name__ for v in ticket_mappings.values()]
+        key_value_types = [(type(k).__name__, type(v).__name__) for k, v in ticket_mappings.items()]
 
+        # Prepare output
+        import pprint
+        pp = pprint.PrettyPrinter(width=80, compact=True)
+        mappings_str = pp.pformat(ticket_mappings)
+        key_types_str = f"Key types: {key_types}"
+        value_types_str = f"Value types: {value_types}"
+        key_value_types_str = f"Key/Value type pairs: {key_value_types}"
+
+        # Discord message limit is 2000 chars; split if needed
+        output_blocks = []
+        output_blocks.append("Raw ticket_mappings:\n" + mappings_str)
+        output_blocks.append(key_types_str)
+        output_blocks.append(value_types_str)
+        output_blocks.append(key_value_types_str)
+
+        msg = "\n\n".join(output_blocks)
+        max_len = 1900  # Leave room for code block or formatting
+
+        if len(msg) <= 2000:
+            await ctx.send(f"```py\n{msg[:1990]}```")
+        else:
+            # Split into multiple messages if too long
+            current = ""
+            for block in output_blocks:
+                block = f"{block}\n\n"
+                if len(current) + len(block) > max_len:
+                    await ctx.send(f"```py\n{current.strip()}```")
+                    current = block
+                else:
+                    current += block
+            if current.strip():
+                await ctx.send(f"```py\n{current.strip()}```")
     @whmcs_admin.command(name="debug")
     async def admin_debug(self, ctx: commands.Context, ticket_id: str):
         """Debug ticket API calls to identify WHMCS configuration issues.
