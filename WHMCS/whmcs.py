@@ -589,16 +589,19 @@ class WHMCS(commands.Cog):
                         tried_ids.append(f"{id_field}={ticket_id_value}")
                         try:
                             response = await api_client.add_ticket_reply(str(ticket_id_value), message.content, admin_username, id_field=id_field)
-                            log.info(f"Attempted add_ticket_reply with {id_field}={ticket_id_value}, response={response}")
+                            log.info(f"[WHMCS Discord Auto-Reply] Tried add_ticket_reply with {id_field}={ticket_id_value}, response={response}")
                             if response.get("result") == "success":
                                 reply_success = True
                                 break
+                            else:
+                                log.warning(f"[WHMCS Discord Auto-Reply] API call failed for {id_field}={ticket_id_value}: {response}")
                         except Exception as e:
-                            log.warning(f"Failed to add reply using {id_field}={ticket_id_value}: {e}")
+                            log.warning(f"[WHMCS Discord Auto-Reply] Exception for {id_field}={ticket_id_value}: {e}")
 
                 if reply_success:
                     await message.add_reaction("✅")
                 else:
+                    log.error(f"[WHMCS Discord Auto-Reply] All attempts failed. Tried: {tried_ids}. Message: {message.content}")
                     await message.channel.send(
                         f"⚠️ Failed to add your reply to the WHMCS ticket.\n"
                         f"Tried ticket IDs: {tried_ids}\n"
