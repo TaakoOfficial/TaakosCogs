@@ -69,7 +69,8 @@ class WHMCS(commands.Cog):
         self._api_clients: Dict[int, WHMCSAPIClient] = {}
         
         # Cache for ticket channels per guild
-        self._ticket_channels: Dict[int, Dict[str, int]] = {}  # {guild_id: {ticket_id: channel_id}}
+        # {guild_id: {channel_id: {"ticket_ids": {...}}}}
+        self._ticket_channels: Dict[int, Dict[int, Dict[str, Any]]] = {}
     
     async def cog_unload(self):
         """Clean up when cog is unloaded."""
@@ -295,16 +296,40 @@ class WHMCS(commands.Cog):
         
         # Load existing mappings from config
         ticket_mappings = await self.config.guild(guild).ticket_mappings()
-        
-        if ticket_id in ticket_mappings:
-            channel = guild.get_channel(ticket_mappings[ticket_id])
-            if channel:
-                return channel
-            else:
-                # Channel was deleted, remove from mappings
-                async with self.config.guild(guild).ticket_mappings() as mappings:
-                    if ticket_id in mappings:
-                        del mappings[ticket_id]
+
+        # ticket_mappings: {channel_id: {"ticket_ids": {...}}}
+        # Backward compatibility: if mapping is str, convert to new format
+        for k, v in list(ticket_mappings.items()):
+            if isinstance(v, int):
+                # Old format: {ticket_id: channel_id}
+                channel = guild.get_channel(v)
+                if channel:
+                    # Try to recover ticket info from ticket_data
+                    ticket_ids = {
+                        "ticketid": ticket_data.get("ticketid"),
+                        "ticketnum": ticket_data.get("ticketnum"),
+                        "tid": ticket_data.get("tid"),
+                        "maskid": ticket_data.get("maskid"),
+                    }
+                    async with self.config.guild(guild).ticket_mappings() as mappings:
+                        del mappings[k]
+                        mappings[channel.id] = {"ticket_ids": ticket_ids}
+                    self._ticket_channels.setdefault(guild.id, {})[channel.id] = {"ticket_ids": ticket_ids}
+                    return channel
+
+        # New format: {channel_id: {"ticket_ids": {...}}}
+        for channel_id, info in ticket_mappings.items():
+            if isinstance(info, dict) and "ticket_ids" in info:
+                ids = info["ticket_ids"]
+                if any(str(ticket_data.get(f)) == str(ids.get(f)) for f in ["ticketid", "ticketnum", "tid", "maskid"]):
+                    channel = guild.get_channel(channel_id)
+                    if channel:
+                        return channel
+                    else:
+                        # Channel was deleted, remove from mappings
+                        async with self.config.guild(guild).ticket_mappings() as mappings:
+                            if channel_id in mappings:
+                                del mappings[channel_id]
         
         # Create new channel
         try:
@@ -344,12 +369,18 @@ class WHMCS(commands.Cog):
                 topic=f"WHMCS Support Ticket {ticket_id} - {ticket_data.get('subject', 'No Subject')}"
             )
             
-            # Store mapping
+            # Store mapping: {channel_id: {"ticket_ids": {...}}}
+            ticket_ids = {
+                "ticketid": ticket_data.get("ticketid"),
+                "ticketnum": ticket_data.get("ticketnum"),
+                "tid": ticket_data.get("tid"),
+                "maskid": ticket_data.get("maskid"),
+            }
             async with self.config.guild(guild).ticket_mappings() as mappings:
-                mappings[ticket_id] = channel.id
-            
-            self._ticket_channels[guild.id][ticket_id] = channel.id
-            
+                mappings[channel.id] = {"ticket_ids": ticket_ids}
+
+            self._ticket_channels.setdefault(guild.id, {})[channel.id] = {"ticket_ids": ticket_ids}
+
             # Send initial ticket information to channel
             await self._send_ticket_info_to_channel(channel, ticket_id, ticket_data)
             
@@ -445,37 +476,50 @@ class WHMCS(commands.Cog):
         
         # Check if this is a ticket channel
         ticket_mappings = await self.config.guild(message.guild).ticket_mappings()
-        ticket_id = None
-        
-        for tid, channel_id in ticket_mappings.items():
-            if channel_id == message.channel.id:
-                ticket_id = tid
-                break
-        
-        if not ticket_id:
+        ticket_ids = None
+
+        # New format: {channel_id: {"ticket_ids": {...}}}
+        info = ticket_mappings.get(message.channel.id)
+        if info and isinstance(info, dict) and "ticket_ids" in info:
+            ticket_ids = info["ticket_ids"]
+        else:
+            # Backward compatibility: old mapping
+            for tid, channel_id in ticket_mappings.items():
+                if channel_id == message.channel.id:
+                    ticket_ids = {"tid": tid}
+                    break
+
+        if not ticket_ids:
             return
-        
+
         # Check if user has permission to reply to tickets
         ctx = await self.bot.get_context(message)
         if not await self._check_permissions(ctx, "support"):
             return
-        
+
         # Get API client
         api_client = await self._get_api_client(message.guild)
         if not api_client:
             return
-        
+
         try:
-            # Add reply to WHMCS ticket (robust: try all possible ticket ID fields)
+            # Try all mapped ticket IDs for lookup
             async with api_client:
                 admin_username = f"Discord-{message.author.display_name}"
-                # Lookup the ticket to get all possible ID fields
-                ticket_resp = await api_client.get_ticket(ticket_id)
-                ticket = ticket_resp.get("ticket")
-                if not ticket:
+                found_ticket = None
+                for id_field in ["ticketid", "ticketnum", "tid", "maskid"]:
+                    ticket_id_value = ticket_ids.get(id_field)
+                    if ticket_id_value:
+                        ticket_resp = await api_client.get_ticket(str(ticket_id_value))
+                        ticket = ticket_resp.get("ticket")
+                        if ticket:
+                            found_ticket = ticket
+                            break
+
+                if not found_ticket:
                     await message.channel.send(
                         f"⚠️ Failed to add your reply to the WHMCS ticket.\n"
-                        f"Ticket {ticket_id} not found in WHMCS.\n"
+                        f"Ticket not found in WHMCS using any mapped ID: {ticket_ids}\n"
                         f"API user: {admin_username}\n"
                         f"Please verify the ticket exists in WHMCS and the API user has department access."
                     )
@@ -486,7 +530,7 @@ class WHMCS(commands.Cog):
                 tried_ids = []
                 id_fields = ["id", "ticketid", "ticketnum", "tid", "maskid"]
                 for id_field in id_fields:
-                    ticket_id_value = ticket.get(id_field)
+                    ticket_id_value = found_ticket.get(id_field)
                     if ticket_id_value:
                         tried_ids.append(f"{id_field}={ticket_id_value}")
                         try:
@@ -510,7 +554,7 @@ class WHMCS(commands.Cog):
                     await message.add_reaction("❌")
 
         except Exception as e:
-            log.exception(f"Failed to auto-reply to ticket {ticket_id}")
+            log.exception(f"Failed to auto-reply to ticket channel {message.channel.id}")
             try:
                 await message.add_reaction("❌")
             except:
