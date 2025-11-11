@@ -338,7 +338,7 @@ class WHMCSAPIClient:
                 log.info(f"WHMCS API: Trying GetTicket with ticketid={clean_ticket_id}")
                 resp = await self._make_request('GetTicket', {'ticketid': clean_ticket_id})
                 log.info(f"WHMCS API: GetTicket ticketid response: {resp}")
-                if resp.get("ticket"):
+                if resp.get("result") == "success":
                     log.info(f"WHMCS API: Found ticket using ticketid={clean_ticket_id}")
                     return resp
             except Exception as e:
@@ -348,7 +348,7 @@ class WHMCSAPIClient:
             log.info(f"WHMCS API: Trying GetTicket with ticketnum={clean_ticket_id}")
             resp = await self._make_request('GetTicket', {'ticketnum': clean_ticket_id})
             log.info(f"WHMCS API: GetTicket ticketnum response: {resp}")
-            if resp.get("ticket"):
+            if resp.get("result") == "success":
                 log.info(f"WHMCS API: Found ticket using ticketnum={clean_ticket_id}")
                 return resp
         except Exception as e:
