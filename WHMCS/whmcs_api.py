@@ -276,7 +276,7 @@ class WHMCSAPIClient:
         Returns:
             Dictionary containing invoice details
         """
-        parameters = {'invoiceid': invoice_id}
+        parameters = {'invoiceid': str(invoice_id)}
         return await self._make_request('GetInvoice', parameters)
     
     async def add_credit(self, client_id: int, amount: float, description: str) -> Dict[str, Any]:

@@ -643,6 +643,27 @@ class WHMCS(commands.Cog):
         log.info(f"[WHMCS Discord Auto-Reply] Current ticket_mappings keys: {list(ticket_mappings.keys())}")
         log.info(f"[WHMCS Discord Auto-Reply] Current ticket_mappings types: {[type(k) for k in ticket_mappings.keys()]}")
 
+        # Convert string keys to integers if needed (Config system may convert ints to strings)
+        converted_mappings = {}
+        for key, value in ticket_mappings.items():
+            try:
+                if isinstance(key, str):
+                    int_key = int(key)
+                    converted_mappings[int_key] = value
+                    log.info(f"[WHMCS Discord Auto-Reply] Converting string key {key} to integer {int_key}")
+                else:
+                    converted_mappings[key] = value
+            except (ValueError, TypeError):
+                log.warning(f"[WHMCS Discord Auto-Reply] Skipping invalid mapping key: {key}")
+        
+        # Update the mappings if any conversions were made
+        if converted_mappings != ticket_mappings:
+            async with self.config.guild(message.guild).ticket_mappings() as mappings:
+                mappings.clear()
+                mappings.update(converted_mappings)
+            log.info(f"[WHMCS Discord Auto-Reply] Updated ticket mappings with integer keys")
+            ticket_mappings = converted_mappings
+
         # New format: {channel_id: {"ticket_ids": {...}}}
         info = ticket_mappings.get(message.channel.id)
         if info and isinstance(info, dict) and "ticket_ids" in info:
