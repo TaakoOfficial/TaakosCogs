@@ -467,6 +467,22 @@ class WHMCS(commands.Cog):
                     self._ticket_channels.setdefault(guild.id, {})[channel.id] = {"ticket_ids": ticket_ids}
                     return channel
 
+        # Normalize all ticket_mappings keys to int after any creation/update
+        ticket_mappings = await self.config.guild(guild).ticket_mappings()
+        converted_mappings = {}
+        for key, value in ticket_mappings.items():
+            try:
+                int_key = int(key)
+                converted_mappings[int_key] = value
+            except (ValueError, TypeError):
+                # Skip keys that cannot be converted to int
+                continue
+        if converted_mappings != ticket_mappings:
+            async with self.config.guild(guild).ticket_mappings() as mappings:
+                mappings.clear()
+                mappings.update(converted_mappings)
+            ticket_mappings = converted_mappings
+
         # New format: {channel_id: {"ticket_ids": {...}}}
         for channel_id, info in ticket_mappings.items():
             if isinstance(info, dict) and "ticket_ids" in info:
@@ -2737,12 +2753,12 @@ class WHMCS(commands.Cog):
         if len(message) < 10:
             await self._send_error(ctx, "Reply message must be at least 10 characters long.")
             return
-
+        
         api_client = await self._get_api_client(ctx.guild)
         if not api_client:
             await self._send_error(ctx, "WHMCS is not configured. Use `[p]whmcs admin config` to set up.")
             return
-
+        
         try:
             async with api_client:
                 admin_username = f"Discord-{ctx.author.display_name}"
@@ -2777,6 +2793,20 @@ class WHMCS(commands.Cog):
                         log.warning(f"Failed to add reply using internal_id={internal_id}: {e}\nTicket fields:\n{debug_ticket_fields}")
                 else:
                     log.error(f"No internal ticket ID found in ticket data: {debug_ticket_fields}")
+
+                # Normalize all ticket_mappings keys to int after a reply
+                ticket_mappings = await self.config.guild(ctx.guild).ticket_mappings()
+                converted_mappings = {}
+                for key, value in ticket_mappings.items():
+                    try:
+                        int_key = int(key)
+                        converted_mappings[int_key] = value
+                    except (ValueError, TypeError):
+                        continue
+                if converted_mappings != ticket_mappings:
+                    async with self.config.guild(ctx.guild).ticket_mappings() as mappings:
+                        mappings.clear()
+                        mappings.update(converted_mappings)
 
                 if reply_success:
                     embed = self._create_embed(
