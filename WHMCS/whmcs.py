@@ -98,10 +98,27 @@ class WHMCS(commands.Cog):
             if not api_client:
                 continue
             ticket_mappings = await self.config.guild(guild).ticket_mappings()
+            # Clean up corrupted mappings at runtime
+            cleaned = False
+            keys_to_remove = []
+            for channel_id in list(ticket_mappings.keys()):
+                if not isinstance(channel_id, int):
+                    log.warning(f"Removing invalid ticket_mappings key (not int): {channel_id}")
+                    keys_to_remove.append(channel_id)
+                elif isinstance(channel_id, dict):
+                    log.warning(f"Removing corrupted ticket_mappings key (dict): {channel_id}")
+                    keys_to_remove.append(channel_id)
+            if keys_to_remove:
+                async with self.config.guild(guild).ticket_mappings() as mappings:
+                    for k in keys_to_remove:
+                        del mappings[k]
+                cleaned = True
+            if cleaned:
+                # Reload after cleaning
+                ticket_mappings = await self.config.guild(guild).ticket_mappings()
             # New format: {channel_id: {"ticket_ids": {...}}}
             for channel_id, info in ticket_mappings.items():
                 if not isinstance(channel_id, int):
-                    log.warning(f"Skipping invalid ticket_mappings key (not int): {channel_id}")
                     continue
                 if isinstance(channel_id, dict) or isinstance(info, dict) and not "ticket_ids" in info:
                     log.warning(f"Skipping corrupted ticket_mappings entry: key={channel_id}, value={info}")
@@ -130,8 +147,10 @@ class WHMCS(commands.Cog):
                     # Get last posted reply timestamp from channel history or config
                     last_reply_time = await self.config.guild(guild).get_raw(f"last_reply_time_{ticket_id}", default=None)
                     if not ticket or not ticket.get("replies"):
+                        log.info(f"[WHMCS SYNC] No replies found for ticket {ticket_id} in channel {channel_id}")
                         continue
                     replies = ticket["replies"]
+                    log.info(f"[WHMCS SYNC] All replies for ticket {ticket_id} in channel {channel_id}: {replies}")
                     if isinstance(replies, dict) and "reply" in replies:
                         replies = replies["reply"]
                     if not isinstance(replies, list):
@@ -141,6 +160,7 @@ class WHMCS(commands.Cog):
                         date = reply.get("date")
                         if last_reply_time is None or (date and date > last_reply_time):
                             new_replies.append(reply)
+                    log.info(f"[WHMCS SYNC] New replies to post for ticket {ticket_id} in channel {channel_id}: {new_replies}, last_reply_time={last_reply_time}")
                     id_fields = ["id", "ticketid", "ticketnum", "tid", "maskid"]
                     for reply in new_replies:
                         author = reply.get("admin") or reply.get("name", "Unknown")
@@ -158,6 +178,7 @@ class WHMCS(commands.Cog):
                             value=f"```{rmsg}```",
                             inline=False
                         )
+                        log.info(f"[WHMCS SYNC] Posting reply to Discord channel {channel_id}: author={author}, date={date}, message={rmsg[:100]}")
                         await channel.send(embed=reply_embed)
                         await self.config.guild(guild).set_raw(f"last_reply_time_{ticket_id}", value=date)
                 else:
@@ -594,6 +615,8 @@ class WHMCS(commands.Cog):
                     ticket_id_value = found_ticket.get(id_field)
                     if ticket_id_value:
                         tried_ids.append(f"{id_field}={ticket_id_value}")
+                        payload_preview = message.content[:100] + ("..." if len(message.content) > 100 else "")
+                        log.info(f"[WHMCS Discord Auto-Reply] Attempting add_ticket_reply: id_field={id_field}, ticket_id_value={ticket_id_value}, admin_username={admin_username}, message_preview={payload_preview}")
                         try:
                             response = await api_client.add_ticket_reply(str(ticket_id_value), message.content, admin_username, id_field=id_field)
                             log.info(f"[WHMCS Discord Auto-Reply] Tried add_ticket_reply with {id_field}={ticket_id_value}, response={response}")
