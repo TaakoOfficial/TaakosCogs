@@ -1587,6 +1587,22 @@ class WHMCS(commands.Cog):
             log.exception("Error in admin_test command")
             await self._send_error(ctx, f"❌ Connection test failed: {e}")
 
+    @whmcs_admin.command(name="logticketmappings")
+    async def admin_logticketmappings(self, ctx: commands.Context):
+        """
+        Log the raw ticket_mappings config and the types of its keys and values for the current guild.
+        """
+        if not await self._check_permissions(ctx, "admin"):
+            await ctx.send("You don't have permission to use this command.", ephemeral=True if ctx.interaction else False)
+            return
+        ticket_mappings = await self.config.guild(ctx.guild).ticket_mappings()
+        log.info(f"[WHMCS LOGTICKETMAPPINGS] Raw ticket_mappings: {ticket_mappings!r}")
+        log.info(f"[WHMCS LOGTICKETMAPPINGS] Key types: {[type(k) for k in ticket_mappings.keys()]}")
+        log.info(f"[WHMCS LOGTICKETMAPPINGS] Value types: {[type(v) for v in ticket_mappings.values()]}")
+        # Also log key-value type pairs for clarity
+        log.info(f"[WHMCS LOGTICKETMAPPINGS] Key/Value type pairs: {[(type(k), type(v)) for k, v in ticket_mappings.items()]}")
+        # Do not send anything to Discord
+
     @whmcs_admin.command(name="debug")
     async def admin_debug(self, ctx: commands.Context, ticket_id: str):
         """Debug ticket API calls to identify WHMCS configuration issues.
