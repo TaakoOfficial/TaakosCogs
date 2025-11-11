@@ -103,6 +103,9 @@ class WHMCS(commands.Cog):
                 if not isinstance(channel_id, int):
                     log.warning(f"Skipping invalid ticket_mappings key (not int): {channel_id}")
                     continue
+                if isinstance(channel_id, dict) or isinstance(info, dict) and not "ticket_ids" in info:
+                    log.warning(f"Skipping corrupted ticket_mappings entry: key={channel_id}, value={info}")
+                    continue
                 if isinstance(info, dict) and "ticket_ids" in info:
                     ticket_ids = info["ticket_ids"]
                     channel = guild.get_channel(channel_id)
@@ -167,7 +170,7 @@ class WHMCS(commands.Cog):
                     async with api_client:
                         ticket = None
                         try:
-                            resp = await api_client.get_ticket(ticket_id)
+                            resp = await api_client.get_ticket(str(ticket_id))
                             ticket = resp.get("ticket")
                         except Exception:
                             continue
@@ -585,7 +588,8 @@ class WHMCS(commands.Cog):
 
                 reply_success = False
                 tried_ids = []
-                id_fields = ["id", "ticketid", "ticketnum", "tid", "maskid"]
+                # Prefer visible ticket IDs for reply (not just internal 'id')
+                id_fields = ["ticketnum", "tid", "maskid", "id", "ticketid"]
                 for id_field in id_fields:
                     ticket_id_value = found_ticket.get(id_field)
                     if ticket_id_value:
