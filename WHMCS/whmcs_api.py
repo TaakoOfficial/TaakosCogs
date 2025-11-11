@@ -326,27 +326,35 @@ class WHMCSAPIClient:
             ticket_id: The ticket ID to retrieve (can be numeric, alphanumeric like GLY-907775, or with # prefix like #WYI-894412)
             
         Returns:
-            Dictionary containing ticket details
+            Dictionary containing ticket details or empty dict if not found
         """
         # Clean up ticket ID - remove # prefix if present
         clean_ticket_id = ticket_id.lstrip('#').strip()
+        log.info(f"WHMCS API: Looking up ticket {clean_ticket_id}")
 
         # Try ticketid if numeric, else ticketnum (per WHMCS API docs)
         if clean_ticket_id.isdigit():
             try:
+                log.info(f"WHMCS API: Trying GetTicket with ticketid={clean_ticket_id}")
                 resp = await self._make_request('GetTicket', {'ticketid': clean_ticket_id})
+                log.info(f"WHMCS API: GetTicket ticketid response: {resp}")
                 if resp.get("ticket"):
+                    log.info(f"WHMCS API: Found ticket using ticketid={clean_ticket_id}")
                     return resp
-            except Exception:
-                pass
+            except Exception as e:
+                log.warning(f"WHMCS API: GetTicket with ticketid={clean_ticket_id} failed: {e}")
         # Always try ticketnum as fallback (for alphanumeric or if numeric fails)
         try:
+            log.info(f"WHMCS API: Trying GetTicket with ticketnum={clean_ticket_id}")
             resp = await self._make_request('GetTicket', {'ticketnum': clean_ticket_id})
+            log.info(f"WHMCS API: GetTicket ticketnum response: {resp}")
             if resp.get("ticket"):
+                log.info(f"WHMCS API: Found ticket using ticketnum={clean_ticket_id}")
                 return resp
-        except Exception:
-            pass
+        except Exception as e:
+            log.warning(f"WHMCS API: GetTicket with ticketnum={clean_ticket_id} failed: {e}")
         # If all fail, return empty dict (not found)
+        log.warning(f"WHMCS API: Ticket {clean_ticket_id} not found")
         return {}
     
     async def add_ticket_reply(self, ticket_id: str, message: str, admin_username: Optional[str] = None, id_field: Optional[str] = None) -> Dict[str, Any]:
@@ -369,37 +377,46 @@ class WHMCSAPIClient:
 
         # Clean up ticket ID - remove # prefix if present
         clean_ticket_id = ticket_id.lstrip('#').strip()
+        log.info(f"WHMCS API: Adding reply to ticket {clean_ticket_id}")
 
         # According to WHMCS API docs, AddTicketReply requires 'ticketid' (internal numeric ID)
         # Not ticketnum, tid, or maskid. We must use the internal database ID.
         if id_field and id_field == 'ticketid':
             # Use provided ticketid directly
             parameters['ticketid'] = clean_ticket_id
+            log.info(f"WHMCS API: Using provided ticketid field: {clean_ticket_id}")
         elif clean_ticket_id.isdigit():
             # If clean_ticket_id is numeric, assume it's the internal ticketid
             parameters['ticketid'] = clean_ticket_id
+            log.info(f"WHMCS API: Using numeric ticket_id as ticketid: {clean_ticket_id}")
         else:
             # If not numeric, we need to look up the internal ticketid first
             # This is the correct approach according to WHMCS API documentation
             try:
+                log.info(f"WHMCS API: Looking up ticket {clean_ticket_id} to get internal ID")
                 ticket_resp = await self.get_ticket(clean_ticket_id)
                 if ticket_resp.get("ticket"):
                     internal_id = ticket_resp["ticket"].get("id") or ticket_resp["ticket"].get("ticketid")
                     if internal_id:
                         parameters['ticketid'] = str(internal_id)
-                        log.info(f"Resolved ticket ID {clean_ticket_id} to internal ID {internal_id}")
+                        log.info(f"WHMCS API: Resolved ticket ID {clean_ticket_id} to internal ID {internal_id}")
                     else:
+                        log.error(f"WHMCS API: Could not find internal ticket ID for {clean_ticket_id}")
                         return {"result": "error", "message": f"Could not find internal ticket ID for {clean_ticket_id}"}
                 else:
+                    log.error(f"WHMCS API: Ticket {clean_ticket_id} not found")
                     return {"result": "error", "message": f"Ticket {clean_ticket_id} not found"}
             except Exception as e:
+                log.error(f"WHMCS API: Failed to lookup ticket {clean_ticket_id}: {e}")
                 return {"result": "error", "message": f"Failed to lookup ticket {clean_ticket_id}: {e}"}
 
         try:
+            log.info(f"WHMCS API: Calling AddTicketReply with parameters: {parameters}")
             resp = await self._make_request('AddTicketReply', parameters)
+            log.info(f"WHMCS API: AddTicketReply response: {resp}")
             return resp
         except Exception as e:
-            log.warning(f"AddTicketReply failed with parameters {parameters}: {e}")
+            log.error(f"WHMCS API: AddTicketReply failed with parameters {parameters}: {e}")
             return {"result": "error", "message": f"AddTicketReply failed: {e}"}
     
     # System Methods

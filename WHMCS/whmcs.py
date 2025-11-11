@@ -715,7 +715,19 @@ class WHMCS(commands.Cog):
                         if ticket:
                             found_ticket = ticket
                             log.info(f"[WHMCS Discord Auto-Reply] Found ticket using {id_field}={ticket_id_value}")
+                            log.info(f"[WHMCS Discord Auto-Reply] Ticket data: {ticket}")
                             break
+                        else:
+                            # Enhanced debugging for empty responses
+                            if not ticket_resp:
+                                log.warning(f"[WHMCS Discord Auto-Reply] Empty response for {id_field}={ticket_id_value}")
+                            else:
+                                # Check if there's an error message
+                                error_msg = ticket_resp.get("message")
+                                if error_msg:
+                                    log.warning(f"[WHMCS Discord Auto-Reply] Error for {id_field}={ticket_id_value}: {error_msg}")
+                                else:
+                                    log.warning(f"[WHMCS Discord Auto-Reply] No ticket found for {id_field}={ticket_id_value}, response: {ticket_resp}")
 
                 if not found_ticket:
                     log.error(f"[WHMCS Discord Auto-Reply] No ticket found using any ID: {ticket_ids}")
@@ -738,6 +750,8 @@ class WHMCS(commands.Cog):
                     payload_preview = message.content[:100] + ("..." if len(message.content) > 100 else "")
                     log.info(f"[WHMCS Discord Auto-Reply] Attempting add_ticket_reply using internal ID: {internal_id}, admin_username={admin_username}, message_preview={payload_preview}")
                     try:
+                        # Try multiple approaches to add the reply
+                        # First, try with the internal ID directly
                         response = await api_client.add_ticket_reply(str(internal_id), message.content, admin_username)
                         log.info(f"[WHMCS Discord Auto-Reply] API response for internal_id={internal_id}: {response}")
                         if response.get("result") == "success":
@@ -746,6 +760,20 @@ class WHMCS(commands.Cog):
                         else:
                             error_msg = response.get("message", "No error message")
                             log.warning(f"[WHMCS Discord Auto-Reply] API call failed for internal_id={internal_id}: {error_msg}")
+                            
+                            # If that fails, try with ticketnum if available
+                            ticketnum = found_ticket.get("ticketnum")
+                            if ticketnum and ticketnum != str(internal_id):
+                                log.info(f"[WHMCS Discord Auto-Reply] Trying fallback with ticketnum={ticketnum}")
+                                fallback_response = await api_client.add_ticket_reply(ticketnum, message.content, admin_username)
+                                log.info(f"[WHMCS Discord Auto-Reply] Fallback API response for ticketnum={ticketnum}: {fallback_response}")
+                                if fallback_response.get("result") == "success":
+                                    log.info(f"[WHMCS Discord Auto-Reply] Reply successfully added using ticketnum={ticketnum}")
+                                    reply_success = True
+                                    tried_ids.append(f"ticketnum={ticketnum}")
+                                else:
+                                    fallback_error = fallback_response.get("message", "No error message")
+                                    log.warning(f"[WHMCS Discord Auto-Reply] Fallback API call failed for ticketnum={ticketnum}: {fallback_error}")
                     except Exception as e:
                         log.warning(f"[WHMCS Discord Auto-Reply] Exception for internal_id={internal_id}: {e}")
                 else:
