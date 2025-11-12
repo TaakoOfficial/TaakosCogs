@@ -54,16 +54,27 @@ class WHMCSAPIClient:
         # Rate limiting
         self.rate_limit = 60  # requests per minute
         self.request_timestamps: List[float] = []
-    
+
+        # Internal context manager state
+        self._entered: bool = False
     async def __aenter__(self):
         """Async context manager entry."""
+        if hasattr(self, "_entered") and self._entered:
+            log.warning("WHMCSAPIClient: __aenter__ called while already entered.")
+            raise RuntimeError("WHMCSAPIClient context already entered.")
         self.session = aiohttp.ClientSession(timeout=self.timeout)
+        self._entered = True
+        log.info("WHMCSAPIClient: Async context manager entered, session initialized.")
         return self
-    
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         """Async context manager exit."""
         if self.session:
             await self.session.close()
+            log.info("WHMCSAPIClient: Session closed on context exit.")
+        self.session = None
+        self._entered = False
+        log.info("WHMCSAPIClient: Async context manager exited, state reset.")
+    
     
     def set_api_credentials(self, identifier: str, secret: str, access_key: Optional[str] = None):
         """Set API credentials for authentication.
@@ -143,35 +154,42 @@ class WHMCSAPIClient:
     
     async def _make_request(self, action: str, parameters: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Make an API request to WHMCS.
-        
+
         Args:
             action: The WHMCS API action to perform
             parameters: Additional parameters for the API call
-            
+
         Returns:
             The API response as a dictionary
-            
+
         Raises:
             WHMCSAPIError: If the API request fails
             WHMCSAuthenticationError: If authentication fails
             WHMCSRateLimitError: If rate limit is exceeded
         """
-        if not self.session:
-            raise WHMCSAPIError("Session not initialized. Use async context manager.")
-        
+        if not self._entered or not self.session:
+            log.error("WHMCSAPIClient: Attempted API call outside async context manager.")
+            raise WHMCSAPIError(
+                "WHMCSAPIClient session not initialized. "
+                "All API calls must be made within an 'async with' block. "
+                "Example:\n"
+                "async with WHMCSAPIClient(...) as client:\n"
+                "    await client.get_clients()"
+            )
+
         await self._check_rate_limit()
-        
+
         data = self._build_request_data(action, parameters)
         log.info(f"WHMCS API: Full request payload for action '{action}': {data}")
-        
+
         try:
             async with self.session.post(self.api_url, data=data) as response:
                 response_data = await response.json()
-                
+
                 # Check for API errors
                 if response_data.get('result') == 'error':
                     error_msg = response_data.get('message', 'Unknown API error')
-                    
+
                     # Handle specific error types
                     if 'authentication' in error_msg.lower():
                         raise WHMCSAuthenticationError(error_msg)
@@ -179,14 +197,14 @@ class WHMCSAPIClient:
                         raise WHMCSRateLimitError(error_msg)
                     else:
                         raise WHMCSAPIError(error_msg)
-                
+
                 return response_data
-                
+
         except aiohttp.ClientError as e:
             raise WHMCSAPIError(f"HTTP request failed: {e}")
         except Exception as e:
             raise WHMCSAPIError(f"Unexpected error: {e}")
-    
+
     # Client Management Methods
     async def get_clients(self, limit: int = 25, offset: int = 0, search: Optional[str] = None) -> Dict[str, Any]:
         """Get a list of clients.
