@@ -65,8 +65,7 @@ class WHMCS(commands.Cog):
         
         self.config.register_guild(**default_guild)
         
-        # Cache for API clients per guild
-        self._api_clients: Dict[int, WHMCSAPIClient] = {}
+        # Removed API client cache to ensure fresh session/context per operation
         
         # Cache for ticket channels per guild
         # {guild_id: {channel_id: {"ticket_ids": {...}}}}
@@ -287,39 +286,27 @@ class WHMCS(commands.Cog):
                             await channel.send(embed=reply_embed)
                             await self.config.guild(guild).set_raw(f"last_reply_time_{ticket_id}", value=date)
     async def _get_api_client(self, guild: discord.Guild) -> Optional[WHMCSAPIClient]:
-        """Get or create an API client for the guild.
-        
+        """Always create a new API client for the guild (no caching).
+
         Args:
             guild: The Discord guild
-            
+
         Returns:
             Configured API client or None if not configured
         """
-        guild_id = guild.id
-        
-        recreate = False
-        if guild_id in self._api_clients:
-            client = self._api_clients[guild_id]
-            # Check if session is closed
-            if hasattr(client, "session") and getattr(client.session, "closed", False):
-                recreate = True
-        else:
-            recreate = True
-        if recreate:
-            config = await self.config.guild(guild).api_config()
-            if not config.get("url") or not (config.get("identifier") or config.get("username")):
-                return None
-            client = WHMCSAPIClient(config["url"])
-            if config.get("identifier") and config.get("secret"):
-                client.set_api_credentials(
-                    config["identifier"],
-                    config["secret"],
-                    config.get("access_key")
-                )
-            settings = await self.config.guild(guild).settings()
-            client.rate_limit = settings.get("rate_limit", 60)
-            self._api_clients[guild_id] = client
-        return self._api_clients[guild_id]
+        config = await self.config.guild(guild).api_config()
+        if not config.get("url") or not (config.get("identifier") or config.get("username")):
+            return None
+        client = WHMCSAPIClient(config["url"])
+        if config.get("identifier") and config.get("secret"):
+            client.set_api_credentials(
+                config["identifier"],
+                config["secret"],
+                config.get("access_key")
+            )
+        settings = await self.config.guild(guild).settings()
+        client.rate_limit = settings.get("rate_limit", 60)
+        return client
     
     async def _check_permissions(self, ctx: commands.Context, required_level: str) -> bool:
         """Check if user has required permission level.
