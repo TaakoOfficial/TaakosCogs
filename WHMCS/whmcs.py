@@ -73,13 +73,8 @@ class WHMCS(commands.Cog):
     
     async def cog_unload(self):
         """Clean up when cog is unloaded."""
-        # Close all API client sessions
-        for client in self._api_clients.values():
-            if hasattr(client, 'session') and client.session:
-                await client.session.close()
-    
-        # Start background task for syncing ticket replies
-        self._ticket_sync_task = self.bot.loop.create_task(self._sync_ticket_replies_loop())
+        # No API client cache to clean up.
+        pass
 
     async def _sync_ticket_replies_loop(self):
         await self.bot.wait_until_ready()
