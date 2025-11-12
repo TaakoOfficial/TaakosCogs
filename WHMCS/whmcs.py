@@ -1670,11 +1670,13 @@ class WHMCS(commands.Cog):
         try:
             async with api_client:
                 # Try all possible ID fields for maximum robustness
-                resp = await api_client.get_ticket(ticket_id)
+                async with api_client:
+                    resp = await api_client.get_ticket(ticket_id)
                 ticket = resp.get("ticket")
                 if not ticket:
                     # Fallback: try to find ticket by searching recent tickets for any matching ID field
-                    tickets_response = await api_client.get_tickets(limit=50)
+                    async with api_client:
+                        tickets_response = await api_client.get_tickets(limit=50)
                     found_ticket = None
                     if tickets_response.get("tickets") and tickets_response["tickets"].get("ticket"):
                         tickets = tickets_response["tickets"]["ticket"]
@@ -1745,7 +1747,8 @@ class WHMCS(commands.Cog):
                 
                 # Test 1: Try with ticketid parameter (for numeric IDs)
                 try:
-                    response1 = await api_client.get_ticket(clean_ticket_id)
+                    async with api_client:
+                        response1 = await api_client.get_ticket(clean_ticket_id)
                     if response1.get("ticket"):
                         debug_info.append("✅ **get_ticket() wrapper:** SUCCESS")
                         success_count += 1
@@ -1756,7 +1759,8 @@ class WHMCS(commands.Cog):
                 
                 # Test 2: Try direct API call with ticketid parameter
                 try:
-                    response2 = await api_client._make_request('GetTicket', {'ticketid': clean_ticket_id})
+                    async with api_client:
+                        response2 = await api_client._make_request('GetTicket', {'ticketid': clean_ticket_id})
                     if response2.get("ticket"):
                         debug_info.append("✅ **ticketid parameter:** SUCCESS")
                         success_count += 1
@@ -1767,7 +1771,8 @@ class WHMCS(commands.Cog):
                 
                 # Test 3: Try direct API call with ticketnum parameter
                 try:
-                    response3 = await api_client._make_request('GetTicket', {'ticketnum': clean_ticket_id})
+                    async with api_client:
+                        response3 = await api_client._make_request('GetTicket', {'ticketnum': clean_ticket_id})
                     if response3.get("ticket"):
                         debug_info.append("✅ **ticketnum parameter:** SUCCESS")
                         success_count += 1
@@ -1778,7 +1783,8 @@ class WHMCS(commands.Cog):
                 
                 # Test 4: Try direct API call with tid parameter (some WHMCS versions)
                 try:
-                    response4 = await api_client._make_request('GetTicket', {'tid': clean_ticket_id})
+                    async with api_client:
+                        response4 = await api_client._make_request('GetTicket', {'tid': clean_ticket_id})
                     if response4.get("ticket"):
                         debug_info.append("✅ **tid parameter:** SUCCESS")
                         success_count += 1
@@ -1886,7 +1892,8 @@ class WHMCS(commands.Cog):
         try:
             async with api_client:
                 # Get recent tickets and filter for matches
-                response = await api_client.get_tickets(limit=50)
+                async with api_client:
+                    response = await api_client.get_tickets(limit=50)
                 
                 if not response.get("tickets") or not response["tickets"].get("ticket"):
                     await self._send_error(ctx, f"No tickets found matching '{search_term}'.")
@@ -2248,10 +2255,12 @@ class WHMCS(commands.Cog):
             return
         try:
             async with api_client:
-                response = await api_client.get_ticket(ticket_id)
+                async with api_client:
+                    response = await api_client.get_ticket(ticket_id)
                 found_ticket = None
                 if not response.get("ticket"):
-                    tickets_response = await api_client.get_tickets(limit=50)
+                    async with api_client:
+                        tickets_response = await api_client.get_tickets(limit=50)
                     if tickets_response.get("tickets") and tickets_response["tickets"].get("ticket"):
                         tickets = tickets_response["tickets"]["ticket"]
                         if not isinstance(tickets, list):
@@ -2346,10 +2355,12 @@ class WHMCS(commands.Cog):
             return
         try:
             # Use the same robust lookup logic as support_ticket
-            response = await api_client.get_ticket(ticket_id)
+            async with api_client:
+                response = await api_client.get_ticket(ticket_id)
             found_ticket = None
             if not response.get("ticket"):
-                tickets_response = await api_client.get_tickets(limit=50)
+                async with api_client:
+                    tickets_response = await api_client.get_tickets(limit=50)
                 if tickets_response.get("tickets") and tickets_response["tickets"].get("ticket"):
                     tickets = tickets_response["tickets"]["ticket"]
                     if not isinstance(tickets, list):
@@ -2405,7 +2416,8 @@ class WHMCS(commands.Cog):
                 offset = (page - 1) * limit
                 
                 # Get tickets (status filtering will be done client-side)
-                response = await api_client.get_tickets(client_id=client_id, limit=limit, offset=offset)
+                async with api_client:
+                    response = await api_client.get_tickets(client_id=client_id, limit=limit, offset=offset)
                 
                 if not response.get("tickets"):
                     filter_parts = []
@@ -2664,12 +2676,14 @@ class WHMCS(commands.Cog):
         
         try:
             async with api_client:
-                response = await api_client.get_ticket(ticket_id)
+                async with api_client:
+                    response = await api_client.get_ticket(ticket_id)
                 
                 # Fallback: If not found, search recent tickets for a match (admin_find_ticket logic)
                 if not response.get("ticket"):
                     # Try to find in recent tickets
-                    tickets_response = await api_client.get_tickets(limit=50)
+                    async with api_client:
+                        tickets_response = await api_client.get_tickets(limit=50)
                     found_ticket = None
                     if tickets_response.get("tickets") and tickets_response["tickets"].get("ticket"):
                         tickets = tickets_response["tickets"]["ticket"]
@@ -2827,7 +2841,8 @@ class WHMCS(commands.Cog):
             async with api_client:
                 admin_username = f"Discord-{ctx.author.display_name}"
                 # Lookup the ticket to get all possible ID fields
-                ticket_resp = await api_client.get_ticket(ticket_id)
+                async with api_client:
+                    ticket_resp = await api_client.get_ticket(ticket_id)
                 ticket = ticket_resp.get("ticket")
                 if not ticket:
                     await self._send_error(ctx, f"Ticket {ticket_id} not found.")
