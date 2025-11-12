@@ -99,8 +99,9 @@ class WHMCS(commands.Cog):
             if not api_client:
                 log.info(f"[WHMCS SYNC] No API client for guild {guild.id}, skipping")
                 continue
-            ticket_mappings = await self.config.guild(guild).ticket_mappings()
-            log.info(f"[WHMCS SYNC] Guild {guild.id} has {len(ticket_mappings)} ticket mappings: {list(ticket_mappings.keys())}")
+            async with api_client:
+                ticket_mappings = await self.config.guild(guild).ticket_mappings()
+                log.info(f"[WHMCS SYNC] Guild {guild.id} has {len(ticket_mappings)} ticket mappings: {list(ticket_mappings.keys())}")
             log.info(f"[WHMCS SYNC] Ticket mappings types: {[type(k) for k in ticket_mappings.keys()]}")
             log.info(f"[WHMCS SYNC] Ticket mappings before cleanup: {ticket_mappings}")
             
@@ -173,11 +174,12 @@ class WHMCS(commands.Cog):
                         ticket_id_value = ticket_ids.get(id_field)
                         if ticket_id_value:
                             try:
-                                resp = await api_client.get_ticket(str(ticket_id_value))
-                                ticket = resp.get("ticket")
-                                if ticket:
-                                    found_ticket = (ticket_id_value, ticket)
-                                    break
+                                async with api_client:
+                                    resp = await api_client.get_ticket(str(ticket_id_value))
+                                    ticket = resp.get("ticket")
+                                    if ticket:
+                                        found_ticket = (ticket_id_value, ticket)
+                                        break
                             except Exception:
                                 continue
                     if not found_ticket:
@@ -248,8 +250,9 @@ class WHMCS(commands.Cog):
                     async with api_client:
                         ticket = None
                         try:
-                            resp = await api_client.get_ticket(str(ticket_id))
-                            ticket = resp.get("ticket")
+                            async with api_client:
+                                resp = await api_client.get_ticket(str(ticket_id))
+                                ticket = resp.get("ticket")
                         except Exception:
                             continue
                         if not ticket or not ticket.get("replies"):
