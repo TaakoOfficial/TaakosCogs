@@ -162,6 +162,7 @@ class WHMCSAPIClient:
         await self._check_rate_limit()
         
         data = self._build_request_data(action, parameters)
+        log.info(f"WHMCS API: Full request payload for action '{action}': {data}")
         
         try:
             async with self.session.post(self.api_url, data=data) as response:
@@ -341,8 +342,13 @@ class WHMCSAPIClient:
             if not value:
                 continue
             try:
-                log.info(f"WHMCS API: Trying GetTicket with {field}={value}")
-                resp = await self._make_request('GetTicket', {field: value})
+                # Always request all replies and notes, and log the full payload
+                getticket_params = {
+                    field: value,
+                    "repliessort": "ASC"
+                }
+                log.info(f"WHMCS API: Trying GetTicket with payload: {getticket_params}")
+                resp = await self._make_request('GetTicket', getticket_params)
                 log.info(f"WHMCS API: GetTicket {field} response: {resp}")
                 tried.append((field, value, resp.get("result"), resp.get("ticket", None)))
                 if resp.get("result") == "success" and resp.get("ticket"):
