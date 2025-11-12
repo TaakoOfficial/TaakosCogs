@@ -526,8 +526,18 @@ class WHMCS(commands.Cog):
             )
             
             # Store mapping: {channel_id: {"ticket_ids": {...}}}
+            # Always resolve and store the internal ticketid for this mapping
+            internal_ticketid = ticket_data.get("id") or ticket_data.get("ticketid")
+            if not internal_ticketid:
+                # Try to resolve using API if missing
+                api_client = await self._get_api_client(guild)
+                async with api_client:
+                    resp = await api_client.get_ticket(str(ticket_data.get("ticketnum") or ticket_data.get("tid") or ticket_data.get("maskid")))
+                    ticket = resp.get("ticket")
+                    if ticket:
+                        internal_ticketid = ticket.get("id") or ticket.get("ticketid")
             ticket_ids = {
-                "ticketid": ticket_data.get("ticketid"),
+                "ticketid": internal_ticketid,
                 "ticketnum": ticket_data.get("ticketnum"),
                 "tid": ticket_data.get("tid"),
                 "maskid": ticket_data.get("maskid"),
@@ -536,7 +546,7 @@ class WHMCS(commands.Cog):
             channel_id_int = int(channel.id)
             async with self.config.guild(guild).ticket_mappings() as mappings:
                 mappings[channel_id_int] = {"ticket_ids": ticket_ids}
-                log.info(f"Created ticket mapping for channel {channel_id_int} (type: {type(channel_id_int)})")
+                log.info(f"Created ticket mapping for channel {channel_id_int} (type: {type(channel_id_int)}), ticketid={internal_ticketid}")
 
             self._ticket_channels.setdefault(guild.id, {})[channel_id_int] = {"ticket_ids": ticket_ids}
 
@@ -2849,7 +2859,14 @@ class WHMCS(commands.Cog):
                             "admin_username": admin_username,
                             "message": message[:100] + ("..." if len(message) > 100 else "")
                         }
-                        response = await api_client.add_ticket_reply(str(internal_id), message, admin_username)
+                        # Always include bot name/email for non-client replies
+                        response = await api_client.add_ticket_reply(
+                            str(internal_id),
+                            message,
+                            admin_username,
+                            name="Discord-Taako",
+                            email="discord-taako@example.com"
+                        )
                         log.info(f"Attempted add_ticket_reply with internal_id={internal_id}, payload={debug_payload}, response={response}")
                         if response.get("result") == "success":
                             reply_success = True

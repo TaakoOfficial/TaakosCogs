@@ -377,7 +377,7 @@ class WHMCSAPIClient:
         log.warning(f"WHMCS API: Ticket {clean_ticket_id} not found after trying all ID fields. Tried: {tried}")
         return {}
     
-    async def add_ticket_reply(self, ticket_id: str, message: str, admin_username: Optional[str] = None, id_field: Optional[str] = None) -> Dict[str, Any]:
+    async def add_ticket_reply(self, ticket_id: str, message: str, admin_username: Optional[str] = None, id_field: Optional[str] = None, name: Optional[str] = None, email: Optional[str] = None) -> Dict[str, Any]:
         """Add a reply to a support ticket.
 
         Args:
@@ -394,6 +394,12 @@ class WHMCSAPIClient:
         }
         if admin_username:
             parameters['adminusername'] = admin_username
+
+        # Always include name/email if provided (for non-client/bot replies)
+        if name:
+            parameters['name'] = name
+        if email:
+            parameters['email'] = email
 
         # Clean up ticket ID - remove # prefix if present
         clean_ticket_id = ticket_id.lstrip('#').strip()
