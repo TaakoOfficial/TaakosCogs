@@ -4,6 +4,7 @@ import aiohttp
 import asyncio
 import hashlib
 import logging
+import traceback
 from typing import Dict, List, Optional, Any, Union
 from urllib.parse import urljoin
 
@@ -59,21 +60,23 @@ class WHMCSAPIClient:
         self._entered: bool = False
     async def __aenter__(self):
         """Async context manager entry."""
+        stack = "".join(traceback.format_stack())
         if hasattr(self, "_entered") and self._entered:
-            log.warning("WHMCSAPIClient: __aenter__ called while already entered.")
+            log.warning("WHMCSAPIClient: __aenter__ called while already entered. Stack:\n%s\nState: %r", stack, self.__dict__)
             raise RuntimeError("WHMCSAPIClient context already entered.")
         self.session = aiohttp.ClientSession(timeout=self.timeout)
         self._entered = True
-        log.info("WHMCSAPIClient: Async context manager entered, session initialized.")
+        log.info("WHMCSAPIClient: Async context manager entered, session initialized. Stack:\n%s\nState: %r", stack, self.__dict__)
         return self
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         """Async context manager exit."""
+        stack = "".join(traceback.format_stack())
         if self.session:
             await self.session.close()
-            log.info("WHMCSAPIClient: Session closed on context exit.")
+            log.info("WHMCSAPIClient: Session closed on context exit. Stack:\n%s\nState: %r", stack, self.__dict__)
         self.session = None
         self._entered = False
-        log.info("WHMCSAPIClient: Async context manager exited, state reset.")
+        log.info("WHMCSAPIClient: Async context manager exited, state reset. Stack:\n%s\nState: %r", stack, self.__dict__)
     
     
     def set_api_credentials(self, identifier: str, secret: str, access_key: Optional[str] = None):
@@ -168,7 +171,8 @@ class WHMCSAPIClient:
             WHMCSRateLimitError: If rate limit is exceeded
         """
         if not self._entered or not self.session:
-            log.error("WHMCSAPIClient: Attempted API call outside async context manager.")
+            stack = "".join(traceback.format_stack())
+            log.error("WHMCSAPIClient: Attempted API call outside async context manager. Stack:\n%s\nState: %r", stack, self.__dict__)
             raise WHMCSAPIError(
                 "WHMCSAPIClient session not initialized. "
                 "All API calls must be made within an 'async with' block. "
@@ -339,42 +343,27 @@ class WHMCSAPIClient:
         return await self._make_request('GetTickets', parameters)
     
     async def get_ticket(self, ticket_id: str) -> Dict[str, Any]:
-        """Get details for a specific ticket, trying all possible ID fields.
+        """Get details for a specific ticket using only the minimal, proven working approach.
         Args:
-            ticket_id: The ticket ID to retrieve (numeric, alphanumeric, or mask)
+            ticket_id: The ticket number to retrieve (as used in the successful curl command)
         Returns:
             Dictionary containing ticket details or empty dict if not found
         """
         clean_ticket_id = ticket_id.lstrip('#').strip()
-        log.info(f"WHMCS API: Looking up ticket {clean_ticket_id}")
-
-        tried = []
-        # Try all possible ID fields in order: ticketid, ticketnum, tid, maskid
-        id_fields = [
-            ("ticketid", clean_ticket_id if clean_ticket_id.isdigit() else None),
-            ("ticketnum", clean_ticket_id),
-            ("tid", clean_ticket_id),
-            ("maskid", clean_ticket_id),
-        ]
-        for field, value in id_fields:
-            if not value:
-                continue
-            try:
-                # Always request all replies and notes, and log the full payload
-                getticket_params = {
-                    field: value,
-                    "repliessort": "ASC"
-                }
-                log.info(f"WHMCS API: Trying GetTicket with payload: {getticket_params}")
-                resp = await self._make_request('GetTicket', getticket_params)
-                log.info(f"WHMCS API: GetTicket {field} response: {resp}")
-                tried.append((field, value, resp.get("result"), resp.get("ticket", None)))
-                if resp.get("result") == "success" and resp.get("ticket"):
-                    log.info(f"WHMCS API: Found ticket using {field}={value}")
-                    return resp
-            except Exception as e:
-                log.warning(f"WHMCS API: GetTicket with {field}={value} failed: {e}")
-        log.warning(f"WHMCS API: Ticket {clean_ticket_id} not found after trying all ID fields. Tried: {tried}")
+        log.info(f"WHMCS API: Looking up ticket {clean_ticket_id} using only ticketnum parameter")
+        try:
+            getticket_params = {
+                "ticketnum": clean_ticket_id,
+                "repliessort": "ASC"
+            }
+            log.info(f"WHMCS API: Calling GetTicket with payload: {getticket_params}")
+            resp = await self._make_request('GetTicket', getticket_params)
+            log.info(f"WHMCS API: GetTicket response: {resp}")
+            if resp.get("result") == "success" and resp.get("ticket"):
+                return resp
+        except Exception as e:
+            log.warning(f"WHMCS API: GetTicket with ticketnum={clean_ticket_id} failed: {e}")
+        log.warning(f"WHMCS API: Ticket {clean_ticket_id} not found using ticketnum.")
         return {}
     
     async def add_ticket_reply(self, ticket_id: str, message: str, admin_username: Optional[str] = None, id_field: Optional[str] = None, name: Optional[str] = None, email: Optional[str] = None) -> Dict[str, Any]:

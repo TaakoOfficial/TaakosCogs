@@ -167,20 +167,18 @@ class WHMCS(commands.Cog):
                     if not isinstance(channel, discord.TextChannel):
                         log.warning(f"Skipping mapping: channel_id={channel_id} does not resolve to a TextChannel.")
                         continue
-                    # Try all mapped ticket IDs for lookup
+                    # Only use the minimal, proven working approach for ticket lookup
+                    ticketnum = ticket_ids.get("ticketnum")
                     found_ticket = None
-                    for id_field in ["ticketid", "ticketnum", "tid", "maskid"]:
-                        ticket_id_value = ticket_ids.get(id_field)
-                        if ticket_id_value:
-                            try:
-                                async with api_client:
-                                    resp = await api_client.get_ticket(str(ticket_id_value))
-                                    ticket = resp.get("ticket")
-                                    if ticket:
-                                        found_ticket = (ticket_id_value, ticket)
-                                        break
-                            except Exception:
-                                continue
+                    if ticketnum:
+                        try:
+                            async with api_client:
+                                resp = await api_client.get_ticket(str(ticketnum))
+                                ticket = resp.get("ticket")
+                                if ticket:
+                                    found_ticket = (ticketnum, ticket)
+                        except Exception:
+                            continue
                     if not found_ticket:
                         continue
                     ticket_id, ticket = found_ticket
@@ -531,11 +529,12 @@ class WHMCS(commands.Cog):
             if not internal_ticketid:
                 # Try to resolve using API if missing
                 api_client = await self._get_api_client(guild)
-                async with api_client:
-                    resp = await api_client.get_ticket(str(ticket_data.get("ticketnum") or ticket_data.get("tid") or ticket_data.get("maskid")))
-                    ticket = resp.get("ticket")
-                    if ticket:
-                        internal_ticketid = ticket.get("id") or ticket.get("ticketid")
+                if api_client:
+                    async with api_client:
+                        resp = await api_client.get_ticket(str(ticket_data.get("ticketnum")))
+                        ticket = resp.get("ticket")
+                        if ticket:
+                            internal_ticketid = ticket.get("id") or ticket.get("ticketid")
             ticket_ids = {
                 "ticketid": internal_ticketid,
                 "ticketnum": ticket_data.get("ticketnum"),
@@ -714,35 +713,23 @@ class WHMCS(commands.Cog):
                 admin_username = f"Discord-{message.author.display_name}"
                 found_ticket = None
                 log.info(f"[WHMCS Discord Auto-Reply] Looking up ticket with IDs: {ticket_ids}")
-                for id_field in ["ticketid", "ticketnum", "tid", "maskid"]:
-                    ticket_id_value = ticket_ids.get(id_field)
-                    if ticket_id_value:
-                        log.info(f"[WHMCS Discord Auto-Reply] Trying {id_field}={ticket_id_value}")
-                        ticket_resp = await api_client.get_ticket(str(ticket_id_value))
-                        log.info(f"[WHMCS Discord Auto-Reply] API response for {id_field}={ticket_id_value}: {ticket_resp}")
-                        # Check if API call was successful
-                        if ticket_resp.get("result") == "success":
-                            found_ticket = ticket_resp
-                            log.info(f"[WHMCS Discord Auto-Reply] Found ticket using {id_field}={ticket_id_value}")
-                            log.info(f"[WHMCS Discord Auto-Reply] Ticket data: {ticket_resp}")
-                            break
-                        else:
-                            # Enhanced debugging for failed responses
-                            if not ticket_resp:
-                                log.warning(f"[WHMCS Discord Auto-Reply] Empty response for {id_field}={ticket_id_value}")
-                            else:
-                                # Check if there's an error message
-                                error_msg = ticket_resp.get("message")
-                                if error_msg:
-                                    log.warning(f"[WHMCS Discord Auto-Reply] Error for {id_field}={ticket_id_value}: {error_msg}")
-                                else:
-                                    log.warning(f"[WHMCS Discord Auto-Reply] Failed API call for {id_field}={ticket_id_value}, response: {ticket_resp}")
+                # Only use the minimal, proven working approach for ticket lookup
+                ticketnum = ticket_ids.get("ticketnum")
+                found_ticket = None
+                if ticketnum:
+                    log.info(f"[WHMCS Discord Auto-Reply] Trying ticketnum={ticketnum}")
+                    ticket_resp = await api_client.get_ticket(str(ticketnum))
+                    log.info(f"[WHMCS Discord Auto-Reply] API response for ticketnum={ticketnum}: {ticket_resp}")
+                    if ticket_resp.get("result") == "success":
+                        found_ticket = ticket_resp
+                        log.info(f"[WHMCS Discord Auto-Reply] Found ticket using ticketnum={ticketnum}")
+                        log.info(f"[WHMCS Discord Auto-Reply] Ticket data: {ticket_resp}")
 
                 if not found_ticket:
-                    log.error(f"[WHMCS Discord Auto-Reply] No ticket found using any ID: {ticket_ids}")
+                    log.error(f"[WHMCS Discord Auto-Reply] No ticket found using ticketnum: {ticketnum}")
                     await message.channel.send(
                         f"⚠️ Failed to add your reply to the WHMCS ticket.\n"
-                        f"Ticket not found in WHMCS using any mapped ID: {ticket_ids}\n"
+                        f"Ticket not found in WHMCS using ticketnum: {ticketnum}\n"
                         f"API user: {admin_username}\n"
                         f"Please verify the ticket exists in WHMCS and the API user has department access."
                     )
@@ -751,16 +738,13 @@ class WHMCS(commands.Cog):
 
                 reply_success = False
                 tried_ids = []
-                # IMPORTANT: AddTicketReply API requires internal ticketid (database ID)
-                # We should always use the internal 'id' or 'ticketid' field, not ticketnum/tid/maskid
+                # AddTicketReply API requires internal ticketid (database ID), but we only look up by ticketnum now
                 internal_id = found_ticket.get("id") or found_ticket.get("ticketid")
                 if internal_id:
                     tried_ids.append(f"internal_id={internal_id}")
                     payload_preview = message.content[:100] + ("..." if len(message.content) > 100 else "")
                     log.info(f"[WHMCS Discord Auto-Reply] Attempting add_ticket_reply using internal ID: {internal_id}, admin_username={admin_username}, message_preview={payload_preview}")
                     try:
-                        # Try multiple approaches to add the reply
-                        # First, try with the internal ID directly
                         response = await api_client.add_ticket_reply(str(internal_id), message.content, admin_username)
                         log.info(f"[WHMCS Discord Auto-Reply] API response for internal_id={internal_id}: {response}")
                         if response.get("result") == "success":
@@ -769,20 +753,6 @@ class WHMCS(commands.Cog):
                         else:
                             error_msg = response.get("message", "No error message")
                             log.warning(f"[WHMCS Discord Auto-Reply] API call failed for internal_id={internal_id}: {error_msg}")
-                            
-                            # If that fails, try with ticketnum if available
-                            ticketnum = found_ticket.get("ticketnum")
-                            if ticketnum and ticketnum != str(internal_id):
-                                log.info(f"[WHMCS Discord Auto-Reply] Trying fallback with ticketnum={ticketnum}")
-                                fallback_response = await api_client.add_ticket_reply(ticketnum, message.content, admin_username)
-                                log.info(f"[WHMCS Discord Auto-Reply] Fallback API response for ticketnum={ticketnum}: {fallback_response}")
-                                if fallback_response.get("result") == "success":
-                                    log.info(f"[WHMCS Discord Auto-Reply] Reply successfully added using ticketnum={ticketnum}")
-                                    reply_success = True
-                                    tried_ids.append(f"ticketnum={ticketnum}")
-                                else:
-                                    fallback_error = fallback_response.get("message", "No error message")
-                                    log.warning(f"[WHMCS Discord Auto-Reply] Fallback API call failed for ticketnum={ticketnum}: {fallback_error}")
                     except Exception as e:
                         log.warning(f"[WHMCS Discord Auto-Reply] Exception for internal_id={internal_id}: {e}")
                 else:
@@ -2252,66 +2222,47 @@ class WHMCS(commands.Cog):
             return
         try:
             async with api_client:
-                async with api_client:
-                    response = await api_client.get_ticket(ticket_id)
-                found_ticket = None
-                if not response.get("ticket"):
-                    async with api_client:
-                        tickets_response = await api_client.get_tickets(limit=50)
-                    if tickets_response.get("tickets") and tickets_response["tickets"].get("ticket"):
-                        tickets = tickets_response["tickets"]["ticket"]
-                        if not isinstance(tickets, list):
-                            tickets = [tickets]
-                        search_lower = ticket_id.lower().lstrip('#').strip()
-                        for ticket in tickets:
-                            for id_field in ['tid', 'ticketnum', 'maskid']:
-                                if ticket.get(id_field) and search_lower == str(ticket[id_field]).lower().lstrip('#').strip():
-                                    found_ticket = ticket
-                                    break
-                            if found_ticket:
-                                break
-                else:
-                    found_ticket = response["ticket"]
-                if not found_ticket:
-                    await self._send_error(ctx, f"Ticket {ticket_id} not found.")
-                    return
-                channel = await self._get_or_create_ticket_channel(ctx.guild, str(found_ticket.get("tid") or found_ticket.get("ticketnum") or found_ticket.get("maskid")), found_ticket)
-                if channel:
-                    await self._send_success(ctx, f"Channel <#{channel.id}> created for ticket {ticket_id}.")
-                    # Post a message in the new channel mentioning the user
-                    await channel.send(f"Channel created for ticket {ticket_id} by {ctx.author.mention}")
-                    # Add a reply to the WHMCS ticket noting the Discord channel creation
-                    try:
-                        admin_username = f"Discord-{ctx.author.display_name}"
-                        channel_url = f"https://discord.com/channels/{ctx.guild.id}/{channel.id}"
-                        note_message = f"A Discord channel has been created for this ticket: {channel_url} (created by {ctx.author})"
-                        # Try all possible ticket ID fields for reply
-                        reply_success = False
-                        # Try both ticketid (internal numeric) and ticketnum (public) for reply, per WHMCS API docs
-                        for id_field in ['id', 'ticketid', 'ticketnum']:
-                            ticket_id_value = found_ticket.get(id_field)
-                            if ticket_id_value:
-                                try:
-                                    response = await api_client.add_ticket_reply(str(ticket_id_value), note_message, admin_username)
-                                    log.info(f"Attempted add_ticket_reply with {id_field}={ticket_id_value}, response: {response}")
-                                    if response.get("result") == "success":
-                                        reply_success = True
-                                        break
-                                except Exception as e:
-                                    log.warning(f"Failed to add reply using {id_field}={ticket_id_value}: {e}")
-                        if not reply_success:
-                            await channel.send(
-                                f"⚠️ Failed to add a note to the WHMCS ticket.\n"
-                                f"Tried ticket IDs: {[str(found_ticket.get(f)) for f in ['ticketnum','tid','maskid']]}\n"
-                                f"API user: {admin_username}\n"
-                                f"Ticket status: {found_ticket.get('status')}\n"
-                                f"Ticket department: {found_ticket.get('department')}\n"
-                                f"Please verify the ticket exists in WHMCS and the API user has department access."
-                            )
-                    except Exception as e:
-                        log.exception("Failed to add Discord channel creation note to WHMCS ticket")
-                else:
-                    await self._send_error(ctx, "Failed to create ticket channel. Check category and permissions.")
+                response = await api_client.get_ticket(ticket_id)
+            found_ticket = None
+            if response.get("ticket"):
+                found_ticket = response["ticket"]
+            if not found_ticket:
+                await self._send_error(ctx, f"Ticket {ticket_id} not found.")
+                return
+            channel = await self._get_or_create_ticket_channel(ctx.guild, str(found_ticket.get("ticketnum")), found_ticket)
+            if channel:
+                await self._send_success(ctx, f"Channel <#{channel.id}> created for ticket {ticket_id}.")
+                # Post a message in the new channel mentioning the user
+                await channel.send(f"Channel created for ticket {ticket_id} by {ctx.author.mention}")
+                # Add a reply to the WHMCS ticket noting the Discord channel creation
+                try:
+                    admin_username = f"Discord-{ctx.author.display_name}"
+                    channel_url = f"https://discord.com/channels/{ctx.guild.id}/{channel.id}"
+                    note_message = f"A Discord channel has been created for this ticket: {channel_url} (created by {ctx.author})"
+                    # Only use the minimal, proven working approach for ticket lookup
+                    reply_success = False
+                    internal_id = found_ticket.get("id") or found_ticket.get("ticketid")
+                    if internal_id:
+                        try:
+                            response = await api_client.add_ticket_reply(str(internal_id), note_message, admin_username)
+                            log.info(f"Attempted add_ticket_reply with internal_id={internal_id}, response: {response}")
+                            if response.get("result") == "success":
+                                reply_success = True
+                        except Exception as e:
+                            log.warning(f"Failed to add reply using internal_id={internal_id}: {e}")
+                    if not reply_success:
+                        await channel.send(
+                            f"⚠️ Failed to add a note to the WHMCS ticket.\n"
+                            f"Tried ticketnum: {found_ticket.get('ticketnum')}\n"
+                            f"API user: {admin_username}\n"
+                            f"Ticket status: {found_ticket.get('status')}\n"
+                            f"Ticket department: {found_ticket.get('department')}\n"
+                            f"Please verify the ticket exists in WHMCS and the API user has department access."
+                        )
+                except Exception as e:
+                    log.exception("Failed to add Discord channel creation note to WHMCS ticket")
+            else:
+                await self._send_error(ctx, "Failed to create ticket channel. Check category and permissions.")
         except Exception as e:
             import logging
             logging.getLogger("red.WHMCS").exception("Error in support_ticket_channel command")
