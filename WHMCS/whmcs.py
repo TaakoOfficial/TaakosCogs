@@ -1651,7 +1651,7 @@ class WHMCS(commands.Cog):
     @whmcs_admin.command(name="showreplies")
     async def admin_showreplies(self, ctx: commands.Context, ticket_id: str):
         """
-        TEMPORARY: Fetch and send the raw 'replies' field for a ticket as a plain message.
+        Fetch and send the raw 'replies' field for a ticket, trying all possible ID fields.
 
         Usage: [p]whmcs admin showreplies <ticket_id>
         """
@@ -1666,16 +1666,34 @@ class WHMCS(commands.Cog):
 
         try:
             async with api_client:
+                # Try all possible ID fields for maximum robustness
                 resp = await api_client.get_ticket(ticket_id)
                 ticket = resp.get("ticket")
                 if not ticket:
-                    await self._send_error(ctx, f"Ticket {ticket_id} not found.")
-                    return
+                    # Fallback: try to find ticket by searching recent tickets for any matching ID field
+                    tickets_response = await api_client.get_tickets(limit=50)
+                    found_ticket = None
+                    if tickets_response.get("tickets") and tickets_response["tickets"].get("ticket"):
+                        tickets = tickets_response["tickets"]["ticket"]
+                        if not isinstance(tickets, list):
+                            tickets = [tickets]
+                        search_lower = ticket_id.lower().lstrip('#').strip()
+                        for t in tickets:
+                            for id_field in ['tid', 'ticketnum', 'maskid', 'id']:
+                                if t.get(id_field) and search_lower == str(t[id_field]).lower().lstrip('#').strip():
+                                    found_ticket = t
+                                    break
+                            if found_ticket:
+                                break
+                    if found_ticket:
+                        ticket = found_ticket
+                    else:
+                        await self._send_error(ctx, f"Ticket {ticket_id} not found (tried all ID fields).")
+                        return
                 replies = ticket.get("replies")
                 import pprint
                 pp = pprint.PrettyPrinter(width=120, compact=True)
                 raw = pp.pformat(replies)
-                # Discord message limit is 2000 chars; split if needed
                 max_len = 1900
                 if not raw:
                     await ctx.send("No replies field found.")
@@ -1683,7 +1701,6 @@ class WHMCS(commands.Cog):
                 if len(raw) <= 2000:
                     await ctx.send(f"```py\n{raw[:1990]}```")
                 else:
-                    # Split into multiple messages if too long
                     blocks = [raw[i:i+max_len] for i in range(0, len(raw), max_len)]
                     for block in blocks:
                         await ctx.send(f"```py\n{block.strip()}```")

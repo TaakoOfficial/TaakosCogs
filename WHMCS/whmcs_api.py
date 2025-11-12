@@ -320,41 +320,37 @@ class WHMCSAPIClient:
         return await self._make_request('GetTickets', parameters)
     
     async def get_ticket(self, ticket_id: str) -> Dict[str, Any]:
-        """Get details for a specific ticket.
-        
+        """Get details for a specific ticket, trying all possible ID fields.
         Args:
-            ticket_id: The ticket ID to retrieve (can be numeric, alphanumeric like GLY-907775, or with # prefix like #WYI-894412)
-            
+            ticket_id: The ticket ID to retrieve (numeric, alphanumeric, or mask)
         Returns:
             Dictionary containing ticket details or empty dict if not found
         """
-        # Clean up ticket ID - remove # prefix if present
         clean_ticket_id = ticket_id.lstrip('#').strip()
         log.info(f"WHMCS API: Looking up ticket {clean_ticket_id}")
 
-        # Try ticketid if numeric, else ticketnum (per WHMCS API docs)
-        if clean_ticket_id.isdigit():
+        tried = []
+        # Try all possible ID fields in order: ticketid, ticketnum, tid, maskid
+        id_fields = [
+            ("ticketid", clean_ticket_id if clean_ticket_id.isdigit() else None),
+            ("ticketnum", clean_ticket_id),
+            ("tid", clean_ticket_id),
+            ("maskid", clean_ticket_id),
+        ]
+        for field, value in id_fields:
+            if not value:
+                continue
             try:
-                log.info(f"WHMCS API: Trying GetTicket with ticketid={clean_ticket_id}")
-                resp = await self._make_request('GetTicket', {'ticketid': clean_ticket_id})
-                log.info(f"WHMCS API: GetTicket ticketid response: {resp}")
-                if resp.get("result") == "success":
-                    log.info(f"WHMCS API: Found ticket using ticketid={clean_ticket_id}")
+                log.info(f"WHMCS API: Trying GetTicket with {field}={value}")
+                resp = await self._make_request('GetTicket', {field: value})
+                log.info(f"WHMCS API: GetTicket {field} response: {resp}")
+                tried.append((field, value, resp.get("result"), resp.get("ticket", None)))
+                if resp.get("result") == "success" and resp.get("ticket"):
+                    log.info(f"WHMCS API: Found ticket using {field}={value}")
                     return resp
             except Exception as e:
-                log.warning(f"WHMCS API: GetTicket with ticketid={clean_ticket_id} failed: {e}")
-        # Always try ticketnum as fallback (for alphanumeric or if numeric fails)
-        try:
-            log.info(f"WHMCS API: Trying GetTicket with ticketnum={clean_ticket_id}")
-            resp = await self._make_request('GetTicket', {'ticketnum': clean_ticket_id})
-            log.info(f"WHMCS API: GetTicket ticketnum response: {resp}")
-            if resp.get("result") == "success":
-                log.info(f"WHMCS API: Found ticket using ticketnum={clean_ticket_id}")
-                return resp
-        except Exception as e:
-            log.warning(f"WHMCS API: GetTicket with ticketnum={clean_ticket_id} failed: {e}")
-        # If all fail, return empty dict (not found)
-        log.warning(f"WHMCS API: Ticket {clean_ticket_id} not found")
+                log.warning(f"WHMCS API: GetTicket with {field}={value} failed: {e}")
+        log.warning(f"WHMCS API: Ticket {clean_ticket_id} not found after trying all ID fields. Tried: {tried}")
         return {}
     
     async def add_ticket_reply(self, ticket_id: str, message: str, admin_username: Optional[str] = None, id_field: Optional[str] = None) -> Dict[str, Any]:
