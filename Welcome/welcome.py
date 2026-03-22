@@ -77,7 +77,7 @@ class Welcome(commands.Cog):
             include_bots=False,
             channel_id=None,
             message_template="Welcome {member.mention} to **{guild.name}**!",
-            embed_json={},
+            embed_json="",
             image=self._empty_image_data(),
             image_mode="embed",
         )
@@ -412,6 +412,47 @@ class Welcome(commands.Cog):
                     "data_base64": base64.b64encode(data).decode("ascii"),
                 }
 
+    def _deserialize_embed_json(self, raw_value: Any) -> Optional[Dict[str, Any]]:
+        if not raw_value:
+            return None
+
+        parsed: Any = raw_value
+        if isinstance(raw_value, str):
+            try:
+                parsed = json.loads(raw_value)
+            except json.JSONDecodeError:
+                log.warning("Stored welcome embed JSON could not be decoded.")
+                return None
+
+        if not isinstance(parsed, dict):
+            return None
+
+        try:
+            embed_object = self._extract_embed_object(parsed)
+            cleaned_embed = self._sanitize_embed_dict(embed_object)
+            return self._normalise_embed_dict(cleaned_embed)
+        except commands.BadArgument:
+            log.warning("Stored welcome embed JSON could not be sanitized.")
+            return None
+
+    async def _get_guild_settings(self, guild: discord.Guild) -> Dict[str, Any]:
+        guild_conf = self.config.guild(guild)
+        image_data = await guild_conf.image()
+        if not isinstance(image_data, dict):
+            image_data = self._empty_image_data()
+        else:
+            image_data = {**self._empty_image_data(), **image_data}
+
+        return {
+            "enabled": await guild_conf.enabled(),
+            "include_bots": await guild_conf.include_bots(),
+            "channel_id": await guild_conf.channel_id(),
+            "message_template": await guild_conf.message_template(),
+            "embed_json": self._deserialize_embed_json(await guild_conf.embed_json()),
+            "image": image_data,
+            "image_mode": await guild_conf.image_mode(),
+        }
+
     @staticmethod
     def _build_image_file(image_data: Dict[str, Optional[str]]) -> Optional[discord.File]:
         encoded = image_data.get("data_base64")
@@ -476,7 +517,7 @@ class Welcome(commands.Cog):
 
     @commands.Cog.listener()
     async def on_member_join(self, member: discord.Member) -> None:
-        settings = await self.config.guild(member.guild).all()
+        settings = await self._get_guild_settings(member.guild)
         if not settings.get("enabled"):
             return
         if member.bot and not settings.get("include_bots"):
@@ -578,13 +619,13 @@ class Welcome(commands.Cog):
         except Exception as exc:
             raise commands.BadArgument(f"That JSON could not be converted into a Discord embed: {exc}")
 
-        await self.config.guild(ctx.guild).embed_json.set(embed_json)
+        await self.config.guild(ctx.guild).embed_json.set(json.dumps(embed_json))
         await ctx.send(f"Welcome embed JSON saved from {source}.")
 
     @welcome.command(name="clearembed")
     async def welcome_clear_embed(self, ctx: commands.Context) -> None:
         """Remove the stored custom embed."""
-        await self.config.guild(ctx.guild).embed_json.set({})
+        await self.config.guild(ctx.guild).embed_json.set("")
         await ctx.send("The stored welcome embed has been cleared.")
 
     @welcome.command(name="image")
@@ -660,7 +701,7 @@ class Welcome(commands.Cog):
     @welcome.command(name="settings")
     async def welcome_settings(self, ctx: commands.Context) -> None:
         """Show the current welcome settings for this server."""
-        settings = await self.config.guild(ctx.guild).all()
+        settings = await self._get_guild_settings(ctx.guild)
         channel_id = settings.get("channel_id")
         channel = ctx.guild.get_channel(channel_id) if channel_id else None
         image_data = settings.get("image") or {}
@@ -723,6 +764,6 @@ class Welcome(commands.Cog):
         if not isinstance(member, discord.Member):
             raise commands.BadArgument("The preview target must be a server member.")
 
-        settings = await self.config.guild(ctx.guild).all()
+        settings = await self._get_guild_settings(ctx.guild)
         await self._send_welcome_message(ctx.channel, member, settings)
         await ctx.send("Welcome preview sent above.")
