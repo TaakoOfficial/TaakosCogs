@@ -766,4 +766,3 @@ class Welcome(commands.Cog):
 
         settings = await self._get_guild_settings(ctx.guild)
         await self._send_welcome_message(ctx.channel, member, settings)
-        await ctx.send("Welcome preview sent above.")
