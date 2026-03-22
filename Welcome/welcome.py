@@ -235,6 +235,119 @@ class Welcome(commands.Cog):
                 ) from exc
         return cleaned
 
+    @staticmethod
+    def _clean_embed_media_block(block: Any) -> Optional[Dict[str, Any]]:
+        if not isinstance(block, dict):
+            return None
+
+        url = block.get("url")
+        if not url:
+            return None
+
+        return {"url": url}
+
+    @staticmethod
+    def _clean_embed_footer_block(block: Any) -> Optional[Dict[str, Any]]:
+        if not isinstance(block, dict):
+            return None
+
+        cleaned: Dict[str, Any] = {}
+        text = block.get("text")
+        icon_url = block.get("icon_url")
+        if text:
+            cleaned["text"] = text
+        if icon_url:
+            cleaned["icon_url"] = icon_url
+        return cleaned or None
+
+    @staticmethod
+    def _clean_embed_author_block(block: Any) -> Optional[Dict[str, Any]]:
+        if not isinstance(block, dict):
+            return None
+
+        cleaned: Dict[str, Any] = {}
+        for key in ("name", "url", "icon_url"):
+            value = block.get(key)
+            if value:
+                cleaned[key] = value
+        return cleaned or None
+
+    @staticmethod
+    def _clean_embed_fields(fields: Any) -> List[Dict[str, Any]]:
+        if not isinstance(fields, list):
+            return []
+
+        cleaned_fields: List[Dict[str, Any]] = []
+        for field in fields:
+            if not isinstance(field, dict):
+                continue
+            name = field.get("name")
+            value = field.get("value")
+            if name is None or value is None:
+                continue
+
+            cleaned_field: Dict[str, Any] = {
+                "name": name,
+                "value": value,
+            }
+            if "inline" in field:
+                cleaned_field["inline"] = bool(field.get("inline"))
+            cleaned_fields.append(cleaned_field)
+        return cleaned_fields
+
+    @classmethod
+    def _extract_embed_object(cls, payload: Dict[str, Any]) -> Dict[str, Any]:
+        if "embeds" in payload:
+            embeds = payload.get("embeds")
+            if not isinstance(embeds, list) or not embeds:
+                raise commands.BadArgument("`embeds` must be a non-empty list.")
+            if not isinstance(embeds[0], dict):
+                raise commands.BadArgument("The first entry in `embeds` must be an object.")
+            return embeds[0]
+
+        embed = payload.get("embed")
+        if isinstance(embed, dict):
+            return embed
+
+        return payload
+
+    @classmethod
+    def _sanitize_embed_dict(cls, embed_data: Dict[str, Any]) -> Dict[str, Any]:
+        cleaned: Dict[str, Any] = {}
+
+        for key in ("title", "description", "url", "timestamp"):
+            value = embed_data.get(key)
+            if value not in (None, ""):
+                cleaned[key] = value
+
+        if "color" in embed_data and embed_data.get("color") is not None:
+            cleaned["color"] = embed_data.get("color")
+
+        author = cls._clean_embed_author_block(embed_data.get("author"))
+        if author:
+            cleaned["author"] = author
+
+        footer = cls._clean_embed_footer_block(embed_data.get("footer"))
+        if footer:
+            cleaned["footer"] = footer
+
+        thumbnail = cls._clean_embed_media_block(embed_data.get("thumbnail"))
+        if thumbnail:
+            cleaned["thumbnail"] = thumbnail
+
+        image = cls._clean_embed_media_block(embed_data.get("image"))
+        if image:
+            cleaned["image"] = image
+
+        fields = cls._clean_embed_fields(embed_data.get("fields"))
+        if fields:
+            cleaned["fields"] = fields
+
+        if not cleaned:
+            raise commands.BadArgument("No usable embed data was found in that JSON payload.")
+
+        return cleaned
+
     async def _read_json_input(
         self, ctx: commands.Context, raw_json: Optional[str]
     ) -> Tuple[Dict[str, Any], str]:
@@ -268,7 +381,9 @@ class Welcome(commands.Cog):
         if not isinstance(parsed, dict):
             raise commands.BadArgument("Embed JSON must be a single JSON object.")
 
-        return self._normalise_embed_dict(parsed), source
+        embed_object = self._extract_embed_object(parsed)
+        cleaned_embed = self._sanitize_embed_dict(embed_object)
+        return self._normalise_embed_dict(cleaned_embed), source
 
     async def _download_image(self, url: str) -> Dict[str, str]:
         timeout = aiohttp.ClientTimeout(total=30)
