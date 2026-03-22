@@ -77,7 +77,7 @@ class Welcome(commands.Cog):
             include_bots=False,
             channel_id=None,
             message_template="Welcome {member.mention} to **{guild.name}**!",
-            embed_json=None,
+            embed_json={},
             image=self._empty_image_data(),
             image_mode="embed",
         )
@@ -584,7 +584,7 @@ class Welcome(commands.Cog):
     @welcome.command(name="clearembed")
     async def welcome_clear_embed(self, ctx: commands.Context) -> None:
         """Remove the stored custom embed."""
-        await self.config.guild(ctx.guild).embed_json.set(None)
+        await self.config.guild(ctx.guild).embed_json.set({})
         await ctx.send("The stored welcome embed has been cleared.")
 
     @welcome.command(name="image")
