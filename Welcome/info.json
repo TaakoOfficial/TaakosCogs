@@ -1,0 +1,14 @@
+{
+  "name": "Welcome",
+  "description": "A Red DiscordBot cog for customizable welcome messages with placeholders, JSON embeds, and cached images.",
+  "author": ["Taako"],
+  "install_msg": "Welcome cog loaded. Use [p]welcome to configure join messages for this server.",
+  "requirements": ["aiohttp"],
+  "tags": ["welcome", "greetings", "embeds", "utility"],
+  "min_bot_version": "3.0.0",
+  "hidden": false,
+  "disabled": false,
+  "type": "COG",
+  "short": "Custom welcome messages with placeholders, embeds, and cached images.",
+  "version": "1.0.0"
+}
