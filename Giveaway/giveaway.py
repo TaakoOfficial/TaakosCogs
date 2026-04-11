@@ -133,6 +133,59 @@ class GiveawaySlashGroup(app_commands.Group):
             ephemeral=True,
         )
 
+    @app_commands.command(
+        name="attach",
+        description="Attach a giveaway to an existing message or embed.",
+    )
+    @app_commands.describe(
+        reference="Existing message ID in this channel, or a full Discord message link",
+        duration="How long the giveaway should run, e.g. 30m, 2h, or 1d12h",
+        winner_count="How many winners to draw",
+        prize="Optional prize text. If omitted, the cog will infer one from the message.",
+    )
+    @app_commands.guild_only()
+    async def attach(
+        self,
+        interaction: discord.Interaction,
+        reference: str,
+        duration: str,
+        winner_count: int,
+        prize: Optional[str] = None,
+    ) -> None:
+        if not await self._is_manager(interaction):
+            await interaction.response.send_message(
+                "You need the `Manage Server` permission to use this command.",
+                ephemeral=True,
+            )
+            return
+
+        await interaction.response.defer(ephemeral=True)
+        try:
+            record, entry_message, status_message, duration_text = await self.cog._attach_giveaway(
+                interaction.guild,
+                interaction.channel if isinstance(interaction.channel, discord.TextChannel) else None,
+                interaction.user.id,
+                reference,
+                duration,
+                winner_count,
+                prize,
+            )
+        except commands.CommandError as error:
+            await self._send_command_error(interaction, error)
+            return
+
+        entry_url = self.cog._build_jump_url(
+            interaction.guild.id, int(record["channel_id"]), entry_message.id
+        )
+        status_url = self.cog._build_jump_url(
+            interaction.guild.id, int(record["channel_id"]), status_message.id
+        )
+        await interaction.followup.send(
+            f"Giveaway attached to [the existing message]({entry_url}) for **{record['prize']}**. "
+            f"It ends in {duration_text}. [Status message]({status_url})",
+            ephemeral=True,
+        )
+
     @app_commands.command(name="end", description="End an active giveaway immediately.")
     @app_commands.describe(reference="Giveaway message ID or full Discord message link")
     @app_commands.guild_only()
@@ -382,7 +435,17 @@ class Giveaway(commands.Cog):
         return f"https://discord.com/channels/{guild_id}/{channel_id}/{message_id}"
 
     def _build_giveaway_embed(self, record: Dict[str, Any]) -> discord.Embed:
+        source = record.get("source", "created")
         status = record.get("status", "active")
+        title = "Attached Giveaway" if source == "attached" else "Giveaway"
+        jump_url = None
+        if record.get("guild_id") and record.get("channel_id") and record.get("message_id"):
+            jump_url = self._build_jump_url(
+                int(record["guild_id"]),
+                int(record["channel_id"]),
+                int(record["message_id"]),
+            )
+
         if status == "cancelled":
             color = discord.Color.red()
             status_label = "Cancelled"
@@ -405,7 +468,21 @@ class Giveaway(commands.Cog):
                 f"React with {self.REACTION_EMOJI} to enter."
             )
 
-        embed = discord.Embed(title="Giveaway", description=description, color=color)
+        if source == "attached":
+            if jump_url:
+                description = (
+                    f"{description}\n\n"
+                    f"This giveaway is attached to [an existing message]({jump_url}). "
+                    f"React on the original message with {self.REACTION_EMOJI} to enter."
+                )
+            else:
+                description = (
+                    f"{description}\n\n"
+                    f"This giveaway is attached to an existing message. "
+                    f"React on the original message with {self.REACTION_EMOJI} to enter."
+                )
+
+        embed = discord.Embed(title=title, description=description, color=color)
 
         end_time = datetime.fromtimestamp(float(record["ends_at"]), tz=timezone.utc)
         embed.add_field(
@@ -424,6 +501,9 @@ class Giveaway(commands.Cog):
             inline=True,
         )
         embed.add_field(name="Status", value=status_label, inline=True)
+
+        if source == "attached" and jump_url:
+            embed.add_field(name="Entry Message", value=f"[Jump to message]({jump_url})", inline=False)
 
         entry_count = int(record.get("entry_count", 0))
         if status != "active":
@@ -444,7 +524,8 @@ class Giveaway(commands.Cog):
             )
 
         if record.get("message_id"):
-            embed.set_footer(text=f"Message ID: {record['message_id']}")
+            footer_label = "Entry Message ID" if source == "attached" else "Message ID"
+            embed.set_footer(text=f"{footer_label}: {record['message_id']}")
 
         return embed
 
@@ -453,6 +534,45 @@ class Giveaway(commands.Cog):
             raise commands.BadArgument("Winner count must be at least 1.")
         if winner_count > self.MAX_WINNERS:
             raise commands.BadArgument(f"Winner count cannot exceed {self.MAX_WINNERS}.")
+
+    def _build_record(
+        self,
+        guild_id: int,
+        channel_id: int,
+        host_id: int,
+        prize: str,
+        winner_count: int,
+        ends_at: float,
+        source: str,
+    ) -> Dict[str, Any]:
+        return {
+            "guild_id": guild_id,
+            "message_id": 0,
+            "status_message_id": None,
+            "channel_id": channel_id,
+            "prize": prize,
+            "winner_count": winner_count,
+            "host_id": host_id,
+            "ends_at": ends_at,
+            "status": "active",
+            "winner_ids": [],
+            "ended_at": None,
+            "entry_count": 0,
+            "source": source,
+        }
+
+    def _infer_prize_from_message(self, message: discord.Message) -> str:
+        if message.embeds:
+            first_embed = message.embeds[0]
+            if first_embed.title:
+                return self._shorten(first_embed.title.strip(), 200)
+            if first_embed.description:
+                return self._shorten(first_embed.description.strip(), 200)
+
+        if message.content:
+            return self._shorten(message.content.strip(), 200)
+
+        return "Attached Giveaway"
 
     async def _create_giveaway(
         self,
@@ -473,18 +593,9 @@ class Giveaway(commands.Cog):
         self._validate_channel_permissions(channel, me)
 
         ends_at = self._now_ts() + duration_seconds
-        record: Dict[str, Any] = {
-            "message_id": 0,
-            "channel_id": channel.id,
-            "prize": prize,
-            "winner_count": winner_count,
-            "host_id": host_id,
-            "ends_at": ends_at,
-            "status": "active",
-            "winner_ids": [],
-            "ended_at": None,
-            "entry_count": 0,
-        }
+        record = self._build_record(
+            guild.id, channel.id, host_id, prize, winner_count, ends_at, "created"
+        )
 
         giveaway_message = await channel.send(
             embed=self._build_giveaway_embed(record),
@@ -502,11 +613,93 @@ class Giveaway(commands.Cog):
             ) from exc
 
         record["message_id"] = giveaway_message.id
+        record["status_message_id"] = giveaway_message.id
         async with self.config.guild(guild).giveaways() as giveaways:
             giveaways[str(giveaway_message.id)] = record
 
         duration_text = humanize_timedelta(seconds=duration_seconds) or f"{duration_seconds} seconds"
         return record, giveaway_message, duration_text
+
+    async def _attach_giveaway(
+        self,
+        guild: discord.Guild,
+        current_channel: Optional[discord.TextChannel],
+        host_id: int,
+        reference: str,
+        duration: str,
+        winner_count: int,
+        prize: Optional[str],
+    ) -> Tuple[Dict[str, Any], discord.Message, discord.Message, str]:
+        self._ensure_winner_count(winner_count)
+        duration_seconds = self._parse_duration(duration)
+        channel_id, message_id = self._parse_reference(guild, reference)
+        if channel_id is None:
+            if current_channel is None:
+                raise commands.BadArgument(
+                    "A raw message ID only works in a standard text channel. "
+                    "Use a full Discord message link for messages in other channels."
+                )
+            channel_id = current_channel.id
+
+        entry_message = await self._fetch_message(guild, channel_id, message_id)
+        if entry_message is None:
+            raise commands.CommandError("I couldn't fetch that message.")
+        if not isinstance(entry_message.channel, discord.TextChannel):
+            raise commands.CommandError("The target message must be in a standard text channel.")
+
+        giveaways = await self.config.guild(guild).giveaways()
+        if str(entry_message.id) in giveaways:
+            raise commands.CommandError("That message already has a giveaway attached to it.")
+
+        final_prize = (prize or "").strip() or self._infer_prize_from_message(entry_message)
+        ends_at = self._now_ts() + duration_seconds
+
+        me = guild.me or guild.get_member(self.bot.user.id)
+        self._validate_channel_permissions(entry_message.channel, me)
+
+        record = self._build_record(
+            guild.id,
+            entry_message.channel.id,
+            host_id,
+            final_prize,
+            winner_count,
+            ends_at,
+            "attached",
+        )
+        record["message_id"] = entry_message.id
+
+        status_message = await entry_message.channel.send(
+            embed=self._build_giveaway_embed(record),
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
+
+        try:
+            await entry_message.add_reaction(self.REACTION_EMOJI)
+        except discord.HTTPException as exc:
+            try:
+                await status_message.delete()
+            except discord.HTTPException:
+                pass
+            raise commands.CommandError(
+                "I couldn't add the giveaway reaction to that message. "
+                "Check my `Add Reactions` permission and make sure the message still exists."
+            ) from exc
+
+        record["status_message_id"] = status_message.id
+        async with self.config.guild(guild).giveaways() as stored_giveaways:
+            stored_giveaways[str(entry_message.id)] = record
+
+        try:
+            await status_message.edit(embed=self._build_giveaway_embed(record))
+        except (discord.Forbidden, discord.HTTPException):
+            log.warning(
+                "Failed to finalize attached giveaway status message %s in guild %s",
+                status_message.id,
+                guild.id,
+            )
+
+        duration_text = humanize_timedelta(seconds=duration_seconds) or f"{duration_seconds} seconds"
+        return record, entry_message, status_message, duration_text
 
     def _validate_channel_permissions(
         self, channel: discord.TextChannel, me: Optional[discord.Member]
@@ -533,17 +726,36 @@ class Giveaway(commands.Cog):
                 f"I am missing required permissions in {channel.mention}: {missing_text}."
             )
 
-    async def _fetch_giveaway_message(
-        self, guild: discord.Guild, record: Dict[str, Any]
+    async def _fetch_message(
+        self, guild: discord.Guild, channel_id: int, message_id: int
     ) -> Optional[discord.Message]:
-        channel = self._get_text_channel(guild, int(record["channel_id"]))
+        channel = self._get_text_channel(guild, channel_id)
         if channel is None:
             return None
 
         try:
-            return await channel.fetch_message(int(record["message_id"]))
+            return await channel.fetch_message(message_id)
         except (discord.NotFound, discord.Forbidden, discord.HTTPException):
             return None
+
+    async def _fetch_giveaway_message(
+        self, guild: discord.Guild, record: Dict[str, Any]
+    ) -> Optional[discord.Message]:
+        return await self._fetch_message(
+            guild,
+            int(record["channel_id"]),
+            int(record["message_id"]),
+        )
+
+    async def _fetch_status_message(
+        self, guild: discord.Guild, record: Dict[str, Any]
+    ) -> Optional[discord.Message]:
+        status_message_id = int(record.get("status_message_id") or record["message_id"])
+        return await self._fetch_message(
+            guild,
+            int(record["channel_id"]),
+            status_message_id,
+        )
 
     async def _get_entrants(self, message: discord.Message) -> List[discord.Member]:
         reaction = discord.utils.get(message.reactions, emoji=self.REACTION_EMOJI)
@@ -603,6 +815,12 @@ class Giveaway(commands.Cog):
         key = str(message_id)
         record = giveaways.get(key)
         if record is None:
+            for original_key, candidate in giveaways.items():
+                if int(candidate.get("status_message_id") or 0) == message_id:
+                    key = original_key
+                    record = candidate
+                    break
+        if record is None:
             raise commands.BadArgument("No giveaway with that message ID was found in this server.")
         if channel_id_hint is not None and int(record.get("channel_id", 0)) != channel_id_hint:
             raise commands.BadArgument("That message link does not match the stored giveaway record.")
@@ -611,7 +829,7 @@ class Giveaway(commands.Cog):
     async def _edit_giveaway_message(
         self, guild: discord.Guild, record: Dict[str, Any]
     ) -> Optional[discord.Message]:
-        message = await self._fetch_giveaway_message(guild, record)
+        message = await self._fetch_status_message(guild, record)
         if message is None:
             return None
 
@@ -762,8 +980,9 @@ class Giveaway(commands.Cog):
             jump_url = self._build_jump_url(
                 guild.id, int(record["channel_id"]), int(record["message_id"])
             )
+            mode = "attached" if record.get("source") == "attached" else "native"
             lines.append(
-                f"`{record['message_id']}` | {self._shorten(record['prize'], 80)} | "
+                f"`{record['message_id']}` | {mode} | {self._shorten(record['prize'], 80)} | "
                 f"{channel_text} | ends {discord.utils.format_dt(end_time, 'R')} | {jump_url}"
             )
 
@@ -822,6 +1041,34 @@ class Giveaway(commands.Cog):
         await ctx.send(
             f"Giveaway started in {channel.mention} for **{prize}**. "
             f"It ends in {duration_text}. Message ID: `{giveaway_message.id}`\n{jump_url}"
+        )
+
+    @giveaway.command(name="attach")
+    @commands.guild_only()
+    @commands.admin_or_permissions(manage_guild=True)
+    async def giveaway_attach(
+        self,
+        ctx: commands.Context,
+        reference: str,
+        duration: str,
+        winner_count: int,
+        *,
+        prize: Optional[str] = None,
+    ) -> None:
+        """Attach a giveaway to an existing message or embed."""
+        current_channel = ctx.channel if isinstance(ctx.channel, discord.TextChannel) else None
+        record, entry_message, status_message, duration_text = await self._attach_giveaway(
+            ctx.guild, current_channel, ctx.author.id, reference, duration, winner_count, prize
+        )
+        entry_url = self._build_jump_url(
+            ctx.guild.id, int(record["channel_id"]), entry_message.id
+        )
+        status_url = self._build_jump_url(
+            ctx.guild.id, int(record["channel_id"]), status_message.id
+        )
+        await ctx.send(
+            f"Giveaway attached to [the existing message]({entry_url}) for **{record['prize']}**. "
+            f"It ends in {duration_text}. Status message: {status_url}"
         )
 
     @giveaway.command(name="end")

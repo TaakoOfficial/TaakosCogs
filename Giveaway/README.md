@@ -2,7 +2,7 @@
 
 `Giveaway` is a Red-DiscordBot cog for simple timed giveaways.
 
-It creates a giveaway message, adds the `🎉` reaction automatically, watches active giveaways in the background, and picks winners when the timer expires.
+It can either create a dedicated giveaway message or attach a giveaway to an existing message, adds the `🎉` reaction automatically, watches active giveaways in the background, and picks winners when the timer expires.
 
 ## Features
 
@@ -20,6 +20,7 @@ Prefix commands:
 
 - `[p]giveaway start <duration> <winner_count> <prize>`
 - `[p]giveaway startin <channel> <duration> <winner_count> <prize>`
+- `[p]giveaway attach <message_id_or_link> <duration> <winner_count> [prize]`
 - `[p]giveaway end <message_id_or_link>`
 - `[p]giveaway cancel <message_id_or_link>`
 - `[p]giveaway reroll <message_id_or_link> [winner_count]`
@@ -29,6 +30,7 @@ Slash commands:
 
 - `/giveaway start`
 - `/giveaway startin`
+- `/giveaway attach`
 - `/giveaway end`
 - `/giveaway cancel`
 - `/giveaway reroll`
@@ -39,9 +41,12 @@ Slash commands:
 ```text
 [p]giveaway start 2h 1 Discord Nitro
 [p]giveaway startin #events 3d 3 Server Booster Bundle
+[p]giveaway attach 123456789012345678 2h 1 Discord Nitro
+[p]giveaway attach https://discord.com/channels/123/456/789 2h 1 Discord Nitro
 [p]giveaway end 123456789012345678
 [p]giveaway reroll https://discord.com/channels/123/456/789
 /giveaway start duration:2h winner_count:1 prize:Discord Nitro
+/giveaway attach reference:https://discord.com/channels/123/456/789 duration:2h winner_count:1
 /giveaway list
 ```
 
@@ -51,3 +56,5 @@ Slash commands:
 - Entrants join by reacting with `🎉` on the giveaway message.
 - Winners are selected from non-bot members who still have access to the guild when the giveaway ends.
 - The slash command group is registered on Red's app command tree as `/giveaway` when the cog loads.
+- `attach` uses the existing message for entries and posts a separate bot-owned status embed in the same channel so the giveaway can still be tracked and updated cleanly.
+- A bare message ID for `attach` refers to a message in the channel where you run the command. Use a full message link for a message in another channel.
