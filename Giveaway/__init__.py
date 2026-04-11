@@ -7,4 +7,7 @@ __red_end_user_data_statement__ = (
 
 
 async def setup(bot):
-    await bot.add_cog(Giveaway(bot))
+    cog = Giveaway(bot)
+    await bot.add_cog(cog)
+    if hasattr(cog, "giveaway_group"):
+        bot.tree.add_command(cog.giveaway_group)

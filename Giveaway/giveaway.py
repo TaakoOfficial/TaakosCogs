@@ -11,11 +11,243 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import discord
 from discord.ext import tasks
-from redbot.core import Config, commands
+from redbot.core import Config, app_commands, commands
 from redbot.core.bot import Red
 from redbot.core.utils.chat_formatting import humanize_timedelta, pagify
 
 log = logging.getLogger("red.taakoscogs.giveaway")
+
+
+class GiveawaySlashGroup(app_commands.Group):
+    """Slash command group for giveaway management."""
+
+    def __init__(self, cog: "Giveaway") -> None:
+        super().__init__(name="giveaway", description="Create and manage giveaways.")
+        self.cog = cog
+
+    async def _is_manager(self, interaction: discord.Interaction) -> bool:
+        if not interaction.guild or not interaction.user:
+            return False
+        member = interaction.guild.get_member(interaction.user.id)
+        return bool(member and member.guild_permissions.manage_guild)
+
+    async def _send_command_error(
+        self, interaction: discord.Interaction, error: commands.CommandError
+    ) -> None:
+        message = str(error) or "That giveaway command could not be completed."
+        if interaction.response.is_done():
+            await interaction.followup.send(message, ephemeral=True)
+            return
+        await interaction.response.send_message(message, ephemeral=True)
+
+    @app_commands.command(name="start", description="Start a giveaway in the current channel.")
+    @app_commands.describe(
+        duration="How long the giveaway should run, e.g. 30m, 2h, or 1d12h",
+        winner_count="How many winners to draw",
+        prize="Prize text to show on the giveaway",
+    )
+    @app_commands.guild_only()
+    async def start(
+        self, interaction: discord.Interaction, duration: str, winner_count: int, prize: str
+    ) -> None:
+        if not await self._is_manager(interaction):
+            await interaction.response.send_message(
+                "You need the `Manage Server` permission to use this command.",
+                ephemeral=True,
+            )
+            return
+
+        if not isinstance(interaction.channel, discord.TextChannel):
+            await interaction.response.send_message(
+                "Giveaways can only be started in standard text channels.",
+                ephemeral=True,
+            )
+            return
+
+        await interaction.response.defer(ephemeral=True)
+        try:
+            record, giveaway_message, duration_text = await self.cog._create_giveaway(
+                interaction.guild,
+                interaction.channel,
+                interaction.user.id,
+                duration,
+                winner_count,
+                prize,
+            )
+        except commands.CommandError as error:
+            await self._send_command_error(interaction, error)
+            return
+
+        jump_url = self.cog._build_jump_url(
+            interaction.guild.id, int(record["channel_id"]), giveaway_message.id
+        )
+        await interaction.followup.send(
+            f"Giveaway started in {interaction.channel.mention} for **{record['prize']}**. "
+            f"It ends in {duration_text}. [Jump to giveaway]({jump_url})",
+            ephemeral=True,
+        )
+
+    @app_commands.command(name="startin", description="Start a giveaway in a specific text channel.")
+    @app_commands.describe(
+        channel="Channel where the giveaway should be posted",
+        duration="How long the giveaway should run, e.g. 30m, 2h, or 1d12h",
+        winner_count="How many winners to draw",
+        prize="Prize text to show on the giveaway",
+    )
+    @app_commands.guild_only()
+    async def startin(
+        self,
+        interaction: discord.Interaction,
+        channel: discord.TextChannel,
+        duration: str,
+        winner_count: int,
+        prize: str,
+    ) -> None:
+        if not await self._is_manager(interaction):
+            await interaction.response.send_message(
+                "You need the `Manage Server` permission to use this command.",
+                ephemeral=True,
+            )
+            return
+
+        await interaction.response.defer(ephemeral=True)
+        try:
+            record, giveaway_message, duration_text = await self.cog._create_giveaway(
+                interaction.guild,
+                channel,
+                interaction.user.id,
+                duration,
+                winner_count,
+                prize,
+            )
+        except commands.CommandError as error:
+            await self._send_command_error(interaction, error)
+            return
+
+        jump_url = self.cog._build_jump_url(
+            interaction.guild.id, int(record["channel_id"]), giveaway_message.id
+        )
+        await interaction.followup.send(
+            f"Giveaway started in {channel.mention} for **{record['prize']}**. "
+            f"It ends in {duration_text}. [Jump to giveaway]({jump_url})",
+            ephemeral=True,
+        )
+
+    @app_commands.command(name="end", description="End an active giveaway immediately.")
+    @app_commands.describe(reference="Giveaway message ID or full Discord message link")
+    @app_commands.guild_only()
+    async def end(self, interaction: discord.Interaction, reference: str) -> None:
+        if not await self._is_manager(interaction):
+            await interaction.response.send_message(
+                "You need the `Manage Server` permission to use this command.",
+                ephemeral=True,
+            )
+            return
+
+        await interaction.response.defer(ephemeral=True)
+        try:
+            key, _record = await self.cog._get_record_from_reference(interaction.guild, reference)
+            record, winners = await self.cog._end_giveaway(interaction.guild, int(key))
+        except commands.CommandError as error:
+            await self._send_command_error(interaction, error)
+            return
+
+        jump_url = self.cog._build_jump_url(
+            interaction.guild.id, int(record["channel_id"]), int(record["message_id"])
+        )
+        if winners:
+            winner_text = ", ".join(winner.mention for winner in winners)
+            await interaction.followup.send(
+                f"Giveaway ended. Winner(s): {winner_text}\nUpdated message: {jump_url}",
+                ephemeral=True,
+            )
+            return
+
+        await interaction.followup.send(
+            f"Giveaway ended with no valid entries.\nUpdated message: {jump_url}",
+            ephemeral=True,
+        )
+
+    @app_commands.command(name="cancel", description="Cancel an active giveaway.")
+    @app_commands.describe(reference="Giveaway message ID or full Discord message link")
+    @app_commands.guild_only()
+    async def cancel(self, interaction: discord.Interaction, reference: str) -> None:
+        if not await self._is_manager(interaction):
+            await interaction.response.send_message(
+                "You need the `Manage Server` permission to use this command.",
+                ephemeral=True,
+            )
+            return
+
+        await interaction.response.defer(ephemeral=True)
+        try:
+            key, _record = await self.cog._get_record_from_reference(interaction.guild, reference)
+            record = await self.cog._cancel_giveaway(interaction.guild, int(key))
+        except commands.CommandError as error:
+            await self._send_command_error(interaction, error)
+            return
+
+        jump_url = self.cog._build_jump_url(
+            interaction.guild.id, int(record["channel_id"]), int(record["message_id"])
+        )
+        await interaction.followup.send(
+            f"Giveaway cancelled. Updated message: {jump_url}",
+            ephemeral=True,
+        )
+
+    @app_commands.command(name="reroll", description="Pick new winners for an ended giveaway.")
+    @app_commands.describe(
+        reference="Giveaway message ID or full Discord message link",
+        winner_count="How many new winners to draw. Defaults to the original amount.",
+    )
+    @app_commands.guild_only()
+    async def reroll(
+        self, interaction: discord.Interaction, reference: str, winner_count: Optional[int] = None
+    ) -> None:
+        if not await self._is_manager(interaction):
+            await interaction.response.send_message(
+                "You need the `Manage Server` permission to use this command.",
+                ephemeral=True,
+            )
+            return
+
+        await interaction.response.defer(ephemeral=True)
+        try:
+            key, record = await self.cog._get_record_from_reference(interaction.guild, reference)
+            target_winner_count = winner_count or int(record.get("winner_count", 1))
+            self.cog._ensure_winner_count(target_winner_count)
+            updated_record, winners = await self.cog._reroll_giveaway(
+                interaction.guild, int(key), target_winner_count
+            )
+            await self.cog._announce_reroll(interaction.guild, updated_record, winners)
+        except commands.CommandError as error:
+            await self._send_command_error(interaction, error)
+            return
+
+        winner_text = ", ".join(winner.mention for winner in winners)
+        await interaction.followup.send(f"Rerolled winner(s): {winner_text}", ephemeral=True)
+
+    @app_commands.command(name="list", description="List all active giveaways in this server.")
+    @app_commands.guild_only()
+    async def list(self, interaction: discord.Interaction) -> None:
+        if not interaction.guild:
+            await interaction.response.send_message(
+                "This command can only be used in a server.",
+                ephemeral=True,
+            )
+            return
+
+        pages = await self.cog._get_active_giveaway_pages(interaction.guild)
+        if not pages:
+            await interaction.response.send_message(
+                "There are no active giveaways in this server.",
+                ephemeral=True,
+            )
+            return
+
+        await interaction.response.send_message(pages[0], ephemeral=True)
+        for page in pages[1:]:
+            await interaction.followup.send(page, ephemeral=True)
 
 
 class Giveaway(commands.Cog):
@@ -36,12 +268,14 @@ class Giveaway(commands.Cog):
         self.config = Config.get_conf(self, identifier=2026041101, force_registration=True)
         self.config.register_guild(giveaways={})
         self._giveaway_locks: Dict[Tuple[int, int], asyncio.Lock] = {}
+        self.giveaway_group = GiveawaySlashGroup(self)
         self._task = self.giveaway_loop.start()
 
     async def cog_unload(self) -> None:
         """Cancel the giveaway watcher when the cog unloads."""
         if self._task:
             self._task.cancel()
+        self.bot.tree.remove_command(self.giveaway_group.name)
 
     async def red_delete_data_for_user(self, *, requester: str, user_id: int) -> None:
         """Remove stored host and winner references for a deleted user."""
@@ -219,6 +453,60 @@ class Giveaway(commands.Cog):
             raise commands.BadArgument("Winner count must be at least 1.")
         if winner_count > self.MAX_WINNERS:
             raise commands.BadArgument(f"Winner count cannot exceed {self.MAX_WINNERS}.")
+
+    async def _create_giveaway(
+        self,
+        guild: discord.Guild,
+        channel: discord.TextChannel,
+        host_id: int,
+        duration: str,
+        winner_count: int,
+        prize: str,
+    ) -> Tuple[Dict[str, Any], discord.Message, str]:
+        self._ensure_winner_count(winner_count)
+        duration_seconds = self._parse_duration(duration)
+        prize = prize.strip()
+        if not prize:
+            raise commands.BadArgument("Prize text cannot be empty.")
+
+        me = guild.me or guild.get_member(self.bot.user.id)
+        self._validate_channel_permissions(channel, me)
+
+        ends_at = self._now_ts() + duration_seconds
+        record: Dict[str, Any] = {
+            "message_id": 0,
+            "channel_id": channel.id,
+            "prize": prize,
+            "winner_count": winner_count,
+            "host_id": host_id,
+            "ends_at": ends_at,
+            "status": "active",
+            "winner_ids": [],
+            "ended_at": None,
+            "entry_count": 0,
+        }
+
+        giveaway_message = await channel.send(
+            embed=self._build_giveaway_embed(record),
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
+        try:
+            await giveaway_message.add_reaction(self.REACTION_EMOJI)
+        except discord.HTTPException as exc:
+            try:
+                await giveaway_message.delete()
+            except discord.HTTPException:
+                pass
+            raise commands.CommandError(
+                "I couldn't add the giveaway reaction. Check my `Add Reactions` permission."
+            ) from exc
+
+        record["message_id"] = giveaway_message.id
+        async with self.config.guild(guild).giveaways() as giveaways:
+            giveaways[str(giveaway_message.id)] = record
+
+        duration_text = humanize_timedelta(seconds=duration_seconds) or f"{duration_seconds} seconds"
+        return record, giveaway_message, duration_text
 
     def _validate_channel_permissions(
         self, channel: discord.TextChannel, me: Optional[discord.Member]
@@ -444,6 +732,43 @@ class Giveaway(commands.Cog):
             await self._edit_giveaway_message(guild, record)
             return record, winners
 
+    async def _announce_reroll(
+        self, guild: discord.Guild, record: Dict[str, Any], winners: List[discord.Member]
+    ) -> None:
+        channel = self._get_text_channel(guild, int(record["channel_id"]))
+        if channel is None:
+            return
+
+        winner_text = ", ".join(winner.mention for winner in winners)
+        await channel.send(
+            f"Reroll result for **{record['prize']}**: {winner_text}",
+            allowed_mentions=discord.AllowedMentions(users=True, roles=False, everyone=False),
+        )
+
+    async def _get_active_giveaway_pages(self, guild: discord.Guild) -> List[str]:
+        giveaways = await self.config.guild(guild).giveaways()
+        active_records = [
+            record for record in giveaways.values() if record.get("status") == "active"
+        ]
+        if not active_records:
+            return []
+
+        active_records.sort(key=lambda record: float(record.get("ends_at", 0)))
+        lines = []
+        for record in active_records:
+            channel = self._get_text_channel(guild, int(record["channel_id"]))
+            channel_text = channel.mention if channel is not None else f"<#{record['channel_id']}>"
+            end_time = datetime.fromtimestamp(float(record["ends_at"]), tz=timezone.utc)
+            jump_url = self._build_jump_url(
+                guild.id, int(record["channel_id"]), int(record["message_id"])
+            )
+            lines.append(
+                f"`{record['message_id']}` | {self._shorten(record['prize'], 80)} | "
+                f"{channel_text} | ends {discord.utils.format_dt(end_time, 'R')} | {jump_url}"
+            )
+
+        return list(pagify("\n".join(lines), page_length=1800))
+
     @commands.group(name="giveaway", aliases=["gaw"], invoke_without_command=True)
     @commands.guild_only()
     async def giveaway(self, ctx: commands.Context) -> None:
@@ -464,53 +789,15 @@ class Giveaway(commands.Cog):
         """Start a giveaway in the current channel."""
         if not isinstance(ctx.channel, discord.TextChannel):
             raise commands.CommandError("Giveaways can only be started in standard text channels.")
-
-        self._ensure_winner_count(winner_count)
-        duration_seconds = self._parse_duration(duration)
-        prize = prize.strip()
-        if not prize:
-            raise commands.BadArgument("Prize text cannot be empty.")
-
-        me = ctx.guild.me or ctx.guild.get_member(self.bot.user.id)
-        self._validate_channel_permissions(ctx.channel, me)
-
-        ends_at = self._now_ts() + duration_seconds
-        record: Dict[str, Any] = {
-            "message_id": 0,
-            "channel_id": ctx.channel.id,
-            "prize": prize,
-            "winner_count": winner_count,
-            "host_id": ctx.author.id,
-            "ends_at": ends_at,
-            "status": "active",
-            "winner_ids": [],
-            "ended_at": None,
-            "entry_count": 0,
-        }
-
-        giveaway_message = await ctx.channel.send(
-            embed=self._build_giveaway_embed(record),
-            allowed_mentions=discord.AllowedMentions.none(),
+        record, giveaway_message, duration_text = await self._create_giveaway(
+            ctx.guild, ctx.channel, ctx.author.id, duration, winner_count, prize
         )
-        try:
-            await giveaway_message.add_reaction(self.REACTION_EMOJI)
-        except discord.HTTPException as exc:
-            try:
-                await giveaway_message.delete()
-            except discord.HTTPException:
-                pass
-            raise commands.CommandError(
-                "I couldn't add the giveaway reaction. Check my `Add Reactions` permission."
-            ) from exc
-
-        record["message_id"] = giveaway_message.id
-        async with self.config.guild(ctx.guild).giveaways() as giveaways:
-            giveaways[str(giveaway_message.id)] = record
-
-        duration_text = humanize_timedelta(seconds=duration_seconds) or f"{duration_seconds} seconds"
+        jump_url = self._build_jump_url(
+            ctx.guild.id, int(record["channel_id"]), giveaway_message.id
+        )
         await ctx.send(
             f"Giveaway started in {ctx.channel.mention} for **{prize}**. "
-            f"It ends in {duration_text}. Message ID: `{giveaway_message.id}`"
+            f"It ends in {duration_text}. Message ID: `{giveaway_message.id}`\n{jump_url}"
         )
 
     @giveaway.command(name="startin")
@@ -526,52 +813,15 @@ class Giveaway(commands.Cog):
         prize: str,
     ) -> None:
         """Start a giveaway in a specific text channel."""
-        self._ensure_winner_count(winner_count)
-        duration_seconds = self._parse_duration(duration)
-        prize = prize.strip()
-        if not prize:
-            raise commands.BadArgument("Prize text cannot be empty.")
-
-        me = ctx.guild.me or ctx.guild.get_member(self.bot.user.id)
-        self._validate_channel_permissions(channel, me)
-
-        ends_at = self._now_ts() + duration_seconds
-        record: Dict[str, Any] = {
-            "message_id": 0,
-            "channel_id": channel.id,
-            "prize": prize,
-            "winner_count": winner_count,
-            "host_id": ctx.author.id,
-            "ends_at": ends_at,
-            "status": "active",
-            "winner_ids": [],
-            "ended_at": None,
-            "entry_count": 0,
-        }
-
-        giveaway_message = await channel.send(
-            embed=self._build_giveaway_embed(record),
-            allowed_mentions=discord.AllowedMentions.none(),
+        record, giveaway_message, duration_text = await self._create_giveaway(
+            ctx.guild, channel, ctx.author.id, duration, winner_count, prize
         )
-        try:
-            await giveaway_message.add_reaction(self.REACTION_EMOJI)
-        except discord.HTTPException as exc:
-            try:
-                await giveaway_message.delete()
-            except discord.HTTPException:
-                pass
-            raise commands.CommandError(
-                "I couldn't add the giveaway reaction. Check my `Add Reactions` permission."
-            ) from exc
-
-        record["message_id"] = giveaway_message.id
-        async with self.config.guild(ctx.guild).giveaways() as giveaways:
-            giveaways[str(giveaway_message.id)] = record
-
-        duration_text = humanize_timedelta(seconds=duration_seconds) or f"{duration_seconds} seconds"
+        jump_url = self._build_jump_url(
+            ctx.guild.id, int(record["channel_id"]), giveaway_message.id
+        )
         await ctx.send(
             f"Giveaway started in {channel.mention} for **{prize}**. "
-            f"It ends in {duration_text}. Message ID: `{giveaway_message.id}`"
+            f"It ends in {duration_text}. Message ID: `{giveaway_message.id}`\n{jump_url}"
         )
 
     @giveaway.command(name="end")
@@ -612,41 +862,18 @@ class Giveaway(commands.Cog):
         self._ensure_winner_count(winner_count)
 
         updated_record, winners = await self._reroll_giveaway(ctx.guild, int(key), winner_count)
-        channel = self._get_text_channel(ctx.guild, int(updated_record["channel_id"]))
         winner_text = ", ".join(winner.mention for winner in winners)
-        if channel is not None:
-            await channel.send(
-                f"Reroll result for **{updated_record['prize']}**: {winner_text}",
-                allowed_mentions=discord.AllowedMentions(users=True, roles=False, everyone=False),
-            )
-
+        await self._announce_reroll(ctx.guild, updated_record, winners)
         await ctx.send(f"Rerolled winner(s): {winner_text}")
 
     @giveaway.command(name="list")
     @commands.guild_only()
     async def giveaway_list(self, ctx: commands.Context) -> None:
         """List all active giveaways in this server."""
-        giveaways = await self.config.guild(ctx.guild).giveaways()
-        active_records = [
-            record for record in giveaways.values() if record.get("status") == "active"
-        ]
-        if not active_records:
+        pages = await self._get_active_giveaway_pages(ctx.guild)
+        if not pages:
             await ctx.send("There are no active giveaways in this server.")
             return
 
-        active_records.sort(key=lambda record: float(record.get("ends_at", 0)))
-        lines = []
-        for record in active_records:
-            channel = self._get_text_channel(ctx.guild, int(record["channel_id"]))
-            channel_text = channel.mention if channel is not None else f"<#{record['channel_id']}>"
-            end_time = datetime.fromtimestamp(float(record["ends_at"]), tz=timezone.utc)
-            jump_url = self._build_jump_url(
-                ctx.guild.id, int(record["channel_id"]), int(record["message_id"])
-            )
-            lines.append(
-                f"`{record['message_id']}` | {self._shorten(record['prize'], 80)} | "
-                f"{channel_text} | ends {discord.utils.format_dt(end_time, 'R')} | {jump_url}"
-            )
-
-        for page in pagify("\n".join(lines), page_length=1800):
+        for page in pages:
             await ctx.send(page)
