@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.1
+
+- Renamed `userinfo` to `memberinfo` to avoid conflicts with existing cogs.
+- Replaced common aliases `uinfo` and `whois` with `minfo` and `memberlookup`.
+
 ## 0.3.0
 
 - Added `rolecompare` for role overlap checks.
@@ -10,7 +15,7 @@
 
 ## 0.2.0
 
-- Added `userinfo` for polished member info embeds.
+- Added `memberinfo` for polished member info embeds.
 - Added `userroles` for member role audits.
 - Added `rolecheck` to check if a member has a role.
 - Added `roleaudit` for elevated, empty, managed, and mentionable role audits.

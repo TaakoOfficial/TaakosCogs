@@ -421,13 +421,13 @@ class Toolz(commands.Cog):
         await self._send_embed(ctx, embed)
 
     @commands.hybrid_command(
-        name="userinfo",
-        aliases=["uinfo", "whois"],
+        name="memberinfo",
+        aliases=["minfo", "memberlookup"],
         description="Show detailed information about a server member.",
     )
     @commands.guild_only()
     @commands.bot_has_permissions(embed_links=True)
-    async def userinfo(
+    async def memberinfo(
         self,
         ctx: commands.Context,
         member: Optional[discord.Member] = None,

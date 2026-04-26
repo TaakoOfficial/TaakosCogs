@@ -8,7 +8,7 @@ All commands are hybrid commands. After Red syncs slash commands, each command w
 
 | Command | Description |
 | --- | --- |
-| `[p]userinfo [member]` or `/userinfo` | Show a polished user info embed with copy-friendly user ID, account age, join date, top role, role count, and elevated permission summary. |
+| `[p]memberinfo [member]` or `/memberinfo` | Show a polished member info embed with copy-friendly user ID, account age, join date, top role, role count, and elevated permission summary. |
 | `[p]userroles [member] [limit]` or `/userroles` | List a member's roles with role IDs for quick audits. |
 | `[p]userpermissions [member]` or `/userpermissions` | Show a member's important server permissions and the roles that provide them. |
 | `[p]roleinfo <role>` or `/roleinfo` | Show a polished role info embed with member count, role ID, mention string, color, permissions, and hierarchy details. |
