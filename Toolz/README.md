@@ -1,0 +1,26 @@
+# Toolz
+
+Toolz is a Red DiscordBot cog with role and user utility commands for servers that have many users and roles.
+
+All commands are hybrid commands. After Red syncs slash commands, each command works as both a normal prefix command and a slash command, such as `[p]roleinfo` and `/roleinfo`.
+
+## Commands
+
+| Command | Description |
+| --- | --- |
+| `[p]userinfo [member]` or `/userinfo` | Show a polished user info embed with copy-friendly user ID, account age, join date, top role, role count, and elevated permission summary. |
+| `[p]userroles [member] [limit]` or `/userroles` | List a member's roles with role IDs for quick audits. |
+| `[p]userpermissions [member]` or `/userpermissions` | Show a member's important server permissions and the roles that provide them. |
+| `[p]roleinfo <role>` or `/roleinfo` | Show a polished role info embed with member count, role ID, mention string, color, permissions, and hierarchy details. |
+| `[p]rolecheck <member> <role>` or `/rolecheck` | Check whether a member has a specific role. |
+| `[p]rolecompare <role_one> <role_two> [limit]` or `/rolecompare` | Compare two roles and show overlap, only-in-first, and only-in-second member previews. |
+| `[p]roleaudit [mode] [limit]` or `/roleaudit` | Audit roles by `elevated`, `empty`, `managed`, or `mentionable`. Requires Manage Roles or Red admin permission. |
+| `[p]rolehierarchy [limit] [include_empty]` or `/rolehierarchy` | Show roles in hierarchy order with position, member count, and copy-friendly IDs. |
+| `[p]rolesearch <query>` or `/rolesearch` | Search roles by name or ID and show matching role IDs and member counts. |
+| `[p]rolelist [sort] [limit]` or `/rolelist` | List server roles sorted by `members`, `position`, `name`, or `color`. |
+| `[p]rolemembers <role> [limit]` or `/rolemembers` | Preview members who have a role. |
+| `[p]roleexport <role>` or `/roleexport` | Export role members to a CSV file. Requires Manage Roles or Red admin permission. |
+| `[p]noroles [limit] [include_bots]` or `/noroles` | List members with no roles except `@everyone`. Requires Manage Roles or Red admin permission. |
+| `[p]bots [limit]` or `/bots` | List bot accounts, top roles, and whether they have elevated permissions. Requires Manage Roles or Red admin permission. |
+
+For the easiest mobile and desktop copying, info commands put IDs and mention strings in copy-friendly code blocks.
