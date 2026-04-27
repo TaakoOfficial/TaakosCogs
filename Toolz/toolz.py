@@ -953,6 +953,60 @@ class Toolz(commands.Cog):
         )
         await self._send_embed(ctx, embed)
 
+    @rolemessage.command(
+        name="setup",
+        aliases=["guide", "help"],
+        description="Show role message setup steps and examples.",
+    )
+    @commands.guild_only()
+    @commands.admin_or_permissions(manage_roles=True)
+    @commands.bot_has_permissions(embed_links=True)
+    async def rolemessage_setup(self, ctx: commands.Context):
+        """Show role message setup steps and examples."""
+        prefix = getattr(ctx, "clean_prefix", "[p]")
+        embed = discord.Embed(
+            title="Role Message Setup",
+            description="Post one or more messages when a configured role is given to a member.",
+            color=discord.Color.blurple(),
+        )
+        embed.add_field(
+            name="Setup Steps",
+            value=(
+                f"`{prefix}rolemessage channel @Role #channel`\n"
+                f"`{prefix}rolemessage add @Role Welcome {{user}}, you now have {{role}}!`\n"
+                f"`{prefix}rolemessage test @Role @Member`"
+            ),
+            inline=False,
+        )
+        embed.add_field(
+            name="Manage",
+            value=(
+                f"`{prefix}rolemessage list [role]`\n"
+                f"`{prefix}rolemessage remove <role> <index>`\n"
+                f"`{prefix}rolemessage toggle <role> [true_or_false]`\n"
+                f"`{prefix}rolemessage clear <role>`"
+            ),
+            inline=False,
+        )
+        embed.add_field(
+            name="Placeholders",
+            value=(
+                "`{user}` mention, `{display_name}`, `{username}`, `{user_id}`\n"
+                "`{role}` mention, `{role_name}`, `{role_id}`\n"
+                "`{server}`, `{server_id}`"
+            ),
+            inline=False,
+        )
+        embed.add_field(
+            name="Notes",
+            value=(
+                "The bot needs permission to send messages in the target channel. "
+                "Automatic posting also needs the Server Members intent."
+            ),
+            inline=False,
+        )
+        await self._send_embed(ctx, embed)
+
     @commands.hybrid_command(
         name="roleaudit",
         aliases=["auditroles"],

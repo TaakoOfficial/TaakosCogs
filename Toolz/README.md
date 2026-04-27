@@ -32,6 +32,7 @@ Role messages post automatically when a configured role is newly added to a memb
 
 | Command | Description |
 | --- | --- |
+| `[p]rolemessage setup` | Show setup steps, examples, placeholders, and notes. |
 | `[p]rolemessage channel <role> <channel>` | Set where messages for a role should post. |
 | `[p]rolemessage add <role> <message>` | Add a message template for a role. Up to 10 templates can be stored per role. |
 | `[p]rolemessage remove <role> <index>` | Remove one template by its list number. |

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.2
+
+- Added `rolemessage setup` with setup steps, examples, placeholders, and notes.
+
 ## 0.4.1
 
 - Changed `roleinfo` copy values from code blocks to inline backtick text for easier mobile copying.
