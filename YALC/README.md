@@ -1,101 +1,51 @@
-# 📝 YALC - Yet Another Logging Cog v3.1.1
+# YALC
 
-A powerful, feature-rich logging solution for Red-DiscordBot that just works! ✨
+Yet Another Logging Cog: configurable server logging for Red-DiscordBot.
 
-## 🌟 Features
+[Back to the cog catalog](../README.md)
 
-- 🎯 **Smart Event Logging**
+## Install
 
-  - Message edits and deletions
-  - Member joins, leaves, and updates
-  - Channel and role changes
-  - Thread activity tracking
-  - Command usage monitoring
-
-- 📊 **Advanced Organization**
-
-  - 🗂️ Category-based channel organization
-  - 📜 Single-channel option
-  - 🎨 Beautiful embed formatting
-  - 🏷️ Custom event channels
-
-- ⚙️ **Powerful Configuration**
-
-  - 🧙‍♂️ Interactive setup wizard
-  - ⏱️ Customizable retention periods
-  - 🎯 Event filtering system
-  - 🚫 Ignore lists for users/channels
-
-- 🤖 **Smart Bot Integration**
-
-  - 🎭 Advanced Tupperbox/PluralKit filtering
-  - 🔍 Multiple proxy detection methods
-  - 🪝 Webhook and app message handling
-  - 🔧 Customizable bot ID filters
-
-- 🛡️ **Server Safety**
-  - 🔒 Proper permission handling
-  - ⚡ Rate limit aware
-  - 🎭 Role-based access control
-
-## 📋 Requirements
-
-- Red-DiscordBot V3.5+
-- Discord.py 2.0+
-- Manage Server permission
-- Python 3.9+
-
-## 🚀 Installation
-
-```bash
-[p]load downloader
+```text
 [p]repo add TaakosCogs https://github.com/TaakoOfficial/TaakosCogs
-[p]cog install TaakosCogs yalc
-[p]load yalc
+[p]cog install TaakosCogs YALC
+[p]load YALC
 ```
 
-## 🎮 Quick Start
+## Highlights
 
-1. Run the setup wizard:
+- Logs message, member, channel, thread, role, guild, voice, emoji, and other server events.
+- Configure one log channel or event-specific channels.
+- Enable, disable, bulk enable, and bulk disable event types.
+- Ignore/filter noisy users, channels, bots, webhooks, and proxy-style messages.
+- Setup, validation, diagnostics, autodetect, and dashboard integration commands.
 
-```
-[p]yalc setup
-```
+## Commands
 
-2. Follow the interactive prompts to:
-   - 📁 Choose channel organization
-   - 🎯 Select events to track
-   - ⏱️ Set retention period
+| Command | Description |
+| --- | --- |
+| `[p]yalc` or `[p]logger` | Show the YALC command group help. |
+| `[p]yalc setup` | Run the setup workflow. |
+| `[p]yalc autodetect` | Try smart setup/autodetection. |
+| `[p]yalc settings` | Show current logging settings. |
+| `[p]yalc enable [event_type]` | Enable an event or list available event types. |
+| `[p]yalc disable <event_type>` | Disable an event type. |
+| `[p]yalc setchannel <event_type_or_all> [channel]` | Set where logs should post. |
+| `[p]yalc bulk_enable` | Enable multiple event types. |
+| `[p]yalc bulk_disable` | Disable multiple event types. |
+| `[p]yalc validate` | Validate configuration and permissions. |
+| `[p]yalc test` | Run diagnostics. Aliases: `diagnostics`, `debug`. |
+| `[p]yalc reset` | Reset YALC settings for the server. |
+| `[p]yalc dashboard` | Show dashboard integration details. |
 
-## 📚 Commands
+## Requirements
 
-### Basic Commands
+- Red-DiscordBot 3.5.0 or newer.
+- Python 3.9 or newer.
+- `Send Messages`, `Embed Links`, and permission to view the events being logged.
+- Manage Server permission, Red admin, or equivalent for configuration commands.
+- Server Members intent is recommended for member update logging.
 
-- `[p]yalc setup` - Start the setup wizard
-- `[p]yalc info` - Show current settings
-- `[p]yalc channel` - Set log channel
+## Data
 
-### Event Management
-
-- `[p]yalc toggle` - Enable/disable events
-- `[p]yalc setchannel` - Set channel for specific events
-- `[p]yalc listevents` - Show all available events
-
-### Configuration
-
-- `[p]yalc ignore` - Manage ignore lists
-- `[p]yalc retention` - Configure log retention
-- `[p]yalc filter` - Manage event filters
-
-## 🤝 Support
-
-Join our [support server](https://discord.gg/red) for help!
-
-## 📜 License
-
-Released under the GNU AGPLv3 license. See LICENSE file for the full text.
-
-## 🎨 Credits
-
-- Log icon by [Flaticon](https://www.flaticon.com)
-- Made with ❤️ for the Red community
+YALC stores guild-specific logging settings such as channels, enabled events, event filters, and ignore lists. It does not permanently store personal user data beyond configuration needed for logging behavior.

@@ -1,60 +1,45 @@
 # Giveaway
 
-`Giveaway` is a Red-DiscordBot cog for simple timed giveaways.
+Timed reaction-based giveaways for Red-DiscordBot.
 
-It can either create a dedicated giveaway message or attach a giveaway to an existing message, adds the `🎉` reaction automatically, watches active giveaways in the background, and picks winners when the timer expires.
+[Back to the cog catalog](../README.md)
 
-## Features
+## Install
 
-- Timed giveaways with flexible durations like `30m`, `2h`, `3d`, or `1w2d`
-- Automatic ending after bot restarts
-- Manual end and cancel commands
-- Reroll support for ended giveaways
-- Active giveaway listing per guild
-- Slash commands for Red's application command tree
-- Reaction-based entry, so members do not need extra commands to join
+```text
+[p]repo add TaakosCogs https://github.com/TaakoOfficial/TaakosCogs
+[p]cog install TaakosCogs Giveaway
+[p]load Giveaway
+```
+
+## Highlights
+
+- Start giveaways in the current channel or a specific channel.
+- Attach a giveaway to an existing message by ID or message link.
+- Automatic ending after the timer expires, including after bot restarts.
+- Manual end, cancel, reroll, and active giveaway list commands.
+- Prefix commands and `/giveaway` slash commands.
 
 ## Commands
 
-Prefix commands:
+| Command | Description |
+| --- | --- |
+| `[p]giveaway start <duration> <winner_count> <prize>` | Start a giveaway in the current channel. |
+| `[p]giveaway startin <channel> <duration> <winner_count> <prize>` | Start a giveaway in another channel. |
+| `[p]giveaway attach <message_id_or_link> <duration> <winner_count> [prize]` | Use an existing message for entries. |
+| `[p]giveaway end <message_id_or_link>` | End an active giveaway immediately. |
+| `[p]giveaway cancel <message_id_or_link>` | Cancel an active giveaway. |
+| `[p]giveaway reroll <message_id_or_link> [winner_count]` | Pick new winners for an ended giveaway. |
+| `[p]giveaway list` | List active giveaways in the server. |
 
-- `[p]giveaway start <duration> <winner_count> <prize>`
-- `[p]giveaway startin <channel> <duration> <winner_count> <prize>`
-- `[p]giveaway attach <message_id_or_link> <duration> <winner_count> [prize]`
-- `[p]giveaway end <message_id_or_link>`
-- `[p]giveaway cancel <message_id_or_link>`
-- `[p]giveaway reroll <message_id_or_link> [winner_count]`
-- `[p]giveaway list`
+Durations support values like `30m`, `2h`, `3d`, or `1w2d`.
 
-Slash commands:
+## Requirements
 
-- `/giveaway start`
-- `/giveaway startin`
-- `/giveaway attach`
-- `/giveaway end`
-- `/giveaway cancel`
-- `/giveaway reroll`
-- `/giveaway list`
+- Red-DiscordBot 3.5.0 or newer.
+- `View Channel`, `Send Messages`, `Embed Links`, `Add Reactions`, and `Read Message History`.
+- Manage Server permission, Red admin, or equivalent for giveaway management commands.
 
-## Examples
+## Data
 
-```text
-[p]giveaway start 2h 1 Discord Nitro
-[p]giveaway startin #events 3d 3 Server Booster Bundle
-[p]giveaway attach 123456789012345678 2h 1 Discord Nitro
-[p]giveaway attach https://discord.com/channels/123/456/789 2h 1 Discord Nitro
-[p]giveaway end 123456789012345678
-[p]giveaway reroll https://discord.com/channels/123/456/789
-/giveaway start duration:2h winner_count:1 prize:Discord Nitro
-/giveaway attach reference:https://discord.com/channels/123/456/789 duration:2h winner_count:1
-/giveaway list
-```
-
-## Notes
-
-- The bot needs `View Channel`, `Send Messages`, `Embed Links`, `Add Reactions`, and `Read Message History` in the giveaway channel.
-- Entrants join by reacting with `🎉` on the giveaway message.
-- Winners are selected from non-bot members who still have access to the guild when the giveaway ends.
-- The slash command group is registered on Red's app command tree as `/giveaway` when the cog loads.
-- `attach` uses the existing message for entries and posts a separate bot-owned status embed in the same channel so the giveaway can still be tracked and updated cleanly.
-- A bare message ID for `attach` refers to a message in the channel where you run the command. Use a full message link for a message in another channel.
+Giveaway stores giveaway metadata per guild, including message IDs, channel IDs, host IDs, winner IDs, prize text, and timestamps.
