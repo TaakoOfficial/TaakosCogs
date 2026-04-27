@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.2
+
+- Moved `roleinfo` copy values into normal message text for better mobile copying.
+- Removed the member preview section from `roleinfo`.
+
 ## 0.3.1
 
 - Renamed `userinfo` to `memberinfo` to avoid conflicts with existing cogs.

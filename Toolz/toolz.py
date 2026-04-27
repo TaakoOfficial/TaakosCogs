@@ -158,6 +158,13 @@ class Toolz(commands.Cog):
             return "@everyone"
         return f"<@&{role.id}>"
 
+    def _role_copy_content(self, role: discord.Role) -> str:
+        return (
+            "Copy values:\n"
+            f"Role ID\n{self._copy_block(role.id)}\n"
+            f"Mention String\n{self._copy_block(self._role_mention_string(role))}"
+        )
+
     @staticmethod
     def _assignable_by_bot(role: discord.Role) -> bool:
         try:
@@ -394,12 +401,6 @@ class Toolz(commands.Cog):
 
         embed = self._base_role_embed(role, f"Role Info: {self._safe_role_name(role)}")
         embed.add_field(name="Members", value=self._member_count_text(role), inline=True)
-        embed.add_field(name="Role ID", value=self._copy_block(role.id), inline=True)
-        embed.add_field(
-            name="Mention String",
-            value=self._copy_block(self._role_mention_string(role)),
-            inline=True,
-        )
 
         color_text = f"#{role.color.value:06X}" if role.color.value else "Default"
         embed.add_field(name="Color", value=color_text, inline=True)
@@ -411,14 +412,9 @@ class Toolz(commands.Cog):
             value=self._important_permissions_text(role),
             inline=True,
         )
-        embed.add_field(
-            name="Member Preview",
-            value=self._member_preview_text(role),
-            inline=False,
-        )
         embed.set_footer(text=self._cache_footer(cache_ready))
 
-        await self._send_embed(ctx, embed)
+        await self._send_embed(ctx, embed, content=self._role_copy_content(role))
 
     @commands.hybrid_command(
         name="memberinfo",
