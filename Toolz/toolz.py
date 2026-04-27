@@ -102,6 +102,10 @@ class Toolz(commands.Cog):
         return f"```\n{value}\n```"
 
     @staticmethod
+    def _inline_code(value: object) -> str:
+        return f"`{value}`"
+
+    @staticmethod
     def _line_chunks(lines: Sequence[str], max_chars: int = 1000) -> List[str]:
         chunks: List[str] = []
         current: List[str] = []
@@ -436,7 +440,7 @@ class Toolz(commands.Cog):
                 inline=True,
             )
             embed.add_field(name="Mode", value=self._role_message_mode(entry), inline=True)
-            embed.add_field(name="Role ID", value=self._copy_block(role.id), inline=False)
+            embed.add_field(name="Role ID", value=self._inline_code(role.id), inline=False)
 
             if messages:
                 lines = [
@@ -747,7 +751,7 @@ class Toolz(commands.Cog):
         embed.add_field(name="Member", value=member.mention, inline=True)
         embed.add_field(name="Role", value=self._role_reference(role), inline=True)
         embed.add_field(name="User ID", value=self._copy_block(member.id), inline=True)
-        embed.add_field(name="Role ID", value=self._copy_block(role.id), inline=True)
+        embed.add_field(name="Role ID", value=self._inline_code(role.id), inline=True)
 
         await self._send_embed(ctx, embed)
 
@@ -1195,8 +1199,8 @@ class Toolz(commands.Cog):
             ),
             inline=False,
         )
-        embed.add_field(name="First Role ID", value=self._copy_block(role_one.id), inline=True)
-        embed.add_field(name="Second Role ID", value=self._copy_block(role_two.id), inline=True)
+        embed.add_field(name="First Role ID", value=self._inline_code(role_one.id), inline=True)
+        embed.add_field(name="Second Role ID", value=self._inline_code(role_two.id), inline=True)
 
         sections = (
             ("In Both", both_members),
@@ -1575,7 +1579,7 @@ class Toolz(commands.Cog):
                 )
                 embed.add_field(name=field_name, value=chunk, inline=False)
 
-        embed.add_field(name="Role ID", value=self._copy_block(role.id), inline=False)
+        embed.add_field(name="Role ID", value=self._inline_code(role.id), inline=False)
         embed.set_footer(text=self._cache_footer(cache_ready))
 
         await self._send_embed(ctx, embed)
@@ -1611,7 +1615,7 @@ class Toolz(commands.Cog):
             f"Exported {self._count(len(members))} cached members for "
             f"{self._role_reference(role)}."
         )
-        embed.add_field(name="Role ID", value=self._copy_block(role.id), inline=True)
+        embed.add_field(name="Role ID", value=self._inline_code(role.id), inline=True)
         embed.add_field(name="File", value=f"`{filename}`", inline=True)
         embed.set_footer(text=self._cache_footer(cache_ready))
 

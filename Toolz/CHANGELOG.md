@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.4
+
+- Standardized role ID display to inline backtick text across Toolz command outputs.
+
 ## 0.4.3
 
 - Added `rolemessage mode <role> all|random`.
