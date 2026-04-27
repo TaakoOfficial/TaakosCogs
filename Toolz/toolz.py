@@ -6,16 +6,26 @@ import io
 from typing import List, Optional, Sequence, Tuple
 
 import discord
-from redbot.core import commands
+from redbot.core import Config, commands
 
 __red_end_user_data_statement__ = (
-    "This cog does not persistently store any end user data. Role member exports are "
-    "generated on demand and sent directly to Discord without being saved locally."
+    "This cog stores per-guild role message settings, including role IDs, channel IDs, "
+    "and configured message templates. Role member exports are generated on demand and "
+    "sent directly to Discord without being saved locally."
 )
+
+
+class SafeFormatDict(dict):
+    """Keep unknown template placeholders intact."""
+
+    def __missing__(self, key: str) -> str:
+        return "{" + key + "}"
 
 
 class Toolz(commands.Cog):
     """Role and user utility tools for larger servers."""
+
+    CONFIG_IDENTIFIER = 8273649150
 
     IMPORTANT_PERMISSIONS: Tuple[Tuple[str, str], ...] = (
         ("administrator", "Administrator"),
@@ -36,6 +46,12 @@ class Toolz(commands.Cog):
 
     def __init__(self, bot):
         self.bot = bot
+        self.config = Config.get_conf(
+            self,
+            identifier=self.CONFIG_IDENTIFIER,
+            force_registration=True,
+        )
+        self.config.register_guild(role_messages={})
 
     async def _defer_if_needed(self, ctx: commands.Context) -> None:
         """Defer slash command responses before member cache work."""
@@ -161,8 +177,8 @@ class Toolz(commands.Cog):
     def _role_copy_content(self, role: discord.Role) -> str:
         return (
             "Copy values:\n"
-            f"Role ID\n{self._copy_block(role.id)}\n"
-            f"Mention String\n{self._copy_block(self._role_mention_string(role))}"
+            f"Role ID: `{role.id}`\n"
+            f"Mention String: `{self._role_mention_string(role)}`"
         )
 
     @staticmethod
@@ -288,6 +304,156 @@ class Toolz(commands.Cog):
     def _user_footer() -> str:
         return "Toolz user tools"
 
+    @staticmethod
+    def _default_role_message_settings() -> dict:
+        return {"channel_id": None, "messages": [], "enabled": True}
+
+    @staticmethod
+    def _role_message_key(role: discord.Role) -> str:
+        return str(role.id)
+
+    def _role_message_placeholders(
+        self,
+        member: discord.Member,
+        role: discord.Role,
+    ) -> SafeFormatDict:
+        return SafeFormatDict(
+            user=member.mention,
+            username=str(member),
+            display_name=member.display_name,
+            user_id=str(member.id),
+            role=self._role_reference(role),
+            role_name=self._safe_role_name(role),
+            role_id=str(role.id),
+            server=member.guild.name,
+            server_id=str(member.guild.id),
+        )
+
+    def _render_role_message(
+        self,
+        template: str,
+        member: discord.Member,
+        role: discord.Role,
+    ) -> str:
+        message = template.format_map(self._role_message_placeholders(member, role))
+        if len(message) > 2000:
+            return f"{message[:1997]}..."
+        return message
+
+    def _role_message_entry_summary(
+        self,
+        guild: discord.Guild,
+        role_id: str,
+        entry: dict,
+    ) -> str:
+        role = guild.get_role(int(role_id))
+        role_text = self._role_reference(role) if role else f"Deleted role `{role_id}`"
+        channel = guild.get_channel(entry.get("channel_id") or 0)
+        channel_text = channel.mention if channel else "No channel set"
+        messages = entry.get("messages", [])
+        enabled = self._yes_no(entry.get("enabled", True))
+        return (
+            f"{role_text} - {self._count(len(messages))} messages - "
+            f"{channel_text} - enabled: {enabled}"
+        )
+
+    async def _send_configured_role_messages(
+        self,
+        member: discord.Member,
+        role: discord.Role,
+        entry: dict,
+    ) -> None:
+        if not entry.get("enabled", True):
+            return
+
+        messages = entry.get("messages") or []
+        channel_id = entry.get("channel_id")
+        if not messages or not channel_id:
+            return
+
+        channel = member.guild.get_channel(channel_id)
+        if channel is None:
+            return
+
+        me = member.guild.me
+        if me is None:
+            return
+
+        permissions = channel.permissions_for(me)
+        if not permissions.send_messages:
+            return
+
+        allowed_mentions = discord.AllowedMentions(
+            users=True,
+            roles=False,
+            everyone=False,
+        )
+        for template in messages:
+            content = self._render_role_message(template, member, role)
+            try:
+                await channel.send(content, allowed_mentions=allowed_mentions)
+            except discord.HTTPException:
+                return
+
+    async def _send_role_message_settings(
+        self,
+        ctx: commands.Context,
+        role: Optional[discord.Role] = None,
+    ) -> None:
+        role_messages = await self.config.guild(ctx.guild).role_messages()
+        embed = discord.Embed(
+            title="Role Messages",
+            color=discord.Color.blurple(),
+        )
+
+        if role is not None:
+            entry = role_messages.get(self._role_message_key(role))
+            if not entry:
+                embed.description = f"No role messages are configured for {self._role_reference(role)}."
+                await self._send_embed(ctx, embed)
+                return
+
+            channel = ctx.guild.get_channel(entry.get("channel_id") or 0)
+            channel_text = channel.mention if channel else "No channel set"
+            messages = entry.get("messages", [])
+            embed.description = self._role_reference(role)
+            embed.add_field(name="Channel", value=channel_text, inline=True)
+            embed.add_field(
+                name="Enabled",
+                value=self._yes_no(entry.get("enabled", True)),
+                inline=True,
+            )
+            embed.add_field(name="Role ID", value=self._copy_block(role.id), inline=False)
+
+            if messages:
+                lines = [
+                    f"`{index}.` {message}"
+                    for index, message in enumerate(messages, start=1)
+                ]
+                for index, chunk in enumerate(self._line_chunks(lines), start=1):
+                    field_name = "Messages" if index == 1 else "Messages continued"
+                    embed.add_field(name=field_name, value=chunk, inline=False)
+            else:
+                embed.add_field(name="Messages", value="No messages set.", inline=False)
+
+            await self._send_embed(ctx, embed)
+            return
+
+        if not role_messages:
+            embed.description = "No role messages are configured."
+            await self._send_embed(ctx, embed)
+            return
+
+        lines = [
+            self._role_message_entry_summary(ctx.guild, role_id, entry)
+            for role_id, entry in role_messages.items()
+        ]
+        for index, chunk in enumerate(self._line_chunks(lines), start=1):
+            field_name = "Configured Roles" if index == 1 else "Configured Roles continued"
+            embed.add_field(name=field_name, value=chunk, inline=False)
+
+        await self._send_embed(ctx, embed)
+
     def _has_important_permissions(self, role: discord.Role) -> bool:
         return any(
             getattr(role.permissions, attr, False)
@@ -387,6 +553,30 @@ class Toolz(commands.Cog):
 
         embed.set_thumbnail(url=member.display_avatar.url)
         return embed
+
+    @commands.Cog.listener()
+    async def on_member_update(
+        self,
+        before: discord.Member,
+        after: discord.Member,
+    ) -> None:
+        before_role_ids = {role.id for role in before.roles}
+        added_roles = [
+            role
+            for role in after.roles
+            if role.id not in before_role_ids and not role.is_default()
+        ]
+        if not added_roles:
+            return
+
+        role_messages = await self.config.guild(after.guild).role_messages()
+        if not role_messages:
+            return
+
+        for role in added_roles:
+            entry = role_messages.get(self._role_message_key(role))
+            if entry:
+                await self._send_configured_role_messages(after, role, entry)
 
     @commands.hybrid_command(
         name="roleinfo",
@@ -546,6 +736,221 @@ class Toolz(commands.Cog):
         embed.add_field(name="User ID", value=self._copy_block(member.id), inline=True)
         embed.add_field(name="Role ID", value=self._copy_block(role.id), inline=True)
 
+        await self._send_embed(ctx, embed)
+
+    @commands.hybrid_group(
+        name="rolemessage",
+        aliases=["rolemsg"],
+        invoke_without_command=True,
+        description="Manage messages posted when roles are given.",
+    )
+    @commands.guild_only()
+    @commands.admin_or_permissions(manage_roles=True)
+    @commands.bot_has_permissions(embed_links=True)
+    async def rolemessage(self, ctx: commands.Context):
+        """Manage messages posted when roles are given."""
+        await self._send_role_message_settings(ctx)
+
+    @rolemessage.command(name="list", description="List configured role messages.")
+    @commands.guild_only()
+    @commands.admin_or_permissions(manage_roles=True)
+    @commands.bot_has_permissions(embed_links=True)
+    async def rolemessage_list(
+        self,
+        ctx: commands.Context,
+        role: Optional[discord.Role] = None,
+    ):
+        """List configured role messages."""
+        await self._send_role_message_settings(ctx, role)
+
+    @rolemessage.command(name="channel", description="Set where a role's messages post.")
+    @commands.guild_only()
+    @commands.admin_or_permissions(manage_roles=True)
+    async def rolemessage_channel(
+        self,
+        ctx: commands.Context,
+        role: discord.Role,
+        channel: discord.TextChannel,
+    ):
+        """Set where a role's messages post."""
+        me = ctx.guild.me
+        if me is None or not channel.permissions_for(me).send_messages:
+            await ctx.send(
+                f"I cannot send messages in {channel.mention}.",
+                allowed_mentions=discord.AllowedMentions.none(),
+            )
+            return
+
+        async with self.config.guild(ctx.guild).role_messages() as role_messages:
+            entry = role_messages.setdefault(
+                self._role_message_key(role),
+                self._default_role_message_settings(),
+            )
+            entry["channel_id"] = channel.id
+
+        await ctx.send(
+            f"Role messages for {self._role_reference(role)} will post in {channel.mention}.",
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
+
+    @rolemessage.command(name="add", description="Add a message template for a role.")
+    @commands.guild_only()
+    @commands.admin_or_permissions(manage_roles=True)
+    async def rolemessage_add(
+        self,
+        ctx: commands.Context,
+        role: discord.Role,
+        *,
+        message: str,
+    ):
+        """Add a message template for a role."""
+        message = message.strip()
+        if not message:
+            await ctx.send("Message cannot be empty.")
+            return
+        if len(message) > 1800:
+            await ctx.send("Message templates must be 1,800 characters or shorter.")
+            return
+
+        async with self.config.guild(ctx.guild).role_messages() as role_messages:
+            entry = role_messages.setdefault(
+                self._role_message_key(role),
+                self._default_role_message_settings(),
+            )
+            messages = entry.setdefault("messages", [])
+            if len(messages) >= 10:
+                await ctx.send("That role already has the maximum of 10 messages.")
+                return
+            messages.append(message)
+            has_channel = bool(entry.get("channel_id"))
+
+        channel_note = "" if has_channel else " Set a channel with `rolemessage channel` before it can post."
+        await ctx.send(
+            f"Added message {len(messages)} for {self._role_reference(role)}.{channel_note}",
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
+
+    @rolemessage.command(name="remove", description="Remove one message template from a role.")
+    @commands.guild_only()
+    @commands.admin_or_permissions(manage_roles=True)
+    async def rolemessage_remove(
+        self,
+        ctx: commands.Context,
+        role: discord.Role,
+        index: int,
+    ):
+        """Remove one message template from a role."""
+        async with self.config.guild(ctx.guild).role_messages() as role_messages:
+            entry = role_messages.get(self._role_message_key(role))
+            if not entry or not entry.get("messages"):
+                await ctx.send("That role has no messages configured.")
+                return
+
+            messages = entry["messages"]
+            if index < 1 or index > len(messages):
+                await ctx.send(f"Index must be between 1 and {len(messages)}.")
+                return
+
+            removed = messages.pop(index - 1)
+
+        await ctx.send(
+            f"Removed message {index} for {self._role_reference(role)}: `{removed[:120]}`",
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
+
+    @rolemessage.command(name="clear", description="Remove all role message settings for a role.")
+    @commands.guild_only()
+    @commands.admin_or_permissions(manage_roles=True)
+    async def rolemessage_clear(
+        self,
+        ctx: commands.Context,
+        role: discord.Role,
+    ):
+        """Remove all role message settings for a role."""
+        async with self.config.guild(ctx.guild).role_messages() as role_messages:
+            removed = role_messages.pop(self._role_message_key(role), None)
+
+        if removed:
+            await ctx.send(
+                f"Cleared role messages for {self._role_reference(role)}.",
+                allowed_mentions=discord.AllowedMentions.none(),
+            )
+        else:
+            await ctx.send("That role had no role messages configured.")
+
+    @rolemessage.command(name="toggle", description="Enable or disable role messages for a role.")
+    @commands.guild_only()
+    @commands.admin_or_permissions(manage_roles=True)
+    async def rolemessage_toggle(
+        self,
+        ctx: commands.Context,
+        role: discord.Role,
+        enabled: Optional[bool] = None,
+    ):
+        """Enable or disable role messages for a role."""
+        async with self.config.guild(ctx.guild).role_messages() as role_messages:
+            entry = role_messages.setdefault(
+                self._role_message_key(role),
+                self._default_role_message_settings(),
+            )
+            entry["enabled"] = not entry.get("enabled", True) if enabled is None else enabled
+            enabled_text = self._yes_no(entry["enabled"])
+
+        await ctx.send(
+            f"Role messages for {self._role_reference(role)} enabled: {enabled_text}.",
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
+
+    @rolemessage.command(name="test", description="Preview the configured messages for a role.")
+    @commands.guild_only()
+    @commands.admin_or_permissions(manage_roles=True)
+    async def rolemessage_test(
+        self,
+        ctx: commands.Context,
+        role: discord.Role,
+        member: Optional[discord.Member] = None,
+    ):
+        """Preview the configured messages for a role."""
+        member = member or ctx.author
+        role_messages = await self.config.guild(ctx.guild).role_messages()
+        entry = role_messages.get(self._role_message_key(role))
+        if not entry or not entry.get("messages"):
+            await ctx.send("That role has no messages configured.")
+            return
+
+        allowed_mentions = discord.AllowedMentions(
+            users=True,
+            roles=False,
+            everyone=False,
+        )
+        for template in entry["messages"]:
+            await ctx.send(
+                self._render_role_message(template, member, role),
+                allowed_mentions=allowed_mentions,
+            )
+
+    @rolemessage.command(name="placeholders", description="Show role message placeholders.")
+    @commands.guild_only()
+    @commands.admin_or_permissions(manage_roles=True)
+    @commands.bot_has_permissions(embed_links=True)
+    async def rolemessage_placeholders(self, ctx: commands.Context):
+        """Show role message placeholders."""
+        placeholders = (
+            "`{user}` - member mention\n"
+            "`{username}` - username and discriminator/global name\n"
+            "`{display_name}` - server display name\n"
+            "`{user_id}` - member ID\n"
+            "`{role}` - role mention\n"
+            "`{role_name}` - role name\n"
+            "`{role_id}` - role ID\n"
+            "`{server}` - server name\n"
+            "`{server_id}` - server ID"
+        )
+        embed = discord.Embed(
+            title="Role Message Placeholders",
+            description=placeholders,
+            color=discord.Color.blurple(),
+        )
         await self._send_embed(ctx, embed)
 
     @commands.hybrid_command(

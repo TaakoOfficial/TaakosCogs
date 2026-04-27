@@ -22,5 +22,30 @@ All commands are hybrid commands. After Red syncs slash commands, each command w
 | `[p]roleexport <role>` or `/roleexport` | Export role members to a CSV file. Requires Manage Roles or Red admin permission. |
 | `[p]noroles [limit] [include_bots]` or `/noroles` | List members with no roles except `@everyone`. Requires Manage Roles or Red admin permission. |
 | `[p]bots [limit]` or `/bots` | List bot accounts, top roles, and whether they have elevated permissions. Requires Manage Roles or Red admin permission. |
+| `[p]rolemessage` or `/rolemessage` | Manage messages posted when a configured role is given to a member. Requires Manage Roles or Red admin permission. |
 
-For the easiest mobile and desktop copying, `roleinfo` sends role ID and mention string as normal message text above the embed.
+For the easiest mobile and desktop copying, `roleinfo` sends role ID and mention string as inline backtick text above the embed.
+
+## Role Messages
+
+Role messages post automatically when a configured role is newly added to a member.
+
+| Command | Description |
+| --- | --- |
+| `[p]rolemessage channel <role> <channel>` | Set where messages for a role should post. |
+| `[p]rolemessage add <role> <message>` | Add a message template for a role. Up to 10 templates can be stored per role. |
+| `[p]rolemessage remove <role> <index>` | Remove one template by its list number. |
+| `[p]rolemessage clear <role>` | Remove all settings for a role. |
+| `[p]rolemessage toggle <role> [enabled]` | Enable, disable, or toggle a role's messages. |
+| `[p]rolemessage list [role]` | Show all configured roles or detailed settings for one role. |
+| `[p]rolemessage test <role> [member]` | Preview the rendered templates. |
+| `[p]rolemessage placeholders` | Show available placeholders. |
+
+Useful placeholders include `{user}`, `{display_name}`, `{username}`, `{user_id}`, `{role}`, `{role_name}`, `{role_id}`, `{server}`, and `{server_id}`.
+
+Example:
+
+```text
+[p]rolemessage channel @Verified #welcome
+[p]rolemessage add @Verified Welcome {user}, you now have {role} in {server}!
+```

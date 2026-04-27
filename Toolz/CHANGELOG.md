@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.4.1
+
+- Changed `roleinfo` copy values from code blocks to inline backtick text for easier mobile copying.
+
+## 0.4.0
+
+- Added role-triggered messages with the `rolemessage` command group.
+- Added persistent per-guild settings for role message channels, templates, and enabled status.
+- Added template placeholders including `{user}`, `{role}`, `{display_name}`, and `{server}`.
+- Added automatic posting when a configured role is newly given to a member.
+
 ## 0.3.2
 
 - Moved `roleinfo` copy values into normal message text for better mobile copying.
