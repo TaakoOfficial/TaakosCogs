@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.3
+
+- Added `rolemessage mode <role> all|random`.
+- Role messages now support posting all configured messages or one random configured message.
+
 ## 0.4.2
 
 - Added `rolemessage setup` with setup steps, examples, placeholders, and notes.

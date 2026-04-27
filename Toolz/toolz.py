@@ -3,6 +3,7 @@
 import asyncio
 import csv
 import io
+import random
 from typing import List, Optional, Sequence, Tuple
 
 import discord
@@ -306,7 +307,14 @@ class Toolz(commands.Cog):
 
     @staticmethod
     def _default_role_message_settings() -> dict:
-        return {"channel_id": None, "messages": [], "enabled": True}
+        return {"channel_id": None, "messages": [], "enabled": True, "mode": "all"}
+
+    @staticmethod
+    def _role_message_mode(entry: dict) -> str:
+        mode = entry.get("mode", "all")
+        if mode not in {"all", "random"}:
+            return "all"
+        return mode
 
     @staticmethod
     def _role_message_key(role: discord.Role) -> str:
@@ -352,9 +360,10 @@ class Toolz(commands.Cog):
         channel_text = channel.mention if channel else "No channel set"
         messages = entry.get("messages", [])
         enabled = self._yes_no(entry.get("enabled", True))
+        mode = self._role_message_mode(entry)
         return (
             f"{role_text} - {self._count(len(messages))} messages - "
-            f"{channel_text} - enabled: {enabled}"
+            f"{channel_text} - mode: {mode} - enabled: {enabled}"
         )
 
     async def _send_configured_role_messages(
@@ -370,6 +379,9 @@ class Toolz(commands.Cog):
         channel_id = entry.get("channel_id")
         if not messages or not channel_id:
             return
+
+        if self._role_message_mode(entry) == "random":
+            messages = [random.choice(messages)]
 
         channel = member.guild.get_channel(channel_id)
         if channel is None:
@@ -423,6 +435,7 @@ class Toolz(commands.Cog):
                 value=self._yes_no(entry.get("enabled", True)),
                 inline=True,
             )
+            embed.add_field(name="Mode", value=self._role_message_mode(entry), inline=True)
             embed.add_field(name="Role ID", value=self._copy_block(role.id), inline=False)
 
             if messages:
@@ -901,6 +914,33 @@ class Toolz(commands.Cog):
             allowed_mentions=discord.AllowedMentions.none(),
         )
 
+    @rolemessage.command(name="mode", description="Set whether role messages post all or one random message.")
+    @commands.guild_only()
+    @commands.admin_or_permissions(manage_roles=True)
+    async def rolemessage_mode(
+        self,
+        ctx: commands.Context,
+        role: discord.Role,
+        mode: str,
+    ):
+        """Set whether role messages post all or one random message."""
+        mode = mode.casefold()
+        if mode not in {"all", "random"}:
+            await ctx.send("Mode must be `all` or `random`.")
+            return
+
+        async with self.config.guild(ctx.guild).role_messages() as role_messages:
+            entry = role_messages.setdefault(
+                self._role_message_key(role),
+                self._default_role_message_settings(),
+            )
+            entry["mode"] = mode
+
+        await ctx.send(
+            f"Role messages for {self._role_reference(role)} will use `{mode}` mode.",
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
+
     @rolemessage.command(name="test", description="Preview the configured messages for a role.")
     @commands.guild_only()
     @commands.admin_or_permissions(manage_roles=True)
@@ -923,7 +963,11 @@ class Toolz(commands.Cog):
             roles=False,
             everyone=False,
         )
-        for template in entry["messages"]:
+        messages = entry["messages"]
+        if self._role_message_mode(entry) == "random":
+            messages = [random.choice(messages)]
+
+        for template in messages:
             await ctx.send(
                 self._render_role_message(template, member, role),
                 allowed_mentions=allowed_mentions,
@@ -983,6 +1027,7 @@ class Toolz(commands.Cog):
             value=(
                 f"`{prefix}rolemessage list [role]`\n"
                 f"`{prefix}rolemessage remove <role> <index>`\n"
+                f"`{prefix}rolemessage mode <role> all_or_random`\n"
                 f"`{prefix}rolemessage toggle <role> [true_or_false]`\n"
                 f"`{prefix}rolemessage clear <role>`"
             ),

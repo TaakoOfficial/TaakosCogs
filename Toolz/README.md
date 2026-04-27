@@ -38,6 +38,7 @@ Role messages post automatically when a configured role is newly added to a memb
 | `[p]rolemessage remove <role> <index>` | Remove one template by its list number. |
 | `[p]rolemessage clear <role>` | Remove all settings for a role. |
 | `[p]rolemessage toggle <role> [enabled]` | Enable, disable, or toggle a role's messages. |
+| `[p]rolemessage mode <role> <all\|random>` | Post every configured message or pick one random message when the role is given. |
 | `[p]rolemessage list [role]` | Show all configured roles or detailed settings for one role. |
 | `[p]rolemessage test <role> [member]` | Preview the rendered templates. |
 | `[p]rolemessage placeholders` | Show available placeholders. |
@@ -49,4 +50,5 @@ Example:
 ```text
 [p]rolemessage channel @Verified #welcome
 [p]rolemessage add @Verified Welcome {user}, you now have {role} in {server}!
+[p]rolemessage mode @Verified random
 ```
