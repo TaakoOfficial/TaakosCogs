@@ -34,6 +34,7 @@ To update installed cogs:
 | --- | --- | --- |
 | [Toolz](./Toolz) | Role and user utilities | Role/user info, role audits, role comparison, CSV exports, bot/no-role audits, role-triggered messages with `{user}` placeholders. |
 | [YALC](./YALC) | Server logging | Message/member/channel/role logging, event filters, retention settings, ignore lists, Tupperbox/PluralKit-aware filtering. |
+| [Applications](./Applications) | Staff applications | Configurable forms, application panels, DM questionnaires, review buttons, role actions, CSV exports, and polls. |
 | [Welcome](./Welcome) | Join messages | Configurable welcome messages, placeholders, JSON embeds, and cached welcome images. |
 | [Giveaway](./Giveaway) | Community events | Timed giveaways, reaction entry, rerolls, cancellation, attached giveaways, prefix and slash command support. |
 | [EmojiPorter](./EmojiPorter) | Server migration | Copy emojis and stickers between servers, list emoji/sticker inventory, skip duplicates automatically. |
@@ -52,11 +53,12 @@ To update installed cogs:
 Install these if you want better moderation visibility and role operations:
 
 ```text
-[p]cog install TaakosCogs Toolz YALC Welcome Giveaway
+[p]cog install TaakosCogs Toolz YALC Applications Welcome Giveaway
 ```
 
 - `Toolz` gives staff role/user lookup, audit, export, and role-triggered message tools.
 - `YALC` gives detailed server logging.
+- `Applications` handles staff applications, review workflows, and approval roles.
 - `Welcome` handles onboarding messages.
 - `Giveaway` supports events and community rewards.
 
@@ -140,6 +142,7 @@ Some features also need Discord privileged intents:
 
 - Role-triggered messages in `Toolz` need Server Members intent.
 - Member logging and member update features in logging cogs may also need Server Members intent.
+- Role assignment features in `Applications` need Manage Roles and a bot role above the target roles.
 
 ## Data and Privacy
 
@@ -147,7 +150,7 @@ Each cog includes its own data statement in `info.json`. In short:
 
 - `Flipper`, `RandomWeather`, `EmojiPorter`, and `ZodiacColorRoles` do not persistently store end user data.
 - `Toolz` stores per-guild role-message settings such as role IDs, channel IDs, and message templates.
-- `YALC`, `Welcome`, `Giveaway`, `Fable`, `Paranoia`, `RPCalander`, and `WHMCS` store the settings or records needed for their features.
+- `YALC`, `Applications`, `Welcome`, `Giveaway`, `Fable`, `Paranoia`, `RPCalander`, and `WHMCS` store the settings or records needed for their features.
 - `RPCalander` also uses a local `post_tracker.json` file to prevent duplicate daily posts.
 
 No cog is intended to share stored data with external services unless the feature explicitly requires an external integration, such as WHMCS API access or optional Fable export workflows.
@@ -158,6 +161,7 @@ Start with each cog's README:
 
 - [Toolz README](./Toolz/README.md)
 - [YALC README](./YALC/README.md)
+- [Applications README](./Applications/README.md)
 - [Welcome README](./Welcome/README.md)
 - [Giveaway README](./Giveaway/README.md)
 - [EmojiPorter README](./EmojiPorter/README.md)
