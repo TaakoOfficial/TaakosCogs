@@ -14,7 +14,7 @@ Yet Another Logging Cog: configurable server logging for Red-DiscordBot.
 
 ## Highlights
 
-- Logs message, member, channel, thread, role, guild, voice, emoji, and other server events.
+- Logs message, member, channel, thread/forum, role, guild, voice, stage, sticker, soundboard, AutoMod, webhook, invite, application command, emoji, and other server events.
 - Configure one log channel or event-specific channels.
 - Enable, disable, bulk enable, and bulk disable event types.
 - Ignore/filter noisy users, channels, bots, webhooks, and proxy-style messages.
@@ -37,6 +37,12 @@ Yet Another Logging Cog: configurable server logging for Red-DiscordBot.
 | `[p]yalc test` | Run diagnostics. Aliases: `diagnostics`, `debug`. |
 | `[p]yalc reset` | Reset YALC settings for the server. |
 | `[p]yalc dashboard` | Show dashboard integration details. |
+
+## Setup Channels
+
+`[p]yalc setup CONFIRM` creates a private `YALC Logs` category with these channels and routes supported event types to the closest match:
+
+`🤖 | application-logs`, `🤖 | channel-logs`, `🤖 | discord-automod-logs`, `🤖 | emoji-logs`, `🤖 | event-logs`, `🤖 | invite-logs`, `🤖 | message-logs`, `🤖 | role-logs`, `🤖 | stage-logs`, `🤖 | server-logs`, `🤖 | sticker-logs`, `🤖 | soundboard-logs`, `🤖 | thread-logs`, `🤖 | user-logs`, `🤖 | voice-logs`, `🤖 | webhook-logs`, and `🤖 | moderation-logs`.
 
 ## Requirements
 

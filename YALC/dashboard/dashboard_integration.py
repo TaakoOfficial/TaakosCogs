@@ -118,6 +118,8 @@ class DashboardIntegration(object):
                 await self.config.guild(guild).message_prefix_filter.set(new_settings["message_prefix_filter"])
             if "webhook_name_filter" in new_settings:
                 await self.config.guild(guild).webhook_name_filter.set(new_settings["webhook_name_filter"])
+            if hasattr(self, "_invalidate_settings_cache"):
+                self._invalidate_settings_cache(guild)
                 
         except Exception as e:
             # Use bot logger if available, otherwise just pass
