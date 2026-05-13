@@ -1,8 +1,8 @@
 # Taako's Cogs
 
-A growing collection of cogs for [Red-DiscordBot](https://github.com/Cog-Creators/Red-DiscordBot), focused on practical server tools, roleplay immersion, community events, and admin workflows.
+A growing collection of cogs for [Red-DiscordBot](https://github.com/Cog-Creators/Red-DiscordBot), focused on practical server tools, roleplay immersion, community events, invite tracking, and admin workflows.
 
-This repo includes everything from role/user audits and logging to RP world tracking, weather simulation, giveaways, welcome automation, emoji migration, party games, and WHMCS support tooling.
+This repo includes everything from role/user audits, invite tracking, and logging to RP world tracking, weather simulation, giveaways, welcome automation, emoji migration, party games, and WHMCS support tooling.
 
 ## Quick Install
 
@@ -36,6 +36,7 @@ To update installed cogs:
 | [YALC](./YALC) | Server logging | Message/member/channel/role logging, event filters, retention settings, ignore lists, Tupperbox/PluralKit-aware filtering. |
 | [Applications](./Applications) | Staff applications | Configurable forms, application panels, DM questionnaires, review buttons, role actions, CSV exports, and polls. |
 | [Welcome](./Welcome) | Join messages | Configurable welcome messages, placeholders, JSON embeds, and cached welcome images. |
+| [InviteTracker](./InviteTracker) | Invite tracking | Invite-use detection, join sources, fake joins, leaver counts, leaderboards, log embeds, and CSV exports. |
 | [Giveaway](./Giveaway) | Community events | Timed giveaways, reaction entry, rerolls, cancellation, attached giveaways, prefix and slash command support. |
 | [EmojiPorter](./EmojiPorter) | Server migration | Copy emojis and stickers between servers, list emoji/sticker inventory, skip duplicates automatically. |
 | [ZodiacColorRoles](./ZodiacColorRoles) | Role setup | Bulk-create zodiac, color, pronoun, and ping preference roles with hybrid command support. |
@@ -51,16 +52,17 @@ To update installed cogs:
 
 ### Staff and Server Management
 
-Install these if you want better moderation visibility and role operations:
+Install these if you want better moderation visibility, invite attribution, and role operations:
 
 ```text
-[p]cog install TaakosCogs Toolz YALC Applications Welcome Giveaway
+[p]cog install TaakosCogs Toolz YALC Applications Welcome InviteTracker Giveaway
 ```
 
 - `Toolz` gives staff role/user lookup, audit, export, and role-triggered message tools.
 - `YALC` gives detailed server logging.
 - `Applications` handles staff applications, review workflows, and approval roles.
 - `Welcome` handles onboarding messages.
+- `InviteTracker` tracks invite joins, fake joins, leavers, join sources, and leaderboards.
 - `Giveaway` supports events and community rewards.
 
 ### Roleplay Servers
@@ -143,6 +145,7 @@ Some cogs have Python package requirements that Red's downloader installs automa
 
 Some features also need Discord privileged intents:
 
+- Invite join and leave tracking in `InviteTracker` needs Server Members intent.
 - Role-triggered messages in `Toolz` need Server Members intent.
 - Member logging and member update features in logging cogs may also need Server Members intent.
 - Role assignment features in `Applications` need Manage Roles and a bot role above the target roles.
@@ -153,7 +156,8 @@ Each cog includes its own data statement in `info.json`. In short:
 
 - `Flipper`, `RandomWeather`, `EmojiPorter`, and `ZodiacColorRoles` do not persistently store end user data.
 - `Toolz` stores per-guild role-message settings such as role IDs, channel IDs, and message templates.
-- `YALC`, `Applications`, `Welcome`, `Giveaway`, `FiveMStatus`, `Fable`, `Paranoia`, `RPCalander`, and `WHMCS` store the settings or records needed for their features.
+- `YALC`, `Applications`, `Welcome`, `InviteTracker`, `Giveaway`, `FiveMStatus`, `Fable`, `Paranoia`, `RPCalander`, and `WHMCS` store the settings or records needed for their features.
+- `InviteTracker` stores invite cache metadata, inviter stats, tracked member join-source records, Discord user IDs, invite codes, timestamps, fake-join flags, and unknown join counts.
 - `RPCalander` also uses a local `post_tracker.json` file to prevent duplicate daily posts.
 
 No cog is intended to share stored data with external services unless the feature explicitly requires an external integration, such as WHMCS API access or optional Fable export workflows.
@@ -166,6 +170,7 @@ Start with each cog's README:
 - [YALC README](./YALC/README.md)
 - [Applications README](./Applications/README.md)
 - [Welcome README](./Welcome/README.md)
+- [InviteTracker README](./InviteTracker/README.md)
 - [Giveaway README](./Giveaway/README.md)
 - [EmojiPorter README](./EmojiPorter/README.md)
 - [ZodiacColorRoles README](./ZodiacColorRoles/README.md)
