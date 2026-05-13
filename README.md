@@ -39,6 +39,7 @@ To update installed cogs:
 | [Giveaway](./Giveaway) | Community events | Timed giveaways, reaction entry, rerolls, cancellation, attached giveaways, prefix and slash command support. |
 | [EmojiPorter](./EmojiPorter) | Server migration | Copy emojis and stickers between servers, list emoji/sticker inventory, skip duplicates automatically. |
 | [ZodiacColorRoles](./ZodiacColorRoles) | Role setup | Bulk-create zodiac, color, pronoun, and ping preference roles with hybrid command support. |
+| [FiveMStatus](./FiveMStatus) | FiveM communities | Live server status panel with player counts, connect command, restart countdowns, uptime tracking, images, and link buttons. |
 | [RandomWeather](./RandomWeather) | RP atmosphere | Seasonal weather simulation, extreme weather events, automatic updates, role notifications, timezone-aware generation. |
 | [RPCalander](./RPCalander) | RP timekeeping | Daily RP calendar posts, custom timelines, moon phases, blood moon events, separate moon channels. |
 | [Fable](./Fable) | RP worldbuilding | Character profiles, relationships, locations, timelines, visualizations, lore tracking, export tools. |
@@ -67,9 +68,10 @@ Install these if you want better moderation visibility and role operations:
 Install these for immersive RP communities:
 
 ```text
-[p]cog install TaakosCogs Fable RandomWeather RPCalander Paranoia
+[p]cog install TaakosCogs FiveMStatus Fable RandomWeather RPCalander Paranoia
 ```
 
+- `FiveMStatus` posts a live FiveM status panel with player counts, connect command, restarts, and buttons.
 - `Fable` tracks characters, relationships, locations, and lore.
 - `RandomWeather` adds seasonal weather and extreme events.
 - `RPCalander` keeps your in-world calendar and moons moving.
@@ -136,6 +138,7 @@ Some cogs have Python package requirements that Red's downloader installs automa
 | RPCalander | `pytz` |
 | Welcome | `aiohttp` |
 | EmojiPorter | `aiohttp` |
+| FiveMStatus | `aiohttp` |
 | WHMCS | `aiohttp>=3.8.0` |
 
 Some features also need Discord privileged intents:
@@ -150,7 +153,7 @@ Each cog includes its own data statement in `info.json`. In short:
 
 - `Flipper`, `RandomWeather`, `EmojiPorter`, and `ZodiacColorRoles` do not persistently store end user data.
 - `Toolz` stores per-guild role-message settings such as role IDs, channel IDs, and message templates.
-- `YALC`, `Applications`, `Welcome`, `Giveaway`, `Fable`, `Paranoia`, `RPCalander`, and `WHMCS` store the settings or records needed for their features.
+- `YALC`, `Applications`, `Welcome`, `Giveaway`, `FiveMStatus`, `Fable`, `Paranoia`, `RPCalander`, and `WHMCS` store the settings or records needed for their features.
 - `RPCalander` also uses a local `post_tracker.json` file to prevent duplicate daily posts.
 
 No cog is intended to share stored data with external services unless the feature explicitly requires an external integration, such as WHMCS API access or optional Fable export workflows.
@@ -166,6 +169,7 @@ Start with each cog's README:
 - [Giveaway README](./Giveaway/README.md)
 - [EmojiPorter README](./EmojiPorter/README.md)
 - [ZodiacColorRoles README](./ZodiacColorRoles/README.md)
+- [FiveMStatus README](./FiveMStatus/README.md)
 - [RandomWeather README](./RandomWeather/README.md)
 - [RPCalander README](./RPCalander/README.md)
 - [Fable README](./Fable/README.md)
