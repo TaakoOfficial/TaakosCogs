@@ -440,6 +440,8 @@ class InviteTracker(commands.Cog):
             color=self.DEFAULT_COLOR,
             timestamp=self._now(),
         )
+        prefix = ctx.clean_prefix
+        setup_command = f"{prefix}invitetracker setup #join-logs"
         embed.add_field(
             name="Status",
             value=(
@@ -450,6 +452,28 @@ class InviteTracker(commands.Cog):
             ),
             inline=False,
         )
+        if not settings.get("enabled") or not channel_id:
+            embed.add_field(
+                name="Start Here",
+                value=(
+                    f"1. Create or choose a join log channel.\n"
+                    f"2. Run `{setup_command}`.\n"
+                    f"3. Make sure I have `Manage Server` so I can read invites.\n"
+                    f"4. Enable Server Members intent for reliable join/leave tracking."
+                ),
+                inline=False,
+            )
+        else:
+            embed.add_field(
+                name="Useful Commands",
+                value=(
+                    f"`{prefix}invites top 10` - show the leaderboard\n"
+                    f"`{prefix}invites @member` - show someone's invite stats\n"
+                    f"`{prefix}invites source @member` - show how a member joined\n"
+                    f"`{prefix}invitetracker refresh` - recache current invites"
+                ),
+                inline=False,
+            )
         embed.add_field(
             name="Tracked Data",
             value=(
@@ -468,6 +492,14 @@ class InviteTracker(commands.Cog):
                 f"Unknown joins: **{self._count(int(settings.get('unknown_joins') or 0))}**"
             ),
             inline=True,
+        )
+        embed.add_field(
+            name="How It Works",
+            value=(
+                "Discord does not tell bots the exact invite used on join. "
+                "InviteTracker compares invite use counts before and after a member joins."
+            ),
+            inline=False,
         )
         await ctx.send(embed=embed)
 

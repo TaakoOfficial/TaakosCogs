@@ -26,7 +26,7 @@ Invite tracking, join-source lookup, fake join detection, leaver counts, leaderb
 
 | Command | Description |
 | --- | --- |
-| `[p]invitetracker` | Show current InviteTracker settings. |
+| `[p]invitetracker` | Show current settings, quick setup steps, required access, and useful commands. |
 | `[p]invitetracker setup [channel]` | Enable tracking, set the log channel, and cache current invites. |
 | `[p]invitetracker enable [true_or_false]` | Enable or disable invite tracking. |
 | `[p]invitetracker disable` | Disable invite tracking. |
