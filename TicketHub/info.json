@@ -1,0 +1,17 @@
+{
+  "$schema": "https://raw.githubusercontent.com/Cog-Creators/Red-DiscordBot/V3/develop/schema/red_cog.schema.json",
+  "name": "TicketHub",
+  "author": ["Taako"],
+  "version": "1.0.0",
+  "description": "A Red DiscordBot cog for ticket panels, ticket lifecycle controls, AAA3A Tickets profile imports, and self-contained HTML transcripts sent to staff logs and ticket owners.",
+  "install_msg": "TicketHub loaded. Use `[p]tickethub walkthrough` to set up your first panel, or `[p]tickethub import aaa3a main` to preview an AAA3A Tickets profile import.",
+  "short": "Ticket panels, controls, AAA3A imports, and HTML transcripts.",
+  "tags": ["tickets", "support", "transcripts", "html", "migration", "utility", "moderation"],
+  "requirements": [],
+  "min_bot_version": "3.5.0",
+  "min_python_version": [3, 9, 0],
+  "hidden": false,
+  "disabled": false,
+  "type": "COG",
+  "end_user_data_statement": "This cog stores per-guild ticket profiles, panel message IDs, channel/category/role IDs, ticket records, ticket owner IDs, claimed/closed staff IDs, participant IDs, ticket reasons, close reasons, timestamps, and ticket lifecycle event metadata. HTML and text transcripts are generated on demand from Discord message history and sent directly to configured Discord destinations."
+}
