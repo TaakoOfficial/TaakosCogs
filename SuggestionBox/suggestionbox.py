@@ -29,6 +29,7 @@ class SuggestionVoteView(discord.ui.View):
 
     @discord.ui.button(
         label="Upvote",
+        emoji="\N{UPWARDS BLACK ARROW}",
         style=discord.ButtonStyle.success,
         custom_id="taakoscogs:suggestionbox:upvote",
     )
@@ -41,6 +42,7 @@ class SuggestionVoteView(discord.ui.View):
 
     @discord.ui.button(
         label="Downvote",
+        emoji="\N{DOWNWARDS BLACK ARROW}",
         style=discord.ButtonStyle.danger,
         custom_id="taakoscogs:suggestionbox:downvote",
     )
@@ -92,6 +94,8 @@ class SuggestionBox(commands.Cog):
             anonymous=False,
             allow_downvotes=True,
             allow_self_vote=False,
+            create_threads=False,
+            thread_auto_archive_duration=1440,
             embed_color=self.DEFAULT_COLOR,
             next_id=1,
             suggestions={},
@@ -172,6 +176,93 @@ class SuggestionBox(commands.Cog):
         if len(cleaned) > limit:
             raise commands.BadArgument(f"Text must be {limit} characters or fewer.")
         return cleaned
+
+    async def _wait_for_setup_reply(
+        self,
+        ctx: commands.Context,
+        prompt: str,
+        timeout: int = 120,
+    ) -> str:
+        await ctx.send(prompt)
+
+        def check(message: discord.Message) -> bool:
+            return (
+                message.author.id == ctx.author.id
+                and message.channel.id == ctx.channel.id
+                and message.guild == ctx.guild
+            )
+
+        try:
+            message = await self.bot.wait_for("message", check=check, timeout=timeout)
+        except asyncio.TimeoutError as exc:
+            raise commands.CommandError("SuggestionBox walkthrough timed out.") from exc
+
+        answer = message.content.strip()
+        if answer.lower() in {"cancel", "stop", "quit"}:
+            raise commands.CommandError("SuggestionBox walkthrough cancelled.")
+        return answer
+
+    async def _parse_text_channel_answer(
+        self,
+        ctx: commands.Context,
+        answer: str,
+        *,
+        allow_none: bool = False,
+    ) -> Optional[discord.TextChannel]:
+        lowered = answer.lower().strip()
+        if lowered in {"here", "current"}:
+            if isinstance(ctx.channel, discord.TextChannel):
+                return ctx.channel
+            raise commands.BadArgument("This is not a standard text channel.")
+
+        if allow_none and lowered in {"none", "no", "off", "skip"}:
+            return None
+
+        try:
+            return await commands.TextChannelConverter().convert(ctx, answer)
+        except commands.BadArgument as exc:
+            raise commands.BadArgument(
+                "Reply with a text channel mention, channel ID, `here`, or `none` when allowed."
+            ) from exc
+
+    @staticmethod
+    def _parse_bool_answer(answer: str, *, default: Optional[bool] = None) -> bool:
+        lowered = answer.lower().strip()
+        if default is not None and lowered in {"", "default", "skip"}:
+            return default
+        if lowered in {"yes", "y", "true", "on", "enable", "enabled", "1"}:
+            return True
+        if lowered in {"no", "n", "false", "off", "disable", "disabled", "0"}:
+            return False
+        raise commands.BadArgument("Reply with `yes` or `no`.")
+
+    async def _prompt_text_channel(
+        self,
+        ctx: commands.Context,
+        prompt: str,
+        *,
+        allow_none: bool = False,
+    ) -> Optional[discord.TextChannel]:
+        while True:
+            answer = await self._wait_for_setup_reply(ctx, prompt)
+            try:
+                return await self._parse_text_channel_answer(ctx, answer, allow_none=allow_none)
+            except commands.BadArgument as error:
+                await ctx.send(str(error))
+
+    async def _prompt_bool(
+        self,
+        ctx: commands.Context,
+        prompt: str,
+        *,
+        default: Optional[bool] = None,
+    ) -> bool:
+        while True:
+            answer = await self._wait_for_setup_reply(ctx, prompt)
+            try:
+                return self._parse_bool_answer(answer, default=default)
+            except commands.BadArgument as error:
+                await ctx.send(str(error))
 
     @classmethod
     def _normalise_status(cls, status: str) -> str:
@@ -258,6 +349,10 @@ class SuggestionBox(commands.Cog):
         if updated_at:
             embed.add_field(name="Updated", value=self._format_ts(updated_at, "R"), inline=True)
 
+        thread_id = record.get("thread_id")
+        if thread_id:
+            embed.add_field(name="Discussion", value=f"<#{thread_id}>", inline=True)
+
         decision_reason = record.get("decision_reason")
         if decision_reason:
             decision_by = self._user_ref(record.get("decision_by"))
@@ -320,6 +415,104 @@ class SuggestionBox(commands.Cog):
             return await channel.fetch_message(int(message_id))
         except (discord.NotFound, discord.Forbidden, discord.HTTPException):
             return None
+
+    @staticmethod
+    def _thread_name(record: SuggestionRecord) -> str:
+        suggestion_id = int(record.get("id") or 0)
+        text = " ".join(str(record.get("text") or "").split())
+        if len(text) > 70:
+            text = text[:67] + "..."
+        name = f"Suggestion #{suggestion_id}"
+        if text:
+            name = f"{name}: {text}"
+        return name[:100]
+
+    async def _create_suggestion_thread(
+        self,
+        guild: discord.Guild,
+        message: discord.Message,
+        record: SuggestionRecord,
+        settings: Dict[str, Any],
+        *,
+        raise_on_error: bool = False,
+    ) -> Optional[discord.Thread]:
+        existing_thread = getattr(message, "thread", None)
+        if isinstance(existing_thread, discord.Thread):
+            return existing_thread
+
+        if not isinstance(message.channel, discord.TextChannel):
+            if raise_on_error:
+                raise commands.CommandError("Suggestion threads can only be created in text channels.")
+            return None
+
+        me = guild.me
+        if me is None:
+            if raise_on_error:
+                raise commands.CommandError("I could not inspect my thread permissions.")
+            return None
+
+        permissions = message.channel.permissions_for(me)
+        if not getattr(permissions, "create_public_threads", False):
+            if raise_on_error:
+                raise commands.CommandError(
+                    f"I need `Create Public Threads` in {message.channel.mention}."
+                )
+            log.warning("Missing Create Public Threads in guild %s channel %s", guild.id, message.channel.id)
+            return None
+
+        auto_archive_duration = int(settings.get("thread_auto_archive_duration") or 1440)
+        try:
+            thread = await message.create_thread(
+                name=self._thread_name(record),
+                auto_archive_duration=auto_archive_duration,
+                reason="SuggestionBox discussion thread",
+            )
+        except discord.HTTPException as exc:
+            if raise_on_error:
+                raise commands.CommandError("I could not create a thread for that suggestion.") from exc
+            log.exception("Failed to create suggestion thread in guild %s", guild.id)
+            return None
+
+        try:
+            await thread.send(
+                f"Discussion for suggestion #{record.get('id')}. Vote on the main suggestion message.",
+                allowed_mentions=discord.AllowedMentions.none(),
+            )
+        except discord.HTTPException:
+            log.exception("Failed to send suggestion thread starter in guild %s", guild.id)
+
+        return thread
+
+    async def _get_record_thread(
+        self,
+        guild: discord.Guild,
+        record: SuggestionRecord,
+    ) -> Optional[discord.Thread]:
+        thread_id = record.get("thread_id")
+        if not thread_id:
+            return None
+        thread = guild.get_thread(int(thread_id))
+        if thread is not None:
+            return thread
+        try:
+            channel = await self.bot.fetch_channel(int(thread_id))
+        except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+            return None
+        return channel if isinstance(channel, discord.Thread) else None
+
+    async def _send_thread_notice(
+        self,
+        guild: discord.Guild,
+        record: SuggestionRecord,
+        content: str,
+    ) -> None:
+        thread = await self._get_record_thread(guild, record)
+        if thread is None:
+            return
+        try:
+            await thread.send(content, allowed_mentions=discord.AllowedMentions.none())
+        except discord.HTTPException:
+            log.exception("Failed to send suggestion thread notice in guild %s", guild.id)
 
     def _view_for_record(self, record: SuggestionRecord) -> Optional[discord.ui.View]:
         if str(record.get("status") or "open") != "open":
@@ -496,6 +689,10 @@ class SuggestionBox(commands.Cog):
             raise commands.CommandError(
                 f"I need `Send Messages` and `Embed Links` in {channel.mention}."
             )
+        if settings.get("create_threads") and not getattr(permissions, "create_public_threads", False):
+            raise commands.CommandError(
+                f"Threads are enabled, but I need `Create Public Threads` in {channel.mention}."
+            )
 
         suggestion_text = self._clean_text(suggestion_text, self.MAX_SUGGESTION_LENGTH)
         async with self._guild_lock(guild.id):
@@ -507,6 +704,7 @@ class SuggestionBox(commands.Cog):
                 "status": "open",
                 "channel_id": channel.id,
                 "message_id": None,
+                "thread_id": None,
                 "created_at": self._now_ts(),
                 "updated_at": None,
                 "upvotes": [],
@@ -520,6 +718,10 @@ class SuggestionBox(commands.Cog):
             embed = self._record_embed(guild, record, settings)
             message = await channel.send(embed=embed, view=self._vote_view)
             record["message_id"] = message.id
+            if settings.get("create_threads"):
+                thread = await self._create_suggestion_thread(guild, message, record, settings)
+                if thread is not None:
+                    record["thread_id"] = thread.id
 
             async with self.config.guild(guild).suggestions() as suggestions:
                 suggestions[self._suggestion_key(next_id)] = record
@@ -559,7 +761,9 @@ class SuggestionBox(commands.Cog):
             value=(
                 f"Anonymous: **{'Yes' if settings.get('anonymous') else 'No'}**\n"
                 f"Downvotes: **{'Yes' if settings.get('allow_downvotes') else 'No'}**\n"
-                f"Self voting: **{'Yes' if settings.get('allow_self_vote') else 'No'}**"
+                f"Self voting: **{'Yes' if settings.get('allow_self_vote') else 'No'}**\n"
+                f"Threads: **{'Yes' if settings.get('create_threads') else 'No'}**\n"
+                f"Thread archive: **{int(settings.get('thread_auto_archive_duration') or 1440)} min**"
             ),
             inline=True,
         )
@@ -586,7 +790,8 @@ class SuggestionBox(commands.Cog):
             await ctx.send(str(error))
             return
 
-        await ctx.send(f"Suggestion #{record['id']} submitted: {message.jump_url}")
+        thread_text = f"\nThread: <#{record['thread_id']}>" if record.get("thread_id") else ""
+        await ctx.send(f"Suggestion #{record['id']} submitted: {message.jump_url}{thread_text}")
 
     @commands.group(name="suggestionbox", aliases=["suggestionset"], invoke_without_command=True)
     @commands.guild_only()
@@ -615,7 +820,95 @@ class SuggestionBox(commands.Cog):
         await self.config.guild(ctx.guild).review_channel_id.set(review_channel.id if review_channel else None)
         await self.config.guild(ctx.guild).enabled.set(True)
         review_text = f" Review logs will post in {review_channel.mention}." if review_channel else ""
-        await ctx.send(f"SuggestionBox is enabled in {suggestion_channel.mention}.{review_text}")
+        await ctx.send(
+            f"SuggestionBox is enabled in {suggestion_channel.mention}.{review_text}\n"
+            f"Users submit with `{ctx.clean_prefix}suggest <suggestion>`. I will post a tracked "
+            "embed there with Upvote and Downvote buttons."
+        )
+
+    @suggestionbox.command(name="walkthrough", aliases=["wizard"])
+    @commands.admin_or_permissions(manage_guild=True)
+    @commands.bot_has_permissions(embed_links=True)
+    async def suggestionbox_walkthrough(self, ctx: commands.Context) -> None:
+        """Walk through the SuggestionBox setup interactively."""
+        assert ctx.guild is not None
+        await ctx.send(
+            "SuggestionBox setup walkthrough started. Reply `cancel` at any step to stop."
+        )
+
+        try:
+            suggestion_channel = await self._prompt_text_channel(
+                ctx,
+                "Step 1/6: Which channel should suggestions be posted in? "
+                "Reply with a channel mention, channel ID, or `here`.",
+            )
+            assert suggestion_channel is not None
+            review_channel = await self._prompt_text_channel(
+                ctx,
+                "Step 2/6: Which channel should staff review logs go to? "
+                "Reply with a channel, `here`, or `none`.",
+                allow_none=True,
+            )
+            anonymous = await self._prompt_bool(
+                ctx,
+                "Step 3/6: Hide suggestion authors on public embeds? Reply `yes` or `no`. "
+                "Reply `skip` for no.",
+                default=False,
+            )
+            allow_downvotes = await self._prompt_bool(
+                ctx,
+                "Step 4/6: Allow downvotes? Reply `yes` or `no`. Reply `skip` for yes.",
+                default=True,
+            )
+            allow_self_vote = await self._prompt_bool(
+                ctx,
+                "Step 5/6: Allow users to vote on their own suggestions? Reply `yes` or `no`. "
+                "Reply `skip` for no.",
+                default=False,
+            )
+            create_threads = await self._prompt_bool(
+                ctx,
+                "Step 6/6: Create a discussion thread for each suggestion? Reply `yes` or `no`. "
+                "Reply `skip` for yes.",
+                default=True,
+            )
+        except commands.CommandError as error:
+            await ctx.send(str(error))
+            return
+
+        await self.config.guild(ctx.guild).suggestion_channel_id.set(suggestion_channel.id)
+        await self.config.guild(ctx.guild).review_channel_id.set(
+            review_channel.id if review_channel else None
+        )
+        await self.config.guild(ctx.guild).anonymous.set(anonymous)
+        await self.config.guild(ctx.guild).allow_downvotes.set(allow_downvotes)
+        await self.config.guild(ctx.guild).allow_self_vote.set(allow_self_vote)
+        await self.config.guild(ctx.guild).create_threads.set(create_threads)
+        await self.config.guild(ctx.guild).enabled.set(True)
+
+        thread_warning = ""
+        if create_threads:
+            me = ctx.guild.me
+            permissions = suggestion_channel.permissions_for(me) if me else None
+            if permissions is None or not getattr(permissions, "create_public_threads", False):
+                thread_warning = (
+                    "\nThreads are enabled, but I need `Create Public Threads` in "
+                    f"{suggestion_channel.mention} before I can make them."
+                )
+
+        review_text = review_channel.mention if review_channel else "Not set"
+        await ctx.send(
+            "SuggestionBox setup complete.\n"
+            f"Suggestions: {suggestion_channel.mention}\n"
+            f"Review logs: {review_text}\n"
+            f"Anonymous: {'yes' if anonymous else 'no'}\n"
+            f"Downvotes: {'yes' if allow_downvotes else 'no'}\n"
+            f"Self voting: {'yes' if allow_self_vote else 'no'}\n"
+            f"Threads: {'yes' if create_threads else 'no'}\n\n"
+            f"Users submit with `{ctx.clean_prefix}suggest <suggestion>`. I post the suggestion "
+            "as an embed in the suggestion channel with Upvote and Downvote buttons."
+            f"{thread_warning}"
+        )
 
     @suggestionbox.command(name="enable")
     @commands.admin_or_permissions(manage_guild=True)
@@ -698,6 +991,36 @@ class SuggestionBox(commands.Cog):
         assert ctx.guild is not None
         await self.config.guild(ctx.guild).allow_self_vote.set(enabled)
         await ctx.send(f"Self voting is now {'enabled' if enabled else 'disabled'}.")
+
+    @suggestionbox.command(name="threads", aliases=["thread"])
+    @commands.admin_or_permissions(manage_guild=True)
+    async def suggestionbox_threads(self, ctx: commands.Context, enabled: bool) -> None:
+        """Choose whether each new suggestion gets a discussion thread."""
+        assert ctx.guild is not None
+        await self.config.guild(ctx.guild).create_threads.set(enabled)
+        message = f"Suggestion discussion threads are now {'enabled' if enabled else 'disabled'}."
+        if enabled:
+            settings = await self.config.guild(ctx.guild).all()
+            channel = await self._get_suggestion_channel(ctx.guild, settings)
+            me = ctx.guild.me
+            permissions = channel.permissions_for(me) if channel and me else None
+            if channel is None:
+                message += " Set a suggestion channel before submitting suggestions."
+            elif permissions is None or not getattr(permissions, "create_public_threads", False):
+                message += f" I need `Create Public Threads` in {channel.mention}."
+        await ctx.send(message)
+
+    @suggestionbox.command(name="threadarchive")
+    @commands.admin_or_permissions(manage_guild=True)
+    async def suggestionbox_thread_archive(self, ctx: commands.Context, minutes: int) -> None:
+        """Set the auto-archive duration for new suggestion threads."""
+        assert ctx.guild is not None
+        valid_minutes = {60, 1440, 4320, 10080}
+        if minutes not in valid_minutes:
+            await ctx.send("Thread archive duration must be one of: `60`, `1440`, `4320`, `10080`.")
+            return
+        await self.config.guild(ctx.guild).thread_auto_archive_duration.set(minutes)
+        await ctx.send(f"New suggestion threads will auto-archive after **{minutes}** minute(s).")
 
     @suggestionbox.command(name="color")
     @commands.admin_or_permissions(manage_guild=True)
@@ -888,6 +1211,10 @@ class SuggestionBox(commands.Cog):
         settings = await self.config.guild(ctx.guild).all()
         await self._sync_suggestion_message(ctx.guild, record, settings)
         await self._send_review_log(ctx.guild, record, self._status_label(status), ctx.author, reason)
+        notice = f"Suggestion #{suggestion_id} was marked as {self._status_label(status)}."
+        if reason:
+            notice += f"\nReason: {reason}"
+        await self._send_thread_notice(ctx.guild, record, notice)
         await ctx.send(f"Suggestion #{suggestion_id} marked as {self._status_label(status)}.")
 
     @suggestions_group.command(name="approve")
@@ -989,6 +1316,11 @@ class SuggestionBox(commands.Cog):
         settings = await self.config.guild(ctx.guild).all()
         await self._sync_suggestion_message(ctx.guild, record, settings)
         await self._send_review_log(ctx.guild, record, "Commented", ctx.author, comment)
+        await self._send_thread_notice(
+            ctx.guild,
+            record,
+            f"Staff note added to suggestion #{suggestion_id}: {comment}",
+        )
         await ctx.send(f"Added a staff note to suggestion #{suggestion_id}.")
 
     @suggestions_group.command(name="delete")
@@ -1020,6 +1352,53 @@ class SuggestionBox(commands.Cog):
         await self._send_review_log(ctx.guild, record, "Deleted", ctx.author, reason)
         await ctx.send(f"Suggestion #{suggestion_id} was deleted.")
 
+    @suggestions_group.command(name="thread")
+    @commands.admin_or_permissions(manage_guild=True)
+    async def suggestions_thread(self, ctx: commands.Context, suggestion_id: int) -> None:
+        """Create a discussion thread for an existing suggestion."""
+        assert ctx.guild is not None
+        async with self._guild_lock(ctx.guild.id):
+            settings = await self.config.guild(ctx.guild).all()
+            suggestions = settings.get("suggestions") or {}
+            key = self._suggestion_key(suggestion_id)
+            record = suggestions.get(key)
+            if not record:
+                await ctx.send(f"No suggestion with ID `{suggestion_id}` was found.")
+                return
+
+            if record.get("thread_id"):
+                await ctx.send(f"Suggestion #{suggestion_id} already has a thread: <#{record['thread_id']}>")
+                return
+
+            message = await self._fetch_suggestion_message(ctx.guild, record)
+            if message is None:
+                await ctx.send("I could not find the suggestion message.")
+                return
+
+            try:
+                thread = await self._create_suggestion_thread(
+                    ctx.guild,
+                    message,
+                    record,
+                    settings,
+                    raise_on_error=True,
+                )
+            except commands.CommandError as error:
+                await ctx.send(str(error))
+                return
+
+            if thread is None:
+                await ctx.send("I could not create a thread for that suggestion.")
+                return
+
+            record["thread_id"] = thread.id
+            record["updated_at"] = self._now_ts()
+            async with self.config.guild(ctx.guild).suggestions() as stored_suggestions:
+                stored_suggestions[key] = record
+
+        await self._sync_suggestion_message(ctx.guild, record, settings)
+        await ctx.send(f"Created a discussion thread for suggestion #{suggestion_id}: {thread.mention}")
+
     @suggestions_group.command(name="export")
     @commands.admin_or_permissions(manage_guild=True)
     @commands.bot_has_permissions(attach_files=True)
@@ -1045,6 +1424,7 @@ class SuggestionBox(commands.Cog):
                 "updated_at",
                 "decision_by",
                 "decision_at",
+                "thread_id",
                 "suggestion",
             ]
         )
@@ -1061,6 +1441,7 @@ class SuggestionBox(commands.Cog):
                     self._format_export_time(record.get("updated_at")),
                     record.get("decision_by"),
                     self._format_export_time(record.get("decision_at")),
+                    record.get("thread_id"),
                     record.get("text"),
                 ]
             )

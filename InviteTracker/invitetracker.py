@@ -471,7 +471,7 @@ class InviteTracker(commands.Cog):
         )
         await ctx.send(embed=embed)
 
-    @commands.group(name="invitetracker", aliases=["inviteset"], invoke_without_command=True)
+    @commands.group(name="invitetracker", invoke_without_command=True)
     @commands.guild_only()
     @commands.bot_has_permissions(embed_links=True)
     async def invitetracker(self, ctx: commands.Context) -> None:

@@ -37,7 +37,7 @@ To update installed cogs:
 | [Applications](./Applications) | Staff applications | Configurable forms, application panels, DM questionnaires, review buttons, role actions, CSV exports, and polls. |
 | [Welcome](./Welcome) | Join messages | Configurable welcome messages, placeholders, JSON embeds, and cached welcome images. |
 | [InviteTracker](./InviteTracker) | Invite tracking | Invite-use detection, join sources, fake joins, leaver counts, leaderboards, log embeds, and CSV exports. |
-| [SuggestionBox](./SuggestionBox) | Community feedback | Suggestions with persistent voting buttons, staff review states, comments, review logs, and CSV exports. |
+| [SuggestionBox](./SuggestionBox) | Community feedback | Suggestions with persistent arrow voting buttons, optional discussion threads, staff review states, comments, review logs, and CSV exports. |
 | [Giveaway](./Giveaway) | Community events | Timed giveaways, reaction entry, rerolls, cancellation, attached giveaways, prefix and slash command support. |
 | [EmojiPorter](./EmojiPorter) | Server migration | Copy emojis and stickers between servers, list emoji/sticker inventory, skip duplicates automatically. |
 | [ZodiacColorRoles](./ZodiacColorRoles) | Role setup | Bulk-create zodiac, color, pronoun, and ping preference roles with hybrid command support. |
@@ -64,7 +64,7 @@ Install these if you want better moderation visibility, invite attribution, feed
 - `Applications` handles staff applications, review workflows, and approval roles.
 - `Welcome` handles onboarding messages.
 - `InviteTracker` tracks invite joins, fake joins, leavers, join sources, and leaderboards.
-- `SuggestionBox` collects community suggestions with voting, staff review states, comments, and exports.
+- `SuggestionBox` collects community suggestions with voting, optional discussion threads, staff review states, comments, and exports.
 - `Giveaway` supports events and community rewards.
 
 ### Roleplay Servers
@@ -160,7 +160,7 @@ Each cog includes its own data statement in `info.json`. In short:
 - `Toolz` stores per-guild role-message settings such as role IDs, channel IDs, and message templates.
 - `YALC`, `Applications`, `Welcome`, `InviteTracker`, `SuggestionBox`, `Giveaway`, `FiveMStatus`, `Fable`, `Paranoia`, `RPCalander`, and `WHMCS` store the settings or records needed for their features.
 - `InviteTracker` stores invite cache metadata, inviter stats, tracked member join-source records, Discord user IDs, invite codes, timestamps, fake-join flags, and unknown join counts.
-- `SuggestionBox` stores suggestion text, author IDs, voter IDs, staff reviewer IDs, message/channel IDs, votes, statuses, staff notes, review reasons, and timestamps.
+- `SuggestionBox` stores suggestion text, author IDs, voter IDs, staff reviewer IDs, message/channel/thread IDs, votes, statuses, staff notes, review reasons, and timestamps.
 - `RPCalander` also uses a local `post_tracker.json` file to prevent duplicate daily posts.
 
 No cog is intended to share stored data with external services unless the feature explicitly requires an external integration, such as WHMCS API access or optional Fable export workflows.
