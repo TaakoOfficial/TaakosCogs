@@ -12,9 +12,8 @@ __red_end_user_data_statement__ = "This cog does not persistently store any end 
 
 
 class Uppercase(commands.Cog):
-    """Create and rename text channels with uppercase-style names."""
+    """Create and rename text channels with uppercase names."""
 
-    BOLD_SANS_A_ORD = 0x1D5D4
     MAX_CHANNEL_NAME_LENGTH = 100
     SEPARATOR_RE = re.compile(r"[\s_]+")
     REPEATED_DASH_RE = re.compile(r"-{2,}")
@@ -23,28 +22,15 @@ class Uppercase(commands.Cog):
         self.bot = bot
 
     @classmethod
-    def _uppercase_ascii_letter(cls, letter: str) -> str:
-        return chr(cls.BOLD_SANS_A_ORD + ord(letter) - ord("A"))
-
-    @classmethod
-    def _uppercase_char(cls, char: str) -> str:
-        upper = char.upper()
-        if len(upper) > 1:
-            return "".join(cls._uppercase_char(part) for part in upper)
-        if "A" <= upper <= "Z":
-            return cls._uppercase_ascii_letter(upper)
-        return upper
-
-    @classmethod
     def format_channel_name(cls, name: str) -> str:
-        """Return a Discord-safe uppercase display name for a text channel."""
+        """Return a Discord-safe uppercase name for a text channel."""
         normalized = cls.SEPARATOR_RE.sub("-", name.strip())
-        converted = "".join(cls._uppercase_char(char) for char in normalized)
+        converted = normalized.upper()
         collapsed = cls.REPEATED_DASH_RE.sub("-", converted).strip("-")
         trimmed = collapsed[: cls.MAX_CHANNEL_NAME_LENGTH].strip("-")
         if trimmed:
             return trimmed
-        return "".join(cls._uppercase_char(char) for char in "unnamed")
+        return "UNNAMED"
 
     @staticmethod
     def _audit_reason(ctx: commands.Context) -> str:
@@ -61,7 +47,7 @@ class Uppercase(commands.Cog):
 
     @commands.hybrid_command(
         name="create-channel",
-        description="Create a text channel with an uppercase-style name.",
+        description="Create a text channel with an uppercase name.",
     )
     @app_commands.describe(
         category="The category where the new text channel should be created.",
@@ -77,7 +63,7 @@ class Uppercase(commands.Cog):
         *,
         name: str,
     ) -> None:
-        """Create a text channel in a category with an uppercase-style name."""
+        """Create a text channel in a category with an uppercase name."""
         guild = ctx.guild
         if guild is None:
             return
@@ -109,7 +95,7 @@ class Uppercase(commands.Cog):
 
     @commands.hybrid_command(
         name="rename-channel",
-        description="Rename a text channel with an uppercase-style name.",
+        description="Rename a text channel with an uppercase name.",
     )
     @app_commands.describe(
         channel="The text channel to rename.",
@@ -125,7 +111,7 @@ class Uppercase(commands.Cog):
         *,
         name: str,
     ) -> None:
-        """Rename a text channel with an uppercase-style name."""
+        """Rename a text channel with an uppercase name."""
         guild = ctx.guild
         if guild is None:
             return

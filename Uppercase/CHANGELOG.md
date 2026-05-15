@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.2
+
+- Changed channel formatting to use plain uppercase text for the requested name.
+
 ## 1.1.1
 
 - Changed uppercase channel formatting from fullwidth letters to bold sans uppercase letters for a cleaner Discord appearance.

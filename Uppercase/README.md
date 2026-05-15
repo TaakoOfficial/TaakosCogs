@@ -1,6 +1,6 @@
 # Uppercase
 
-A small Red-DiscordBot utility cog for creating and renaming text channels with uppercase-style names.
+A small Red-DiscordBot utility cog for creating and renaming text channels with uppercase names.
 
 [Back to the cog catalog](../README.md)
 
@@ -16,7 +16,7 @@ A small Red-DiscordBot utility cog for creating and renaming text channels with 
 
 - Creates text channels in the category you specify.
 - Renames existing text channels.
-- Converts ASCII letters to bold sans uppercase letters so channel names stay visibly uppercase.
+- Converts the requested channel name to uppercase.
 - Hybrid command support for prefix and slash usage.
 - No external dependencies.
 
@@ -24,8 +24,8 @@ A small Red-DiscordBot utility cog for creating and renaming text channels with 
 
 | Command                                           | Description                                                 |
 | ------------------------------------------------- | ----------------------------------------------------------- |
-| `[p]create-channel <category> <name>` or `/create-channel` | Create a text channel in a category with an uppercase-style name. |
-| `[p]rename-channel <channel> <name>` or `/rename-channel` | Rename a text channel with an uppercase-style name. |
+| `[p]create-channel <category> <name>` or `/create-channel` | Create a text channel in a category with an uppercase name. |
+| `[p]rename-channel <channel> <name>` or `/rename-channel` | Rename a text channel with an uppercase name. |
 
 ## Requirements
 
@@ -36,7 +36,7 @@ A small Red-DiscordBot utility cog for creating and renaming text channels with 
 
 For prefix commands, `<category>` can be a category mention, ID, or name. If the category name has spaces, use the category ID or quote the name.
 
-Example output: `staff loa` becomes `𝗦𝗧𝗔𝗙𝗙-𝗟𝗢𝗔`.
+Example output: `staff loa` becomes `STAFF-LOA`.
 
 ## Data
 
