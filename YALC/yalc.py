@@ -7663,13 +7663,14 @@ class YALC(DashboardIntegration, commands.Cog):
                         
                         # Check if YALC is registered
                         try:
-                            third_parties = getattr(dashboard_cog.rpc.third_parties_handler, 'third_parties', [])
-                            yalc_registered = any(getattr(tp, 'name', None) == 'YALC' for tp in third_parties)
+                            third_parties = getattr(dashboard_cog.rpc.third_parties_handler, 'third_parties', {})
+                            yalc_registered = self.qualified_name in third_parties
                             
                             if yalc_registered:
+                                pages = third_parties.get(self.qualified_name, {})
                                 embed.add_field(
                                     name="✅ YALC Registration",
-                                    value="YALC is registered as a third party",
+                                    value=f"YALC is registered as a third party with {len(pages)} page(s)",
                                     inline=False
                                 )
                             else:
@@ -7679,11 +7680,12 @@ class YALC(DashboardIntegration, commands.Cog):
                                     inline=False
                                 )
                                 
+                            registered_names = list(third_parties.keys())
                             embed.add_field(
                                 name="📊 Registered Third Parties",
-                                value=f"Total: {len(third_parties)}\n" +
-                                      "\n".join([f"• {getattr(tp, 'name', 'Unknown')}" for tp in third_parties[:5]]) +
-                                      (f"\n• ...and {len(third_parties) - 5} more" if len(third_parties) > 5 else ""),
+                                value=f"Total: {len(registered_names)}\n" +
+                                      "\n".join([f"• {name}" for name in registered_names[:5]]) +
+                                      (f"\n• ...and {len(registered_names) - 5} more" if len(registered_names) > 5 else ""),
                                 inline=False
                             )
                         except Exception as e:
@@ -7709,9 +7711,8 @@ class YALC(DashboardIntegration, commands.Cog):
             embed.add_field(
                 name="🔧 Integration Object",
                 value=f"Dashboard integration: {self is not None}\n" +
-                      f"Has dashboard_home: {hasattr(self, 'dashboard_home')}\n" +
-                      f"Has dashboard_settings: {hasattr(self, 'dashboard_settings')}\n" +
-                      f"Has dashboard_about: {hasattr(self, 'dashboard_about')}",
+                      f"Has dashboard_page: {hasattr(self, 'dashboard_page')}\n" +
+                      f"Has dashboard listener: {hasattr(self, 'on_dashboard_cog_add')}",
                 inline=False
             )
             
@@ -7730,12 +7731,16 @@ class YALC(DashboardIntegration, commands.Cog):
                 return
                 
             try:
-                dashboard_cog.rpc.third_parties_handler.add_third_party(self)
+                handler = dashboard_cog.rpc.third_parties_handler
+                try:
+                    handler.add_third_party(self, overwrite=True)
+                except TypeError:
+                    handler.add_third_party(self)
                 await ctx.send("✅ Successfully registered YALC as a dashboard third party.")
                 
                 # Verify registration
-                third_parties = getattr(dashboard_cog.rpc.third_parties_handler, 'third_parties', [])
-                yalc_registered = any(getattr(tp, 'name', None) == 'YALC' for tp in third_parties)
+                third_parties = getattr(handler, 'third_parties', {})
+                yalc_registered = self.qualified_name in third_parties
                 
                 if yalc_registered:
                     await ctx.send("✅ Registration verified - YALC is now registered.")

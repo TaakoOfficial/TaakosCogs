@@ -44,6 +44,10 @@ Yet Another Logging Cog: configurable server logging for Red-DiscordBot.
 
 `🤖 | application-logs`, `🤖 | channel-logs`, `🤖 | discord-automod-logs`, `🤖 | emoji-logs`, `🤖 | event-logs`, `🤖 | invite-logs`, `🤖 | message-logs`, `🤖 | role-logs`, `🤖 | stage-logs`, `🤖 | server-logs`, `🤖 | sticker-logs`, `🤖 | soundboard-logs`, `🤖 | thread-logs`, `🤖 | user-logs`, `🤖 | voice-logs`, `🤖 | webhook-logs`, and `🤖 | moderation-logs`.
 
+## Dashboard
+
+YALC registers a Red-Web-Dashboard third-party page when the AAA3A `Dashboard` cog is loaded. Use `[p]yalc dashboard status` to verify registration, or `[p]yalc dashboard register` after reloading Dashboard. The page appears under the guild dashboard's Third Parties tab for users with Manage Server, Red admin, or bot owner access.
+
 ## Requirements
 
 - Red-DiscordBot 3.5.0 or newer.

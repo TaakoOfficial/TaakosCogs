@@ -2,6 +2,7 @@ import discord
 from redbot.core import commands
 import typing
 import logging
+import html
 
 # Dashboard integration decorator - compatible with Red-Web-Dashboard
 def dashboard_page(*args, **kwargs):
@@ -126,11 +127,15 @@ class DashboardIntegration(object):
             if hasattr(self, 'log') and self.log:
                 self.log.error(f"Error updating YALC settings: {e}")
 
-    @dashboard_page(name=None, methods=("GET", "POST"))
+    @dashboard_page(
+        name=None,
+        description="Configure YALC logging settings.",
+        methods=("GET", "POST"),
+    )
     async def dashboard_page(
         self,
         user: discord.User,
-        guild_id: int,
+        guild: discord.Guild,
         **kwargs,
     ) -> typing.Dict[str, typing.Any]:
         """Main dashboard page for YALC."""
@@ -142,14 +147,17 @@ class DashboardIntegration(object):
                     "error_title": "Configuration Error",
                     "error_message": "Dashboard integration is not properly initialized. Please reload the cog."
                 }
-            
-            guild = self.bot.get_guild(guild_id)
-            if not guild:
-                return {"status": 1, "error_title": "Invalid Guild", "error_message": "The specified guild could not be found."}
 
             # Check permissions
             member = guild.get_member(user.id)
-            if not member or not member.guild_permissions.manage_guild:
+            is_owner = user.id in getattr(self.bot, "owner_ids", set())
+            is_admin = member is not None and await self.bot.is_admin(member)
+            can_manage = (
+                is_owner
+                or is_admin
+                or (member is not None and member.guild_permissions.manage_guild)
+            )
+            if not can_manage:
                 return {"status": 1, "error_title": "Insufficient Permissions", "error_message": "You need `Manage Server` permission to view this page."}
 
             # Get current settings
@@ -197,13 +205,18 @@ class DashboardIntegration(object):
     ) -> typing.Dict[str, typing.Any]:
         """Handle POST form submissions with CSRF validation and proper error handling."""
         try:
-            # Get form data and validate CSRF
-            form_data = kwargs.get("data", {})
+            data = kwargs.get("data") or {}
+            if isinstance(data, dict) and ("form" in data or "json" in data):
+                form_data = data.get("form") or data.get("json") or {}
+            elif isinstance(data, dict):
+                form_data = data
+            else:
+                form_data = data
             
             # Enhanced logging for debugging
             if hasattr(self, 'log') and self.log:
                 self.log.info(f"YALC form submission from {user.name} ({user.id}) for guild {guild.name}")
-                self.log.debug(f"Form data keys: {list(form_data.keys())}")
+                self.log.debug(f"Form data keys: {list(form_data.keys()) if hasattr(form_data, 'keys') else []}")
             
             # Check for CSRF token (Red-Web-Dashboard should handle this automatically)
             if not form_data:
@@ -218,7 +231,7 @@ class DashboardIntegration(object):
             
             # Process the form submission
             try:
-                new_settings = await self._process_form_data(form_data)
+                new_settings = await self._process_form_data(form_data, settings)
                 
                 # Enhanced logging of what we're saving
                 if hasattr(self, 'log') and self.log:
@@ -261,9 +274,31 @@ class DashboardIntegration(object):
                 "notifications": [{"message": f"❌ Form processing failed: {str(e)}", "category": "error"}]
             }
 
-    async def _process_form_data(self, form_data: dict) -> dict:
+    def _get_form_value(
+        self,
+        form_data: typing.Any,
+        key: str,
+        default: typing.Any = None,
+    ) -> typing.Any:
+        """Return a submitted form value from dict-like or MultiDict-like data."""
+        if hasattr(form_data, "get"):
+            return form_data.get(key, default)
+        return default
+
+    def _manual_csrf_hidden(self, kwargs: dict) -> str:
+        """Build a CSRF field for the fallback form when Dashboard's Form helper is unavailable."""
+        csrf_token = kwargs.get("csrf_token")
+        if not isinstance(csrf_token, (tuple, list)) or len(csrf_token) != 2:
+            return ""
+        return (
+            '<input type="hidden" name="csrf_token" value="'
+            f'{html.escape(str(csrf_token[1]), quote=True)}">'
+        )
+
+    async def _process_form_data(self, form_data: typing.Any, current_settings: dict) -> dict:
         """Process form data into settings format with validation."""
         new_settings = {}
+        event_descriptions = getattr(self, "event_descriptions", {})
         
         # Process basic filter settings (checkboxes only appear if checked)
         checkbox_settings = [
@@ -279,22 +314,26 @@ class DashboardIntegration(object):
             )
         
         # Process event toggles
-        events = {}
-        for key, value in form_data.items():
-            if key.startswith("event_"):
-                event_name = key[6:]  # Remove "event_" prefix
-                events[event_name] = True  # If field exists, it's checked
+        events = {
+            event: f"event_{event}" in form_data
+            for event in event_descriptions
+        }
         new_settings["events"] = events
         
         # Process channel configurations
-        event_channels = {}
-        for key, value in form_data.items():
-            if key.startswith("event_channels[") and key.endswith("]"):
-                event_name = key[15:-1]  # Extract event name
-                if value and str(value).isdigit():
-                    event_channels[event_name] = int(value)
-                else:
-                    event_channels[event_name] = None
+        existing_channels = current_settings.get("event_channels", {})
+        event_channels = {
+            event: existing_channels.get(event)
+            for event in event_descriptions
+        }
+        for event in event_descriptions:
+            value = self._get_form_value(form_data, f"event_channels[{event}]")
+            if value is None:
+                continue
+            try:
+                event_channels[event] = int(value) if str(value).strip() else None
+            except (TypeError, ValueError):
+                event_channels[event] = None
         new_settings["event_channels"] = event_channels
         
         return new_settings
@@ -376,9 +415,16 @@ class DashboardIntegration(object):
             # Generate additional sections for events and channels
             event_sections = self._generate_event_sections(settings)
             channel_sections = self._generate_channel_sections(guild, settings)
+            csrf_hidden = str(form.hidden_tag()) if hasattr(form, "hidden_tag") else ""
             
             # Generate the HTML template
-            html_template = await self._generate_wtforms_html(guild, settings, event_sections, channel_sections)
+            html_template = await self._generate_wtforms_html(
+                guild,
+                settings,
+                event_sections,
+                channel_sections,
+                csrf_hidden,
+            )
             
             # Enhanced logging for template and form
             if hasattr(self, 'log') and self.log:
@@ -420,6 +466,7 @@ class DashboardIntegration(object):
             # Generate sections
             event_sections = self._generate_event_sections(settings)
             channel_sections = self._generate_channel_sections(guild, settings)
+            csrf_hidden = self._manual_csrf_hidden(kwargs)
             
             # Warning message about CSRF
             csrf_warning = """
@@ -433,6 +480,7 @@ class DashboardIntegration(object):
             """
             
             # Create checkbox values
+            guild_name = html.escape(guild.name)
             checkbox_values = {
                 "include_thumbnails": "checked" if settings.get("include_thumbnails", True) else "",
                 "ignore_bots": "checked" if settings.get("ignore_bots", False) else "",
@@ -446,13 +494,14 @@ class DashboardIntegration(object):
             <div style="padding: 1em; max-width: 1200px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #1a1a1a; color: #e0e0e0; min-height: 100vh;">
                 <div style="background: linear-gradient(135deg, #2c5aa0 0%, #4a148c 100%); color: white; padding: 2em; border-radius: 10px; margin-bottom: 2em; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);">
                     <h1 style="margin: 0; font-size: 2em; font-weight: 600;">⚙️ YALC Settings</h1>
-                    <p style="margin: 0.5em 0 0 0; opacity: 0.9; font-size: 1.1em;">Configure comprehensive logging for <strong>{guild.name}</strong></p>
+                    <p style="margin: 0.5em 0 0 0; opacity: 0.9; font-size: 1.1em;">Configure comprehensive logging for <strong>{guild_name}</strong></p>
                     <p style="margin: 0.5em 0 0 0; opacity: 0.8; font-size: 0.9em;">Monitor 40+ event types across your Discord server</p>
                 </div>
 
                 {csrf_warning}
 
                 <form method="POST" style="width: 100%;">
+                    {csrf_hidden}
                     <!-- Filter Settings Section -->
                     <div style="margin-bottom: 2em; padding: 1.5em; background: #2d2d2d; border-radius: 8px; border-left: 4px solid #4caf50;">
                         <h3 style="color: #4caf50; margin-top: 0; margin-bottom: 1em; font-size: 1.3em; font-weight: 600;">🔍 Filtering Options</h3>
@@ -592,13 +641,15 @@ class DashboardIntegration(object):
         guild: discord.Guild,
         settings: dict,
         event_sections: str,
-        channel_sections: str
+        channel_sections: str,
+        csrf_hidden: str = "",
     ) -> str:
         """Generate HTML template for WTForms rendering.
         
         This method now returns a simplified template that doesn't rely on form field access,
         since the Jinja2 error suggests the form object isn't being passed correctly to the template context.
         """
+        guild_name = html.escape(guild.name)
         # Create checkbox values for direct HTML rendering
         checkbox_values = {
             "include_thumbnails": "checked" if settings.get("include_thumbnails", True) else "",
@@ -613,12 +664,13 @@ class DashboardIntegration(object):
         <div style="padding: 1em; max-width: 1200px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #1a1a1a; color: #e0e0e0; min-height: 100vh;">
             <div style="background: linear-gradient(135deg, #2c5aa0 0%, #4a148c 100%); color: white; padding: 2em; border-radius: 10px; margin-bottom: 2em; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);">
                 <h1 style="margin: 0; font-size: 2em; font-weight: 600;">⚙️ YALC Settings</h1>
-                <p style="margin: 0.5em 0 0 0; opacity: 0.9; font-size: 1.1em;">Configure comprehensive logging for <strong>{guild.name}</strong></p>
+                <p style="margin: 0.5em 0 0 0; opacity: 0.9; font-size: 1.1em;">Configure comprehensive logging for <strong>{guild_name}</strong></p>
                 <p style="margin: 0.5em 0 0 0; opacity: 0.8; font-size: 0.9em;">Monitor 40+ event types across your Discord server</p>
             </div>
 
             <!-- Manual form since WTForms template access is problematic -->
             <form method="POST" style="width: 100%;">
+                {csrf_hidden}
                 <!-- Filter Settings Section -->
                 <div style="margin-bottom: 2em; padding: 1.5em; background: #2d2d2d; border-radius: 8px; border-left: 4px solid #4caf50;">
                     <h3 style="color: #4caf50; margin-top: 0; margin-bottom: 1em; font-size: 1.3em; font-weight: 600;">🔍 Filtering Options</h3>
@@ -735,109 +787,171 @@ class DashboardIntegration(object):
         </div>
         """
 
+    def _get_event_categories(self) -> typing.Dict[str, typing.Dict[str, typing.Any]]:
+        """Return dashboard groupings for YALC's configured event keys."""
+        return {
+            "Message Events": {
+                "events": [
+                    "message_delete",
+                    "message_edit",
+                    "message_bulk_delete",
+                    "message_pin",
+                    "message_unpin",
+                ],
+                "color": "#f44336",
+                "description": "Track message modifications, deletions, and pin changes",
+            },
+            "Reaction Events": {
+                "events": ["reaction_add", "reaction_remove", "reaction_clear"],
+                "color": "#e91e63",
+                "description": "Monitor message reactions and emoji interactions",
+            },
+            "Member Events": {
+                "events": [
+                    "member_join",
+                    "member_leave",
+                    "member_ban",
+                    "member_unban",
+                    "member_kick",
+                    "member_timeout",
+                    "member_update",
+                ],
+                "color": "#2196f3",
+                "description": "Monitor member activity and moderation actions",
+            },
+            "Voice Events": {
+                "events": ["voice_state_update", "voice_update"],
+                "color": "#9c27b0",
+                "description": "Track voice channel activity and state changes",
+            },
+            "Channel Events": {
+                "events": ["channel_create", "channel_delete", "channel_update"],
+                "color": "#ff9800",
+                "description": "Monitor channel management",
+            },
+            "Thread & Forum Events": {
+                "events": [
+                    "thread_create",
+                    "thread_delete",
+                    "thread_update",
+                    "thread_member_join",
+                    "thread_member_leave",
+                    "forum_post_create",
+                    "forum_post_delete",
+                    "forum_post_update",
+                ],
+                "color": "#00bcd4",
+                "description": "Monitor thread and forum post activity",
+            },
+            "Role Events": {
+                "events": ["role_create", "role_delete", "role_update"],
+                "color": "#ff5722",
+                "description": "Track role creation, deletion, and permission changes",
+            },
+            "Server Events": {
+                "events": ["guild_update", "emoji_update", "sticker_update"],
+                "color": "#009688",
+                "description": "Monitor server settings, emoji, and sticker changes",
+            },
+            "Scheduled & Stage Events": {
+                "events": [
+                    "guild_scheduled_event_create",
+                    "guild_scheduled_event_delete",
+                    "guild_scheduled_event_update",
+                    "stage_instance_create",
+                    "stage_instance_delete",
+                    "stage_instance_update",
+                ],
+                "color": "#607d8b",
+                "description": "Track scheduled events and stage instances",
+            },
+            "Command Events": {
+                "events": [
+                    "command_use",
+                    "command_error",
+                    "application_cmd",
+                    "application_cmd_permissions_update",
+                ],
+                "color": "#4caf50",
+                "description": "Track prefix commands, slash commands, and permissions",
+            },
+            "Integration & Webhook Events": {
+                "events": [
+                    "integration_create",
+                    "integration_delete",
+                    "integration_update",
+                    "webhook_update",
+                ],
+                "color": "#673ab7",
+                "description": "Track server integrations and webhook changes",
+            },
+            "Soundboard Events": {
+                "events": [
+                    "soundboard_sound_create",
+                    "soundboard_sound_delete",
+                    "soundboard_sound_update",
+                ],
+                "color": "#3f51b5",
+                "description": "Monitor soundboard sound changes",
+            },
+            "AutoMod Events": {
+                "events": [
+                    "automod_rule_create",
+                    "automod_rule_delete",
+                    "automod_rule_update",
+                    "automod_action",
+                ],
+                "color": "#795548",
+                "description": "Track AutoMod rule changes and moderation actions",
+            },
+            "Invite Events": {
+                "events": ["invite_create", "invite_delete"],
+                "color": "#ff6f00",
+                "description": "Monitor server invite creation and deletion",
+            },
+        }
+
 
     def _generate_event_sections(self, settings: dict) -> str:
         """Generate HTML for event toggle sections with dark mode styling."""
         # Get event descriptions from the main cog
         event_descriptions = getattr(self, 'event_descriptions', {})
         
-        # Complete categories with all 52 event types and dark mode colors
-        categories = {
-            "Message Events": {
-                "events": ["message_delete", "message_edit", "message_bulk_delete", "message_pin", "message_unpin"],
-                "color": "#f44336",
-                "description": "Track message modifications, deletions, and pin changes"
-            },
-            "Member Events": {
-                "events": ["member_join", "member_leave", "member_ban", "member_unban", "member_kick", "member_timeout", "member_update"],
-                "color": "#2196f3",
-                "description": "Monitor member activity and moderation actions"
-            },
-            "Voice Events": {
-                "events": ["voice_state_update"],
-                "color": "#9c27b0",
-                "description": "Track voice channel activity and state changes"
-            },
-            "Channel Events": {
-                "events": ["channel_create", "channel_delete", "channel_update", "thread_create", "thread_delete", "thread_update"],
-                "color": "#ff9800",
-                "description": "Monitor channel and thread management"
-            },
-            "Role Events": {
-                "events": ["role_create", "role_delete", "role_update"],
-                "color": "#ff5722",
-                "description": "Track role creation, deletion, and permission changes"
-            },
-            "Server Events": {
-                "events": ["guild_update", "emoji_update", "sticker_update", "scheduled_event_create", "scheduled_event_delete", "scheduled_event_update"],
-                "color": "#009688",
-                "description": "Monitor server settings, emoji, sticker, and scheduled event changes"
-            },
-            "Command Events": {
-                "events": ["slash_command_completion"],
-                "color": "#4caf50",
-                "description": "Track slash command usage and completion"
-            },
-            "Reaction Events": {
-                "events": ["reaction_add", "reaction_remove", "reaction_clear", "reaction_clear_emoji"],
-                "color": "#e91e63",
-                "description": "Monitor message reactions and emoji interactions"
-            },
-            "Integration Events": {
-                "events": ["integration_create", "integration_delete", "integration_update"],
-                "color": "#673ab7",
-                "description": "Track server integrations and connected services"
-            },
-            "Webhook Events": {
-                "events": ["webhook_update"],
-                "color": "#607d8b",
-                "description": "Monitor webhook configuration changes"
-            },
-            "AutoMod Events": {
-                "events": ["automod_rule_create", "automod_rule_delete", "automod_rule_update", "automod_action_execution"],
-                "color": "#795548",
-                "description": "Track AutoMod rule changes and moderation actions"
-            },
-            "Invite Events": {
-                "events": ["invite_create", "invite_delete"],
-                "color": "#3f51b5",
-                "description": "Monitor server invite creation and deletion"
-            },
-            "Permission Events": {
-                "events": ["app_command_permissions_update"],
-                "color": "#ff6f00",
-                "description": "Track application command permission changes"
-            }
-        }
+        categories = self._get_event_categories()
 
         sections = []
 
         for category_name, category_info in categories.items():
-            events = category_info["events"]
+            events = [event for event in category_info["events"] if event in event_descriptions]
+            if not events:
+                continue
             color = category_info["color"]
-            description = category_info["description"]
+            description = html.escape(category_info["description"])
+            category_name_html = html.escape(category_name)
             
             event_checkboxes = []
             enabled_count = 0
             
             for event in events:
-                if event in event_descriptions:
-                    emoji, desc = event_descriptions[event]
-                    is_checked = settings.get("events", {}).get(event, False)
-                    if is_checked:
-                        enabled_count += 1
-                    
-                    checked = "checked" if is_checked else ""
-                    event_checkboxes.append(f"""
-                        <label style="display: flex; align-items: center; padding: 0.6em; background: #3a3a3a; border-radius: 6px; border: 1px solid #4a4a4a; cursor: pointer; transition: all 0.2s ease; margin-bottom: 8px; color: #e0e0e0;">
-                            <input type="checkbox" name="event_{event}" value="1" {checked}
-                                   style="margin-right: 10px; transform: scale(1.3); accent-color: {color};">
-                            <div style="flex: 1;">
-                                <div style="font-weight: 500; color: #e0e0e0;">{emoji} {desc}</div>
-                                <div style="font-size: 0.8em; color: #b0b0b0; margin-top: 2px;">Event: {event}</div>
-                            </div>
-                        </label>
-                    """)
+                emoji, desc = event_descriptions[event]
+                is_checked = settings.get("events", {}).get(event, False)
+                if is_checked:
+                    enabled_count += 1
+                
+                checked = "checked" if is_checked else ""
+                event_html = html.escape(event)
+                desc_html = html.escape(desc)
+                emoji_html = html.escape(emoji)
+                event_checkboxes.append(f"""
+                    <label style="display: flex; align-items: center; padding: 0.6em; background: #3a3a3a; border-radius: 6px; border: 1px solid #4a4a4a; cursor: pointer; transition: all 0.2s ease; margin-bottom: 8px; color: #e0e0e0;">
+                        <input type="checkbox" name="event_{event_html}" value="1" {checked}
+                               style="margin-right: 10px; transform: scale(1.3); accent-color: {color};">
+                        <div style="flex: 1;">
+                            <div style="font-weight: 500; color: #e0e0e0;">{emoji_html} {desc_html}</div>
+                            <div style="font-size: 0.8em; color: #b0b0b0; margin-top: 2px;">Event: {event_html}</div>
+                        </div>
+                    </label>
+                """)
 
             if event_checkboxes:
                 status_badge = f"""
@@ -849,7 +963,7 @@ class DashboardIntegration(object):
                 sections.append(f"""
                     <div style="margin-bottom: 2em; padding: 1.5em; background: #2d2d2d; border-radius: 8px; border-left: 4px solid {color};">
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1em;">
-                            <h3 style="color: {color}; margin: 0; font-size: 1.3em; font-weight: 600;">{category_name}</h3>
+                            <h3 style="color: {color}; margin: 0; font-size: 1.3em; font-weight: 600;">{category_name_html}</h3>
                             {status_badge}
                         </div>
                         <p style="color: #b0b0b0; margin-bottom: 1.5em; font-size: 0.95em;">{description}</p>
@@ -868,91 +982,71 @@ class DashboardIntegration(object):
         text_channels.sort(key=lambda c: c.name.lower())  # Sort alphabetically
         
         channel_options = '<option value="">📵 No logging</option>' + "".join(
-            f'<option value="{c.id}">#{c.name}</option>' for c in text_channels
+            f'<option value="{c.id}">#{html.escape(c.name)}</option>' for c in text_channels
         )
 
-        enabled_events = [event for event, enabled in settings.get("events", {}).items() if enabled]
-
-        if not enabled_events:
-            return """
-            <div style="margin-bottom: 2em; padding: 2em; background: linear-gradient(135deg, #3d2914 0%, #5d4037 100%); border-radius: 8px; border-left: 4px solid #ff9800; text-align: center;">
-                <h4 style="margin: 0 0 0.5em 0; color: #ff9800; font-size: 1.2em;">⚠️ No Events Enabled</h4>
-                <p style="margin: 0; color: #bcaaa4; font-size: 1em;">
-                    Enable some events in the sections above to configure their log channels.
-                    <br><small>Each event type can be logged to a different channel for better organization.</small>
-                </p>
-            </div>
-            """
-
         event_descriptions = getattr(self, 'event_descriptions', {})
-        
-        # Group events by category for better organization - complete list
-        categories = {
-            "Message Events": ["message_delete", "message_edit", "message_bulk_delete", "message_pin", "message_unpin"],
-            "Member Events": ["member_join", "member_leave", "member_ban", "member_unban", "member_kick", "member_timeout", "member_update"],
-            "Voice Events": ["voice_state_update"],
-            "Channel Events": ["channel_create", "channel_delete", "channel_update", "thread_create", "thread_delete", "thread_update"],
-            "Role Events": ["role_create", "role_delete", "role_update"],
-            "Server Events": ["guild_update", "emoji_update", "sticker_update", "scheduled_event_create", "scheduled_event_delete", "scheduled_event_update"],
-            "Command Events": ["slash_command_completion"],
-            "Reaction Events": ["reaction_add", "reaction_remove", "reaction_clear", "reaction_clear_emoji"],
-            "Integration Events": ["integration_create", "integration_delete", "integration_update"],
-            "Webhook Events": ["webhook_update"],
-            "AutoMod Events": ["automod_rule_create", "automod_rule_delete", "automod_rule_update", "automod_action_execution"],
-            "Invite Events": ["invite_create", "invite_delete"],
-            "Permission Events": ["app_command_permissions_update"]
-        }
+        categories = self._get_event_categories()
         
         category_sections = []
         configured_count = 0
-        total_enabled = len(enabled_events)
+        total_events = len(event_descriptions)
         
-        for category_name, category_events in categories.items():
-            category_enabled = [event for event in category_events if event in enabled_events]
-            if not category_enabled:
+        for category_name, category_info in categories.items():
+            category_events = [
+                event for event in category_info["events"] if event in event_descriptions
+            ]
+            if not category_events:
                 continue
                 
             channel_config_html = ""
-            for event in category_enabled:
-                if event in event_descriptions:
-                    emoji, desc = event_descriptions[event]
-                    current_channel_id = settings.get("event_channels", {}).get(event)
-                    if current_channel_id:
-                        configured_count += 1
-                    
-                    # Create options with current selection
-                    options_with_selection = channel_options
-                    if current_channel_id:
-                        options_with_selection = options_with_selection.replace(
-                            f'value="{current_channel_id}"',
-                            f'value="{current_channel_id}" selected'
-                        )
+            for event in category_events:
+                emoji, desc = event_descriptions[event]
+                current_channel_id = settings.get("event_channels", {}).get(event)
+                if current_channel_id:
+                    configured_count += 1
+                
+                options_with_selection = channel_options
+                if current_channel_id:
+                    options_with_selection = options_with_selection.replace(
+                        f'value="{current_channel_id}"',
+                        f'value="{current_channel_id}" selected'
+                    )
 
-                    channel_config_html += f"""
-                        <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.8em; background: #3a3a3a; border-radius: 6px; border: 1px solid #4a4a4a; margin-bottom: 8px;">
-                            <label for="channel_{event}" style="flex: 1; margin-right: 1.5em; font-weight: 500; color: #e0e0e0;">
-                                {emoji} {desc}
-                                <div style="font-size: 0.8em; color: #b0b0b0; margin-top: 2px; font-weight: normal;">Event: {event}</div>
-                            </label>
-                            <select name="event_channels[{event}]" id="channel_{event}"
-                                    style="flex: 0 0 250px; padding: 0.7em; border-radius: 6px; border: 1px solid #555; font-size: 0.9em; background: #2a2a2a; color: #e0e0e0;">
-                                {options_with_selection}
-                            </select>
-                        </div>
-                    """
+                is_enabled = settings.get("events", {}).get(event, False)
+                state_badge = "" if is_enabled else """
+                    <span style="display: inline-block; margin-left: 8px; padding: 0.15em 0.5em; border-radius: 10px; background: #555; color: #ddd; font-size: 0.75em;">disabled</span>
+                """
+                opacity = "1" if is_enabled else "0.72"
+                event_html = html.escape(event)
+                desc_html = html.escape(desc)
+                emoji_html = html.escape(emoji)
+
+                channel_config_html += f"""
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.8em; background: #3a3a3a; border-radius: 6px; border: 1px solid #4a4a4a; margin-bottom: 8px; opacity: {opacity};">
+                        <label for="channel_{event_html}" style="flex: 1; margin-right: 1.5em; font-weight: 500; color: #e0e0e0;">
+                            {emoji_html} {desc_html}{state_badge}
+                            <div style="font-size: 0.8em; color: #b0b0b0; margin-top: 2px; font-weight: normal;">Event: {event_html}</div>
+                        </label>
+                        <select name="event_channels[{event_html}]" id="channel_{event_html}"
+                                style="flex: 0 0 250px; padding: 0.7em; border-radius: 6px; border: 1px solid #555; font-size: 0.9em; background: #2a2a2a; color: #e0e0e0;">
+                            {options_with_selection}
+                        </select>
+                    </div>
+                """
             
             if channel_config_html:
                 category_sections.append(f"""
                     <div style="margin-bottom: 1.5em;">
                         <h4 style="color: #2196f3; margin: 0 0 0.8em 0; font-size: 1.1em; font-weight: 600; border-bottom: 1px solid #4a4a4a; padding-bottom: 0.5em;">
-                            {category_name}
+                            {html.escape(category_name)}
                         </h4>
                         {channel_config_html}
                     </div>
                 """)
 
-        status_text = f"{configured_count}/{total_enabled} events have channels configured"
-        status_color = "#4caf50" if configured_count == total_enabled else "#ff9800" if configured_count > 0 else "#f44336"
+        status_text = f"{configured_count}/{total_events} events have channels configured"
+        status_color = "#4caf50" if configured_count == total_events else "#ff9800" if configured_count > 0 else "#f44336"
 
         return f"""
             <div style="margin-bottom: 2em; padding: 1.5em; background: #2d2d2d; border-radius: 8px; border-left: 4px solid #00bcd4;">
@@ -963,8 +1057,8 @@ class DashboardIntegration(object):
                     </span>
                 </div>
                 <p style="color: #b0b0b0; margin-bottom: 1.5em; font-size: 0.95em;">
-                    Assign specific channels for each enabled event type. Events without assigned channels won't be logged.
-                    <br><small style="color: #888;">💡 Tip: Use different channels for different event types to keep logs organized.</small>
+                    Assign channels for events you enable above. Events without assigned channels won't be logged.
+                    <br><small style="color: #888;">💡 Tip: You can preselect channels for disabled events before enabling them.</small>
                 </p>
                 {"".join(category_sections)}
             </div>
@@ -1038,4 +1132,8 @@ class DashboardIntegration(object):
     @commands.Cog.listener()
     async def on_dashboard_cog_add(self, dashboard_cog: commands.Cog) -> None:
         """Register the dashboard integration when dashboard cog is loaded."""
-        dashboard_cog.rpc.third_parties_handler.add_third_party(self)
+        handler = dashboard_cog.rpc.third_parties_handler
+        try:
+            handler.add_third_party(self, overwrite=True)
+        except TypeError:
+            handler.add_third_party(self)
