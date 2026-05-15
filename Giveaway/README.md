@@ -7,8 +7,8 @@ Timed reaction-based giveaways for Red-DiscordBot.
 ## Install
 
 ```text
-[p]repo add TaakosCogs https://github.com/TaakoOfficial/TaakosCogs
-[p]cog install TaakosCogs Giveaway
+[p]repo add taakoscogs https://github.com/TaakoOfficial/TaakosCogs
+[p]cog install taakoscogs Giveaway
 [p]load Giveaway
 ```
 
@@ -22,15 +22,15 @@ Timed reaction-based giveaways for Red-DiscordBot.
 
 ## Commands
 
-| Command | Description |
-| --- | --- |
-| `[p]giveaway start <duration> <winner_count> <prize>` | Start a giveaway in the current channel. |
-| `[p]giveaway startin <channel> <duration> <winner_count> <prize>` | Start a giveaway in another channel. |
-| `[p]giveaway attach <message_id_or_link> <duration> <winner_count> [prize]` | Use an existing message for entries. |
-| `[p]giveaway end <message_id_or_link>` | End an active giveaway immediately. |
-| `[p]giveaway cancel <message_id_or_link>` | Cancel an active giveaway. |
-| `[p]giveaway reroll <message_id_or_link> [winner_count]` | Pick new winners for an ended giveaway. |
-| `[p]giveaway list` | List active giveaways in the server. |
+| Command                                                                     | Description                              |
+| --------------------------------------------------------------------------- | ---------------------------------------- |
+| `[p]giveaway start <duration> <winner_count> <prize>`                       | Start a giveaway in the current channel. |
+| `[p]giveaway startin <channel> <duration> <winner_count> <prize>`           | Start a giveaway in another channel.     |
+| `[p]giveaway attach <message_id_or_link> <duration> <winner_count> [prize]` | Use an existing message for entries.     |
+| `[p]giveaway end <message_id_or_link>`                                      | End an active giveaway immediately.      |
+| `[p]giveaway cancel <message_id_or_link>`                                   | Cancel an active giveaway.               |
+| `[p]giveaway reroll <message_id_or_link> [winner_count]`                    | Pick new winners for an ended giveaway.  |
+| `[p]giveaway list`                                                          | List active giveaways in the server.     |
 
 Durations support values like `30m`, `2h`, `3d`, or `1w2d`.
 

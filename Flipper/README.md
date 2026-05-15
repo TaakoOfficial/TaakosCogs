@@ -7,8 +7,8 @@ A small Red-DiscordBot utility cog for flipping a coin.
 ## Install
 
 ```text
-[p]repo add TaakosCogs https://github.com/TaakoOfficial/TaakosCogs
-[p]cog install TaakosCogs Flipper
+[p]repo add taakoscogs https://github.com/TaakoOfficial/TaakosCogs
+[p]cog install taakoscogs Flipper
 [p]load Flipper
 ```
 
@@ -21,8 +21,8 @@ A small Red-DiscordBot utility cog for flipping a coin.
 
 ## Commands
 
-| Command | Description |
-| --- | --- |
+| Command                      | Description                                     |
+| ---------------------------- | ----------------------------------------------- |
 | `[p]coinflip` or `/coinflip` | Flip a coin and display the result in an embed. |
 
 ## Requirements

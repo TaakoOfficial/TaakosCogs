@@ -17,7 +17,7 @@
 ### 2️⃣ Install the Cog
 
 ```ini
-[p]cog install TaakosCogs Fable
+[p]cog install taakoscogs Fable
 ```
 
 ### 3️⃣ Load the Cog
@@ -73,14 +73,12 @@ Fable uses the following Discord permissions:
 ## Command Access Levels
 
 - **Admin Commands**
-
   - Server setup
   - Template management
   - Category configuration
   - Backup management
 
 - **Moderator Commands**
-
   - Character approval
   - Event moderation
   - Location management

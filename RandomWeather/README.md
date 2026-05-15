@@ -7,8 +7,8 @@ Seasonal weather simulation for Red-DiscordBot servers.
 ## Install
 
 ```text
-[p]repo add TaakosCogs https://github.com/TaakoOfficial/TaakosCogs
-[p]cog install TaakosCogs RandomWeather
+[p]repo add taakoscogs https://github.com/TaakoOfficial/TaakosCogs
+[p]cog install taakoscogs RandomWeather
 [p]load RandomWeather
 ```
 
@@ -24,19 +24,19 @@ Seasonal weather simulation for Red-DiscordBot servers.
 
 ## Commands
 
-| Command | Description |
-| --- | --- |
-| `[p]rweather` | Show current weather. |
-| `[p]rweather info` | Show current settings. |
-| `[p]rweather settimezone <timezone>` | Set server timezone. |
+| Command                                     | Description                         |
+| ------------------------------------------- | ----------------------------------- |
+| `[p]rweather`                               | Show current weather.               |
+| `[p]rweather info`                          | Show current settings.              |
+| `[p]rweather settimezone <timezone>`        | Set server timezone.                |
 | `[p]rweather setrefresh <interval_or_time>` | Set refresh interval or daily time. |
-| `[p]rweather channel <channel>` | Set the update channel. |
-| `[p]rweather role <role>` | Set the role to notify. |
-| `[p]rweather toggle` | Toggle role notification on or off. |
-| `[p]rweather color <color>` | Set embed color. |
-| `[p]rweather footer` | Toggle embed footer. |
-| `[p]rweather force` | Force a weather update post. |
-| `[p]rweather extreme` | Force an extreme weather event. |
+| `[p]rweather channel <channel>`             | Set the update channel.             |
+| `[p]rweather role <role>`                   | Set the role to notify.             |
+| `[p]rweather toggle`                        | Toggle role notification on or off. |
+| `[p]rweather color <color>`                 | Set embed color.                    |
+| `[p]rweather footer`                        | Toggle embed footer.                |
+| `[p]rweather force`                         | Force a weather update post.        |
+| `[p]rweather extreme`                       | Force an extreme weather event.     |
 
 Slash command equivalents are available for the same core weather actions.
 

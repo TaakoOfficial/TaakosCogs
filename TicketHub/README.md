@@ -7,8 +7,8 @@ Ticket panels, ticket lifecycle controls, AAA3A Tickets profile imports, and sel
 ## Install
 
 ```text
-[p]repo add TaakosCogs https://github.com/TaakoOfficial/TaakosCogs
-[p]cog install TaakosCogs TicketHub
+[p]repo add taakoscogs https://github.com/TaakoOfficial/TaakosCogs
+[p]cog install taakoscogs TicketHub
 [p]load TicketHub
 ```
 
@@ -58,34 +58,34 @@ Existing open ticket records, modal forms, modlog cases, forum tags, and panel b
 
 ## Commands
 
-| Command | Description |
-| --- | --- |
-| `[p]tickethub` or `[p]thub` | Show settings, profiles, and setup hints. |
-| `[p]tickethub walkthrough [profile]` | Walk through basic setup. |
-| `[p]tickethub enable [true_or_false]` | Enable or disable TicketHub. |
-| `[p]tickethub panel [profile] [channel]` | Post a ticket panel. |
-| `[p]tickethub profile [profile]` | Create a profile if it does not exist. |
-| `[p]tickethub open [profile] [reason]` | Open a ticket by command. |
-| `[p]tickethub category <profile> [category]` | Set the open-ticket category. |
-| `[p]tickethub closedcategory <profile> [category]` | Set the closed-ticket category. |
-| `[p]tickethub logchannel <profile> [channel]` | Set the ticket log channel. |
-| `[p]tickethub transcriptchannel <profile> [channel]` | Set the transcript channel. |
-| `[p]tickethub supportrole add <profile> <role>` | Add a support role. |
-| `[p]tickethub supportrole remove <profile> <role>` | Remove a support role. |
-| `[p]tickethub maxopen <profile> <amount>` | Set max open tickets per member. |
-| `[p]tickethub transcripts <profile> <true_or_false>` | Enable or disable transcripts on close/delete. |
+| Command                                               | Description                                        |
+| ----------------------------------------------------- | -------------------------------------------------- | ------------- | ------------- |
+| `[p]tickethub` or `[p]thub`                           | Show settings, profiles, and setup hints.          |
+| `[p]tickethub walkthrough [profile]`                  | Walk through basic setup.                          |
+| `[p]tickethub enable [true_or_false]`                 | Enable or disable TicketHub.                       |
+| `[p]tickethub panel [profile] [channel]`              | Post a ticket panel.                               |
+| `[p]tickethub profile [profile]`                      | Create a profile if it does not exist.             |
+| `[p]tickethub open [profile] [reason]`                | Open a ticket by command.                          |
+| `[p]tickethub category <profile> [category]`          | Set the open-ticket category.                      |
+| `[p]tickethub closedcategory <profile> [category]`    | Set the closed-ticket category.                    |
+| `[p]tickethub logchannel <profile> [channel]`         | Set the ticket log channel.                        |
+| `[p]tickethub transcriptchannel <profile> [channel]`  | Set the transcript channel.                        |
+| `[p]tickethub supportrole add <profile> <role>`       | Add a support role.                                |
+| `[p]tickethub supportrole remove <profile> <role>`    | Remove a support role.                             |
+| `[p]tickethub maxopen <profile> <amount>`             | Set max open tickets per member.                   |
+| `[p]tickethub transcripts <profile> <true_or_false>`  | Enable or disable transcripts on close/delete.     |
 | `[p]tickethub dmtranscript <profile> <true_or_false>` | Enable or disable transcript DMs to ticket owners. |
-| `[p]tickethub claim [ticket_id]` | Claim a ticket. |
-| `[p]tickethub unclaim [ticket_id]` | Unclaim a ticket. |
-| `[p]tickethub close [ticket_id] [reason]` | Close a ticket. |
-| `[p]tickethub reopen [ticket_id]` | Reopen a ticket. |
-| `[p]tickethub delete [ticket_id] [reason]` | Delete a ticket channel after saving a transcript. |
-| `[p]tickethub transcript [ticket_id]` | Generate and send a transcript. |
-| `[p]tickethub addmember <member> [ticket_id]` | Add a member to a ticket. |
-| `[p]tickethub removemember <member> [ticket_id]` | Remove a member from a ticket. |
-| `[p]tickethub list [open|closed|all] [owner]` | List tickets. |
-| `[p]tickethub import aaa3a [profile] [confirm]` | Preview or apply an AAA3A Tickets profile import. |
-| `[p]tickethub export` | Export TicketHub ticket records as CSV. |
+| `[p]tickethub claim [ticket_id]`                      | Claim a ticket.                                    |
+| `[p]tickethub unclaim [ticket_id]`                    | Unclaim a ticket.                                  |
+| `[p]tickethub close [ticket_id] [reason]`             | Close a ticket.                                    |
+| `[p]tickethub reopen [ticket_id]`                     | Reopen a ticket.                                   |
+| `[p]tickethub delete [ticket_id] [reason]`            | Delete a ticket channel after saving a transcript. |
+| `[p]tickethub transcript [ticket_id]`                 | Generate and send a transcript.                    |
+| `[p]tickethub addmember <member> [ticket_id]`         | Add a member to a ticket.                          |
+| `[p]tickethub removemember <member> [ticket_id]`      | Remove a member from a ticket.                     |
+| `[p]tickethub list [open                              | closed                                             | all] [owner]` | List tickets. |
+| `[p]tickethub import aaa3a [profile] [confirm]`       | Preview or apply an AAA3A Tickets profile import.  |
+| `[p]tickethub export`                                 | Export TicketHub ticket records as CSV.            |
 
 ## Example Setup
 

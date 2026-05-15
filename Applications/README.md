@@ -7,8 +7,8 @@ Configurable application forms for Red-DiscordBot servers.
 ## Install
 
 ```text
-[p]repo add TaakosCogs https://github.com/TaakoOfficial/TaakosCogs
-[p]cog install TaakosCogs Applications
+[p]repo add taakoscogs https://github.com/TaakoOfficial/TaakosCogs
+[p]cog install taakoscogs Applications
 [p]load Applications
 ```
 
@@ -49,38 +49,38 @@ Remove a role when the application is approved:
 
 ## Main Commands
 
-| Command | Description |
-| --- | --- |
-| `[p]apply <name>` | Start an application from chat. |
-| `[p]application create <name> <description> <channel>` | Create a new application form. |
-| `[p]application delete <name>` | Delete an application and its stored responses. |
-| `[p]application list` | List configured applications. |
-| `[p]application view <name>` | Show settings and questions for one application. |
+| Command                                                      | Description                                                             |
+| ------------------------------------------------------------ | ----------------------------------------------------------------------- |
+| `[p]apply <name>`                                            | Start an application from chat.                                         |
+| `[p]application create <name> <description> <channel>`       | Create a new application form.                                          |
+| `[p]application delete <name>`                               | Delete an application and its stored responses.                         |
+| `[p]application list`                                        | List configured applications.                                           |
+| `[p]application view <name>`                                 | Show settings and questions for one application.                        |
 | `[p]application panel <channel> [buttons_or_select] [names]` | Post an application panel. Use comma-separated names for multiple apps. |
-| `[p]application send <name> <member>` | Send an application directly to a member, bypassing role restrictions. |
-| `[p]application responses <name> [status] [member]` | List response IDs and statuses. |
-| `[p]application response <name> <response_id>` | Show one response. |
-| `[p]application export <name> [status]` | Export responses to CSV. |
-| `[p]application backup` | Export all application, panel, and poll data to JSON. |
+| `[p]application send <name> <member>`                        | Send an application directly to a member, bypassing role restrictions.  |
+| `[p]application responses <name> [status] [member]`          | List response IDs and statuses.                                         |
+| `[p]application response <name> <response_id>`               | Show one response.                                                      |
+| `[p]application export <name> [status]`                      | Export responses to CSV.                                                |
+| `[p]application backup`                                      | Export all application, panel, and poll data to JSON.                   |
 
 Valid response statuses are `all`, `pending`, `accepted`, and `denied`.
 
 ## Question Commands
 
-| Command | Description |
-| --- | --- |
-| `[p]application question add <name> <question> [type] [required] [choices]` | Add a question. |
-| `[p]application question remove <name> <position>` | Remove a question by position. |
-| `[p]application question list <name>` | List questions for an application. |
+| Command                                                                     | Description                        |
+| --------------------------------------------------------------------------- | ---------------------------------- |
+| `[p]application question add <name> <question> [type] [required] [choices]` | Add a question.                    |
+| `[p]application question remove <name> <position>`                          | Remove a question by position.     |
+| `[p]application question list <name>`                                       | List questions for an application. |
 
 Question types:
 
-| Type | Behavior |
-| --- | --- |
-| `text` | Applicant replies with a normal DM message. |
-| `boolean` | Applicant clicks Yes or No. |
-| `choice` | Applicant picks one configured choice. |
-| `attachment` | Applicant sends an attachment or link. |
+| Type         | Behavior                                    |
+| ------------ | ------------------------------------------- |
+| `text`       | Applicant replies with a normal DM message. |
+| `boolean`    | Applicant clicks Yes or No.                 |
+| `choice`     | Applicant picks one configured choice.      |
+| `attachment` | Applicant sends an attachment or link.      |
 
 Choice questions use comma-separated choices. Add `other` to allow a custom typed answer.
 
@@ -90,32 +90,32 @@ Choice questions use comma-separated choices. Add `other` to allow a custom type
 
 ## Config Commands
 
-| Command | Description |
-| --- | --- |
-| `[p]application config channel <name> <channel>` | Set the response logging channel. |
-| `[p]application config status <name> <open_or_close>` | Open or close an application. |
-| `[p]application config color <name> <color>` | Set the embed color, such as `#5865F2`. |
-| `[p]application config cooldown <name> <minutes>` | Set the cooldown before a user can apply again. |
-| `[p]application config multiple <name> <true_or_false>` | Allow or block multiple pending responses from one user. |
-| `[p]application config thread <name> <true_or_false> [template]` | Enable response threads and set the thread name template. |
-| `[p]application config notifications <name> <true_or_false>` | Enable or disable notifications. |
-| `[p]application config notifychannels <name> <channels>` | Set extra notification channels by mention or ID. |
-| `[p]application config notifyroles <name> <roles>` | Set notification ping roles by mention or ID. |
-| `[p]application config voting <name> <true_or_false> [threshold]` | Enable or disable reviewer voting. |
-| `[p]application config button <name> <label_or_emoji_or_style> <value>` | Configure the panel button. |
-| `[p]application config message <name> <type> <message>` | Configure panel, notification, completion, accept, or deny messages. |
+| Command                                                                 | Description                                                          |
+| ----------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| `[p]application config channel <name> <channel>`                        | Set the response logging channel.                                    |
+| `[p]application config status <name> <open_or_close>`                   | Open or close an application.                                        |
+| `[p]application config color <name> <color>`                            | Set the embed color, such as `#5865F2`.                              |
+| `[p]application config cooldown <name> <minutes>`                       | Set the cooldown before a user can apply again.                      |
+| `[p]application config multiple <name> <true_or_false>`                 | Allow or block multiple pending responses from one user.             |
+| `[p]application config thread <name> <true_or_false> [template]`        | Enable response threads and set the thread name template.            |
+| `[p]application config notifications <name> <true_or_false>`            | Enable or disable notifications.                                     |
+| `[p]application config notifychannels <name> <channels>`                | Set extra notification channels by mention or ID.                    |
+| `[p]application config notifyroles <name> <roles>`                      | Set notification ping roles by mention or ID.                        |
+| `[p]application config voting <name> <true_or_false> [threshold]`       | Enable or disable reviewer voting.                                   |
+| `[p]application config button <name> <label_or_emoji_or_style> <value>` | Configure the panel button.                                          |
+| `[p]application config message <name> <type> <message>`                 | Configure panel, notification, completion, accept, or deny messages. |
 
 Button styles are `green`, `red`, `gray`, and `blurple`.
 
 Message types are:
 
-| Type | Used For |
-| --- | --- |
-| `panel` | Text shown on a one-application panel. |
+| Type           | Used For                                     |
+| -------------- | -------------------------------------------- |
+| `panel`        | Text shown on a one-application panel.       |
 | `notification` | Message posted when a response is submitted. |
-| `completion` | DM sent to the applicant after submission. |
-| `accept` | DM sent when staff accepts a response. |
-| `deny` | DM sent when staff denies a response. |
+| `completion`   | DM sent to the applicant after submission.   |
+| `accept`       | DM sent when staff accepts a response.       |
+| `deny`         | DM sent when staff denies a response.        |
 
 ## Role Commands
 
@@ -127,17 +127,17 @@ Use this command shape for all application role settings:
 
 Role types:
 
-| Role Type | Behavior |
-| --- | --- |
-| `manager` | Allows a role to review responses and use response tools. |
-| `whitelist` | Only members with one of these roles can apply. |
-| `blacklist` | Members with one of these roles cannot apply. |
-| `apply` | Role given when a member starts an application. |
-| `submit` | Role given when a member submits an application. |
-| `accept` | Role given when a response is approved. |
-| `acceptremove` | Role removed when a response is approved. |
-| `deny` | Role given when a response is denied. |
-| `denyremove` | Role removed when a response is denied. |
+| Role Type      | Behavior                                                  |
+| -------------- | --------------------------------------------------------- |
+| `manager`      | Allows a role to review responses and use response tools. |
+| `whitelist`    | Only members with one of these roles can apply.           |
+| `blacklist`    | Members with one of these roles cannot apply.             |
+| `apply`        | Role given when a member starts an application.           |
+| `submit`       | Role given when a member submits an application.          |
+| `accept`       | Role given when a response is approved.                   |
+| `acceptremove` | Role removed when a response is approved.                 |
+| `deny`         | Role given when a response is denied.                     |
+| `denyremove`   | Role removed when a response is denied.                   |
 
 Examples:
 
@@ -170,10 +170,10 @@ Accepting or denying a response updates the response embed, stores the reviewer 
 
 ## Poll Commands
 
-| Command | Description |
-| --- | --- |
-| `[p]apppoll create <channel> <question> \| <option one>, <option two>` | Create a button poll. |
-| `[p]apppoll close <poll_id>` | Close a poll and disable voting buttons. |
+| Command                                                                | Description                              |
+| ---------------------------------------------------------------------- | ---------------------------------------- |
+| `[p]apppoll create <channel> <question> \| <option one>, <option two>` | Create a button poll.                    |
+| `[p]apppoll close <poll_id>`                                           | Close a poll and disable voting buttons. |
 
 Example:
 
@@ -185,21 +185,21 @@ Example:
 
 The cog supports these placeholders in panel, notification, completion, accept, deny, and thread templates:
 
-| Placeholder | Value |
-| --- | --- |
-| `{application}` | Application display name. |
-| `{application_key}` | Stored application key. |
-| `{description}` | Application description. |
-| `{server}` or `{guild}` | Server name. |
-| `{user}` | Applicant username. |
-| `{user_name}` | Applicant server display name. |
-| `{user_mention}` | Applicant mention. |
-| `{user_id}` | Applicant user ID. |
-| `{response_id}` | Response ID. |
-| `{status}` | Response status. |
-| `{reviewer}` | Reviewer username. |
-| `{reviewer_mention}` | Reviewer mention. |
-| `{reason}` | Review reason, or `No reason provided.` |
+| Placeholder             | Value                                   |
+| ----------------------- | --------------------------------------- |
+| `{application}`         | Application display name.               |
+| `{application_key}`     | Stored application key.                 |
+| `{description}`         | Application description.                |
+| `{server}` or `{guild}` | Server name.                            |
+| `{user}`                | Applicant username.                     |
+| `{user_name}`           | Applicant server display name.          |
+| `{user_mention}`        | Applicant mention.                      |
+| `{user_id}`             | Applicant user ID.                      |
+| `{response_id}`         | Response ID.                            |
+| `{status}`              | Response status.                        |
+| `{reviewer}`            | Reviewer username.                      |
+| `{reviewer_mention}`    | Reviewer mention.                       |
+| `{reason}`              | Review reason, or `No reason provided.` |
 
 ## Requirements
 

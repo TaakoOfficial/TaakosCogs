@@ -1,0 +1,17 @@
+{
+  "$schema": "https://raw.githubusercontent.com/Cog-Creators/Red-DiscordBot/V3/develop/schema/red_cog.schema.json",
+  "name": "RepBoard",
+  "author": ["Taako"],
+  "version": "1.0.0",
+  "description": "A Red DiscordBot cog for community reputation, kudos, public rep boards, leaderboards, moderation, and CSV exports.",
+  "install_msg": "RepBoard loaded. Use `[p]repboard setup` for a quick setup or `[p]repboard walkthrough` for the guided setup.",
+  "short": "Community reputation, kudos, rep boards, leaderboards, and exports.",
+  "tags": ["reputation", "kudos", "leaderboard", "community", "utility", "moderation"],
+  "requirements": [],
+  "min_bot_version": "3.5.0",
+  "min_python_version": [3, 9, 0],
+  "hidden": false,
+  "disabled": false,
+  "type": "COG",
+  "end_user_data_statement": "This cog stores per-guild reputation configuration, reputation records, Discord user IDs for givers, receivers, and moderators, reasons, message/channel IDs, timestamps, active/removed state, cooldown metadata, daily limit metadata, and aggregate reputation statistics. CSV exports are generated on demand and sent directly to Discord."
+}

@@ -7,8 +7,8 @@ Custom welcome messages for Red-DiscordBot servers.
 ## Install
 
 ```text
-[p]repo add TaakosCogs https://github.com/TaakoOfficial/TaakosCogs
-[p]cog install TaakosCogs Welcome
+[p]repo add taakoscogs https://github.com/TaakoOfficial/TaakosCogs
+[p]cog install taakoscogs Welcome
 [p]load Welcome
 ```
 
@@ -22,22 +22,22 @@ Custom welcome messages for Red-DiscordBot servers.
 
 ## Commands
 
-| Command | Description |
-| --- | --- |
-| `[p]welcome enable <true_or_false>` | Enable or disable welcome messages. |
-| `[p]welcome channel [channel]` | Set or clear the welcome channel. |
-| `[p]welcome message <template>` | Set the plain welcome message template. |
-| `[p]welcome clearmessage` | Clear the plain welcome message. |
-| `[p]welcome embedjson [json]` | Set a custom embed from text or an attached JSON file. |
-| `[p]welcome clearembed` | Clear the custom embed. |
-| `[p]welcome image <url>` | Download and cache a welcome image. |
-| `[p]welcome clearimage` | Remove the cached image. |
-| `[p]welcome imagemode <embed_or_attachment>` | Choose how the cached image is used. |
-| `[p]welcome bots <true_or_false>` | Choose whether bot accounts trigger welcomes. |
-| `[p]welcome placeholders` | Show available placeholders. |
-| `[p]welcome samplejson` | Show a sample embed JSON payload. |
-| `[p]welcome settings` | Show current settings. |
-| `[p]welcome test [member]` | Preview the welcome output. |
+| Command                                      | Description                                            |
+| -------------------------------------------- | ------------------------------------------------------ |
+| `[p]welcome enable <true_or_false>`          | Enable or disable welcome messages.                    |
+| `[p]welcome channel [channel]`               | Set or clear the welcome channel.                      |
+| `[p]welcome message <template>`              | Set the plain welcome message template.                |
+| `[p]welcome clearmessage`                    | Clear the plain welcome message.                       |
+| `[p]welcome embedjson [json]`                | Set a custom embed from text or an attached JSON file. |
+| `[p]welcome clearembed`                      | Clear the custom embed.                                |
+| `[p]welcome image <url>`                     | Download and cache a welcome image.                    |
+| `[p]welcome clearimage`                      | Remove the cached image.                               |
+| `[p]welcome imagemode <embed_or_attachment>` | Choose how the cached image is used.                   |
+| `[p]welcome bots <true_or_false>`            | Choose whether bot accounts trigger welcomes.          |
+| `[p]welcome placeholders`                    | Show available placeholders.                           |
+| `[p]welcome samplejson`                      | Show a sample embed JSON payload.                      |
+| `[p]welcome settings`                        | Show current settings.                                 |
+| `[p]welcome test [member]`                   | Preview the welcome output.                            |
 
 ## Requirements
 

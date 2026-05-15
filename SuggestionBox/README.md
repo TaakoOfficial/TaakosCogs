@@ -7,8 +7,8 @@ Community suggestions with persistent voting buttons, staff review states, comme
 ## Install
 
 ```text
-[p]repo add TaakosCogs https://github.com/TaakoOfficial/TaakosCogs
-[p]cog install TaakosCogs SuggestionBox
+[p]repo add taakoscogs https://github.com/TaakoOfficial/TaakosCogs
+[p]cog install taakoscogs SuggestionBox
 [p]load SuggestionBox
 ```
 
@@ -33,39 +33,39 @@ Community suggestions with persistent voting buttons, staff review states, comme
 
 ## Commands
 
-| Command | Description |
-| --- | --- |
-| `[p]suggest <suggestion>` | Submit a suggestion. |
-| `[p]suggestionbox` or `[p]suggestionset` | Show current SuggestionBox settings. |
-| `[p]suggestionbox setup [suggestion_channel] [review_channel]` | Enable suggestions and configure channels. |
-| `[p]suggestionbox walkthrough` or `[p]suggestionbox wizard` | Walk through setup interactively. |
-| `[p]suggestionbox enable [true_or_false]` | Enable or disable suggestions and voting. |
-| `[p]suggestionbox disable` | Disable suggestions and voting. |
-| `[p]suggestionbox channel [channel]` | Set the suggestion channel. |
-| `[p]suggestionbox reviewchannel [channel]` | Set the staff review log channel. |
-| `[p]suggestionbox clearreview` | Clear the staff review log channel. |
-| `[p]suggestionbox anonymous <true_or_false>` | Hide or show authors on suggestion embeds. |
-| `[p]suggestionbox downvotes <true_or_false>` | Enable or disable downvotes. |
-| `[p]suggestionbox selfvote <true_or_false>` | Allow or block authors voting on their own suggestions. |
-| `[p]suggestionbox threads <true_or_false>` | Enable or disable per-suggestion discussion threads. |
-| `[p]suggestionbox threadarchive <minutes>` | Set thread auto-archive time: `60`, `1440`, `4320`, or `10080`. |
-| `[p]suggestionbox color [hex_or_color]` | Set the open suggestion embed color. Omit to reset. |
-| `[p]suggestionbox reset confirm` | Clear all stored suggestion records. |
-| `[p]suggestionbox refresh` | Refresh all tracked suggestion messages from stored records. |
-| `[p]suggestions info <id>` | Show a suggestion by ID. |
-| `[p]suggestions list [status|all] [limit]` | List suggestions by status. |
-| `[p]suggestions mine [limit]` | List your submitted suggestions. |
-| `[p]suggestions stats` | Show suggestion totals by status. |
-| `[p]suggestions approve <id> [reason]` | Mark a suggestion as approved. |
-| `[p]suggestions deny <id> [reason]` | Mark a suggestion as denied. |
-| `[p]suggestions consider <id> [reason]` | Mark a suggestion as under consideration. |
-| `[p]suggestions implement <id> [reason]` | Mark a suggestion as implemented. |
-| `[p]suggestions close <id> [reason]` | Close a suggestion. |
-| `[p]suggestions reopen <id>` | Reopen a suggestion for voting. |
-| `[p]suggestions comment <id> <comment>` | Add a staff note to a suggestion. |
-| `[p]suggestions delete <id> [reason]` | Delete a suggestion record and its message when possible. |
-| `[p]suggestions thread <id>` | Create a discussion thread for an existing suggestion. |
-| `[p]suggestions export` | Export suggestion records as CSV. |
+| Command                                                        | Description                                                     |
+| -------------------------------------------------------------- | --------------------------------------------------------------- | --------------------------- |
+| `[p]suggest <suggestion>`                                      | Submit a suggestion.                                            |
+| `[p]suggestionbox` or `[p]suggestionset`                       | Show current SuggestionBox settings.                            |
+| `[p]suggestionbox setup [suggestion_channel] [review_channel]` | Enable suggestions and configure channels.                      |
+| `[p]suggestionbox walkthrough` or `[p]suggestionbox wizard`    | Walk through setup interactively.                               |
+| `[p]suggestionbox enable [true_or_false]`                      | Enable or disable suggestions and voting.                       |
+| `[p]suggestionbox disable`                                     | Disable suggestions and voting.                                 |
+| `[p]suggestionbox channel [channel]`                           | Set the suggestion channel.                                     |
+| `[p]suggestionbox reviewchannel [channel]`                     | Set the staff review log channel.                               |
+| `[p]suggestionbox clearreview`                                 | Clear the staff review log channel.                             |
+| `[p]suggestionbox anonymous <true_or_false>`                   | Hide or show authors on suggestion embeds.                      |
+| `[p]suggestionbox downvotes <true_or_false>`                   | Enable or disable downvotes.                                    |
+| `[p]suggestionbox selfvote <true_or_false>`                    | Allow or block authors voting on their own suggestions.         |
+| `[p]suggestionbox threads <true_or_false>`                     | Enable or disable per-suggestion discussion threads.            |
+| `[p]suggestionbox threadarchive <minutes>`                     | Set thread auto-archive time: `60`, `1440`, `4320`, or `10080`. |
+| `[p]suggestionbox color [hex_or_color]`                        | Set the open suggestion embed color. Omit to reset.             |
+| `[p]suggestionbox reset confirm`                               | Clear all stored suggestion records.                            |
+| `[p]suggestionbox refresh`                                     | Refresh all tracked suggestion messages from stored records.    |
+| `[p]suggestions info <id>`                                     | Show a suggestion by ID.                                        |
+| `[p]suggestions list [status                                   | all] [limit]`                                                   | List suggestions by status. |
+| `[p]suggestions mine [limit]`                                  | List your submitted suggestions.                                |
+| `[p]suggestions stats`                                         | Show suggestion totals by status.                               |
+| `[p]suggestions approve <id> [reason]`                         | Mark a suggestion as approved.                                  |
+| `[p]suggestions deny <id> [reason]`                            | Mark a suggestion as denied.                                    |
+| `[p]suggestions consider <id> [reason]`                        | Mark a suggestion as under consideration.                       |
+| `[p]suggestions implement <id> [reason]`                       | Mark a suggestion as implemented.                               |
+| `[p]suggestions close <id> [reason]`                           | Close a suggestion.                                             |
+| `[p]suggestions reopen <id>`                                   | Reopen a suggestion for voting.                                 |
+| `[p]suggestions comment <id> <comment>`                        | Add a staff note to a suggestion.                               |
+| `[p]suggestions delete <id> [reason]`                          | Delete a suggestion record and its message when possible.       |
+| `[p]suggestions thread <id>`                                   | Create a discussion thread for an existing suggestion.          |
+| `[p]suggestions export`                                        | Export suggestion records as CSV.                               |
 
 ## Example Setup
 

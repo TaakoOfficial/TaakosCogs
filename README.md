@@ -1,8 +1,8 @@
 # Taako's Cogs
 
-A growing collection of cogs for [Red-DiscordBot](https://github.com/Cog-Creators/Red-DiscordBot), focused on practical server tools, roleplay immersion, community feedback, support tickets, events, invite tracking, and admin workflows.
+A growing collection of cogs for [Red-DiscordBot](https://github.com/Cog-Creators/Red-DiscordBot), focused on practical server tools, roleplay immersion, community feedback, reputation, support tickets, events, invite tracking, and admin workflows.
 
-This repo includes everything from role/user audits, invite tracking, suggestions, tickets, and logging to RP world tracking, weather simulation, giveaways, welcome automation, emoji migration, party games, and WHMCS support tooling.
+This repo includes everything from role/user audits, invite tracking, suggestions, reputation, tickets, and logging to RP world tracking, weather simulation, giveaways, welcome automation, emoji migration, party games, and WHMCS support tooling.
 
 ## Quick Install
 
@@ -10,15 +10,15 @@ Run these commands in Discord with your Red bot prefix:
 
 ```text
 [p]load downloader
-[p]repo add TaakosCogs https://github.com/TaakoOfficial/TaakosCogs
-[p]cog install TaakosCogs <CogName>
+[p]repo add taakoscogs https://github.com/TaakoOfficial/TaakosCogs
+[p]cog install taakoscogs <CogName>
 [p]load <CogName>
 ```
 
 Example:
 
 ```text
-[p]cog install TaakosCogs Toolz
+[p]cog install taakoscogs Toolz
 [p]load Toolz
 ```
 
@@ -30,34 +30,35 @@ To update installed cogs:
 
 ## Cog Catalog
 
-| Cog | Best For | Highlights |
-| --- | --- | --- |
-| [Toolz](./Toolz) | Role and user utilities | Role/user info, role audits, role comparison, CSV exports, bot/no-role audits, role-triggered messages with `{user}` placeholders. |
-| [YALC](./YALC) | Server logging | Message/member/channel/role logging, event filters, retention settings, ignore lists, Tupperbox/PluralKit-aware filtering. |
-| [Applications](./Applications) | Staff applications | Configurable forms, application panels, DM questionnaires, review buttons, role actions, CSV exports, and polls. |
-| [Welcome](./Welcome) | Join messages | Configurable welcome messages, placeholders, JSON embeds, and cached welcome images. |
-| [InviteTracker](./InviteTracker) | Invite tracking | Invite-use detection, join sources, fake joins, leaver counts, leaderboards, log embeds, and CSV exports. |
-| [SuggestionBox](./SuggestionBox) | Community feedback | Suggestions with persistent arrow voting buttons, optional discussion threads, staff review states, comments, review logs, and CSV exports. |
-| [TicketHub](./TicketHub) | Support tickets | Ticket panels, private channels, claim/close controls, AAA3A Tickets profile imports, HTML transcripts, and owner transcript DMs. |
-| [Giveaway](./Giveaway) | Community events | Timed giveaways, reaction entry, rerolls, cancellation, attached giveaways, prefix and slash command support. |
-| [EmojiPorter](./EmojiPorter) | Server migration | Copy emojis and stickers between servers, list emoji/sticker inventory, skip duplicates automatically. |
-| [ZodiacColorRoles](./ZodiacColorRoles) | Role setup | Bulk-create zodiac, color, pronoun, and ping preference roles with hybrid command support. |
-| [FiveMStatus](./FiveMStatus) | FiveM communities | Live server status panel with player counts, connect command, restart countdowns, uptime tracking, images, and link buttons. |
-| [RandomWeather](./RandomWeather) | RP atmosphere | Seasonal weather simulation, extreme weather events, automatic updates, role notifications, timezone-aware generation. |
-| [RPCalander](./RPCalander) | RP timekeeping | Daily RP calendar posts, custom timelines, moon phases, blood moon events, separate moon channels. |
-| [Fable](./Fable) | RP worldbuilding | Character profiles, relationships, locations, timelines, visualizations, lore tracking, export tools. |
-| [Paranoia](./Paranoia) | Social games | Discord version of Paranoia with secret DM questions, custom questions, status tracking, and Tupperbox support. |
-| [Flipper](./Flipper) | Simple fun | Lightweight coin flip command with embeds. |
-| [WHMCS](./WHMCS) | Hosting/business support | WHMCS clients, billing, support tickets, role permissions, API configuration, and Discord ticket channels. |
+| Cog                                    | Best For                 | Highlights                                                                                                                                  |
+| -------------------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| [Toolz](./Toolz)                       | Role and user utilities  | Role/user info, role audits, role comparison, CSV exports, bot/no-role audits, role-triggered messages with `{user}` placeholders.          |
+| [YALC](./YALC)                         | Server logging           | Message/member/channel/role logging, event filters, retention settings, ignore lists, Tupperbox/PluralKit-aware filtering.                  |
+| [Applications](./Applications)         | Staff applications       | Configurable forms, application panels, DM questionnaires, review buttons, role actions, CSV exports, and polls.                            |
+| [Welcome](./Welcome)                   | Join messages            | Configurable welcome messages, placeholders, JSON embeds, and cached welcome images.                                                        |
+| [InviteTracker](./InviteTracker)       | Invite tracking          | Invite-use detection, join sources, fake joins, leaver counts, leaderboards, log embeds, and CSV exports.                                   |
+| [SuggestionBox](./SuggestionBox)       | Community feedback       | Suggestions with persistent arrow voting buttons, optional discussion threads, staff review states, comments, review logs, and CSV exports. |
+| [RepBoard](./RepBoard)                 | Community reputation     | Member kudos, public rep board posts, cooldowns, daily limits, profiles, leaderboards, moderation removal, and CSV exports.                 |
+| [TicketHub](./TicketHub)               | Support tickets          | Ticket panels, private channels, claim/close controls, AAA3A Tickets profile imports, HTML transcripts, and owner transcript DMs.           |
+| [Giveaway](./Giveaway)                 | Community events         | Timed giveaways, reaction entry, rerolls, cancellation, attached giveaways, prefix and slash command support.                               |
+| [EmojiPorter](./EmojiPorter)           | Server migration         | Copy emojis and stickers between servers, list emoji/sticker inventory, skip duplicates automatically.                                      |
+| [ZodiacColorRoles](./ZodiacColorRoles) | Role setup               | Bulk-create zodiac, color, pronoun, and ping preference roles with hybrid command support.                                                  |
+| [FiveMStatus](./FiveMStatus)           | FiveM communities        | Live server status panel with player counts, connect command, restart countdowns, uptime tracking, images, and link buttons.                |
+| [RandomWeather](./RandomWeather)       | RP atmosphere            | Seasonal weather simulation, extreme weather events, automatic updates, role notifications, timezone-aware generation.                      |
+| [RPCalander](./RPCalander)             | RP timekeeping           | Daily RP calendar posts, custom timelines, moon phases, blood moon events, separate moon channels.                                          |
+| [Fable](./Fable)                       | RP worldbuilding         | Character profiles, relationships, locations, timelines, visualizations, lore tracking, export tools.                                       |
+| [Paranoia](./Paranoia)                 | Social games             | Discord version of Paranoia with secret DM questions, custom questions, status tracking, and Tupperbox support.                             |
+| [Flipper](./Flipper)                   | Simple fun               | Lightweight coin flip command with embeds.                                                                                                  |
+| [WHMCS](./WHMCS)                       | Hosting/business support | WHMCS clients, billing, support tickets, role permissions, API configuration, and Discord ticket channels.                                  |
 
 ## Recommended Sets
 
 ### Staff and Server Management
 
-Install these if you want better moderation visibility, invite attribution, feedback workflows, support tickets, and role operations:
+Install these if you want better moderation visibility, invite attribution, feedback workflows, community reputation, support tickets, and role operations:
 
 ```text
-[p]cog install TaakosCogs Toolz YALC Applications Welcome InviteTracker SuggestionBox TicketHub Giveaway
+[p]cog install taakoscogs Toolz YALC Applications Welcome InviteTracker SuggestionBox RepBoard TicketHub Giveaway
 ```
 
 - `Toolz` gives staff role/user lookup, audit, export, and role-triggered message tools.
@@ -66,6 +67,7 @@ Install these if you want better moderation visibility, invite attribution, feed
 - `Welcome` handles onboarding messages.
 - `InviteTracker` tracks invite joins, fake joins, leavers, join sources, and leaderboards.
 - `SuggestionBox` collects community suggestions with voting, optional discussion threads, staff review states, comments, and exports.
+- `RepBoard` gives members a lightweight kudos and reputation leaderboard system.
 - `TicketHub` handles support tickets with panels, private channels, staff controls, imports, and transcripts.
 - `Giveaway` supports events and community rewards.
 
@@ -74,7 +76,7 @@ Install these if you want better moderation visibility, invite attribution, feed
 Install these for immersive RP communities:
 
 ```text
-[p]cog install TaakosCogs FiveMStatus Fable RandomWeather RPCalander Paranoia
+[p]cog install taakoscogs FiveMStatus Fable RandomWeather RPCalander Paranoia
 ```
 
 - `FiveMStatus` posts a live FiveM status panel with player counts, connect command, restarts, and buttons.
@@ -88,7 +90,7 @@ Install these for immersive RP communities:
 Install these when building or moving a server:
 
 ```text
-[p]cog install TaakosCogs EmojiPorter ZodiacColorRoles Toolz
+[p]cog install taakoscogs EmojiPorter ZodiacColorRoles Toolz
 ```
 
 - `EmojiPorter` copies emojis and stickers from another server the bot can access.
@@ -100,7 +102,7 @@ Install these when building or moving a server:
 Install this if your Discord supports a WHMCS-powered hosting or billing operation:
 
 ```text
-[p]cog install TaakosCogs WHMCS
+[p]cog install taakoscogs WHMCS
 ```
 
 `WHMCS` connects Discord staff workflows to clients, invoices, support tickets, and optional per-ticket Discord channels.
@@ -111,14 +113,14 @@ Install this if your Discord supports a WHMCS-powered hosting or billing operati
 
 Key commands:
 
-| Command | Purpose |
-| --- | --- |
-| `[p]roleinfo <role>` or `/roleinfo` | Show role info with mobile-copyable role ID and mention text. |
+| Command                                   | Purpose                                                                      |
+| ----------------------------------------- | ---------------------------------------------------------------------------- |
+| `[p]roleinfo <role>` or `/roleinfo`       | Show role info with mobile-copyable role ID and mention text.                |
 | `[p]memberinfo [member]` or `/memberinfo` | Show user/member details, join date, roles, and elevated permission summary. |
-| `[p]rolecompare <role_a> <role_b>` | Compare role overlap and member differences. |
-| `[p]roleaudit [mode]` | Audit elevated, empty, managed, or mentionable roles. |
-| `[p]rolehierarchy` | Review role order, counts, and IDs. |
-| `[p]rolemessage setup` | Show setup help for messages posted when a role is given. |
+| `[p]rolecompare <role_a> <role_b>`        | Compare role overlap and member differences.                                 |
+| `[p]roleaudit [mode]`                     | Audit elevated, empty, managed, or mentionable roles.                        |
+| `[p]rolehierarchy`                        | Review role order, counts, and IDs.                                          |
+| `[p]rolemessage setup`                    | Show setup help for messages posted when a role is given.                    |
 
 Role message example:
 
@@ -138,14 +140,14 @@ Most cogs require:
 
 Some cogs have Python package requirements that Red's downloader installs automatically:
 
-| Cog | Requirements |
-| --- | --- |
-| RandomWeather | `pytz` |
-| RPCalander | `pytz` |
-| Welcome | `aiohttp` |
-| EmojiPorter | `aiohttp` |
-| FiveMStatus | `aiohttp` |
-| WHMCS | `aiohttp>=3.8.0` |
+| Cog           | Requirements     |
+| ------------- | ---------------- |
+| RandomWeather | `pytz`           |
+| RPCalander    | `pytz`           |
+| Welcome       | `aiohttp`        |
+| EmojiPorter   | `aiohttp`        |
+| FiveMStatus   | `aiohttp`        |
+| WHMCS         | `aiohttp>=3.8.0` |
 
 Some features also need Discord privileged intents:
 
@@ -160,9 +162,10 @@ Each cog includes its own data statement in `info.json`. In short:
 
 - `Flipper`, `RandomWeather`, `EmojiPorter`, and `ZodiacColorRoles` do not persistently store end user data.
 - `Toolz` stores per-guild role-message settings such as role IDs, channel IDs, and message templates.
-- `YALC`, `Applications`, `Welcome`, `InviteTracker`, `SuggestionBox`, `TicketHub`, `Giveaway`, `FiveMStatus`, `Fable`, `Paranoia`, `RPCalander`, and `WHMCS` store the settings or records needed for their features.
+- `YALC`, `Applications`, `Welcome`, `InviteTracker`, `SuggestionBox`, `RepBoard`, `TicketHub`, `Giveaway`, `FiveMStatus`, `Fable`, `Paranoia`, `RPCalander`, and `WHMCS` store the settings or records needed for their features.
 - `InviteTracker` stores invite cache metadata, inviter stats, tracked member join-source records, Discord user IDs, invite codes, timestamps, fake-join flags, and unknown join counts.
 - `SuggestionBox` stores suggestion text, author IDs, voter IDs, staff reviewer IDs, message/channel/thread IDs, votes, statuses, staff notes, review reasons, and timestamps.
+- `RepBoard` stores reputation settings, giver/receiver/moderator IDs, reasons, message/channel IDs, timestamps, active/removed state, cooldown metadata, daily limit metadata, and aggregate reputation statistics.
 - `TicketHub` stores ticket profiles, panel IDs, channel/category/role IDs, ticket records, owner/staff/participant IDs, reasons, timestamps, and lifecycle events. Transcripts are generated on demand from channel history.
 - `RPCalander` also uses a local `post_tracker.json` file to prevent duplicate daily posts.
 
@@ -178,6 +181,7 @@ Start with each cog's README:
 - [Welcome README](./Welcome/README.md)
 - [InviteTracker README](./InviteTracker/README.md)
 - [SuggestionBox README](./SuggestionBox/README.md)
+- [RepBoard README](./RepBoard/README.md)
 - [TicketHub README](./TicketHub/README.md)
 - [Giveaway README](./Giveaway/README.md)
 - [EmojiPorter README](./EmojiPorter/README.md)

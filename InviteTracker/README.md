@@ -7,8 +7,8 @@ Invite tracking, join-source lookup, fake join detection, leaver counts, leaderb
 ## Install
 
 ```text
-[p]repo add TaakosCogs https://github.com/TaakoOfficial/TaakosCogs
-[p]cog install TaakosCogs InviteTracker
+[p]repo add taakoscogs https://github.com/TaakoOfficial/TaakosCogs
+[p]cog install taakoscogs InviteTracker
 [p]load InviteTracker
 ```
 
@@ -24,24 +24,24 @@ Invite tracking, join-source lookup, fake join detection, leaver counts, leaderb
 
 ## Commands
 
-| Command | Description |
-| --- | --- |
-| `[p]invitetracker` | Show current settings, quick setup steps, required access, and useful commands. |
-| `[p]invitetracker setup [channel]` | Enable tracking, set the log channel, and cache current invites. |
-| `[p]invitetracker enable [true_or_false]` | Enable or disable invite tracking. |
-| `[p]invitetracker disable` | Disable invite tracking. |
-| `[p]invitetracker channel [channel]` | Set the invite log channel. Omit the channel to use the current channel. |
-| `[p]invitetracker clearchannel` | Clear the invite log channel. |
-| `[p]invitetracker fakeage <hours>` | Set the account-age threshold for fake joins. Use `0` to disable fake marking. |
-| `[p]invitetracker includebots <true_or_false>` | Choose whether bot joins should be tracked. |
-| `[p]invitetracker refresh` | Refresh the cached invite list from Discord. |
-| `[p]invitetracker resetstats confirm` | Clear all tracked invite stats and member records for the server. |
-| `[p]invitetracker settings` | Show current settings. |
-| `[p]invites [member]` | Show invite stats for yourself or another member. |
-| `[p]invites top [limit]` | Show the invite leaderboard, up to 25 users. |
-| `[p]invites source <member>` | Show which invite a current member joined with. |
-| `[p]invites joinedby <member> [limit]` | List currently tracked members invited by a user. |
-| `[p]invites export` | Export tracked member invite records as CSV. |
+| Command                                        | Description                                                                     |
+| ---------------------------------------------- | ------------------------------------------------------------------------------- |
+| `[p]invitetracker`                             | Show current settings, quick setup steps, required access, and useful commands. |
+| `[p]invitetracker setup [channel]`             | Enable tracking, set the log channel, and cache current invites.                |
+| `[p]invitetracker enable [true_or_false]`      | Enable or disable invite tracking.                                              |
+| `[p]invitetracker disable`                     | Disable invite tracking.                                                        |
+| `[p]invitetracker channel [channel]`           | Set the invite log channel. Omit the channel to use the current channel.        |
+| `[p]invitetracker clearchannel`                | Clear the invite log channel.                                                   |
+| `[p]invitetracker fakeage <hours>`             | Set the account-age threshold for fake joins. Use `0` to disable fake marking.  |
+| `[p]invitetracker includebots <true_or_false>` | Choose whether bot joins should be tracked.                                     |
+| `[p]invitetracker refresh`                     | Refresh the cached invite list from Discord.                                    |
+| `[p]invitetracker resetstats confirm`          | Clear all tracked invite stats and member records for the server.               |
+| `[p]invitetracker settings`                    | Show current settings.                                                          |
+| `[p]invites [member]`                          | Show invite stats for yourself or another member.                               |
+| `[p]invites top [limit]`                       | Show the invite leaderboard, up to 25 users.                                    |
+| `[p]invites source <member>`                   | Show which invite a current member joined with.                                 |
+| `[p]invites joinedby <member> [limit]`         | List currently tracked members invited by a user.                               |
+| `[p]invites export`                            | Export tracked member invite records as CSV.                                    |
 
 ## Example Setup
 

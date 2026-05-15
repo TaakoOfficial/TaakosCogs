@@ -7,8 +7,8 @@ Roleplay calendar, moon phase, and celestial event tracking for Red-DiscordBot.
 ## Install
 
 ```text
-[p]repo add TaakosCogs https://github.com/TaakoOfficial/TaakosCogs
-[p]cog install TaakosCogs RPCalander
+[p]repo add taakoscogs https://github.com/TaakoOfficial/TaakosCogs
+[p]cog install taakoscogs RPCalander
 [p]load RPCalander
 ```
 
@@ -24,24 +24,24 @@ Roleplay calendar, moon phase, and celestial event tracking for Red-DiscordBot.
 
 ## Commands
 
-| Command | Description |
-| --- | --- |
-| `[p]rpca` | Show base command help. |
-| `[p]rpca info` | Show current calendar settings. |
-| `[p]rpca force` | Force a calendar update post. |
-| `[p]rpca setdate <month> <day> <year>` | Set the current RP date. |
-| `[p]rpca settitle <title>` | Set the calendar embed title. |
-| `[p]rpca setcolor <color>` | Set embed color. |
-| `[p]rpca settimezone <timezone>` | Set posting timezone. |
-| `[p]rpca setchannel <channel>` | Set calendar update channel. |
-| `[p]rpca togglefooter` | Toggle embed footer. |
-| `[p]rpca moonphase` | Show current moon phase. |
-| `[p]rpca forcemoonupdate` | Force a moon phase update. |
-| `[p]rpca moonconfig enable` | Enable moon phase tracking. |
-| `[p]rpca moonconfig disable` | Disable moon phase tracking. |
-| `[p]rpca moonconfig bloodmoon` | Toggle blood moon events. |
-| `[p]rpca moonconfig setchannel <channel>` | Set moon phase channel. |
-| `[p]rpca resetbloodmoon` | Disable current blood moon mode. |
+| Command                                   | Description                      |
+| ----------------------------------------- | -------------------------------- |
+| `[p]rpca`                                 | Show base command help.          |
+| `[p]rpca info`                            | Show current calendar settings.  |
+| `[p]rpca force`                           | Force a calendar update post.    |
+| `[p]rpca setdate <month> <day> <year>`    | Set the current RP date.         |
+| `[p]rpca settitle <title>`                | Set the calendar embed title.    |
+| `[p]rpca setcolor <color>`                | Set embed color.                 |
+| `[p]rpca settimezone <timezone>`          | Set posting timezone.            |
+| `[p]rpca setchannel <channel>`            | Set calendar update channel.     |
+| `[p]rpca togglefooter`                    | Toggle embed footer.             |
+| `[p]rpca moonphase`                       | Show current moon phase.         |
+| `[p]rpca forcemoonupdate`                 | Force a moon phase update.       |
+| `[p]rpca moonconfig enable`               | Enable moon phase tracking.      |
+| `[p]rpca moonconfig disable`              | Disable moon phase tracking.     |
+| `[p]rpca moonconfig bloodmoon`            | Toggle blood moon events.        |
+| `[p]rpca moonconfig setchannel <channel>` | Set moon phase channel.          |
+| `[p]rpca resetbloodmoon`                  | Disable current blood moon mode. |
 
 Slash command equivalents are available for the same core calendar actions.
 

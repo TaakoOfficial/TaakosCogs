@@ -7,8 +7,8 @@ WHMCS billing, client, and support integration for Red-DiscordBot.
 ## Install
 
 ```text
-[p]repo add TaakosCogs https://github.com/TaakoOfficial/TaakosCogs
-[p]cog install TaakosCogs WHMCS
+[p]repo add taakoscogs https://github.com/TaakoOfficial/TaakosCogs
+[p]cog install taakoscogs WHMCS
 [p]load WHMCS
 ```
 
@@ -23,13 +23,13 @@ WHMCS billing, client, and support integration for Red-DiscordBot.
 
 ## Command Areas
 
-| Area | Example Commands |
-| --- | --- |
-| Admin setup | `[p]whmcs admin config`, `[p]whmcs admin test`, `[p]whmcs admin permissions` |
-| Ticket channels | `[p]whmcs admin channels view`, `[p]whmcs admin channels set category <id>`, `[p]whmcs admin channels enable` |
-| Clients | `[p]whmcs client list`, `[p]whmcs client view <id>`, `[p]whmcs client search <term>` |
-| Billing | `[p]whmcs billing invoices <client_id>`, `[p]whmcs billing invoice <invoice_id>`, `[p]whmcs billing credit <client_id> <amount> <reason>` |
-| Support | `[p]whmcs support tickets`, `[p]whmcs support ticket <ticket_id>`, `[p]whmcs support reply <ticket_id> <message>` |
+| Area            | Example Commands                                                                                                                          |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| Admin setup     | `[p]whmcs admin config`, `[p]whmcs admin test`, `[p]whmcs admin permissions`                                                              |
+| Ticket channels | `[p]whmcs admin channels view`, `[p]whmcs admin channels set category <id>`, `[p]whmcs admin channels enable`                             |
+| Clients         | `[p]whmcs client list`, `[p]whmcs client view <id>`, `[p]whmcs client search <term>`                                                      |
+| Billing         | `[p]whmcs billing invoices <client_id>`, `[p]whmcs billing invoice <invoice_id>`, `[p]whmcs billing credit <client_id> <amount> <reason>` |
+| Support         | `[p]whmcs support tickets`, `[p]whmcs support ticket <ticket_id>`, `[p]whmcs support reply <ticket_id> <message>`                         |
 
 ## Setup Notes
 

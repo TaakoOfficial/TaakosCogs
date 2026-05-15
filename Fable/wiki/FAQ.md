@@ -26,7 +26,7 @@ No! Fable is designed to be user-friendly. All features are accessible through s
 
 ```ini
 [p]repo add taako https://github.com/TaakoOfficial/TaakosCogs
-[p]cog install TaakosCogs Fable
+[p]cog install taakoscogs Fable
 [p]load Fable
 ```
 

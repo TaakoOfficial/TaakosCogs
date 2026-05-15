@@ -7,8 +7,8 @@ Yet Another Logging Cog: configurable server logging for Red-DiscordBot.
 ## Install
 
 ```text
-[p]repo add TaakosCogs https://github.com/TaakoOfficial/TaakosCogs
-[p]cog install TaakosCogs YALC
+[p]repo add taakoscogs https://github.com/TaakoOfficial/TaakosCogs
+[p]cog install taakoscogs YALC
 [p]load YALC
 ```
 
@@ -22,21 +22,21 @@ Yet Another Logging Cog: configurable server logging for Red-DiscordBot.
 
 ## Commands
 
-| Command | Description |
-| --- | --- |
-| `[p]yalc` or `[p]logger` | Show the YALC command group help. |
-| `[p]yalc setup` | Run the setup workflow. |
-| `[p]yalc autodetect` | Try smart setup/autodetection. |
-| `[p]yalc settings` | Show current logging settings. |
-| `[p]yalc enable [event_type]` | Enable an event or list available event types. |
-| `[p]yalc disable <event_type>` | Disable an event type. |
-| `[p]yalc setchannel <event_type_or_all> [channel]` | Set where logs should post. |
-| `[p]yalc bulk_enable` | Enable multiple event types. |
-| `[p]yalc bulk_disable` | Disable multiple event types. |
-| `[p]yalc validate` | Validate configuration and permissions. |
-| `[p]yalc test` | Run diagnostics. Aliases: `diagnostics`, `debug`. |
-| `[p]yalc reset` | Reset YALC settings for the server. |
-| `[p]yalc dashboard` | Show dashboard integration details. |
+| Command                                            | Description                                       |
+| -------------------------------------------------- | ------------------------------------------------- |
+| `[p]yalc` or `[p]logger`                           | Show the YALC command group help.                 |
+| `[p]yalc setup`                                    | Run the setup workflow.                           |
+| `[p]yalc autodetect`                               | Try smart setup/autodetection.                    |
+| `[p]yalc settings`                                 | Show current logging settings.                    |
+| `[p]yalc enable [event_type]`                      | Enable an event or list available event types.    |
+| `[p]yalc disable <event_type>`                     | Disable an event type.                            |
+| `[p]yalc setchannel <event_type_or_all> [channel]` | Set where logs should post.                       |
+| `[p]yalc bulk_enable`                              | Enable multiple event types.                      |
+| `[p]yalc bulk_disable`                             | Disable multiple event types.                     |
+| `[p]yalc validate`                                 | Validate configuration and permissions.           |
+| `[p]yalc test`                                     | Run diagnostics. Aliases: `diagnostics`, `debug`. |
+| `[p]yalc reset`                                    | Reset YALC settings for the server.               |
+| `[p]yalc dashboard`                                | Show dashboard integration details.               |
 
 ## Setup Channels
 

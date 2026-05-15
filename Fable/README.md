@@ -7,8 +7,8 @@ Living world and character tracker for roleplay-focused Red-DiscordBot servers.
 ## Install
 
 ```text
-[p]repo add TaakosCogs https://github.com/TaakoOfficial/TaakosCogs
-[p]cog install TaakosCogs Fable
+[p]repo add taakoscogs https://github.com/TaakoOfficial/TaakosCogs
+[p]cog install taakoscogs Fable
 [p]load Fable
 ```
 
@@ -23,15 +23,15 @@ Living world and character tracker for roleplay-focused Red-DiscordBot servers.
 
 ## Command Areas
 
-| Area | Example Commands |
-| --- | --- |
-| Characters | `[p]fable character quickstart`, `[p]fable character view`, `[p]fable character edit`, `[p]fable character timeline` |
-| Relationships | `[p]fable relationship set`, `[p]fable relationship view`, `[p]fable relations`, `[p]fable visualize relationships` |
-| Events | `[p]fable event log`, `[p]fable event edit`, `[p]fable event delete` |
-| Milestones | `[p]fable milestone add`, `[p]fable milestone list`, `[p]fable milestone categories` |
-| Locations | `[p]fable location create`, `[p]fable location visit`, `[p]fable location connect`, `[p]fable location info` |
-| Visuals | `[p]fable visualize relationships`, `[p]fable visualize locations` |
-| Sync | `[p]fable sysetup`, `[p]fable syexport`, `[p]fable syimport`, `[p]fable systatus` |
+| Area          | Example Commands                                                                                                     |
+| ------------- | -------------------------------------------------------------------------------------------------------------------- |
+| Characters    | `[p]fable character quickstart`, `[p]fable character view`, `[p]fable character edit`, `[p]fable character timeline` |
+| Relationships | `[p]fable relationship set`, `[p]fable relationship view`, `[p]fable relations`, `[p]fable visualize relationships`  |
+| Events        | `[p]fable event log`, `[p]fable event edit`, `[p]fable event delete`                                                 |
+| Milestones    | `[p]fable milestone add`, `[p]fable milestone list`, `[p]fable milestone categories`                                 |
+| Locations     | `[p]fable location create`, `[p]fable location visit`, `[p]fable location connect`, `[p]fable location info`         |
+| Visuals       | `[p]fable visualize relationships`, `[p]fable visualize locations`                                                   |
+| Sync          | `[p]fable sysetup`, `[p]fable syexport`, `[p]fable syimport`, `[p]fable systatus`                                    |
 
 ## Quick Start
 

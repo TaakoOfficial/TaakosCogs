@@ -7,8 +7,8 @@ Live FiveM server status panels for Red-DiscordBot.
 ## Install
 
 ```text
-[p]repo add TaakosCogs https://github.com/TaakoOfficial/TaakosCogs
-[p]cog install TaakosCogs FiveMStatus
+[p]repo add taakoscogs https://github.com/TaakoOfficial/TaakosCogs
+[p]cog install taakoscogs FiveMStatus
 [p]load FiveMStatus
 ```
 
@@ -22,29 +22,29 @@ Live FiveM server status panels for Red-DiscordBot.
 
 ## Commands
 
-| Command | Description |
-| --- | --- |
-| `[p]fivem` or `[p]fivemstatus` | Show current settings. |
-| `[p]fivem setup <server> [channel]` | Set the server, choose the channel, enable updates, and post the panel. |
-| `[p]fivem server <server>` | Change the FiveM endpoint. |
-| `[p]fivem channel [channel]` | Set the status channel. |
-| `[p]fivem post` | Post a fresh status panel. |
-| `[p]fivem refresh` | Refresh the panel immediately. |
-| `[p]fivem enable <true_or_false>` | Enable or disable automatic refreshes. |
-| `[p]fivem name [name]` | Set the panel title. Use `clear` to return to the server hostname. |
-| `[p]fivem message [message]` | Set the short panel message. Use `clear` to remove it. |
-| `[p]fivem logo [url]` | Set the thumbnail logo URL. Use `clear` to remove it. |
-| `[p]fivem image [url]` | Set the large image URL. Use `clear` to use the server banner when available. |
-| `[p]fivem color [hex_or_color]` | Set the embed color. Omit the color to restore the default. |
-| `[p]fivem connecturl [url]` | Set the Connect button URL. Use `clear` to remove it. |
-| `[p]fivem discordurl [url]` | Set the Discord button URL. Use `clear` to remove it. |
-| `[p]fivem hostingurl [url]` | Set the Hosting button URL. Use `clear` to remove it. |
-| `[p]fivem restart add <HH:MM>` | Add a daily restart time. |
-| `[p]fivem restart remove <HH:MM>` | Remove a restart time. |
-| `[p]fivem restart clear` | Clear restart times. |
-| `[p]fivem timezone <iana_timezone>` | Set the timezone used for restart countdowns. |
-| `[p]fivem players` | Show the currently listed online players. |
-| `[p]fivem settings` | Show current settings. |
+| Command                             | Description                                                                   |
+| ----------------------------------- | ----------------------------------------------------------------------------- |
+| `[p]fivem` or `[p]fivemstatus`      | Show current settings.                                                        |
+| `[p]fivem setup <server> [channel]` | Set the server, choose the channel, enable updates, and post the panel.       |
+| `[p]fivem server <server>`          | Change the FiveM endpoint.                                                    |
+| `[p]fivem channel [channel]`        | Set the status channel.                                                       |
+| `[p]fivem post`                     | Post a fresh status panel.                                                    |
+| `[p]fivem refresh`                  | Refresh the panel immediately.                                                |
+| `[p]fivem enable <true_or_false>`   | Enable or disable automatic refreshes.                                        |
+| `[p]fivem name [name]`              | Set the panel title. Use `clear` to return to the server hostname.            |
+| `[p]fivem message [message]`        | Set the short panel message. Use `clear` to remove it.                        |
+| `[p]fivem logo [url]`               | Set the thumbnail logo URL. Use `clear` to remove it.                         |
+| `[p]fivem image [url]`              | Set the large image URL. Use `clear` to use the server banner when available. |
+| `[p]fivem color [hex_or_color]`     | Set the embed color. Omit the color to restore the default.                   |
+| `[p]fivem connecturl [url]`         | Set the Connect button URL. Use `clear` to remove it.                         |
+| `[p]fivem discordurl [url]`         | Set the Discord button URL. Use `clear` to remove it.                         |
+| `[p]fivem hostingurl [url]`         | Set the Hosting button URL. Use `clear` to remove it.                         |
+| `[p]fivem restart add <HH:MM>`      | Add a daily restart time.                                                     |
+| `[p]fivem restart remove <HH:MM>`   | Remove a restart time.                                                        |
+| `[p]fivem restart clear`            | Clear restart times.                                                          |
+| `[p]fivem timezone <iana_timezone>` | Set the timezone used for restart countdowns.                                 |
+| `[p]fivem players`                  | Show the currently listed online players.                                     |
+| `[p]fivem settings`                 | Show current settings.                                                        |
 
 ## Server Formats
 

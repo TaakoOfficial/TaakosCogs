@@ -7,8 +7,8 @@ Copy custom emojis and stickers between Discord servers.
 ## Install
 
 ```text
-[p]repo add TaakosCogs https://github.com/TaakoOfficial/TaakosCogs
-[p]cog install TaakosCogs EmojiPorter
+[p]repo add taakoscogs https://github.com/TaakoOfficial/TaakosCogs
+[p]cog install taakoscogs EmojiPorter
 [p]load EmojiPorter
 ```
 
@@ -22,12 +22,12 @@ Copy custom emojis and stickers between Discord servers.
 
 ## Commands
 
-| Command | Description |
-| --- | --- |
-| `[p]copyemojis <source_guild_id> [emoji_names]` or `/copyemojis` | Copy emojis into the current server. |
+| Command                                                                | Description                            |
+| ---------------------------------------------------------------------- | -------------------------------------- |
+| `[p]copyemojis <source_guild_id> [emoji_names]` or `/copyemojis`       | Copy emojis into the current server.   |
 | `[p]copystickers <source_guild_id> [sticker_names]` or `/copystickers` | Copy stickers into the current server. |
-| `[p]listemojis [guild_id]` or `/listemojis` | List custom emojis. |
-| `[p]liststickers [guild_id]` or `/liststickers` | List custom stickers. |
+| `[p]listemojis [guild_id]` or `/listemojis`                            | List custom emojis.                    |
+| `[p]liststickers [guild_id]` or `/liststickers`                        | List custom stickers.                  |
 
 For selected copies, pass comma-separated names such as `blobwave,blobheart`.
 

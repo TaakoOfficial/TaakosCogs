@@ -7,8 +7,8 @@ Bulk role creation for zodiac, color, pronoun, and ping preference roles.
 ## Install
 
 ```text
-[p]repo add TaakosCogs https://github.com/TaakoOfficial/TaakosCogs
-[p]cog install TaakosCogs ZodiacColorRoles
+[p]repo add taakoscogs https://github.com/TaakoOfficial/TaakosCogs
+[p]cog install taakoscogs ZodiacColorRoles
 [p]load ZodiacColorRoles
 ```
 
@@ -23,14 +23,14 @@ Bulk role creation for zodiac, color, pronoun, and ping preference roles.
 
 ## Commands
 
-| Command | Description |
-| --- | --- |
-| `[p]addzodiacrole <zodiac_or_all>` or `/addzodiacrole` | Create one or all zodiac roles. |
-| `[p]addcolorrole <color_or_all>` or `/addcolorrole` | Create one or all color roles. |
-| `[p]addpronounrole <pronoun_or_all>` or `/addpronounrole` | Create one or all pronoun roles. |
-| `[p]addcommonpingrole <role_or_all>` or `/addcommonpingrole` | Create one or all common ping roles. |
-| `[p]listzodiacroles` or `/listzodiacroles` | Show available zodiac options. |
-| `[p]listcolorroles` or `/listcolorroles` | Show available color options and hex values. |
+| Command                                                      | Description                                  |
+| ------------------------------------------------------------ | -------------------------------------------- |
+| `[p]addzodiacrole <zodiac_or_all>` or `/addzodiacrole`       | Create one or all zodiac roles.              |
+| `[p]addcolorrole <color_or_all>` or `/addcolorrole`          | Create one or all color roles.               |
+| `[p]addpronounrole <pronoun_or_all>` or `/addpronounrole`    | Create one or all pronoun roles.             |
+| `[p]addcommonpingrole <role_or_all>` or `/addcommonpingrole` | Create one or all common ping roles.         |
+| `[p]listzodiacroles` or `/listzodiacroles`                   | Show available zodiac options.               |
+| `[p]listcolorroles` or `/listcolorroles`                     | Show available color options and hex values. |
 
 ## Requirements
 
