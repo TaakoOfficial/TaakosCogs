@@ -41,6 +41,7 @@ To update installed cogs:
 | [RepBoard](./RepBoard)                 | Community reputation     | Member kudos, public rep board posts, cooldowns, daily limits, profiles, leaderboards, moderation removal, and CSV exports.                 |
 | [TicketHub](./TicketHub)               | Support tickets          | Ticket panels, private channels, claim/close controls, AAA3A Tickets profile imports, HTML transcripts, and owner transcript DMs.           |
 | [Giveaway](./Giveaway)                 | Community events         | Timed giveaways, reaction entry, rerolls, cancellation, attached giveaways, prefix and slash command support.                               |
+| [Uppercase](./Uppercase)               | Channel setup            | Create and rename text channels with uppercase-style names using `/create-channel` and `/rename-channel`.                                  |
 | [EmojiPorter](./EmojiPorter)           | Server migration         | Copy emojis and stickers between servers, list emoji/sticker inventory, skip duplicates automatically.                                      |
 | [ZodiacColorRoles](./ZodiacColorRoles) | Role setup               | Bulk-create zodiac, color, pronoun, and ping preference roles with hybrid command support.                                                  |
 | [FiveMStatus](./FiveMStatus)           | FiveM communities        | Live server status panel with player counts, connect command, restart countdowns, uptime tracking, images, and link buttons.                |
@@ -90,12 +91,13 @@ Install these for immersive RP communities:
 Install these when building or moving a server:
 
 ```text
-[p]cog install taakoscogs EmojiPorter ZodiacColorRoles Toolz
+[p]cog install taakoscogs EmojiPorter ZodiacColorRoles Toolz Uppercase
 ```
 
 - `EmojiPorter` copies emojis and stickers from another server the bot can access.
 - `ZodiacColorRoles` creates common self-role sets quickly.
 - `Toolz` helps audit role counts, hierarchy, empty roles, bots, and permissions.
+- `Uppercase` creates and renames text channels with uppercase-style names.
 
 ### Hosting and Support Teams
 
@@ -160,7 +162,7 @@ Some features also need Discord privileged intents:
 
 Each cog includes its own data statement in `info.json`. In short:
 
-- `Flipper`, `RandomWeather`, `EmojiPorter`, and `ZodiacColorRoles` do not persistently store end user data.
+- `Flipper`, `RandomWeather`, `EmojiPorter`, `ZodiacColorRoles`, and `Uppercase` do not persistently store end user data.
 - `Toolz` stores per-guild role-message settings such as role IDs, channel IDs, and message templates.
 - `YALC`, `Applications`, `Welcome`, `InviteTracker`, `SuggestionBox`, `RepBoard`, `TicketHub`, `Giveaway`, `FiveMStatus`, `Fable`, `Paranoia`, `RPCalander`, and `WHMCS` store the settings or records needed for their features.
 - `InviteTracker` stores invite cache metadata, inviter stats, tracked member join-source records, Discord user IDs, invite codes, timestamps, fake-join flags, and unknown join counts.
@@ -184,6 +186,7 @@ Start with each cog's README:
 - [RepBoard README](./RepBoard/README.md)
 - [TicketHub README](./TicketHub/README.md)
 - [Giveaway README](./Giveaway/README.md)
+- [Uppercase README](./Uppercase/README.md)
 - [EmojiPorter README](./EmojiPorter/README.md)
 - [ZodiacColorRoles README](./ZodiacColorRoles/README.md)
 - [FiveMStatus README](./FiveMStatus/README.md)
