@@ -30,6 +30,7 @@ class FiveMStatus(commands.Cog):
     REQUEST_TIMEOUT = aiohttp.ClientTimeout(total=10)
     DEFAULT_COLOR = 0x3B315F
     OFFLINE_COLOR = 0xD84E4E
+    CFX_JOIN_CODE_RE = re.compile(r"[a-z0-9]{3,24}", re.IGNORECASE)
 
     def __init__(self, bot: Red) -> None:
         self.bot = bot
@@ -230,10 +231,28 @@ class FiveMStatus(commands.Cog):
     @fivemstatus.command(name="connecturl")
     @commands.admin_or_permissions(manage_guild=True)
     async def fivemstatus_connect_url(self, ctx: commands.Context, url: Optional[str] = None) -> None:
-        """Set or clear the Connect button URL."""
+        """Set or clear the Join Server button URL."""
         assert ctx.guild is not None
         await self.config.guild(ctx.guild).connect_url.set(self._clean_optional_url(url))
         await ctx.tick()
+
+    @fivemstatus.command(name="joincode", aliases=["cfxjoin", "cfxcode"])
+    @commands.admin_or_permissions(manage_guild=True)
+    async def fivemstatus_join_code(
+        self,
+        ctx: commands.Context,
+        *,
+        code: Optional[str] = None,
+    ) -> None:
+        """Set or clear the CFX join code used by the Join Server button."""
+        assert ctx.guild is not None
+        join_code = self._clean_optional_cfx_join_code(code)
+        connect_url = self._cfx_join_url(join_code) if join_code else None
+        await self.config.guild(ctx.guild).connect_url.set(connect_url)
+        if connect_url:
+            await ctx.send(f"Join Server button set to `{connect_url}`.")
+        else:
+            await ctx.send("Join Server button URL cleared.")
 
     @fivemstatus.command(name="discordurl")
     @commands.admin_or_permissions(manage_guild=True)
@@ -365,6 +384,34 @@ class FiveMStatus(commands.Cog):
         return cleaned
 
     @classmethod
+    def _clean_optional_cfx_join_code(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        cleaned = value.strip().lower()
+        if cleaned in {"clear", "none", "reset", "off"}:
+            return None
+
+        if cleaned.startswith("fivem://connect/"):
+            cleaned = cleaned.split("/", 3)[-1]
+
+        join_match = re.search(r"(?:cfx\.re/join/|servers/single/)([a-z0-9]+)", cleaned)
+        if join_match:
+            cleaned = join_match.group(1)
+
+        if cleaned.startswith("cfx:"):
+            cleaned = cleaned[4:]
+
+        if not cls.CFX_JOIN_CODE_RE.fullmatch(cleaned):
+            raise commands.BadArgument(
+                "Provide a CFX join code like `gmblex`, a `https://cfx.re/join/...` URL, or `clear`."
+            )
+        return cleaned
+
+    @staticmethod
+    def _cfx_join_url(join_code: str) -> str:
+        return f"https://cfx.re/join/{join_code}"
+
+    @classmethod
     def _normalize_server_address(cls, value: str) -> str:
         server = value.strip()
         if not server:
@@ -379,7 +426,7 @@ class FiveMStatus(commands.Cog):
         if join_match:
             return f"cfx:{join_match.group(1)}"
 
-        if re.fullmatch(r"[a-z0-9]{3,12}", lowered) and "." not in lowered and ":" not in lowered:
+        if cls.CFX_JOIN_CODE_RE.fullmatch(lowered) and "." not in lowered and ":" not in lowered:
             return f"cfx:{lowered}"
 
         if "://" in server:
@@ -411,7 +458,7 @@ class FiveMStatus(commands.Cog):
         session = await self._get_session()
         headers = {
             "Accept": "application/json",
-            "User-Agent": "TaakosCogs-FiveMStatus/1.0",
+            "User-Agent": "TaakosCogs-FiveMStatus/1.1",
         }
         async with session.get(url, headers=headers, timeout=self.REQUEST_TIMEOUT) as response:
             if response.status >= 400:
@@ -464,7 +511,9 @@ class FiveMStatus(commands.Cog):
                 "error": None,
             }
         except Exception as error:
-            return self._offline_data(f"cfx.re/join/{join_code}", error)
+            data = self._offline_data(f"cfx.re/join/{join_code}", error)
+            data["join_code"] = join_code
+            return data
 
     async def _fetch_direct_data(self, server_address: str) -> ServerData:
         base_url = f"http://{server_address}"
@@ -748,10 +797,15 @@ class FiveMStatus(commands.Cog):
         view = discord.ui.View(timeout=None)
 
         connect_url = settings.get("connect_url")
-        if not connect_url and data.get("join_code"):
-            connect_url = f"https://cfx.re/join/{data['join_code']}"
+        if not connect_url:
+            join_code = data.get("join_code")
+            server_address = settings.get("server_address")
+            if not join_code and isinstance(server_address, str) and server_address.startswith("cfx:"):
+                join_code = server_address[4:]
+            if join_code:
+                connect_url = self._cfx_join_url(str(join_code))
         if connect_url:
-            view.add_item(discord.ui.Button(label="Connect", url=connect_url))
+            view.add_item(discord.ui.Button(label="Join Server", url=connect_url))
 
         discord_url = settings.get("discord_url")
         if discord_url:
@@ -778,7 +832,7 @@ class FiveMStatus(commands.Cog):
             f"Restart times: {restarts}",
             f"Logo URL: {settings.get('logo_url') or 'Not set'}",
             f"Image URL: {settings.get('image_url') or 'Auto/server banner'}",
-            f"Connect button: {settings.get('connect_url') or 'Auto for cfx.re join codes'}",
+            f"Join Server button: {settings.get('connect_url') or 'Auto for cfx.re join codes'}",
             f"Discord button: {settings.get('discord_url') or 'Not set'}",
             f"Hosting button: {settings.get('hosting_url') or 'Not set'}",
         ]

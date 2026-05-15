@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import re
-from typing import Optional
 
 import discord
 from redbot.core import app_commands, commands
@@ -51,11 +50,6 @@ class Uppercase(commands.Cog):
     def _audit_reason(ctx: commands.Context) -> str:
         return f"Uppercase command used by {ctx.author} ({ctx.author.id})"
 
-    @staticmethod
-    def _current_category(ctx: commands.Context) -> Optional[discord.CategoryChannel]:
-        channel = getattr(ctx, "channel", None)
-        return getattr(channel, "category", None)
-
     async def _send_result(
         self,
         ctx: commands.Context,
@@ -69,12 +63,21 @@ class Uppercase(commands.Cog):
         name="create-channel",
         description="Create a text channel with an uppercase-style name.",
     )
-    @app_commands.describe(name="The channel name to convert to uppercase.")
+    @app_commands.describe(
+        category="The category where the new text channel should be created.",
+        name="The channel name to convert to uppercase.",
+    )
     @commands.guild_only()
     @commands.admin_or_permissions(manage_channels=True)
     @commands.cooldown(1, 5, commands.BucketType.user)
-    async def create_channel(self, ctx: commands.Context, *, name: str) -> None:
-        """Create a text channel in the current category with an uppercase-style name."""
+    async def create_channel(
+        self,
+        ctx: commands.Context,
+        category: discord.CategoryChannel,
+        *,
+        name: str,
+    ) -> None:
+        """Create a text channel in a category with an uppercase-style name."""
         guild = ctx.guild
         if guild is None:
             return
@@ -83,9 +86,11 @@ class Uppercase(commands.Cog):
         if me is None or not me.guild_permissions.manage_channels:
             await ctx.send("I need the Manage Channels permission to create channels.")
             return
+        if not category.permissions_for(me).manage_channels:
+            await ctx.send(f"I need Manage Channels permission in `{category.name}`.")
+            return
 
         formatted_name = self.format_channel_name(name)
-        category = self._current_category(ctx)
 
         try:
             channel = await guild.create_text_channel(

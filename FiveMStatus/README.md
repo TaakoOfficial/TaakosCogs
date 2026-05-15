@@ -17,7 +17,7 @@ Live FiveM server status panels for Red-DiscordBot.
 - Posts one Discord embed that updates every minute.
 - Reads live player count, max players, hostname, server banner, and player list from FiveM JSON endpoints.
 - Supports direct `ip:port` / `hostname:port` servers and `cfx.re/join` codes.
-- Shows online/offline status, players, F8 connect command, next restart, and uptime.
+- Shows online/offline status, players, F8 connect command, next restart, uptime, and a Join Server button.
 - Supports custom title, message, thumbnail logo, banner image, embed color, restart schedule, timezone, and link buttons.
 
 ## Commands
@@ -36,7 +36,8 @@ Live FiveM server status panels for Red-DiscordBot.
 | `[p]fivem logo [url]`               | Set the thumbnail logo URL. Use `clear` to remove it.                         |
 | `[p]fivem image [url]`              | Set the large image URL. Use `clear` to use the server banner when available. |
 | `[p]fivem color [hex_or_color]`     | Set the embed color. Omit the color to restore the default.                   |
-| `[p]fivem connecturl [url]`         | Set the Connect button URL. Use `clear` to remove it.                         |
+| `[p]fivem connecturl [url]`         | Set the Join Server button URL. Use `clear` to remove it.                     |
+| `[p]fivem joincode [code_or_url]`   | Set the Join Server button from a CFX join code or `cfx.re/join` URL.         |
 | `[p]fivem discordurl [url]`         | Set the Discord button URL. Use `clear` to remove it.                         |
 | `[p]fivem hostingurl [url]`         | Set the Hosting button URL. Use `clear` to remove it.                         |
 | `[p]fivem restart add <HH:MM>`      | Add a daily restart time.                                                     |
@@ -66,11 +67,14 @@ If no port is provided for a direct host, the cog uses FiveM's default `30120` p
 [p]fivem name Revival of Hope RP
 [p]fivem logo https://example.com/logo.png
 [p]fivem image https://example.com/banner.png
+[p]fivem joincode gmblex
 [p]fivem restart add 06:00
 [p]fivem restart add 18:00
 [p]fivem timezone America/Chicago
 [p]fivem discordurl https://discord.gg/example
 ```
+
+`[p]fivem joincode gmblex` creates a Discord button that links to `https://cfx.re/join/gmblex`. On devices with FiveM/CFX handling configured, that link opens the game and starts the connection flow.
 
 ## Requirements
 

@@ -14,7 +14,7 @@ A small Red-DiscordBot utility cog for creating and renaming text channels with 
 
 ## Highlights
 
-- Creates text channels in the same category as the channel where the command is used.
+- Creates text channels in the category you specify.
 - Renames existing text channels.
 - Converts ASCII letters to fullwidth uppercase letters so channel names stay visibly uppercase.
 - Hybrid command support for prefix and slash usage.
@@ -24,7 +24,7 @@ A small Red-DiscordBot utility cog for creating and renaming text channels with 
 
 | Command                                           | Description                                                 |
 | ------------------------------------------------- | ----------------------------------------------------------- |
-| `[p]create-channel <name>` or `/create-channel`   | Create a text channel with an uppercase-style name.         |
+| `[p]create-channel <category> <name>` or `/create-channel` | Create a text channel in a category with an uppercase-style name. |
 | `[p]rename-channel <channel> <name>` or `/rename-channel` | Rename a text channel with an uppercase-style name. |
 
 ## Requirements
@@ -33,6 +33,8 @@ A small Red-DiscordBot utility cog for creating and renaming text channels with 
 - Python 3.9 or newer.
 - The command user needs `Manage Channels`.
 - The bot needs `Manage Channels`.
+
+For prefix commands, `<category>` can be a category mention, ID, or name. If the category name has spaces, use the category ID or quote the name.
 
 ## Data
 

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.0
+
+- Updated `[p]create-channel` and `/create-channel` to accept a category before the channel name.
+
 ## 1.0.0
 
 - Added `/create-channel` and `[p]create-channel`.
