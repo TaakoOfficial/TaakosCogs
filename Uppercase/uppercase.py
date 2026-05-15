@@ -14,7 +14,7 @@ __red_end_user_data_statement__ = "This cog does not persistently store any end 
 class Uppercase(commands.Cog):
     """Create and rename text channels with uppercase-style names."""
 
-    FULLWIDTH_A_ORD = 0xFF21
+    BOLD_SANS_A_ORD = 0x1D5D4
     MAX_CHANNEL_NAME_LENGTH = 100
     SEPARATOR_RE = re.compile(r"[\s_]+")
     REPEATED_DASH_RE = re.compile(r"-{2,}")
@@ -24,7 +24,7 @@ class Uppercase(commands.Cog):
 
     @classmethod
     def _uppercase_ascii_letter(cls, letter: str) -> str:
-        return chr(cls.FULLWIDTH_A_ORD + ord(letter) - ord("A"))
+        return chr(cls.BOLD_SANS_A_ORD + ord(letter) - ord("A"))
 
     @classmethod
     def _uppercase_char(cls, char: str) -> str:

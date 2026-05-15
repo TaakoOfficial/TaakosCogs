@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.1
+
+- Changed uppercase channel formatting from fullwidth letters to bold sans uppercase letters for a cleaner Discord appearance.
+
 ## 1.1.0
 
 - Updated `[p]create-channel` and `/create-channel` to accept a category before the channel name.
