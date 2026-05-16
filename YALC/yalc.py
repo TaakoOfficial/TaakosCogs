@@ -1379,10 +1379,8 @@ class YALC(DashboardIntegration, commands.Cog):
         except Exception as e:
             self.log.error(f"Failed to log voice_state_update: {e}", exc_info=True)
 
-    @commands.Cog.listener()
-    async def on_message_pin(self, message: discord.Message) -> None:
+    async def _log_message_pin(self, message: discord.Message) -> None:
         """Log message pin events with audit log integration."""
-        self.log.debug("Listener triggered: on_message_pin")
         if not message.guild:
             return
         try:
@@ -1394,7 +1392,12 @@ class YALC(DashboardIntegration, commands.Cog):
                 return
 
             # Try to get audit log information about who pinned the message
-            entry = await self._get_audit_log_entry(message.guild, discord.AuditLogAction.message_pin_add, target=message.author, timeout_seconds=10)
+            entry = await self._get_audit_log_entry(
+                message.guild,
+                discord.AuditLogAction.message_pin,
+                target=message.author,
+                timeout_seconds=10
+            )
 
             embed = self.create_embed("message_pin",
                 f"📌 Message pinned in {message.channel.mention}",
@@ -1419,10 +1422,8 @@ class YALC(DashboardIntegration, commands.Cog):
         except Exception as e:
             self.log.error(f"Failed to log message_pin: {e}")
 
-    @commands.Cog.listener()
-    async def on_message_unpin(self, message: discord.Message) -> None:
+    async def _log_message_unpin(self, message: discord.Message) -> None:
         """Log message unpin events with audit log integration."""
-        self.log.debug("Listener triggered: on_message_unpin")
         if not message.guild:
             return
         try:
@@ -1434,7 +1435,12 @@ class YALC(DashboardIntegration, commands.Cog):
                 return
 
             # Try to get audit log information about who unpinned the message
-            entry = await self._get_audit_log_entry(message.guild, discord.AuditLogAction.message_pin_add, target=message.author, timeout_seconds=10)
+            entry = await self._get_audit_log_entry(
+                message.guild,
+                discord.AuditLogAction.message_unpin,
+                target=message.author,
+                timeout_seconds=10
+            )
 
             embed = self.create_embed("message_unpin",
                 f"📍 Message unpinned in {message.channel.mention}",
@@ -1609,43 +1615,39 @@ class YALC(DashboardIntegration, commands.Cog):
             self.log.error(f"Failed to log integration_create: {e}")
 
     @commands.Cog.listener()
-    async def on_integration_update(self, before: discord.Integration, after: discord.Integration) -> None:
+    async def on_integration_update(self, integration: discord.Integration) -> None:
         """Log integration update events."""
         self.log.debug("Listener triggered: on_integration_update")
-        if not before.guild:
+        if not integration.guild:
             return
         try:
-            should_log = await self.should_log_event(before.guild, "integration_update")
+            should_log = await self.should_log_event(integration.guild, "integration_update")
             if not should_log:
                 return
-            channel = await self.get_log_channel(before.guild, "integration_update")
+            channel = await self.get_log_channel(integration.guild, "integration_update")
             if not channel:
                 return
 
-            changes = []
-            if before.name != after.name:
-                changes.append(f"Name: `{before.name}` → `{after.name}`")
-            if before.enabled != after.enabled:
-                changes.append(f"Enabled: `{before.enabled}` → `{after.enabled}`")
-
-            if not changes:
-                return  # No meaningful changes
-
             # Try to get audit log information
-            entry = await self._get_audit_log_entry(before.guild, discord.AuditLogAction.integration_update, timeout_seconds=10)
+            entry = await self._get_audit_log_entry(
+                integration.guild,
+                discord.AuditLogAction.integration_update,
+                timeout_seconds=10
+            )
 
             embed = self.create_embed("integration_update",
-                f"🔄 Integration updated: **{after.name}**")
-
-            if changes:
-                embed.add_field(name="Changes", value="\n".join(changes), inline=False)
+                f"🔄 Integration updated: **{integration.name}**")
+            embed.add_field(name="Type", value=str(integration.type), inline=True)
+            embed.add_field(name="Enabled", value=str(integration.enabled), inline=True)
 
             if entry and entry.user:
                 embed.add_field(name="Updated By",
                     value=f"{entry.user.mention} (`{entry.user}`, ID: `{entry.user.id}`)",
                     inline=True)
+                if entry.reason:
+                    embed.add_field(name="Reason", value=entry.reason, inline=False)
 
-            embed.set_footer(text=f"Integration ID: {after.id}")
+            embed.set_footer(text=f"Integration ID: {integration.id}")
 
             await self.safe_send(channel, embed=embed)
 
@@ -1653,32 +1655,45 @@ class YALC(DashboardIntegration, commands.Cog):
             self.log.error(f"Failed to log integration_update: {e}")
 
     @commands.Cog.listener()
-    async def on_integration_delete(self, integration: discord.Integration) -> None:
+    async def on_raw_integration_delete(self, payload) -> None:
         """Log integration deletion events."""
-        self.log.debug("Listener triggered: on_integration_delete")
-        if not integration.guild:
+        self.log.debug("Listener triggered: on_raw_integration_delete")
+        guild = self.bot.get_guild(getattr(payload, "guild_id", 0))
+        if not guild:
             return
         try:
-            should_log = await self.should_log_event(integration.guild, "integration_delete")
+            should_log = await self.should_log_event(guild, "integration_delete")
             if not should_log:
                 return
-            channel = await self.get_log_channel(integration.guild, "integration_delete")
+            channel = await self.get_log_channel(guild, "integration_delete")
             if not channel:
                 return
 
             # Try to get audit log information
-            entry = await self._get_audit_log_entry(integration.guild, discord.AuditLogAction.integration_delete, timeout_seconds=10)
+            entry = await self._get_audit_log_entry(
+                guild,
+                discord.AuditLogAction.integration_delete,
+                timeout_seconds=10
+            )
+            integration_id = getattr(payload, "integration_id", None)
+            integration_name = f"ID `{integration_id}`" if integration_id else "Unknown integration"
+            if entry and entry.target:
+                integration_name = getattr(entry.target, "name", None) or integration_name
 
             embed = self.create_embed("integration_delete",
-                f"🗑️ Integration deleted: **{integration.name}**",
-                integration_type=getattr(integration.type, 'name', str(integration.type)))
+                f"🗑️ Integration deleted: **{integration_name}**")
+            if integration_id:
+                embed.add_field(name="Integration ID", value=f"`{integration_id}`", inline=True)
 
             if entry and entry.user:
                 embed.add_field(name="Deleted By",
                     value=f"{entry.user.mention} (`{entry.user}`, ID: `{entry.user.id}`)",
                     inline=True)
+                if entry.reason:
+                    embed.add_field(name="Reason", value=entry.reason, inline=False)
 
-            embed.set_footer(text=f"Integration ID: {integration.id}")
+            if integration_id:
+                embed.set_footer(text=f"Integration ID: {integration_id}")
 
             await self.safe_send(channel, embed=embed)
 
@@ -1686,9 +1701,9 @@ class YALC(DashboardIntegration, commands.Cog):
             self.log.error(f"Failed to log integration_delete: {e}")
 
     @commands.Cog.listener()
-    async def on_webhook_update(self, channel: discord.abc.GuildChannel) -> None:
+    async def on_webhooks_update(self, channel: discord.abc.GuildChannel) -> None:
         """Log webhook update events for the specified channel."""
-        self.log.debug("Listener triggered: on_webhook_update")
+        self.log.debug("Listener triggered: on_webhooks_update")
         if not channel.guild:
             return
         try:
@@ -1770,53 +1785,49 @@ class YALC(DashboardIntegration, commands.Cog):
             self.log.error(f"Failed to log automod_rule_create: {e}")
 
     @commands.Cog.listener()
-    async def on_automod_rule_update(self, before: discord.AutoModRule, after: discord.AutoModRule) -> None:
+    async def on_automod_rule_update(self, rule: discord.AutoModRule) -> None:
         """Log AutoMod rule update events."""
         self.log.debug("Listener triggered: on_automod_rule_update")
-        if not before.guild:
+        if not rule.guild:
             return
         try:
-            should_log = await self.should_log_event(before.guild, "automod_rule_update")
+            should_log = await self.should_log_event(rule.guild, "automod_rule_update")
             if not should_log:
                 return
-            channel = await self.get_log_channel(before.guild, "automod_rule_update")
+            channel = await self.get_log_channel(rule.guild, "automod_rule_update")
             if not channel:
                 return
 
-            changes = []
-            if before.name != after.name:
-                changes.append(f"Name: `{before.name}` → `{after.name}`")
-            if hasattr(before, 'enabled') and hasattr(after, 'enabled') and before.enabled != after.enabled:
-                changes.append(f"Enabled: `{before.enabled}` → `{after.enabled}`")
-            if str(before.trigger) != str(after.trigger):
-                changes.append(f"Trigger: `{before.trigger}` → `{after.trigger}`")
-
-            # Check for action changes
-            before_actions = [str(a) for a in before.actions] if before.actions else []
-            after_actions = [str(a) for a in after.actions] if after.actions else []
-            if set(before_actions) != set(after_actions):
-                changes.append(f"Actions changed from {len(before_actions)} to {len(after_actions)} actions")
-
-            if not changes:
-                return  # No meaningful changes
-
             # Try to get audit log information
-            entry = await self._get_audit_log_entry(before.guild, discord.AuditLogAction.automod_rule_update, timeout_seconds=10)
+            entry = await self._get_audit_log_entry(
+                rule.guild,
+                discord.AuditLogAction.automod_rule_update,
+                target=rule,
+                timeout_seconds=10
+            )
 
             embed = self.create_embed("automod_rule_update",
-                f"🔄 AutoMod rule updated: **{after.name}**")
+                f"🔄 AutoMod rule updated: **{rule.name}**")
 
-            embed.add_field(name="Rule Name", value=after.name, inline=True)
+            embed.add_field(name="Rule Name", value=rule.name, inline=True)
+            embed.add_field(name="Enabled", value="✅ Yes" if rule.enabled else "❌ No", inline=True)
+            embed.add_field(name="Trigger", value=str(rule.trigger).replace('_', ' ').title(), inline=True)
 
-            if changes:
-                embed.add_field(name="Changes", value="\n".join(changes), inline=False)
+            actions_list = []
+            for action in rule.actions:
+                action_type = str(getattr(action, "type", action)).replace('_', ' ').title()
+                actions_list.append(f"• {action_type}")
+            if actions_list:
+                embed.add_field(name="Actions", value="\n".join(actions_list[:5]), inline=False)
 
             if entry and entry.user:
                 embed.add_field(name="Updated By",
                     value=f"{entry.user.mention} (`{entry.user}`, ID: `{entry.user.id}`)",
                     inline=True)
+                if entry.reason:
+                    embed.add_field(name="Reason", value=entry.reason, inline=False)
 
-            embed.set_footer(text=f"Rule ID: {after.id}")
+            embed.set_footer(text=f"Rule ID: {rule.id}")
 
             await self.safe_send(channel, embed=embed)
 
@@ -2301,17 +2312,27 @@ class YALC(DashboardIntegration, commands.Cog):
             self.log.error(f"Failed to log invite_delete: {e}")
 
     @commands.Cog.listener()
-    async def on_application_command_permissions_update(self, guild: discord.Guild, permissions):
+    async def on_raw_app_command_permissions_update(self, payload):
         """Log application command permission changes, showing who did it if possible."""
         try:
+            guild = self.bot.get_guild(getattr(payload, "guild_id", 0))
+            if not guild:
+                return
             if not await self.should_log_event(guild, "application_cmd_permissions_update"):
                 return
             channel = await self.get_log_channel(guild, "application_cmd_permissions_update")
             if not channel:
                 return
-            desc = f"⚙️ Application command permissions updated."
+            command_id = getattr(payload, "command_id", None)
+            desc = "⚙️ Application command permissions updated."
+            if command_id:
+                desc += f"\nCommand ID: `{command_id}`"
             # Try audit log for actor
-            entry = await self._get_audit_log_entry(guild, discord.AuditLogAction.application_command_permission_update, timeout_seconds=10)
+            entry = await self._get_audit_log_entry(
+                guild,
+                discord.AuditLogAction.app_command_permission_update,
+                timeout_seconds=10
+            )
             if entry and entry.user:
                 desc += f" by {entry.user.mention} ({entry.user})"
             embed = self.create_embed("application_cmd_permissions_update", desc)
@@ -2724,6 +2745,13 @@ class YALC(DashboardIntegration, commands.Cog):
         try:
             # Get settings once to avoid redundant database calls
             settings = await self.config.guild(before.guild).all()
+
+            if before.pinned != after.pinned:
+                if after.pinned:
+                    await self._log_message_pin(after)
+                else:
+                    await self._log_message_unpin(after)
+                return
             
             # 1. Check if the message_edit event is enabled
             if not settings["events"].get("message_edit", False):
@@ -4422,9 +4450,9 @@ class YALC(DashboardIntegration, commands.Cog):
             self.log.error(f"Failed to log thread_member_leave: {e}")
 
     @commands.Cog.listener()
-    async def on_role_create(self, role: discord.Role) -> None:
+    async def on_guild_role_create(self, role: discord.Role) -> None:
         """Log role creation events with audit log integration to show who created roles."""
-        self.log.debug("Listener triggered: on_role_create")
+        self.log.debug("Listener triggered: on_guild_role_create")
         if not role.guild:
             self.log.debug("No guild on role.")
             return
@@ -4596,9 +4624,9 @@ class YALC(DashboardIntegration, commands.Cog):
             self.log.error(f"Failed to log role_create: {e}")
 
     @commands.Cog.listener()
-    async def on_role_delete(self, role: discord.Role) -> None:
+    async def on_guild_role_delete(self, role: discord.Role) -> None:
         """Log role deletion events with audit log integration to show who deleted roles."""
-        self.log.debug("Listener triggered: on_role_delete")
+        self.log.debug("Listener triggered: on_guild_role_delete")
         if not role.guild:
             self.log.debug("No guild on role.")
             return
@@ -4770,9 +4798,9 @@ class YALC(DashboardIntegration, commands.Cog):
             self.log.error(f"Failed to log role_delete: {e}")
 
     @commands.Cog.listener()
-    async def on_role_update(self, before: discord.Role, after: discord.Role) -> None:
+    async def on_guild_role_update(self, before: discord.Role, after: discord.Role) -> None:
         """Log role update events with real-time audit log attribution."""
-        self.log.debug("Listener triggered: on_role_update")
+        self.log.debug("Listener triggered: on_guild_role_update")
         self.log.debug(f"Role before: name={before.name}, color={before.color}, permissions={before.permissions}")
         self.log.debug(f"Role after:  name={after.name}, color={after.color}, permissions={after.permissions}")
         if not before.guild:
@@ -5381,7 +5409,7 @@ class YALC(DashboardIntegration, commands.Cog):
             self.log.error(f"Error logging command_error: {e}", exc_info=True)
 
     @commands.Cog.listener()
-    async def on_guild_scheduled_event_create(self, event: discord.ScheduledEvent) -> None:
+    async def on_scheduled_event_create(self, event: discord.ScheduledEvent) -> None:
         """
         Log guild scheduled event creation.
         
@@ -5390,7 +5418,7 @@ class YALC(DashboardIntegration, commands.Cog):
         event: discord.ScheduledEvent
             The scheduled event that was created
         """
-        self.log.debug("Listener triggered: on_guild_scheduled_event_create")
+        self.log.debug("Listener triggered: on_scheduled_event_create")
         
         # Skip if event has no guild
         guild = event.guild
@@ -5496,7 +5524,7 @@ class YALC(DashboardIntegration, commands.Cog):
             self.log.error(f"Error logging guild_scheduled_event_create: {e}", exc_info=True)
             
     @commands.Cog.listener()
-    async def on_guild_scheduled_event_update(self, before: discord.ScheduledEvent, after: discord.ScheduledEvent) -> None:
+    async def on_scheduled_event_update(self, before: discord.ScheduledEvent, after: discord.ScheduledEvent) -> None:
         """
         Log guild scheduled event updates.
         
@@ -5507,7 +5535,7 @@ class YALC(DashboardIntegration, commands.Cog):
         after: discord.ScheduledEvent
             The scheduled event after the update
         """
-        self.log.debug("Listener triggered: on_guild_scheduled_event_update")
+        self.log.debug("Listener triggered: on_scheduled_event_update")
         
         # Skip if event has no guild
         guild = after.guild
@@ -5609,7 +5637,7 @@ class YALC(DashboardIntegration, commands.Cog):
             self.log.error(f"Error logging guild_scheduled_event_update: {e}", exc_info=True)
             
     @commands.Cog.listener()
-    async def on_guild_scheduled_event_delete(self, event: discord.ScheduledEvent) -> None:
+    async def on_scheduled_event_delete(self, event: discord.ScheduledEvent) -> None:
         """
         Log guild scheduled event deletion.
         
@@ -5618,7 +5646,7 @@ class YALC(DashboardIntegration, commands.Cog):
         event: discord.ScheduledEvent
             The scheduled event that was deleted
         """
-        self.log.debug("Listener triggered: on_guild_scheduled_event_delete")
+        self.log.debug("Listener triggered: on_scheduled_event_delete")
         
         # Skip if event has no guild
         guild = event.guild

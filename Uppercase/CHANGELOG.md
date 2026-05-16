@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.3
+
+- Restored bold sans uppercase formatting because Discord lowercases normal ASCII channel names.
+
 ## 1.1.2
 
 - Changed channel formatting to use plain uppercase text for the requested name.

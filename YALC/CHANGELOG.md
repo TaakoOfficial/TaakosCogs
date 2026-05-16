@@ -1,5 +1,19 @@
 # 📝 YALC Changelog
 
+## [v3.1.3] - 2026-05-16
+
+### 🐛 Bug Fixes
+
+- Fixed additional misnamed Discord.py listeners for webhooks, scheduled events, integration deletion, and application command permission updates.
+- Fixed listener signatures for integration updates and AutoMod rule updates.
+- Rewired message pin and unpin logging through message edit pin-state changes.
+
+## [v3.1.2] - 2026-05-16
+
+### 🐛 Bug Fixes
+
+- Fixed role creation, deletion, and update listeners so Discord role events are tracked correctly.
+
 ## [v3.1.1] - 2025-05-12
 
 ### 🐛 Bug Fixes
