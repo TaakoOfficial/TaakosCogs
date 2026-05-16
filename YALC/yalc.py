@@ -120,6 +120,7 @@ class YALC(DashboardIntegration, commands.Cog):
         
         # Real-time audit log entry storage for role attribution
         self.recent_audit_entries = {}
+        self._recent_role_event_logs = {}
         
         # Ban cache to distinguish between kicks and leaves
         self._ban_cache = {}
@@ -435,6 +436,134 @@ class YALC(DashboardIntegration, commands.Cog):
     def _get_audit_action(self, action_name: str):
         """Get an audit log action if the installed discord.py version exposes it."""
         return getattr(discord.AuditLogAction, action_name, None)
+
+    @staticmethod
+    def _role_has_permission(role: discord.Role, permission_name: str) -> bool:
+        """Return whether a role has a permission, tolerating older discord.py fields."""
+        permissions = getattr(role, "permissions", None)
+        return bool(getattr(permissions, permission_name, False))
+
+    @staticmethod
+    def _role_is_premium_subscriber(role: discord.Role) -> bool:
+        """Return whether a role is Discord's booster role across discord.py variants."""
+        checker = getattr(role, "is_premium_subscriber", None)
+        if callable(checker):
+            try:
+                return bool(checker())
+            except Exception:
+                return False
+        return bool(getattr(role, "premium_subscriber", False))
+
+    def _prune_recent_role_event_logs(self) -> None:
+        """Remove old role log markers used to prevent gateway/audit duplicates."""
+        current_time = time.time()
+        expired_keys = [
+            key for key, timestamp in self._recent_role_event_logs.items()
+            if current_time - timestamp > 30
+        ]
+        for key in expired_keys:
+            del self._recent_role_event_logs[key]
+
+    def _role_event_log_key(self, guild_id: int, event_type: str, role_key) -> tuple:
+        return (guild_id, event_type, str(role_key))
+
+    def _mark_role_event_logged(self, guild_id: int, event_type: str, role_key) -> None:
+        if guild_id is None or role_key is None:
+            return
+        self._prune_recent_role_event_logs()
+        self._recent_role_event_logs[self._role_event_log_key(guild_id, event_type, role_key)] = time.time()
+
+    def _was_role_event_logged(self, guild_id: int, event_type: str, role_key) -> bool:
+        if guild_id is None or role_key is None:
+            return False
+        self._prune_recent_role_event_logs()
+        return self._role_event_log_key(guild_id, event_type, role_key) in self._recent_role_event_logs
+
+    def _get_audit_role_name(self, entry) -> Optional[str]:
+        target = getattr(entry, "target", None)
+        for source in (target, getattr(entry, "before", None), getattr(entry, "after", None)):
+            name = getattr(source, "name", None)
+            if name:
+                return name
+        return None
+
+    def _get_audit_role_key(self, entry):
+        target = getattr(entry, "target", None)
+        target_id = getattr(target, "id", None)
+        if target_id is not None:
+            return target_id
+        return self._get_audit_role_name(entry)
+
+    async def _log_role_audit_fallback(self, entry, event_type: str) -> None:
+        """Log role create/delete from audit logs when the gateway role event is missed."""
+        try:
+            await asyncio.sleep(2)
+            guild = getattr(entry, "guild", None)
+            if not guild:
+                return
+
+            role_key = self._get_audit_role_key(entry)
+            if self._was_role_event_logged(guild.id, event_type, role_key):
+                return
+
+            if not await self.should_log_event(guild, event_type):
+                return
+
+            channel = await self.get_log_channel(guild, event_type)
+            if not channel:
+                self.log.warning(f"No log channel set for {event_type}.")
+                return
+
+            target = getattr(entry, "target", None)
+            role_name = self._get_audit_role_name(entry) or "Unknown role"
+            role_id = getattr(target, "id", None)
+            actor = getattr(entry, "user", None)
+            reason = getattr(entry, "reason", None)
+
+            if event_type == "role_create":
+                role_display = getattr(target, "mention", f"**{role_name}**")
+                description = f"✨ Role created: {role_display}"
+                actor_field = "Created By"
+                footer_label = "YALC Logger • Role Created"
+            else:
+                description = f"🗑️ Role deleted: **{role_name}**"
+                actor_field = "Deleted By"
+                footer_label = "YALC Logger • Role Deleted"
+
+            if actor:
+                description += f" by {actor.mention}"
+            description += "\n\u200b"
+
+            embed = self.create_embed(event_type, description)
+            role_value = f"**{role_name}**"
+            if role_id is not None:
+                role_value += f" (ID: `{role_id}`)"
+            embed.add_field(name="Role", value=role_value, inline=True)
+
+            if actor:
+                embed.add_field(
+                    name=actor_field,
+                    value=f"{actor.mention} (`{actor}`, ID: `{actor.id}`)",
+                    inline=True
+                )
+            else:
+                embed.add_field(
+                    name=actor_field,
+                    value="Unknown (audit log unavailable)",
+                    inline=True
+                )
+
+            if reason:
+                embed.add_field(name="Reason", value=reason, inline=False)
+
+            event_time = datetime.datetime.now(datetime.UTC)
+            self.set_embed_footer(embed, event_time=event_time, label=footer_label)
+
+            sent_message = await self.safe_send(channel, embed=embed)
+            if sent_message:
+                self._mark_role_event_logged(guild.id, event_type, role_key)
+        except Exception as e:
+            self.log.error(f"Failed to log {event_type} from audit log fallback: {e}", exc_info=True)
 
     async def should_log_event(self, guild: discord.Guild, event_type: str,
                          channel: Optional[discord.abc.GuildChannel] = None,
@@ -2342,10 +2471,22 @@ class YALC(DashboardIntegration, commands.Cog):
 
     @commands.Cog.listener()
     async def on_audit_log_entry_create(self, entry):
-        """Handle audit log entries for role updates and store them temporarily for real-time attribution."""
+        """Handle audit log entries for role attribution and gateway fallbacks."""
         try:
-            # Only capture role_update audit entries for real-time role logging
-            if entry.action == discord.AuditLogAction.role_update:
+            role_create_action = self._get_audit_action("role_create")
+            role_delete_action = self._get_audit_action("role_delete")
+            role_update_action = self._get_audit_action("role_update")
+
+            if role_create_action and entry.action == role_create_action:
+                await self._log_role_audit_fallback(entry, "role_create")
+                return
+
+            if role_delete_action and entry.action == role_delete_action:
+                await self._log_role_audit_fallback(entry, "role_delete")
+                return
+
+            # Capture role_update audit entries for real-time role logging.
+            if role_update_action and entry.action == role_update_action:
                 # Store audit entry temporarily with timestamp for role attribution
                 role_id = entry.target.id if entry.target else None
                 if role_id:
@@ -4570,13 +4711,13 @@ class YALC(DashboardIntegration, commands.Cog):
             
             # Add role properties
             role_properties = []
-            if role.mentionable:
+            if getattr(role, "mentionable", False):
                 role_properties.append("📢 Mentionable")
-            if role.hoist:
+            if getattr(role, "hoist", False):
                 role_properties.append("📌 Hoisted (displays separately)")
-            if role.managed:
+            if getattr(role, "managed", False):
                 role_properties.append("🤖 Managed by integration")
-            if role.premium_subscriber:
+            if self._role_is_premium_subscriber(role):
                 role_properties.append("💎 Premium subscriber role")
             
             if role_properties:
@@ -4588,19 +4729,19 @@ class YALC(DashboardIntegration, commands.Cog):
             
             # Add permission summary if role has elevated permissions
             dangerous_perms = []
-            if role.permissions.administrator:
+            if self._role_has_permission(role, "administrator"):
                 dangerous_perms.append("🔧 Administrator")
-            if role.permissions.manage_guild:
+            if self._role_has_permission(role, "manage_guild"):
                 dangerous_perms.append("⚙️ Manage Server")
-            if role.permissions.manage_roles:
+            if self._role_has_permission(role, "manage_roles"):
                 dangerous_perms.append("👥 Manage Roles")
-            if role.permissions.manage_channels:
+            if self._role_has_permission(role, "manage_channels"):
                 dangerous_perms.append("📝 Manage Channels")
-            if role.permissions.kick_members:
+            if self._role_has_permission(role, "kick_members"):
                 dangerous_perms.append("👢 Kick Members")
-            if role.permissions.ban_members:
+            if self._role_has_permission(role, "ban_members"):
                 dangerous_perms.append("🔨 Ban Members")
-            if role.permissions.moderate_members:
+            if self._role_has_permission(role, "moderate_members"):
                 dangerous_perms.append("⏰ Timeout Members")
             
             if dangerous_perms:
@@ -4619,9 +4760,11 @@ class YALC(DashboardIntegration, commands.Cog):
             event_time = datetime.datetime.now(datetime.UTC)
             self.set_embed_footer(embed, event_time=event_time, label="YALC Logger • Role Created")
             
-            await self.safe_send(channel, embed=embed)
+            sent_message = await self.safe_send(channel, embed=embed)
+            if sent_message:
+                self._mark_role_event_logged(role.guild.id, "role_create", role.id)
         except Exception as e:
-            self.log.error(f"Failed to log role_create: {e}")
+            self.log.error(f"Failed to log role_create: {e}", exc_info=True)
 
     @commands.Cog.listener()
     async def on_guild_role_delete(self, role: discord.Role) -> None:
@@ -4744,13 +4887,13 @@ class YALC(DashboardIntegration, commands.Cog):
             
             # Add role properties that were preserved before deletion
             role_properties = []
-            if role.mentionable:
+            if getattr(role, "mentionable", False):
                 role_properties.append("📢 Was mentionable")
-            if role.hoist:
+            if getattr(role, "hoist", False):
                 role_properties.append("📌 Was hoisted (displayed separately)")
-            if role.managed:
+            if getattr(role, "managed", False):
                 role_properties.append("🤖 Was managed by integration")
-            if role.premium_subscriber:
+            if self._role_is_premium_subscriber(role):
                 role_properties.append("💎 Was premium subscriber role")
             
             if role_properties:
@@ -4762,19 +4905,19 @@ class YALC(DashboardIntegration, commands.Cog):
             
             # Add permission summary if role had elevated permissions
             dangerous_perms = []
-            if role.permissions.administrator:
+            if self._role_has_permission(role, "administrator"):
                 dangerous_perms.append("🔧 Had Administrator")
-            if role.permissions.manage_guild:
+            if self._role_has_permission(role, "manage_guild"):
                 dangerous_perms.append("⚙️ Had Manage Server")
-            if role.permissions.manage_roles:
+            if self._role_has_permission(role, "manage_roles"):
                 dangerous_perms.append("👥 Had Manage Roles")
-            if role.permissions.manage_channels:
+            if self._role_has_permission(role, "manage_channels"):
                 dangerous_perms.append("📝 Had Manage Channels")
-            if role.permissions.kick_members:
+            if self._role_has_permission(role, "kick_members"):
                 dangerous_perms.append("👢 Had Kick Members")
-            if role.permissions.ban_members:
+            if self._role_has_permission(role, "ban_members"):
                 dangerous_perms.append("🔨 Had Ban Members")
-            if role.permissions.moderate_members:
+            if self._role_has_permission(role, "moderate_members"):
                 dangerous_perms.append("⏰ Had Timeout Members")
             
             if dangerous_perms:
@@ -4793,9 +4936,11 @@ class YALC(DashboardIntegration, commands.Cog):
             event_time = datetime.datetime.now(datetime.UTC)
             self.set_embed_footer(embed, event_time=event_time, label="YALC Logger • Role Deleted")
             
-            await self.safe_send(channel, embed=embed)
+            sent_message = await self.safe_send(channel, embed=embed)
+            if sent_message:
+                self._mark_role_event_logged(role.guild.id, "role_delete", role.id)
         except Exception as e:
-            self.log.error(f"Failed to log role_delete: {e}")
+            self.log.error(f"Failed to log role_delete: {e}", exc_info=True)
 
     @commands.Cog.listener()
     async def on_guild_role_update(self, before: discord.Role, after: discord.Role) -> None:
@@ -4971,7 +5116,7 @@ class YALC(DashboardIntegration, commands.Cog):
             
             await self.safe_send(channel, embed=embed)
         except Exception as e:
-            self.log.error(f"Failed to log role_update: {e}")
+            self.log.error(f"Failed to log role_update: {e}", exc_info=True)
 
     @commands.Cog.listener()
     async def on_guild_update(self, before: discord.Guild, after: discord.Guild) -> None:

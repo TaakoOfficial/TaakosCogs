@@ -1,5 +1,19 @@
 # 📝 YALC Changelog
 
+## [v3.1.5] - 2026-05-16
+
+### 🐛 Bug Fixes
+
+- Added an audit-log fallback for role creation and deletion logs when Discord's role gateway event is missed.
+- Added duplicate protection so role create/delete logs do not post twice when both gateway and audit-log events arrive.
+
+## [v3.1.4] - 2026-05-16
+
+### 🐛 Bug Fixes
+
+- Made role creation and deletion logging tolerate discord.py role metadata differences so deleted-role embeds do not fail before sending.
+- Added traceback logging for role create, delete, and update failures.
+
 ## [v3.1.3] - 2026-05-16
 
 ### 🐛 Bug Fixes
