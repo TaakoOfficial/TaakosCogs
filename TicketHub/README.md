@@ -1,6 +1,6 @@
 # TicketHub
 
-Ticket panels, ticket lifecycle controls, AAA3A Tickets profile imports, and self-contained HTML transcripts for Red-DiscordBot.
+Ticket panels, configurable modal forms, ticket lifecycle controls, AAA3A Tickets profile imports, and self-contained HTML transcripts for Red-DiscordBot.
 
 [Back to the cog catalog](../README.md)
 
@@ -15,6 +15,7 @@ Ticket panels, ticket lifecycle controls, AAA3A Tickets profile imports, and sel
 ## Highlights
 
 - Posts ticket panels with persistent Open Ticket buttons.
+- Supports configurable and imported modal questions before panel-created tickets open.
 - Creates private ticket channels with owner, support role, and viewer role permissions.
 - Supports claim, unclaim, close, reopen, delete, add member, remove member, and list workflows.
 - Generates self-contained HTML transcripts with a dark viewer, message search, attachments, embeds, and ticket events.
@@ -30,6 +31,15 @@ When a transcript is generated, TicketHub reads the ticket channel history and c
 - `ticket-<id>-transcript.txt`
 
 The HTML file is self-contained and can be opened directly in a browser. It does not require a public proxy preview service.
+
+## How Ticket Modals Work
+
+When a profile has modal questions configured, clicking that profile's panel button opens a Discord modal before the ticket channel is created. Submitted answers are stored on the ticket record and shown in the ticket channel.
+
+```text
+[p]tickethub modal wizard main
+[p]tickethub modal show main
+```
 
 ## AAA3A Import
 
@@ -48,24 +58,31 @@ Mapped settings include:
 - max open tickets per member
 - channel name template
 - welcome and custom messages
+- modal form questions, including AAA3A's default reason modal behavior
 - transcript setting
 - owner close/reopen settings
 - support, view, ping, whitelist, and blacklist roles
 - open and closed categories
 - log channel
 
-Existing open ticket records, modal forms, modlog cases, forum tags, and panel buttons are not imported.
+Existing open ticket records, modlog cases, forum tags, and panel buttons are not imported.
 
 ## Commands
 
 | Command                                               | Description                                        |
-| ----------------------------------------------------- | -------------------------------------------------- | ------------- | ------------- |
+| ----------------------------------------------------- | -------------------------------------------------- |
 | `[p]tickethub` or `[p]thub`                           | Show settings, profiles, and setup hints.          |
 | `[p]tickethub walkthrough [profile]`                  | Walk through basic setup.                          |
 | `[p]tickethub enable [true_or_false]`                 | Enable or disable TicketHub.                       |
 | `[p]tickethub panel [profile] [channel]`              | Post a ticket panel.                               |
 | `[p]tickethub profile [profile]`                      | Create a profile if it does not exist.             |
 | `[p]tickethub open [profile] [reason]`                | Open a ticket by command.                          |
+| `[p]tickethub modal [profile]`                        | Show modal questions for a profile.                |
+| `[p]tickethub modal wizard [profile]`                 | Walk through creating a custom ticket modal.       |
+| `[p]tickethub modal add <profile> <label>`            | Add a required paragraph modal question.           |
+| `[p]tickethub modal remove <profile> <index>`         | Remove a modal question.                           |
+| `[p]tickethub modal defaultreason [profile]`          | Use the default Reason modal.                      |
+| `[p]tickethub modal clear [profile]`                  | Disable modal questions.                           |
 | `[p]tickethub category <profile> [category]`          | Set the open-ticket category.                      |
 | `[p]tickethub closedcategory <profile> [category]`    | Set the closed-ticket category.                    |
 | `[p]tickethub logchannel <profile> [channel]`         | Set the ticket log channel.                        |
@@ -83,7 +100,7 @@ Existing open ticket records, modal forms, modlog cases, forum tags, and panel b
 | `[p]tickethub transcript [ticket_id]`                 | Generate and send a transcript.                    |
 | `[p]tickethub addmember <member> [ticket_id]`         | Add a member to a ticket.                          |
 | `[p]tickethub removemember <member> [ticket_id]`      | Remove a member from a ticket.                     |
-| `[p]tickethub list [open                              | closed                                             | all] [owner]` | List tickets. |
+| `[p]tickethub list [open \| closed \| all] [owner]`   | List tickets.                                      |
 | `[p]tickethub import aaa3a [profile] [confirm]`       | Preview or apply an AAA3A Tickets profile import.  |
 | `[p]tickethub export`                                 | Export TicketHub ticket records as CSV.            |
 
@@ -115,6 +132,8 @@ Or configure directly:
 
 ## Data
 
-TicketHub stores per-guild ticket profiles, panel message IDs, channel/category/role IDs, ticket records, ticket owner IDs, claimed/closed staff IDs, participant IDs, ticket reasons, close reasons, timestamps, and ticket lifecycle event metadata.
+TicketHub stores per-guild ticket profiles, panel message IDs, channel/category/role IDs, ticket records, ticket owner IDs, claimed/closed staff IDs, participant IDs, ticket reasons, modal form answers, close reasons, timestamps, and ticket lifecycle event metadata.
 
 HTML and text transcripts are generated on demand from Discord message history and sent directly to configured Discord destinations.
+
+Imported modal answers are stored on ticket records and shown in the ticket channel.

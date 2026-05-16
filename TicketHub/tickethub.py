@@ -21,6 +21,7 @@ log = logging.getLogger("red.taakoscogs.tickethub")
 
 TicketRecord = Dict[str, Any]
 ProfileRecord = Dict[str, Any]
+ModalFieldRecord = Dict[str, Any]
 
 
 class TicketPanelView(discord.ui.View):
@@ -89,6 +90,107 @@ class TicketControlView(discord.ui.View):
         button: discord.ui.Button,
     ) -> None:
         await self.cog.handle_ticket_button(interaction, "transcript")
+
+
+class TicketOpenModal(discord.ui.Modal):
+    """Dynamic modal shown before opening a ticket from a panel."""
+
+    def __init__(
+        self,
+        cog: "TicketHub",
+        guild: discord.Guild,
+        owner: discord.Member,
+        profile_name: str,
+        fields: Sequence[ModalFieldRecord],
+    ) -> None:
+        super().__init__(title="Open Ticket", timeout=300)
+        self.cog = cog
+        self.guild = guild
+        self.owner = owner
+        self.profile_name = profile_name
+        self.text_inputs: List[Tuple[str, discord.ui.TextInput]] = []
+
+        for field in fields[:5]:
+            label = str(field.get("label") or "Question").strip()[:45]
+            if not label:
+                continue
+            display_label = label
+            if not display_label.endswith((":", "?")):
+                display_label = f"{display_label}:"
+            display_label = display_label[:45]
+            style_value = int(field.get("style") or discord.TextStyle.paragraph.value)
+            style = (
+                discord.TextStyle.short
+                if style_value == discord.TextStyle.short.value
+                else discord.TextStyle.paragraph
+            )
+            default = field.get("default")
+            placeholder = field.get("placeholder")
+            text_input = discord.ui.TextInput(
+                label=display_label,
+                style=style,
+                required=bool(field.get("required", True)),
+                default=str(default)[:4000] if default not in (None, "") else None,
+                placeholder=str(placeholder)[:100] if placeholder not in (None, "") else None,
+                min_length=field.get("min_length"),
+                max_length=field.get("max_length"),
+            )
+            self.add_item(text_input)
+            self.text_inputs.append((label, text_input))
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        if not interaction.guild or not isinstance(interaction.user, discord.Member):
+            await interaction.response.send_message(
+                "This form only works in a server.",
+                ephemeral=True,
+            )
+            return
+        if interaction.user.id != self.owner.id:
+            await interaction.response.send_message(
+                "Only the ticket opener can submit this form.",
+                ephemeral=True,
+            )
+            return
+
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        form_answers = []
+        for label, text_input in self.text_inputs:
+            value = str(text_input.value or "").strip()
+            if value:
+                form_answers.append({"label": label, "value": value[:4000]})
+        reason = "Opened from ticket panel."
+        if len(form_answers) == 1 and form_answers[0]["label"].strip().lower() == "reason":
+            reason = form_answers[0]["value"][:1000]
+
+        try:
+            record, channel = await self.cog._create_ticket(
+                self.guild,
+                interaction.user,
+                self.profile_name,
+                reason=reason,
+                form_answers=form_answers,
+            )
+        except commands.CommandError as error:
+            await interaction.followup.send(str(error), ephemeral=True)
+            return
+
+        await interaction.followup.send(
+            f"Ticket #{record['id']} opened: {channel.mention}",
+            ephemeral=True,
+        )
+
+    async def on_error(self, interaction: discord.Interaction, error: Exception) -> None:
+        log.exception(
+            "TicketHub open-ticket modal failed.",
+            exc_info=(type(error), error, error.__traceback__),
+        )
+        if interaction.response.is_done():
+            await interaction.followup.send("I could not create that ticket.", ephemeral=True)
+        else:
+            await interaction.response.send_message(
+                "I could not create that ticket.",
+                ephemeral=True,
+            )
 
 
 class TicketHub(commands.Cog):
@@ -171,12 +273,27 @@ class TicketHub(commands.Cog):
                 "Welcome {owner_mention}. A staff member will be with you shortly."
             ),
             "custom_message": "Please describe what you need help with.",
+            "creating_modal": None,
             "transcripts": True,
             "dm_transcript": True,
             "owner_can_close": True,
             "owner_can_reopen": False,
             "auto_delete_on_close_hours": None,
         }
+
+    @staticmethod
+    def _default_reason_modal() -> List[ModalFieldRecord]:
+        return [
+            {
+                "label": "Reason",
+                "style": discord.TextStyle.paragraph.value,
+                "required": True,
+                "default": "",
+                "placeholder": "Enter the reason for creating the ticket...",
+                "min_length": 1,
+                "max_length": 1000,
+            }
+        ]
 
     def _guild_lock(self, guild_id: int) -> asyncio.Lock:
         return self._locks.setdefault(guild_id, asyncio.Lock())
@@ -240,6 +357,85 @@ class TicketHub(commands.Cog):
         return cleaned[:limit] or None
 
     @staticmethod
+    def _clean_modal_text(value: Any, limit: int) -> str:
+        if value in (None, "None"):
+            return ""
+        return str(value).strip()[:limit]
+
+    @staticmethod
+    def _clean_modal_bool(value: Any, default: bool = True) -> bool:
+        if isinstance(value, bool):
+            return value
+        if value is None:
+            return default
+        lowered = str(value).strip().lower()
+        if lowered in {"yes", "y", "true", "t", "1", "enable", "enabled", "on"}:
+            return True
+        if lowered in {"no", "n", "false", "f", "0", "disable", "disabled", "off"}:
+            return False
+        return default
+
+    @staticmethod
+    def _clean_modal_int(
+        value: Any,
+        *,
+        default: Optional[int] = None,
+        minimum: Optional[int] = None,
+        maximum: Optional[int] = None,
+    ) -> Optional[int]:
+        if value in (None, "", "None"):
+            return default
+        try:
+            cleaned = int(value)
+        except (TypeError, ValueError):
+            return default
+        if minimum is not None:
+            cleaned = max(minimum, cleaned)
+        if maximum is not None:
+            cleaned = min(maximum, cleaned)
+        return cleaned
+
+    @classmethod
+    def _sanitize_modal_fields(cls, value: Any) -> Optional[List[ModalFieldRecord]]:
+        if not isinstance(value, list):
+            return None
+        fields: List[ModalFieldRecord] = []
+        for raw_field in value[:5]:
+            if not isinstance(raw_field, dict):
+                continue
+            label = cls._clean_modal_text(raw_field.get("label"), 45)
+            if not label:
+                continue
+            style = (
+                cls._clean_modal_int(raw_field.get("style"), default=2, minimum=1, maximum=2)
+                or 2
+            )
+            min_length = cls._clean_modal_int(
+                raw_field.get("min_length"),
+                minimum=0,
+                maximum=4000,
+            )
+            max_length = cls._clean_modal_int(
+                raw_field.get("max_length"),
+                minimum=1,
+                maximum=4000,
+            )
+            if min_length is not None and max_length is not None and min_length > max_length:
+                min_length = None
+            fields.append(
+                {
+                    "label": label,
+                    "style": style,
+                    "required": cls._clean_modal_bool(raw_field.get("required"), default=True),
+                    "default": cls._clean_modal_text(raw_field.get("default"), 4000),
+                    "placeholder": cls._clean_modal_text(raw_field.get("placeholder"), 100),
+                    "min_length": min_length,
+                    "max_length": max_length,
+                }
+            )
+        return fields or None
+
+    @staticmethod
     def _merge_profile(value: Optional[Dict[str, Any]]) -> ProfileRecord:
         profile = TicketHub._default_profile()
         if value:
@@ -252,6 +448,9 @@ class TicketHub(commands.Cog):
                 "blacklist_role_ids",
             ):
                 profile[key] = list(profile.get(key) or [])
+            profile["creating_modal"] = TicketHub._sanitize_modal_fields(
+                profile.get("creating_modal")
+            )
         return profile
 
     async def _get_profiles(self, guild: discord.Guild) -> Dict[str, ProfileRecord]:
@@ -348,6 +547,40 @@ class TicketHub(commands.Cog):
             return False, "You do not have a role allowed to open tickets."
         return True, ""
 
+    async def _validate_ticket_open_request(
+        self,
+        guild: discord.Guild,
+        owner: discord.Member,
+        profile_name: str,
+    ) -> Tuple[str, ProfileRecord]:
+        if not await self.config.guild(guild).enabled():
+            raise commands.CommandError("TicketHub is not enabled yet.")
+
+        profile_name = self._clean_name(profile_name)
+        profile = await self._get_profile(guild, profile_name)
+        if not profile.get("enabled"):
+            raise commands.CommandError(f"TicketHub profile `{profile_name}` is disabled.")
+
+        allowed, denial = self._can_create_ticket(owner, profile)
+        if not allowed:
+            raise commands.CommandError(denial)
+
+        max_open = int(profile.get("max_open_tickets_by_member") or 0)
+        if max_open > 0:
+            open_count = await self._user_open_ticket_count(guild, owner.id, profile_name)
+            if open_count >= max_open:
+                raise commands.CommandError(
+                    f"You already have {open_count} open ticket(s) for `{profile_name}`."
+                )
+
+        me = guild.me
+        if me is None:
+            raise commands.CommandError("I could not inspect my server permissions.")
+        if not me.guild_permissions.manage_channels:
+            raise commands.CommandError("I need `Manage Channels` to create ticket channels.")
+
+        return profile_name, profile
+
     async def _user_open_ticket_count(
         self,
         guild: discord.Guild,
@@ -362,6 +595,29 @@ class TicketHub(commands.Cog):
             and record.get("status") == "open"
             and (profile_name is None or record.get("profile") == profile_name)
         )
+
+    @classmethod
+    def _clean_form_answers(
+        cls,
+        answers: Optional[Sequence[Dict[str, str]]],
+    ) -> List[Dict[str, str]]:
+        if not isinstance(answers, list):
+            return []
+        cleaned_answers = []
+        for answer in answers or []:
+            if not isinstance(answer, dict):
+                continue
+            label = cls._clean_modal_text(answer.get("label"), 45)
+            value = cls._clean_modal_text(answer.get("value"), 4000)
+            if label and value:
+                cleaned_answers.append({"label": label, "value": value})
+        return cleaned_answers[:5]
+
+    @staticmethod
+    def _truncate_field(value: str, limit: int) -> str:
+        if len(value) <= limit:
+            return value
+        return value[: limit - 3] + "..."
 
     def _format_template(
         self,
@@ -428,6 +684,12 @@ class TicketHub(commands.Cog):
             )
             if record.get("close_reason"):
                 embed.add_field(name="Close Reason", value=str(record["close_reason"])[:1024], inline=False)
+        for answer in self._clean_form_answers(record.get("form_answers")):
+            embed.add_field(
+                name=self._truncate_field(f"Form: {answer['label']}", 256),
+                value=self._truncate_field(answer["value"], 1024),
+                inline=False,
+            )
         embed.set_footer(text=f"Ticket ID: {record.get('id')}")
         return embed
 
@@ -540,12 +802,34 @@ class TicketHub(commands.Cog):
         if interaction.message is None:
             await interaction.response.send_message("I could not identify this panel.", ephemeral=True)
             return
-        await interaction.response.defer(ephemeral=True, thinking=True)
         try:
-            profile_name, _profile = await self._find_panel_profile(
+            profile_name, profile = await self._find_panel_profile(
                 interaction.guild,
                 interaction.message.id,
             )
+            modal_fields = profile.get("creating_modal")
+            if modal_fields:
+                await self._validate_ticket_open_request(
+                    interaction.guild,
+                    interaction.user,
+                    profile_name,
+                )
+                await interaction.response.send_modal(
+                    TicketOpenModal(
+                        self,
+                        interaction.guild,
+                        interaction.user,
+                        profile_name,
+                        modal_fields,
+                    )
+                )
+                return
+        except commands.CommandError as error:
+            await interaction.response.send_message(str(error), ephemeral=True)
+            return
+
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        try:
             record, channel = await self._create_ticket(
                 interaction.guild,
                 interaction.user,
@@ -610,33 +894,14 @@ class TicketHub(commands.Cog):
         profile_name: str,
         *,
         reason: Optional[str] = None,
+        form_answers: Optional[Sequence[Dict[str, str]]] = None,
     ) -> Tuple[TicketRecord, discord.TextChannel]:
-        if not await self.config.guild(guild).enabled():
-            raise commands.CommandError("TicketHub is not enabled yet.")
-
-        profile_name = self._clean_name(profile_name)
-        profile = await self._get_profile(guild, profile_name)
-        if not profile.get("enabled"):
-            raise commands.CommandError(f"TicketHub profile `{profile_name}` is disabled.")
-
-        allowed, denial = self._can_create_ticket(owner, profile)
-        if not allowed:
-            raise commands.CommandError(denial)
-
-        max_open = int(profile.get("max_open_tickets_by_member") or 0)
-        if max_open > 0:
-            open_count = await self._user_open_ticket_count(guild, owner.id, profile_name)
-            if open_count >= max_open:
-                raise commands.CommandError(
-                    f"You already have {open_count} open ticket(s) for `{profile_name}`."
-                )
-
-        me = guild.me
-        if me is None:
-            raise commands.CommandError("I could not inspect my server permissions.")
-        guild_perms = me.guild_permissions
-        if not guild_perms.manage_channels:
-            raise commands.CommandError("I need `Manage Channels` to create ticket channels.")
+        profile_name, profile = await self._validate_ticket_open_request(
+            guild,
+            owner,
+            profile_name,
+        )
+        clean_form_answers = self._clean_form_answers(form_answers)
 
         async with self._guild_lock(guild.id):
             ticket_id = int(await self.config.guild(guild).next_ticket_id())
@@ -668,6 +933,7 @@ class TicketHub(commands.Cog):
                 "status": "open",
                 "claimed_by": None,
                 "reason": (reason or "No reason provided.")[:1000],
+                "form_answers": clean_form_answers,
                 "created_at": self._now_ts(),
                 "closed_at": None,
                 "closed_by": None,
@@ -1358,9 +1624,11 @@ search.addEventListener('input', () => {{
         for name, profile in sorted(profiles.items()):
             panel_channel = self._profile_channel(ctx.guild, profile, "panel_channel_id")
             ticket_category = self._profile_category(ctx.guild, profile, "ticket_category_id")
+            modal_count = len(profile.get("creating_modal") or [])
             profile_lines.append(
                 f"`{name}` - panel {panel_channel.mention if panel_channel else 'not set'} "
-                f"- category {ticket_category.name if ticket_category else 'not set'}"
+                f"- category {ticket_category.name if ticket_category else 'not set'} "
+                f"- modal fields {modal_count}"
             )
         embed.add_field(
             name="Profiles",
@@ -1514,6 +1782,88 @@ search.addEventListener('input', () => {{
                 roles.append(role)
         return roles
 
+    @staticmethod
+    def _modal_style_name(style: Any) -> str:
+        try:
+            style_value = int(style)
+        except (TypeError, ValueError):
+            style_value = discord.TextStyle.paragraph.value
+        return "short" if style_value == discord.TextStyle.short.value else "paragraph"
+
+    @classmethod
+    def _modal_summary_lines(cls, fields: Optional[Sequence[ModalFieldRecord]]) -> List[str]:
+        if not fields:
+            return ["No modal questions are configured."]
+        lines = []
+        for index, field in enumerate(fields, start=1):
+            label = cls._clean_modal_text(field.get("label"), 45) or "Question"
+            style = cls._modal_style_name(field.get("style"))
+            required = "required" if field.get("required", True) else "optional"
+            placeholder = cls._clean_modal_text(field.get("placeholder"), 100) or "none"
+            lines.append(f"{index}. {label} ({style}, {required}, placeholder: {placeholder})")
+        return lines
+
+    async def _send_modal_settings(self, ctx: commands.Context, profile_name: str = "main") -> None:
+        assert ctx.guild is not None
+        profile_name = self._clean_name(profile_name)
+        profile = await self._get_profile(ctx.guild, profile_name)
+        lines = self._modal_summary_lines(profile.get("creating_modal"))
+        summary = "\n".join(lines)
+        await ctx.send(f"Modal questions for `{profile_name}`:\n{box(summary)}")
+
+    async def _prompt_modal_count(self, ctx: commands.Context) -> int:
+        while True:
+            answer = await self._wait_for_setup_reply(
+                ctx,
+                "How many questions should this modal have? Reply with a number from `1` to `5`.",
+            )
+            try:
+                count = int(answer)
+            except ValueError:
+                await ctx.send("Reply with a number from `1` to `5`.")
+                continue
+            if 1 <= count <= 5:
+                return count
+            await ctx.send("A Discord modal can have between 1 and 5 questions.")
+
+    async def _prompt_modal_label(self, ctx: commands.Context, prompt: str) -> str:
+        while True:
+            label = await self._wait_for_setup_reply(ctx, prompt)
+            label = label.strip()
+            if 1 <= len(label) <= 45:
+                return label
+            await ctx.send("Question labels must be between 1 and 45 characters.")
+
+    async def _prompt_modal_style(self, ctx: commands.Context, prompt: str) -> int:
+        while True:
+            answer = (await self._wait_for_setup_reply(ctx, prompt)).lower()
+            if answer in {"short", "single", "line", "1"}:
+                return discord.TextStyle.short.value
+            if answer in {"paragraph", "long", "multi", "2"}:
+                return discord.TextStyle.paragraph.value
+            await ctx.send("Reply with `short` or `paragraph`.")
+
+    async def _prompt_modal_bool(self, ctx: commands.Context, prompt: str) -> bool:
+        while True:
+            answer = (await self._wait_for_setup_reply(ctx, prompt)).lower()
+            if answer in {"yes", "y", "true", "t", "1", "required", "on"}:
+                return True
+            if answer in {"no", "n", "false", "f", "0", "optional", "off"}:
+                return False
+            await ctx.send("Reply with `yes` or `no`.")
+
+    async def _prompt_optional_modal_text(
+        self,
+        ctx: commands.Context,
+        prompt: str,
+        *,
+        limit: int,
+    ) -> str:
+        answer = await self._wait_for_setup_reply(ctx, prompt)
+        if answer.lower() in {"none", "no", "skip", "off", "clear"}:
+            return ""
+        return answer[:limit]
+
     async def _post_panel(
         self,
         guild: discord.Guild,
@@ -1664,6 +2014,160 @@ search.addEventListener('input', () => {{
         profile["transcript_channel_id"] = channel.id if channel else None
         await self._set_profile(ctx.guild, profile_name, profile)
         await ctx.send(f"Transcript channel for `{profile_name}` set to {channel.mention if channel else 'none'}.")
+
+    @tickethub.group(name="modal", invoke_without_command=True)
+    @commands.admin_or_permissions(manage_guild=True)
+    async def tickethub_modal(self, ctx: commands.Context, profile_name: str = "main") -> None:
+        """Manage modal questions shown from ticket panels."""
+        await self._send_modal_settings(ctx, profile_name)
+
+    @tickethub_modal.command(name="show")
+    @commands.admin_or_permissions(manage_guild=True)
+    async def tickethub_modal_show(self, ctx: commands.Context, profile_name: str = "main") -> None:
+        """Show modal questions for a profile."""
+        await self._send_modal_settings(ctx, profile_name)
+
+    @tickethub_modal.command(name="wizard")
+    @commands.admin_or_permissions(manage_guild=True)
+    async def tickethub_modal_wizard(self, ctx: commands.Context, profile_name: str = "main") -> None:
+        """Walk through creating a custom ticket modal."""
+        assert ctx.guild is not None
+        profile_name = self._clean_name(profile_name)
+        await self._ensure_profile(ctx.guild, profile_name)
+        await ctx.send("TicketHub modal builder started. Reply `cancel` at any step to stop.")
+        try:
+            count = await self._prompt_modal_count(ctx)
+            fields: List[ModalFieldRecord] = []
+            for index in range(1, count + 1):
+                label = await self._prompt_modal_label(
+                    ctx,
+                    f"Question {index}/{count}: What should the label be?",
+                )
+                style = await self._prompt_modal_style(
+                    ctx,
+                    f"Question {index}/{count}: Should this be `short` or `paragraph`?",
+                )
+                required = await self._prompt_modal_bool(
+                    ctx,
+                    f"Question {index}/{count}: Should this be required? Reply `yes` or `no`.",
+                )
+                placeholder = await self._prompt_optional_modal_text(
+                    ctx,
+                    f"Question {index}/{count}: Placeholder text? Reply `none` to skip.",
+                    limit=100,
+                )
+                fields.append(
+                    {
+                        "label": label,
+                        "style": style,
+                        "required": required,
+                        "default": "",
+                        "placeholder": placeholder,
+                        "min_length": None,
+                        "max_length": None,
+                    }
+                )
+        except commands.CommandError as error:
+            await ctx.send(str(error))
+            return
+
+        profile = await self._ensure_profile(ctx.guild, profile_name)
+        profile["creating_modal"] = self._sanitize_modal_fields(fields)
+        await self._set_profile(ctx.guild, profile_name, profile)
+        await ctx.send(
+            f"Modal for `{profile_name}` saved.\n"
+            + box("\n".join(self._modal_summary_lines(profile["creating_modal"])))
+        )
+
+    @tickethub_modal.command(name="add")
+    @commands.admin_or_permissions(manage_guild=True)
+    async def tickethub_modal_add(
+        self,
+        ctx: commands.Context,
+        profile_name: str,
+        *,
+        label: str,
+    ) -> None:
+        """Add a required paragraph question to a profile modal."""
+        assert ctx.guild is not None
+        label = label.strip()
+        if not 1 <= len(label) <= 45:
+            await ctx.send("Question labels must be between 1 and 45 characters.")
+            return
+        profile = await self._ensure_profile(ctx.guild, profile_name)
+        fields = list(profile.get("creating_modal") or [])
+        if len(fields) >= 5:
+            await ctx.send("A Discord modal can only have 5 questions.")
+            return
+        fields.append(
+            {
+                "label": label,
+                "style": discord.TextStyle.paragraph.value,
+                "required": True,
+                "default": "",
+                "placeholder": "",
+                "min_length": None,
+                "max_length": None,
+            }
+        )
+        profile["creating_modal"] = self._sanitize_modal_fields(fields)
+        await self._set_profile(ctx.guild, profile_name, profile)
+        await ctx.send(
+            f"Added modal question to `{self._clean_name(profile_name)}`.\n"
+            + box("\n".join(self._modal_summary_lines(profile["creating_modal"])))
+        )
+
+    @tickethub_modal.command(name="remove", aliases=["delete"])
+    @commands.admin_or_permissions(manage_guild=True)
+    async def tickethub_modal_remove(
+        self,
+        ctx: commands.Context,
+        profile_name: str,
+        index: int,
+    ) -> None:
+        """Remove a modal question by number."""
+        assert ctx.guild is not None
+        profile = await self._ensure_profile(ctx.guild, profile_name)
+        fields = list(profile.get("creating_modal") or [])
+        if not fields:
+            await ctx.send(f"`{self._clean_name(profile_name)}` has no modal questions.")
+            return
+        if index < 1 or index > len(fields):
+            await ctx.send(f"Question number must be between 1 and {len(fields)}.")
+            return
+        removed = fields.pop(index - 1)
+        profile["creating_modal"] = self._sanitize_modal_fields(fields)
+        await self._set_profile(ctx.guild, profile_name, profile)
+        removed_label = self._clean_modal_text(removed.get("label"), 45)
+        clean_profile_name = self._clean_name(profile_name)
+        await ctx.send(
+            f"Removed `{removed_label}` from `{clean_profile_name}`.\n"
+            + box("\n".join(self._modal_summary_lines(profile["creating_modal"])))
+        )
+
+    @tickethub_modal.command(name="defaultreason", aliases=["reason", "default"])
+    @commands.admin_or_permissions(manage_guild=True)
+    async def tickethub_modal_default_reason(
+        self,
+        ctx: commands.Context,
+        profile_name: str = "main",
+    ) -> None:
+        """Use the default ticket reason modal for a profile."""
+        assert ctx.guild is not None
+        profile = await self._ensure_profile(ctx.guild, profile_name)
+        profile["creating_modal"] = self._default_reason_modal()
+        await self._set_profile(ctx.guild, profile_name, profile)
+        await ctx.send(f"`{self._clean_name(profile_name)}` now uses the default Reason modal.")
+
+    @tickethub_modal.command(name="clear", aliases=["disable", "off"])
+    @commands.admin_or_permissions(manage_guild=True)
+    async def tickethub_modal_clear(self, ctx: commands.Context, profile_name: str = "main") -> None:
+        """Disable modal questions for a profile."""
+        assert ctx.guild is not None
+        profile = await self._ensure_profile(ctx.guild, profile_name)
+        profile["creating_modal"] = None
+        await self._set_profile(ctx.guild, profile_name, profile)
+        await ctx.send(f"Modal questions disabled for `{self._clean_name(profile_name)}`.")
 
     @tickethub.group(name="supportrole", invoke_without_command=True)
     @commands.admin_or_permissions(manage_guild=True)
@@ -2058,7 +2562,21 @@ search.addEventListener('input', () => {{
         auto_delete = source.get("auto_delete_on_close")
         profile["auto_delete_on_close_hours"] = auto_delete
         summary.append(f"- auto_delete_on_close -> auto_delete_on_close_hours: {auto_delete!r}")
-        summary.append("Not imported: existing open ticket records, modlog cases, modal forms, forum tags, and panel buttons.")
+        modal_fields = self._sanitize_modal_fields(source.get("creating_modal"))
+        uses_default_reason_modal = False
+        if modal_fields is None and not source.get("disable_default_open_modal", False):
+            modal_fields = self._default_reason_modal()
+            uses_default_reason_modal = True
+        profile["creating_modal"] = modal_fields
+        if uses_default_reason_modal:
+            summary.append("- creating_modal -> creating_modal: default reason field")
+        elif modal_fields:
+            summary.append(f"- creating_modal -> creating_modal: {len(modal_fields)} field(s)")
+        else:
+            summary.append("- creating_modal -> creating_modal: none")
+        summary.append(
+            "Not imported: existing open ticket records, modlog cases, forum tags, and panel buttons."
+        )
         return profile, summary
 
     @tickethub.command(name="export")
