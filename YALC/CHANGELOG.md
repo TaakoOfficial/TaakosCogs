@@ -1,5 +1,11 @@
 # 📝 YALC Changelog
 
+## [v3.1.6] - 2026-05-16
+
+### ✨ New Features
+
+- Added deleted image copying for message deletion logs by re-uploading cached image attachments when Discord still provides them.
+
 ## [v3.1.5] - 2026-05-16
 
 ### 🐛 Bug Fixes

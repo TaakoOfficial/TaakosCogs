@@ -454,6 +454,114 @@ class YALC(DashboardIntegration, commands.Cog):
                 return False
         return bool(getattr(role, "premium_subscriber", False))
 
+    @staticmethod
+    def _attachment_is_image(attachment: discord.Attachment) -> bool:
+        """Return whether an attachment looks like an image."""
+        content_type = getattr(attachment, "content_type", None)
+        if content_type and content_type.lower().startswith("image/"):
+            return True
+
+        filename = getattr(attachment, "filename", "").lower()
+        return filename.endswith((
+            ".apng",
+            ".avif",
+            ".bmp",
+            ".gif",
+            ".jpeg",
+            ".jpg",
+            ".png",
+            ".tif",
+            ".tiff",
+            ".webp",
+        ))
+
+    @staticmethod
+    def _format_file_size(size: Optional[int]) -> str:
+        if not size:
+            return "unknown size"
+
+        units = ["B", "KB", "MB", "GB"]
+        value = float(size)
+        unit = units[0]
+        for unit in units:
+            if value < 1024 or unit == units[-1]:
+                break
+            value /= 1024
+
+        if unit == "B":
+            return f"{int(value)} {unit}"
+        return f"{value:.1f} {unit}"
+
+    @staticmethod
+    def _reset_send_files(kwargs: dict) -> None:
+        """Reset discord.File objects before retrying a send."""
+        send_files = []
+        if kwargs.get("file"):
+            send_files.append(kwargs["file"])
+        send_files.extend(kwargs.get("files") or [])
+
+        for send_file in send_files:
+            reset = getattr(send_file, "reset", None)
+            if callable(reset):
+                try:
+                    reset(seek=True)
+                except TypeError:
+                    reset()
+                except Exception:
+                    continue
+
+    async def _copy_deleted_image_attachments(
+        self,
+        attachments: List[discord.Attachment],
+        log_channel: discord.TextChannel,
+    ) -> tuple:
+        """Create discord.File copies for deleted-message image attachments."""
+        copied_files = []
+        copy_notes = []
+        if not attachments:
+            return copied_files, copy_notes
+
+        file_size_limit = getattr(getattr(log_channel, "guild", None), "filesize_limit", None)
+
+        for attachment in attachments:
+            if not self._attachment_is_image(attachment):
+                continue
+
+            filename = getattr(attachment, "filename", "image")
+            size = getattr(attachment, "size", None)
+            if file_size_limit and size and size > file_size_limit:
+                copy_notes.append(
+                    f"`{filename}` was too large to copy ({self._format_file_size(size)})."
+                )
+                continue
+
+            try:
+                try:
+                    file_copy = await attachment.to_file(use_cached=True)
+                except TypeError:
+                    file_copy = await attachment.to_file()
+                copied_files.append(file_copy)
+            except (discord.Forbidden, discord.NotFound, discord.HTTPException) as e:
+                copy_notes.append(f"`{filename}` could not be copied ({e.__class__.__name__}).")
+            except Exception as e:
+                self.log.debug(f"Could not copy deleted image attachment {filename}: {e}", exc_info=True)
+                copy_notes.append(f"`{filename}` could not be copied.")
+
+        if copied_files:
+            copy_notes.insert(0, f"Copied {len(copied_files)} deleted image(s) below.")
+
+        return copied_files, copy_notes
+
+    @staticmethod
+    def _close_send_files(files: List[discord.File]) -> None:
+        for send_file in files:
+            close = getattr(send_file, "close", None)
+            if callable(close):
+                try:
+                    close()
+                except Exception:
+                    continue
+
     def _prune_recent_role_event_logs(self) -> None:
         """Remove old role log markers used to prevent gateway/audit duplicates."""
         current_time = time.time()
@@ -2610,7 +2718,11 @@ class YALC(DashboardIntegration, commands.Cog):
         try:
             author = getattr(message, "author", None)
             content = getattr(message, "content", "")
-            attachments = [a.url for a in getattr(message, "attachments", [])]
+            attachment_objects = list(getattr(message, "attachments", []) or [])
+            deleted_image_files, image_copy_notes = await self._copy_deleted_image_attachments(
+                attachment_objects,
+                channel
+            )
             embeds = getattr(message, "embeds", [])
             channel_name = getattr(message.channel, "name", str(message.channel) if message.channel else "Unknown")
             
@@ -2719,16 +2831,32 @@ class YALC(DashboardIntegration, commands.Cog):
                 embed.add_field(name="Content", value="*No text content*", inline=False)
             
             # Handle attachments with better formatting
-            if attachments:
+            if attachment_objects:
                 attachment_list = []
-                for i, url in enumerate(attachments):
-                    file_name = url.split("/")[-1]
-                    attachment_list.append(f"[{file_name}]({url})")
+                for attachment in attachment_objects:
+                    file_name = getattr(attachment, "filename", None) or "Attachment"
+                    url = getattr(attachment, "url", None)
+                    size = getattr(attachment, "size", None)
+                    file_label = file_name
+                    if size:
+                        file_label += f" ({self._format_file_size(size)})"
+                    if url:
+                        attachment_list.append(f"[{file_label}]({url})")
+                    else:
+                        attachment_list.append(f"`{file_label}`")
                 
                 embed.add_field(
-                    name=f"Attachments ({len(attachments)})",
+                    name=f"Attachments ({len(attachment_objects)})",
                     value="\n".join(attachment_list) if len(attachment_list) <= 5 
                           else "\n".join(attachment_list[:5]) + f"\n*...and {len(attachment_list) - 5} more*",
+                    inline=False
+                )
+
+            if image_copy_notes:
+                embed.add_field(
+                    name="Deleted Image Copy",
+                    value="\n".join(image_copy_notes[:5]) +
+                          (f"\n*...and {len(image_copy_notes) - 5} more notes*" if len(image_copy_notes) > 5 else ""),
                     inline=False
                 )
             
@@ -2867,7 +2995,13 @@ class YALC(DashboardIntegration, commands.Cog):
                 embed.set_thumbnail(url=author.display_avatar.url)
             
             # Send the log message to the configured channel
-            await self.safe_send(channel, embed=embed)
+            try:
+                if deleted_image_files:
+                    await self.safe_send(channel, embed=embed, files=deleted_image_files)
+                else:
+                    await self.safe_send(channel, embed=embed)
+            finally:
+                self._close_send_files(deleted_image_files)
             
         except Exception as e:
             self.log.error(f"Failed to log message_delete: {e}", exc_info=True)
@@ -8438,6 +8572,7 @@ class YALC(DashboardIntegration, commands.Cog):
         
         for attempt in range(max_retries):
             try:
+                self._reset_send_files(kwargs)
                 return await channel.send(**kwargs)
                 
             except discord.Forbidden:
@@ -8455,6 +8590,7 @@ class YALC(DashboardIntegration, commands.Cog):
                                     value=f"Original destination: {channel.mention} (no permission)",
                                     inline=False
                                 )
+                            self._reset_send_files(kwargs)
                             return await fallback_channel.send(**kwargs)
                         except Exception as fallback_e:
                             self.log.error(f"Fallback send also failed: {fallback_e}")
