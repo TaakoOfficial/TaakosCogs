@@ -39,6 +39,7 @@ To update installed cogs:
 | [InviteTracker](./InviteTracker)       | Invite tracking          | Invite-use detection, join sources, fake joins, leaver counts, leaderboards, log embeds, and CSV exports.                                   |
 | [SuggestionBox](./SuggestionBox)       | Community feedback       | Suggestions with persistent arrow voting buttons, optional discussion threads, staff review states, comments, review logs, and CSV exports. |
 | [RepBoard](./RepBoard)                 | Community reputation     | Member kudos, public rep board posts, cooldowns, daily limits, profiles, leaderboards, moderation removal, and CSV exports.                 |
+| [ReviewHub](./ReviewHub)               | Reviews and vouches      | ReviewHub-style reviews, vouches, review requests, stats, leaderboards, reports, useful votes, templates, and CSV exports.                  |
 | [TicketHub](./TicketHub)               | Support tickets          | Ticket panels, private channels, claim/close controls, AAA3A Tickets profile imports, HTML transcripts, and owner transcript DMs.           |
 | [Giveaway](./Giveaway)                 | Community events         | Timed giveaways, reaction entry, rerolls, cancellation, attached giveaways, prefix and slash command support.                               |
 | [Uppercase](./Uppercase)               | Channel setup            | Create and rename text channels with uppercase-style names using `/create-channel` and `/rename-channel`.                                  |
@@ -59,7 +60,7 @@ To update installed cogs:
 Install these if you want better moderation visibility, invite attribution, feedback workflows, community reputation, support tickets, and role operations:
 
 ```text
-[p]cog install taakoscogs Toolz YALC Applications Welcome InviteTracker SuggestionBox RepBoard TicketHub Giveaway
+[p]cog install taakoscogs Toolz YALC Applications Welcome InviteTracker SuggestionBox RepBoard ReviewHub TicketHub Giveaway
 ```
 
 - `Toolz` gives staff role/user lookup, audit, export, and role-triggered message tools.
@@ -69,6 +70,7 @@ Install these if you want better moderation visibility, invite attribution, feed
 - `InviteTracker` tracks invite joins, fake joins, leavers, join sources, and leaderboards.
 - `SuggestionBox` collects community suggestions with voting, optional discussion threads, staff review states, comments, and exports.
 - `RepBoard` gives members a lightweight kudos and reputation leaderboard system.
+- `ReviewHub` collects structured reviews and vouches with request buttons, reports, useful votes, stats, and leaderboards.
 - `TicketHub` handles support tickets with panels, private channels, staff controls, imports, and transcripts.
 - `Giveaway` supports events and community rewards.
 
@@ -164,10 +166,11 @@ Each cog includes its own data statement in `info.json`. In short:
 
 - `Flipper`, `RandomWeather`, `EmojiPorter`, `ZodiacColorRoles`, and `Uppercase` do not persistently store end user data.
 - `Toolz` stores per-guild role-message settings such as role IDs, channel IDs, and message templates.
-- `YALC`, `Applications`, `Welcome`, `InviteTracker`, `SuggestionBox`, `RepBoard`, `TicketHub`, `Giveaway`, `FiveMStatus`, `Fable`, `Paranoia`, `RPCalander`, and `WHMCS` store the settings or records needed for their features.
+- `YALC`, `Applications`, `Welcome`, `InviteTracker`, `SuggestionBox`, `RepBoard`, `ReviewHub`, `TicketHub`, `Giveaway`, `FiveMStatus`, `Fable`, `Paranoia`, `RPCalander`, and `WHMCS` store the settings or records needed for their features.
 - `InviteTracker` stores invite cache metadata, inviter stats, tracked member join-source records, Discord user IDs, invite codes, timestamps, fake-join flags, and unknown join counts.
 - `SuggestionBox` stores suggestion text, author IDs, voter IDs, staff reviewer IDs, message/channel/thread IDs, votes, statuses, staff notes, review reasons, and timestamps.
 - `RepBoard` stores reputation settings, giver/receiver/moderator IDs, reasons, message/channel IDs, timestamps, active/removed state, cooldown metadata, daily limit metadata, and aggregate reputation statistics.
+- `ReviewHub` stores review settings, request records, review/vouch records, reviewer/reviewed/reporter/useful-voter/moderator IDs, review text, ratings, message/channel IDs, timestamps, and deletion metadata.
 - `TicketHub` stores ticket profiles, panel IDs, channel/category/role IDs, ticket records, owner/staff/participant IDs, reasons, timestamps, and lifecycle events. Transcripts are generated on demand from channel history.
 - `RPCalander` also uses a local `post_tracker.json` file to prevent duplicate daily posts.
 
@@ -184,6 +187,7 @@ Start with each cog's README:
 - [InviteTracker README](./InviteTracker/README.md)
 - [SuggestionBox README](./SuggestionBox/README.md)
 - [RepBoard README](./RepBoard/README.md)
+- [ReviewHub README](./ReviewHub/README.md)
 - [TicketHub README](./TicketHub/README.md)
 - [Giveaway README](./Giveaway/README.md)
 - [Uppercase README](./Uppercase/README.md)
