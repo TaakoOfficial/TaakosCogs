@@ -60,8 +60,24 @@ def unique_ids(items: Iterable[int]) -> List[int]:
     return seen
 
 
-def parse_csv_values(value: str) -> List[str]:
-    return [item.strip() for item in value.split(",") if item.strip()]
+def parse_csv_values(value: Any) -> List[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        values = [value]
+    else:
+        try:
+            values = list(value)
+        except TypeError:
+            values = [value]
+
+    parsed: List[str] = []
+    for raw_value in values:
+        for item in str(raw_value).split(","):
+            cleaned = item.strip()
+            if cleaned:
+                parsed.append(cleaned)
+    return parsed
 
 
 def parse_mentions_or_ids(value: str) -> List[int]:
@@ -1891,20 +1907,19 @@ class Applications(commands.Cog):
             raise commands.UserFeedbackCheckFailure("Question type must be text, boolean, choice, or attachment.")
         if len(app.get("questions", [])) >= self.MAX_QUESTIONS:
             raise commands.UserFeedbackCheckFailure(f"Applications can have at most {self.MAX_QUESTIONS} questions.")
-        choices: List[str] = []
         allow_other = False
         text = question.strip()
         if question_type == "choice":
-            parsed_choices = parse_csv_values(choices)
-            if not parsed_choices:
+            choice_values = parse_csv_values(choices)
+            if not choice_values:
                 raise commands.UserFeedbackCheckFailure(
                     "Choice questions need comma-separated choices, for example: "
                     "`[p]application question add staff \"Favorite color?\" choice true red, blue`."
                 )
-            if len(parsed_choices) > self.MAX_CHOICES:
+            if len(choice_values) > self.MAX_CHOICES:
                 raise commands.UserFeedbackCheckFailure("Choice questions can have at most 25 choices.")
-            allow_other = any(choice.lower() == "other" for choice in parsed_choices)
-            parsed_choices = [choice for choice in parsed_choices if choice.lower() != "other"]
+            allow_other = any(choice.lower() == "other" for choice in choice_values)
+            parsed_choices = [choice for choice in choice_values if choice.lower() != "other"]
         else:
             parsed_choices = []
         app.setdefault("questions", []).append(
