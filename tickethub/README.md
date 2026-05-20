@@ -18,7 +18,7 @@ Ticket panels, configurable modal forms, ticket lifecycle controls, AAA3A Ticket
 - Supports configurable and imported modal questions before panel-created tickets open.
 - Creates private ticket channels with owner, support role, and viewer role permissions.
 - Supports claim, unclaim, close, reopen, delete, add member, remove member, and list workflows.
-- Generates self-contained HTML transcripts with a dark viewer, message search, attachments, embeds, and ticket events.
+- Generates HTML transcripts with DiscordChatExporterPy, plus a built-in fallback renderer and plain-text transcript.
 - Sends transcripts to a transcript/log channel and optionally DMs the ticket owner.
 - Imports profile settings from AAA3A's `Tickets` cog with dry-run preview before applying.
 - Keeps commands under `[p]tickethub` so it can coexist with another `[p]ticket` cog during migration.
@@ -30,7 +30,7 @@ When a transcript is generated, TicketHub reads the ticket channel history and c
 - `ticket-<id>-transcript.html`
 - `ticket-<id>-transcript.txt`
 
-The HTML file is self-contained and can be opened directly in a browser. It does not require a public proxy preview service.
+The HTML file is generated with DiscordChatExporterPy when `chat-exporter` is available. If that exporter fails or is missing, TicketHub falls back to its built-in self-contained HTML renderer. It does not require a public proxy preview service.
 
 ## How Ticket Modals Work
 
@@ -126,6 +126,7 @@ Or configure directly:
 
 - Red-DiscordBot 3.5.0 or newer.
 - Python 3.9 or newer.
+- `chat-exporter` for DiscordChatExporterPy-based HTML transcripts. Red installs this from the cog metadata.
 - Bot permission to `Manage Channels` for ticket channel creation and permission updates.
 - Bot permissions to `Send Messages`, `Embed Links`, `Attach Files`, and `Read Message History` in ticket and log channels.
 - Manage Server permission, Red admin, or equivalent for configuration and staff management commands.

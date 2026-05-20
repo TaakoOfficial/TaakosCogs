@@ -16,6 +16,11 @@ from redbot.core import Config, commands
 from redbot.core.bot import Red
 from redbot.core.utils.chat_formatting import box, pagify
 
+try:
+    import chat_exporter
+except ImportError:
+    chat_exporter = None
+
 log = logging.getLogger("red.taakoscogs.tickethub")
 
 
@@ -1288,7 +1293,10 @@ class TicketHub(commands.Cog):
         if channel is None:
             raise commands.CommandError("I could not find that ticket channel.")
         messages = await self._collect_messages(channel)
-        html_bytes = self._render_html_transcript(guild, channel, record, profile, messages).encode("utf-8")
+        html_transcript = await self._render_chat_exporter_transcript(guild, channel, messages)
+        if html_transcript is None:
+            html_transcript = self._render_html_transcript(guild, channel, record, profile, messages)
+        html_bytes = html_transcript.encode("utf-8")
         text_bytes = self._render_text_transcript(guild, channel, record, messages).encode("utf-8")
         html_file_name = f"ticket-{record['id']}-transcript.html"
         text_file_name = f"ticket-{record['id']}-transcript.txt"
@@ -1362,6 +1370,33 @@ class TicketHub(commands.Cog):
         except discord.HTTPException as exc:
             raise commands.CommandError("I could not read the ticket message history.") from exc
         return messages
+
+    async def _render_chat_exporter_transcript(
+        self,
+        guild: discord.Guild,
+        channel: discord.TextChannel,
+        messages: Sequence[discord.Message],
+    ) -> Optional[str]:
+        if chat_exporter is None:
+            return None
+        try:
+            transcript = await chat_exporter.raw_export(
+                channel,
+                messages=list(messages),
+                tz_info="UTC",
+                guild=guild,
+                bot=self.bot,
+                military_time=True,
+                fancy_times=True,
+                support_dev=False,
+                raise_exceptions=True,
+            )
+        except Exception:
+            log.exception("DiscordChatExporterPy failed for ticket transcript in guild %s", guild.id)
+            return None
+        if not transcript or transcript == "Whoops! Something went wrong...":
+            return None
+        return transcript
 
     def _render_text_transcript(
         self,
