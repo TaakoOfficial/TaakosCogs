@@ -1,4 +1,4 @@
-# Paranoia
+# paranoia
 
 A social party game cog for Red-DiscordBot.
 
@@ -8,8 +8,8 @@ A social party game cog for Red-DiscordBot.
 
 ```text
 [p]repo add taakoscogs https://github.com/TaakoOfficial/TaakosCogs
-[p]cog install taakoscogs Paranoia
-[p]load Paranoia
+[p]cog install taakoscogs paranoia
+[p]load paranoia
 ```
 
 ## Highlights

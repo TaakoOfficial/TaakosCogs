@@ -1,10 +1,10 @@
 {
   "$schema": "https://raw.githubusercontent.com/Cog-Creators/Red-DiscordBot/V3/develop/schema/red_cog.schema.json",
-  "name": "Applications",
+  "name": "applications",
   "author": ["Taako"],
   "version": "1.0.0",
   "description": "A configurable Discord application/form cog with panels, DM questionnaires, review buttons, role actions, CSV exports, and polls.",
-  "install_msg": "Applications loaded. Use `[p]application create` to create a form, `[p]application question add` to add questions, and `[p]application panel` to post an apply panel.",
+  "install_msg": "applications loaded. Use `[p]application create` to create a form, `[p]application question add` to add questions, and `[p]application panel` to post an apply panel.",
   "short": "Application forms with panels, review buttons, role actions, exports, and polls.",
   "tags": ["applications", "forms", "apply", "staff", "polls", "utility"],
   "min_bot_version": "3.5.0",

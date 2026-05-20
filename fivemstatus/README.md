@@ -1,4 +1,4 @@
-# FiveMStatus
+# fivemstatus
 
 Live FiveM server status panels for Red-DiscordBot.
 
@@ -8,8 +8,8 @@ Live FiveM server status panels for Red-DiscordBot.
 
 ```text
 [p]repo add taakoscogs https://github.com/TaakoOfficial/TaakosCogs
-[p]cog install taakoscogs FiveMStatus
-[p]load FiveMStatus
+[p]cog install taakoscogs fivemstatus
+[p]load fivemstatus
 ```
 
 ## Highlights

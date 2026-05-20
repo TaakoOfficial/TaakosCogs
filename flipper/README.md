@@ -1,4 +1,4 @@
-# Flipper
+# flipper
 
 A small Red-DiscordBot utility cog for flipping a coin.
 
@@ -8,8 +8,8 @@ A small Red-DiscordBot utility cog for flipping a coin.
 
 ```text
 [p]repo add taakoscogs https://github.com/TaakoOfficial/TaakosCogs
-[p]cog install taakoscogs Flipper
-[p]load Flipper
+[p]cog install taakoscogs flipper
+[p]load flipper
 ```
 
 ## Highlights

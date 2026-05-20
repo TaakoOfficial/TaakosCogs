@@ -458,7 +458,7 @@ class FiveMStatus(commands.Cog):
         session = await self._get_session()
         headers = {
             "Accept": "application/json",
-            "User-Agent": "TaakosCogs-FiveMStatus/1.1",
+            "User-Agent": "TaakosCogs-fivemstatus/1.1",
         }
         async with session.get(url, headers=headers, timeout=self.REQUEST_TIMEOUT) as response:
             if response.status >= 400:

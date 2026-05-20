@@ -8,11 +8,11 @@
 
 ```ini
 # Try reloading the cog
-[p]reload Fable
+[p]reload fable
 
 # If that fails, unload and load
-[p]unload Fable
-[p]load Fable
+[p]unload fable
+[p]load fable
 ```
 
 #### Missing dependencies

@@ -1,4 +1,4 @@
-# EmojiPorter
+# emojiporter
 
 Copy custom emojis and stickers between Discord servers.
 
@@ -8,8 +8,8 @@ Copy custom emojis and stickers between Discord servers.
 
 ```text
 [p]repo add taakoscogs https://github.com/TaakoOfficial/TaakosCogs
-[p]cog install taakoscogs EmojiPorter
-[p]load EmojiPorter
+[p]cog install taakoscogs emojiporter
+[p]load emojiporter
 ```
 
 ## Highlights

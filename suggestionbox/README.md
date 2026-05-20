@@ -1,4 +1,4 @@
-# SuggestionBox
+# suggestionbox
 
 Community suggestions with persistent voting buttons, staff review states, comments, review logs, and CSV exports for Red-DiscordBot.
 
@@ -8,8 +8,8 @@ Community suggestions with persistent voting buttons, staff review states, comme
 
 ```text
 [p]repo add taakoscogs https://github.com/TaakoOfficial/TaakosCogs
-[p]cog install taakoscogs SuggestionBox
-[p]load SuggestionBox
+[p]cog install taakoscogs suggestionbox
+[p]load suggestionbox
 ```
 
 ## Highlights

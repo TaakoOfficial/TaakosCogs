@@ -1,9 +1,9 @@
 {
   "$schema": "https://raw.githubusercontent.com/Cog-Creators/Red-DiscordBot/V3/develop/schema/red_cog.schema.json",
-  "name": "ZodiacColorRoles",
+  "name": "zodiaccolorroles",
   "author": ["Taako"],
   "description": "Comprehensive role management system for zodiac signs, colors, pronouns, and ping preferences. Supports both slash commands and prefix commands with bulk creation options.",
-  "install_msg": "Thank you for installing the ZodiacColorRoles cog! Use `[p]help ZodiacColorRoles` to see all available commands. Supports both slash commands and prefix commands for maximum flexibility.",
+  "install_msg": "Thank you for installing the zodiaccolorroles cog! Use `[p]help zodiaccolorroles` to see all available commands. Supports both slash commands and prefix commands for maximum flexibility.",
   "short": "Advanced role creation system for zodiac, color, pronoun, and ping roles.",
   "tags": ["roles", "zodiac", "color", "pronouns", "ping", "hybrid", "management", "bulk"],
   "min_bot_version": "3.5.0",

@@ -1,4 +1,4 @@
-# Uppercase
+# uppercase
 
 A small Red-DiscordBot utility cog for creating and renaming text channels with visibly uppercase names.
 
@@ -8,8 +8,8 @@ A small Red-DiscordBot utility cog for creating and renaming text channels with 
 
 ```text
 [p]repo add taakoscogs https://github.com/TaakoOfficial/TaakosCogs
-[p]cog install taakoscogs Uppercase
-[p]load Uppercase
+[p]cog install taakoscogs uppercase
+[p]load uppercase
 ```
 
 ## Highlights

@@ -17,13 +17,13 @@
 ### 2️⃣ Install the Cog
 
 ```ini
-[p]cog install taakoscogs Fable
+[p]cog install taakoscogs fable
 ```
 
 ### 3️⃣ Load the Cog
 
 ```ini
-[p]load Fable
+[p]load fable
 ```
 
 ## Initial Setup
@@ -96,7 +96,7 @@ Having issues? Check our common solutions:
 ### Package Installation Failed
 
 ```ini
-[p]reload Fable
+[p]reload fable
 ```
 
 This will trigger automatic package installation again.

@@ -1,10 +1,10 @@
 {
   "$schema": "https://raw.githubusercontent.com/Cog-Creators/Red-DiscordBot/V3/develop/schema/red_cog.schema.json",
-  "name": "Giveaway",
+  "name": "giveaway",
   "author": ["Taako"],
   "version": "1.0.0",
   "description": "A giveaway cog for Red-DiscordBot with timed giveaways, auto-ending, rerolls, and cancellation tools.",
-  "install_msg": "Giveaway loaded. Use `[p]giveaway start <duration> <winner_count> <prize>` to create your first giveaway.",
+  "install_msg": "giveaway loaded. Use `[p]giveaway start <duration> <winner_count> <prize>` to create your first giveaway.",
   "short": "Timed reaction-based giveaways with auto-ending and rerolls.",
   "tags": ["giveaway", "raffle", "events", "utility", "community"],
   "min_bot_version": "3.5.0",

@@ -1,10 +1,10 @@
 {
   "$schema": "https://raw.githubusercontent.com/Cog-Creators/Red-DiscordBot/V3/develop/schema/red_cog.schema.json",
-  "name": "Fable",
+  "name": "fable",
   "author": ["Taako"],
   "version": "2.0.0",
   "description": "Advanced living world tracker for character-driven roleplay. Features rich character development, relationship tracking, location management, timeline visualization, and collaborative lore building.",
-  "install_msg": "Thank you for installing Fable! Use `[p]fable setup` for interactive configuration, then `[p]fable character quickstart` to create your first character. Full documentation available with `[p]help Fable`.",
+  "install_msg": "Thank you for installing fable! Use `[p]fable setup` for interactive configuration, then `[p]fable character quickstart` to create your first character. Full documentation available with `[p]help fable`.",
   "short": "Advanced RP world tracker with characters, relationships, and timelines.",
   "tags": ["roleplay", "character", "relationships", "timeline", "lore", "visualization", "worldbuilding", "development"],
   "min_bot_version": "3.5.0",

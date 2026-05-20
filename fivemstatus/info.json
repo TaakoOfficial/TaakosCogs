@@ -1,10 +1,10 @@
 {
   "$schema": "https://raw.githubusercontent.com/Cog-Creators/Red-DiscordBot/V3/develop/schema/red_cog.schema.json",
-  "name": "FiveMStatus",
+  "name": "fivemstatus",
   "author": ["Taako"],
   "version": "1.1.0",
   "description": "A Red DiscordBot cog that posts and refreshes a FiveM server status panel with live player counts, connect command, restart countdowns, uptime tracking, images, Join Server buttons, and link buttons.",
-  "install_msg": "FiveMStatus loaded. Use `[p]fivem setup <ip:port|cfx_code> [#channel]` to post a live FiveM status panel.",
+  "install_msg": "fivemstatus loaded. Use `[p]fivem setup <ip:port|cfx_code> [#channel]` to post a live FiveM status panel.",
   "short": "Live FiveM server status panel.",
   "tags": ["fivem", "gta", "status", "roleplay", "utility"],
   "requirements": ["aiohttp"],

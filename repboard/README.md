@@ -1,4 +1,4 @@
-# RepBoard
+# repboard
 
 Community reputation, kudos, public rep boards, leaderboards, moderation, and exports for Red-DiscordBot.
 
@@ -8,8 +8,8 @@ Community reputation, kudos, public rep boards, leaderboards, moderation, and ex
 
 ```text
 [p]repo add taakoscogs https://github.com/TaakoOfficial/TaakosCogs
-[p]cog install taakoscogs RepBoard
-[p]load RepBoard
+[p]cog install taakoscogs repboard
+[p]load repboard
 ```
 
 ## Highlights

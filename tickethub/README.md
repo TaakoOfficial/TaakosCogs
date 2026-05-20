@@ -1,4 +1,4 @@
-# TicketHub
+# tickethub
 
 Ticket panels, configurable modal forms, ticket lifecycle controls, AAA3A Tickets profile imports, and self-contained HTML transcripts for Red-DiscordBot.
 
@@ -8,8 +8,8 @@ Ticket panels, configurable modal forms, ticket lifecycle controls, AAA3A Ticket
 
 ```text
 [p]repo add taakoscogs https://github.com/TaakoOfficial/TaakosCogs
-[p]cog install taakoscogs TicketHub
-[p]load TicketHub
+[p]cog install taakoscogs tickethub
+[p]load tickethub
 ```
 
 ## Highlights

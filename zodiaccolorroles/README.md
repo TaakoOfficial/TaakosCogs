@@ -1,4 +1,4 @@
-# ZodiacColorRoles
+# zodiaccolorroles
 
 Bulk role creation for zodiac, color, pronoun, and ping preference roles.
 
@@ -8,8 +8,8 @@ Bulk role creation for zodiac, color, pronoun, and ping preference roles.
 
 ```text
 [p]repo add taakoscogs https://github.com/TaakoOfficial/TaakosCogs
-[p]cog install taakoscogs ZodiacColorRoles
-[p]load ZodiacColorRoles
+[p]cog install taakoscogs zodiaccolorroles
+[p]load zodiaccolorroles
 ```
 
 ## Highlights
