@@ -57,6 +57,12 @@ repos:
     -   id: trailing-whitespace
         args: [--markdown-linebreak-ext=md]
 
+-   repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.13
+    hooks:
+      - id: ruff-check
+        language_version: python3
+
 -   repo: https://github.com/psf/black
     rev: '22.3.0'
     hooks:

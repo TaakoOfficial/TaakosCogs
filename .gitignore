@@ -51,6 +51,7 @@ coverage.xml
 
 # mypy
 .mypy_cache/
+.ruff_cache/
 .dmypy.json
 
 # Pyre type checker
