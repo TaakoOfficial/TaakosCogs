@@ -16,6 +16,7 @@ ReviewHub-style reviews, vouches, review requests, stats, leaderboards, reports,
 
 - Mirrors the public ReviewHub command surface: `/review`, `/vouch`, `/rateme`, `/stats`, `/leaderboard`, `/help`, `/deletereview`, and `/config`.
 - Supports review mode and vouch mode.
+- Lets admins choose whether regular reviews can target a specific member.
 - Posts public review embeds to a configured channel.
 - Adds persistent submit, report, and useful buttons.
 - Supports `/rateme` request messages with a submit button and modal.
@@ -38,6 +39,13 @@ Then users can submit reviews:
 /vouch member:@User rating:5 message:Reliable and helpful.
 ```
 
+To let users attach a regular review to a specific person, such as a service provider:
+
+```text
+[p]reviewhub config reviewtargets true
+/review member:@Provider rating:5 message:Great service.
+```
+
 Staff can request a review from a member:
 
 ```text
@@ -48,14 +56,14 @@ Staff can request a review from a member:
 
 | Command | Description |
 | --- | --- |
-| `/review` | Submit a review. If rating or message is omitted, Discord opens a modal. |
+| `/review` | Submit a review. If enabled by staff, users can choose a member the review is about. If rating or message is omitted, Discord opens a modal. |
 | `/vouch` | Recommend another member. |
 | `/rateme @User` | Request a review from a specific user. |
 | `/stats [user] [global_stats]` | View server or user statistics. |
 | `/leaderboard [mode] [global_stats]` | View the top 10 members by submitted, received, or useful count. |
 | `/help` | View ReviewHub commands and reference links. |
 | `/deletereview id:<review id>` | Delete a review by ID. |
-| `/config server` | Configure review/report channels, threads, titles, command state, request deletion, and vouch mode. |
+| `/config server` | Configure review/report channels, threads, titles, command state, request deletion, vouch mode, and targeted reviews. |
 | `/config appearance` | Configure buttons, template, color, labels, and emojis. |
 | `/config access` | Configure the `/rateme` role and review submission role. |
 
@@ -78,6 +86,7 @@ Staff can request a review from a member:
 | `[p]reviewhub config template <classic|detailed>` | Set the review template. |
 | `[p]reviewhub config color <hex>` | Set the review embed color. |
 | `[p]reviewhub config vouchmode <true_or_false>` | Enable or disable vouch mode. |
+| `[p]reviewhub config reviewtargets <true_or_false>` | Allow or block users from choosing a reviewed member on regular reviews. |
 | `[p]reviewhub config autothread <true_or_false>` | Enable or disable discussion threads. |
 | `[p]reviewhub config ratemerole [role]` | Set or clear the `/rateme` role. |
 | `[p]reviewhub export` | Export review records as CSV. |

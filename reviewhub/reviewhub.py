@@ -192,6 +192,92 @@ class ReviewRequestView(discord.ui.View):
         await self.cog.handle_request_submit(interaction)
 
 
+class ReviewTargetPickerView(discord.ui.View):
+    """Ephemeral target picker shown before opening a public review modal."""
+
+    def __init__(
+        self,
+        cog: "ReviewHub",
+        guild_id: int,
+        reviewer_id: int,
+        settings: Dict[str, Any],
+    ) -> None:
+        super().__init__(timeout=300)
+        self.cog = cog
+        self.guild_id = guild_id
+        self.reviewer_id = reviewer_id
+        self.settings = settings
+        self.add_item(ReviewTargetSelect(self))
+
+    async def _send_modal(
+        self,
+        interaction: discord.Interaction,
+        *,
+        target_id: Optional[int] = None,
+    ) -> None:
+        if not interaction.guild or interaction.guild.id != self.guild_id:
+            await interaction.response.send_message("This picker only works in its server.", ephemeral=True)
+            return
+        if not isinstance(interaction.user, discord.Member):
+            await interaction.response.send_message("This picker only works for server members.", ephemeral=True)
+            return
+        if interaction.user.id != self.reviewer_id:
+            await interaction.response.send_message("This picker is not for you.", ephemeral=True)
+            return
+        title = str(self.settings.get("rate_experience_title") or "Rate your experience")
+        await interaction.response.send_modal(
+            ReviewSubmitModal(
+                self.cog,
+                self.guild_id,
+                self.reviewer_id,
+                target_id=target_id,
+                title=title,
+            )
+        )
+
+    @discord.ui.button(label="No specific person", style=discord.ButtonStyle.secondary)
+    async def skip_target(
+        self,
+        interaction: discord.Interaction,
+        button: discord.ui.Button,
+    ) -> None:
+        await self._send_modal(interaction)
+
+
+class ReviewTargetSelect(discord.ui.UserSelect):
+    """User select used by ReviewTargetPickerView."""
+
+    def __init__(self, view: ReviewTargetPickerView) -> None:
+        super().__init__(
+            placeholder="Choose the person this review is about",
+            min_values=1,
+            max_values=1,
+        )
+        self.picker_view = view
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if not interaction.guild or not isinstance(interaction.user, discord.Member):
+            await interaction.response.send_message("This picker only works in a server.", ephemeral=True)
+            return
+        if interaction.user.id != self.picker_view.reviewer_id:
+            await interaction.response.send_message("This picker is not for you.", ephemeral=True)
+            return
+        selected = self.values[0] if self.values else None
+        target = selected if isinstance(selected, discord.Member) else None
+        if target is None and selected is not None:
+            target = interaction.guild.get_member(int(selected.id))
+        if target is None:
+            await interaction.response.send_message("I could not find that member in this server.", ephemeral=True)
+            return
+        if target.bot:
+            await interaction.response.send_message("Reviews for bot accounts are not supported.", ephemeral=True)
+            return
+        if target.id == interaction.user.id:
+            await interaction.response.send_message("You cannot review yourself.", ephemeral=True)
+            return
+        await self.picker_view._send_modal(interaction, target_id=target.id)
+
+
 class ReviewHubConfigGroup(app_commands.Group):
     """Slash /config group matching ReviewHub's documented command shape."""
 
@@ -227,6 +313,7 @@ class ReviewHubConfigGroup(app_commands.Group):
         reviewcommandname="Preferred display command name: review or vouch",
         deletereviewrequests="Delete /rateme request messages after submit",
         vouchmode="Enable recommendation/vouch mode",
+        reviewtargets="Allow regular reviews to choose a reviewed member",
     )
     @app_commands.choices(
         reviewcommandname=[
@@ -250,6 +337,7 @@ class ReviewHubConfigGroup(app_commands.Group):
         reviewcommandname: Optional[str] = None,
         deletereviewrequests: Optional[bool] = None,
         vouchmode: Optional[bool] = None,
+        reviewtargets: Optional[bool] = None,
     ) -> None:
         if not await self._require_admin(interaction):
             return
@@ -293,6 +381,9 @@ class ReviewHubConfigGroup(app_commands.Group):
         if vouchmode is not None:
             await guild_conf.vouch_mode.set(vouchmode)
             changed.append(f"vouch mode -> {self.cog._enabled_text(vouchmode)}")
+        if reviewtargets is not None:
+            await guild_conf.review_targets_enabled.set(reviewtargets)
+            changed.append(f"review targets -> {self.cog._enabled_text(reviewtargets)}")
 
         if not changed:
             await interaction.response.send_message(
@@ -476,6 +567,7 @@ class ReviewHub(commands.Cog):
             review_author_text="{user} submitted a review",
             delete_review_requests=True,
             vouch_mode=False,
+            review_targets_enabled=False,
             report_button_emoji="\N{WARNING SIGN}",
             submit_review_emoji="\N{MEMO}",
             useful_button_emoji="\N{THUMBS UP SIGN}",
@@ -923,6 +1015,7 @@ class ReviewHub(commands.Cog):
             value=(
                 f"Submissions: **{self._enabled_text(bool(settings.get('review_command_enabled')))}**\n"
                 f"Mode: **{'vouch' if settings.get('vouch_mode') else 'review'}**\n"
+                f"Review targets: **{self._enabled_text(bool(settings.get('review_targets_enabled')))}**\n"
                 f"Active reviews: **{self._count(active_count)}**"
             ),
             inline=True,
@@ -1096,6 +1189,9 @@ class ReviewHub(commands.Cog):
             mode = mode_override or ("vouch" if settings.get("vouch_mode") else "review")
             if mode == "vouch" and target is None:
                 raise commands.CommandError("Choose the member you want to vouch for.")
+            targeted_review = target is not None and mode != "vouch" and request_message_id is None
+            if targeted_review and not settings.get("review_targets_enabled"):
+                raise commands.CommandError("Targeted reviews are disabled here.")
             if target is not None:
                 if target.bot:
                     raise commands.CommandError("Reviews for bot accounts are not supported.")
@@ -1238,6 +1334,18 @@ class ReviewHub(commands.Cog):
         settings = await self.config.guild(interaction.guild).all()
         if settings.get("vouch_mode"):
             await interaction.response.send_message("Use `/vouch` and choose a member to submit a vouch.", ephemeral=True)
+            return
+        if settings.get("review_targets_enabled"):
+            await interaction.response.send_message(
+                "Choose who this review is about, or continue without a specific person.",
+                view=ReviewTargetPickerView(
+                    self,
+                    interaction.guild.id,
+                    interaction.user.id,
+                    settings,
+                ),
+                ephemeral=True,
+            )
             return
         title = str(settings.get("rate_experience_title") or "Rate your experience")
         await interaction.response.send_modal(
@@ -1384,6 +1492,9 @@ class ReviewHub(commands.Cog):
             effective_mode = mode_override or ("vouch" if settings.get("vouch_mode") else "review")
             if effective_mode == "vouch" and target is None:
                 await ctx.send("Choose a member when submitting a vouch.", ephemeral=True)
+                return
+            if target is not None and effective_mode != "vouch" and not settings.get("review_targets_enabled"):
+                await ctx.send("Targeted reviews are disabled here.", ephemeral=True)
                 return
             await ctx.interaction.response.send_modal(
                 ReviewSubmitModal(
@@ -1589,7 +1700,7 @@ class ReviewHub(commands.Cog):
         embed.add_field(
             name="User Commands",
             value=(
-                "`/review` or `/vouch` - submit a review or recommendation\n"
+                "`/review [member]` or `/vouch` - submit a review or recommendation\n"
                 "`/stats [user]` - view server or user statistics\n"
                 "`/leaderboard` - view the top 10 active members"
             ),
@@ -1631,7 +1742,7 @@ class ReviewHub(commands.Cog):
     @commands.guild_only()
     @commands.bot_has_permissions(embed_links=True)
     @app_commands.describe(
-        member="Optional member this review is about",
+        member="Member this review is about, if targeted reviews are enabled",
         rating="Rating from 1 to 5",
         message="Review text",
     )
@@ -1926,6 +2037,14 @@ class ReviewHub(commands.Cog):
         assert ctx.guild is not None
         await self.config.guild(ctx.guild).vouch_mode.set(enabled)
         await ctx.send(f"Vouch mode {self._enabled_text(enabled)}.", ephemeral=bool(ctx.interaction))
+
+    @reviewhub_config.command(name="reviewtargets")
+    @commands.admin_or_permissions(manage_guild=True)
+    async def reviewhub_config_review_targets(self, ctx: commands.Context, enabled: bool) -> None:
+        """Allow or block member targets on regular reviews."""
+        assert ctx.guild is not None
+        await self.config.guild(ctx.guild).review_targets_enabled.set(enabled)
+        await ctx.send(f"Review targets {self._enabled_text(enabled)}.", ephemeral=bool(ctx.interaction))
 
     @reviewhub_config.command(name="autothread")
     @commands.admin_or_permissions(manage_guild=True)

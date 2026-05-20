@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.1
+
+- Added an admin-controlled targeted review setting for regular reviews.
+- Added a public submit-button target picker when targeted reviews are enabled.
+
 ## 1.0.0
 
 - Initial ReviewHub-style cog.
