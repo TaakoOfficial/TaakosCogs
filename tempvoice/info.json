@@ -1,0 +1,17 @@
+{
+  "$schema": "https://raw.githubusercontent.com/Cog-Creators/Red-DiscordBot/V3/develop/schema/red_cog.schema.json",
+  "name": "tempvoice",
+  "author": ["Taako"],
+  "version": "1.0.0",
+  "description": "A Red DiscordBot cog that creates temporary voice channels from a join-to-create channel and posts embedded owner control panels with buttons for renaming, locking, user limits, ownership transfers, permitted users, removal, and claiming.",
+  "install_msg": "tempvoice loaded. Use `[p]tempvoice setup` to create a Join to Create voice channel, or `[p]tempvoice setup <voice channel>` to use an existing one.",
+  "short": "Temporary voice channels with embedded owner control panels.",
+  "tags": ["voice", "temporary", "channels", "buttons", "utility", "moderation"],
+  "requirements": [],
+  "min_bot_version": "3.5.0",
+  "min_python_version": [3, 9, 0],
+  "hidden": false,
+  "disabled": false,
+  "type": "COG",
+  "end_user_data_statement": "This cog stores per-guild temporary voice settings, active temporary voice channel IDs, control panel message/channel IDs, owner Discord user IDs, permitted Discord user IDs, creation timestamps, channel names, lock state, and user limits. Data is used only to manage temporary voice channels and their controls."
+}
