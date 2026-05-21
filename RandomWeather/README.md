@@ -1,4 +1,4 @@
-# randomweather
+# RandomWeather
 
 Seasonal weather simulation for Red-DiscordBot servers.
 
@@ -8,8 +8,8 @@ Seasonal weather simulation for Red-DiscordBot servers.
 
 ```text
 [p]repo add taakoscogs https://github.com/TaakoOfficial/TaakosCogs
-[p]cog install taakoscogs randomweather
-[p]load randomweather
+[p]cog install taakoscogs RandomWeather
+[p]load RandomWeather
 ```
 
 ## Highlights

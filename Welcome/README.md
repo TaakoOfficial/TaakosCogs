@@ -1,4 +1,4 @@
-# welcome
+# Welcome
 
 Custom welcome messages for Red-DiscordBot servers.
 
@@ -8,8 +8,8 @@ Custom welcome messages for Red-DiscordBot servers.
 
 ```text
 [p]repo add taakoscogs https://github.com/TaakoOfficial/TaakosCogs
-[p]cog install taakoscogs welcome
-[p]load welcome
+[p]cog install taakoscogs Welcome
+[p]load Welcome
 ```
 
 ## Highlights

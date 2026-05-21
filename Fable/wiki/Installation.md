@@ -17,13 +17,13 @@
 ### 2️⃣ Install the Cog
 
 ```ini
-[p]cog install taakoscogs fable
+[p]cog install taakoscogs Fable
 ```
 
 ### 3️⃣ Load the Cog
 
 ```ini
-[p]load fable
+[p]load Fable
 ```
 
 ## Initial Setup

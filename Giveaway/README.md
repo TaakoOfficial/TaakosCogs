@@ -1,4 +1,4 @@
-# giveaway
+# Giveaway
 
 Timed reaction-based giveaways for Red-DiscordBot.
 
@@ -8,8 +8,8 @@ Timed reaction-based giveaways for Red-DiscordBot.
 
 ```text
 [p]repo add taakoscogs https://github.com/TaakoOfficial/TaakosCogs
-[p]cog install taakoscogs giveaway
-[p]load giveaway
+[p]cog install taakoscogs Giveaway
+[p]load Giveaway
 ```
 
 ## Highlights

@@ -1,4 +1,4 @@
-# reviewhub
+# ReviewHub
 
 ReviewHub-style reviews, vouches, review requests, stats, leaderboards, reports, useful votes, and configurable review embeds for Red-DiscordBot.
 
@@ -8,8 +8,8 @@ ReviewHub-style reviews, vouches, review requests, stats, leaderboards, reports,
 
 ```text
 [p]repo add taakoscogs https://github.com/TaakoOfficial/TaakosCogs
-[p]cog install taakoscogs reviewhub
-[p]load reviewhub
+[p]cog install taakoscogs ReviewHub
+[p]load ReviewHub
 ```
 
 ## Highlights

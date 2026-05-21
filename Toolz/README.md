@@ -1,4 +1,4 @@
-# toolz
+# Toolz
 
 Role and user utility tools for larger Red-DiscordBot servers.
 
@@ -8,8 +8,8 @@ Role and user utility tools for larger Red-DiscordBot servers.
 
 ```text
 [p]repo add taakoscogs https://github.com/TaakoOfficial/TaakosCogs
-[p]cog install taakoscogs toolz
-[p]load toolz
+[p]cog install taakoscogs Toolz
+[p]load Toolz
 ```
 
 All public commands are hybrid commands. After Red syncs application commands, they work as both prefix commands and slash commands.

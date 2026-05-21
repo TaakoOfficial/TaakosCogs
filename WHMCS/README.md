@@ -1,4 +1,4 @@
-# whmcs
+# WHMCS
 
 WHMCS billing, client, and support integration for Red-DiscordBot.
 
@@ -8,8 +8,8 @@ WHMCS billing, client, and support integration for Red-DiscordBot.
 
 ```text
 [p]repo add taakoscogs https://github.com/TaakoOfficial/TaakosCogs
-[p]cog install taakoscogs whmcs
-[p]load whmcs
+[p]cog install taakoscogs WHMCS
+[p]load WHMCS
 ```
 
 ## Highlights

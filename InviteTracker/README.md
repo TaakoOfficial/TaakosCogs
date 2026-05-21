@@ -1,4 +1,4 @@
-# invitetracker
+# InviteTracker
 
 Invite tracking, join-source lookup, fake join detection, leaver counts, leaderboards, and CSV exports for Red-DiscordBot.
 
@@ -8,8 +8,8 @@ Invite tracking, join-source lookup, fake join detection, leaver counts, leaderb
 
 ```text
 [p]repo add taakoscogs https://github.com/TaakoOfficial/TaakosCogs
-[p]cog install taakoscogs invitetracker
-[p]load invitetracker
+[p]cog install taakoscogs InviteTracker
+[p]load InviteTracker
 ```
 
 ## Highlights

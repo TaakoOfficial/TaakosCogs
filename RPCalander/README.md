@@ -1,4 +1,4 @@
-# rpcalander
+# RPCalander
 
 Roleplay calendar, moon phase, and celestial event tracking for Red-DiscordBot.
 
@@ -8,8 +8,8 @@ Roleplay calendar, moon phase, and celestial event tracking for Red-DiscordBot.
 
 ```text
 [p]repo add taakoscogs https://github.com/TaakoOfficial/TaakosCogs
-[p]cog install taakoscogs rpcalander
-[p]load rpcalander
+[p]cog install taakoscogs RPCalander
+[p]load RPCalander
 ```
 
 ## Highlights

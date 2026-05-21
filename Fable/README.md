@@ -1,4 +1,4 @@
-# fable
+# Fable
 
 Living world and character tracker for roleplay-focused Red-DiscordBot servers.
 
@@ -8,8 +8,8 @@ Living world and character tracker for roleplay-focused Red-DiscordBot servers.
 
 ```text
 [p]repo add taakoscogs https://github.com/TaakoOfficial/TaakosCogs
-[p]cog install taakoscogs fable
-[p]load fable
+[p]cog install taakoscogs Fable
+[p]load Fable
 ```
 
 ## Highlights

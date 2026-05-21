@@ -12,7 +12,7 @@
 
 # If that fails, unload and load
 [p]unload fable
-[p]load fable
+[p]load Fable
 ```
 
 #### Missing dependencies
