@@ -18,6 +18,7 @@ Temporary voice channels with embedded owner controls for Red-DiscordBot.
 - Automatic deletion of empty temporary voice channels.
 - Embedded control panel for each temporary channel.
 - Buttons for rename, lock/unlock, user limit, ownership transfer, permitted users, user removal, and claiming abandoned channels.
+- Uses a native Discord member picker for transfer, permit, and remove modals on current Red installations.
 - Optional text channel for control panels when you do not want to use voice channel chat.
 
 ## Quick Start

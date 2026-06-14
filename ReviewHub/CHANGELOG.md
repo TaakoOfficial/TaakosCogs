@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.0
+
+- Added a native 1–5 star dropdown to review submission modals.
+- Retained the rating text input fallback for older Discord.py versions.
+
 ## 1.0.1
 
 - Added an admin-controlled targeted review setting for regular reviews.

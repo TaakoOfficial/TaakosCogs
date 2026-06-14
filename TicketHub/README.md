@@ -34,10 +34,12 @@ The HTML file is generated with DiscordChatExporterPy when `chat-exporter` is av
 
 ## How Ticket Modals Work
 
-When a profile has modal questions configured, clicking that profile's panel button opens a Discord modal before the ticket channel is created. Submitted answers are stored on the ticket record and shown in the ticket channel.
+When a profile has form questions configured, clicking that profile's panel button collects the answers before the ticket channel is created. Current Red installations show text, dropdown, and boolean questions together in a native Discord modal. Older Discord.py versions fall back to the existing ephemeral step form for dropdown and boolean questions. Submitted answers are stored on the ticket record and shown in the ticket channel.
 
 ```text
 [p]tickethub modal wizard main
+[p]tickethub modal add main boolean "Is this urgent?"
+[p]tickethub modal add main choice "Department | Billing, Technical, Other"
 [p]tickethub modal show main
 ```
 
@@ -79,7 +81,7 @@ Existing open ticket records, modlog cases, forum tags, and panel buttons are no
 | `[p]tickethub open [profile] [reason]`                | Open a ticket by command.                          |
 | `[p]tickethub modal [profile]`                        | Show modal questions for a profile.                |
 | `[p]tickethub modal wizard [profile]`                 | Walk through creating a custom ticket modal.       |
-| `[p]tickethub modal add <profile> <label>`            | Add a required paragraph modal question.           |
+| `[p]tickethub modal add <profile> [type] <label>`     | Add a text, boolean, or choice form question.       |
 | `[p]tickethub modal remove <profile> <index>`         | Remove a modal question.                           |
 | `[p]tickethub modal defaultreason [profile]`          | Use the default Reason modal.                      |
 | `[p]tickethub modal clear [profile]`                  | Disable modal questions.                           |

@@ -19,6 +19,7 @@ log = logging.getLogger("red.taakoscogs.tempvoice")
 
 TempVoiceRecord = Dict[str, Any]
 GuildSettings = Dict[str, Any]
+MODAL_SELECTS_SUPPORTED = hasattr(discord.ui, "Label")
 
 
 class RenameChannelModal(discord.ui.Modal):
@@ -89,20 +90,39 @@ class MemberTargetModal(discord.ui.Modal):
         self.cog = cog
         self.channel_id = channel_id
         self.action = action
-        self.member_input = discord.ui.TextInput(
-            label=label,
-            placeholder="@member or Discord user ID",
-            min_length=2,
-            max_length=100,
-        )
-        self.add_item(self.member_input)
+        if MODAL_SELECTS_SUPPORTED:
+            self.member_input = discord.ui.UserSelect(
+                placeholder="Choose a server member",
+                min_values=1,
+                max_values=1,
+                required=True,
+            )
+            self.add_item(
+                discord.ui.Label(
+                    text=label[:45],
+                    component=self.member_input,
+                )
+            )
+        else:
+            self.member_input = discord.ui.TextInput(
+                label=label,
+                placeholder="@member or Discord user ID",
+                min_length=2,
+                max_length=100,
+            )
+            self.add_item(self.member_input)
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
+        if isinstance(self.member_input, discord.ui.UserSelect):
+            selected = self.member_input.values[0] if self.member_input.values else None
+            raw_member = str(getattr(selected, "id", ""))
+        else:
+            raw_member = str(self.member_input.value)
         await self.cog.handle_member_submit(
             interaction,
             self.channel_id,
             self.action,
-            str(self.member_input.value),
+            raw_member,
         )
 
     async def on_error(self, interaction: discord.Interaction, error: Exception) -> None:

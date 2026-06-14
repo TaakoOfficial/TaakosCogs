@@ -18,7 +18,8 @@ Configurable application forms for Red-DiscordBot servers.
 - Post application panels with buttons or a dropdown menu.
 - Let users apply with `[p]apply <name>` or by clicking a panel.
 - Ask questions in DMs with text, yes/no, choice, and attachment prompts.
-- Log submitted responses to a staff channel with accept, deny, and vote buttons.
+- Optionally collect up to five non-attachment questions in a native Discord modal.
+- Log submitted responses with accept and deny buttons, plus optional voting.
 - Give or remove roles when users apply, submit, get accepted, or get denied.
 - Restrict applications by whitelist and blacklist roles.
 - Configure manager roles, cooldowns, duplicate-pending behavior, threads, and notifications.
@@ -32,6 +33,7 @@ Configurable application forms for Red-DiscordBot servers.
 [p]application question add staff "Why do you want to join staff?" text true
 [p]application question add staff "Are you 18 or older?" boolean true
 [p]application question add staff "Pick your timezone" choice true EST, CST, MST, PST, other
+[p]application config form staff modal
 [p]application panel #apply buttons staff
 ```
 
@@ -88,6 +90,11 @@ Choice questions use comma-separated choices. Add `other` to allow a custom type
 [p]application question add staff "Pick your platform" choice true PC, Xbox, PlayStation, other
 ```
 
+Applications use the DM flow by default. Modal mode supports up to five `text`, `boolean`,
+or `choice` questions. Boolean questions and fixed choices use native modal dropdowns on
+current Red installations. Choice questions with `other` retain a text field so applicants
+can enter a custom answer. Attachment questions require DM mode.
+
 ## Config Commands
 
 | Command                                                                 | Description                                                          |
@@ -97,6 +104,7 @@ Choice questions use comma-separated choices. Add `other` to allow a custom type
 | `[p]application config color <name> <color>`                            | Set the embed color, such as `#5865F2`.                              |
 | `[p]application config cooldown <name> <minutes>`                       | Set the cooldown before a user can apply again.                      |
 | `[p]application config multiple <name> <true_or_false>`                 | Allow or block multiple pending responses from one user.             |
+| `[p]application config form <name> <dm_or_modal>`                       | Choose the DM questionnaire or native modal flow.                    |
 | `[p]application config thread <name> <true_or_false> [template]`        | Enable response threads and set the thread name template.            |
 | `[p]application config notifications <name> <true_or_false>`            | Enable or disable notifications.                                     |
 | `[p]application config notifychannels <name> <channels>`                | Set extra notification channels by mention or ID.                    |
@@ -164,9 +172,10 @@ Staff with Manage Server or an application manager role can:
 
 - Click `Accept` to approve the response and optionally enter a reason.
 - Click `Deny` to reject the response and optionally enter a reason.
-- Click `Upvote`, `Neutral`, or `Downvote` to record an internal reviewer vote.
+- Click `Upvote`, `Neutral`, or `Downvote` when review voting is enabled.
 
 Accepting or denying a response updates the response embed, stores the reviewer and reason, DMs the applicant, and runs the configured role actions.
+Disabling review voting removes the voting buttons from existing and future response messages.
 
 ## Poll Commands
 
@@ -208,7 +217,7 @@ The cog supports these placeholders in panel, notification, completion, accept, 
 - `Create Public Threads` if response threads are enabled.
 - `Manage Roles` if the cog should give or remove roles.
 - The bot role must be higher than any role it gives or removes.
-- Users need open DMs with the bot to complete applications.
+- Users need open DMs with the bot for DM-mode applications. If the initial DM fails, the cog tells the applicant to enable DMs instead of reporting that the form was sent.
 - Manage Server permission, Red admin, bot owner, or a configured manager role for review and management actions.
 
 ## Data

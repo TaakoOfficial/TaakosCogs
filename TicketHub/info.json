@@ -4,7 +4,7 @@
     "author": [
         "Taako"
     ],
-    "version": "1.2.1",
+    "version": "1.4.0",
     "description": "A Red DiscordBot cog for ticket panels, configurable modal forms, ticket lifecycle controls, AAA3A Tickets profile imports, and DiscordChatExporterPy-backed HTML transcripts sent to staff logs and ticket owners.",
     "install_msg": "tickethub loaded. Use `[p]tickethub walkthrough` to set up your first panel, or `[p]tickethub import aaa3a main` to preview an AAA3A Tickets profile import.",
     "short": "Ticket panels, configurable modal forms, controls, AAA3A imports, and HTML transcripts.",

@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.0
+
+- Added a native Discord member picker to transfer, permit, and remove modals.
+- Retained mention/ID text input fallback for older Discord.py versions.
+
 ## 1.0.0
 
 - Initial release.

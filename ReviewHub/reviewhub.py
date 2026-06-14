@@ -20,6 +20,7 @@ log = logging.getLogger("red.taakoscogs.reviewhub")
 ReviewRecord = Dict[str, Any]
 RequestRecord = Dict[str, Any]
 StatsRecord = Dict[str, Any]
+MODAL_SELECTS_SUPPORTED = hasattr(discord.ui, "Label")
 
 
 class ReviewSubmitModal(discord.ui.Modal):
@@ -44,23 +45,53 @@ class ReviewSubmitModal(discord.ui.Modal):
         self.request_message_id = request_message_id
         self.mode_override = mode_override
 
-        self.rating = discord.ui.TextInput(
-            label="Rating (1-5)",
-            placeholder="5",
-            min_length=1,
-            max_length=1,
-            required=True,
-            style=discord.TextStyle.short,
-        )
+        if MODAL_SELECTS_SUPPORTED:
+            self.rating = discord.ui.Select(
+                placeholder="Choose a rating",
+                options=[
+                    discord.SelectOption(
+                        label=f"{rating} star{'s' if rating != 1 else ''}",
+                        value=str(rating),
+                    )
+                    for rating in range(5, 0, -1)
+                ],
+                min_values=1,
+                max_values=1,
+                required=True,
+            )
+        else:
+            self.rating = discord.ui.TextInput(
+                label="Rating (1-5)",
+                placeholder="5",
+                min_length=1,
+                max_length=1,
+                required=True,
+                style=discord.TextStyle.short,
+            )
         self.review = discord.ui.TextInput(
-            label="Review",
+            label=None if MODAL_SELECTS_SUPPORTED else "Review",
             placeholder="Share the feedback you want posted.",
             max_length=ReviewHub.MAX_REVIEW_LENGTH,
             required=True,
             style=discord.TextStyle.paragraph,
         )
-        self.add_item(self.rating)
-        self.add_item(self.review)
+        if MODAL_SELECTS_SUPPORTED:
+            self.add_item(
+                discord.ui.Label(
+                    text="Rating",
+                    description="Choose a score from 1 to 5 stars.",
+                    component=self.rating,
+                )
+            )
+            self.add_item(
+                discord.ui.Label(
+                    text="Review",
+                    component=self.review,
+                )
+            )
+        else:
+            self.add_item(self.rating)
+            self.add_item(self.review)
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
         guild = interaction.guild
@@ -74,8 +105,13 @@ class ReviewSubmitModal(discord.ui.Modal):
             await interaction.response.send_message("This review form is not for you.", ephemeral=True)
             return
 
+        rating_value = (
+            self.rating.values[0]
+            if isinstance(self.rating, discord.ui.Select) and self.rating.values
+            else getattr(self.rating, "value", "")
+        )
         try:
-            rating = int(str(self.rating.value).strip())
+            rating = int(str(rating_value).strip())
         except ValueError:
             await interaction.response.send_message("Rating must be a number from 1 to 5.", ephemeral=True)
             return

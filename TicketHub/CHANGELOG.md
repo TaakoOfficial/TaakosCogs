@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.4.0
+
+- Added native modal dropdowns for choice and boolean ticket questions on current Red installations.
+- Retained the ephemeral step-form fallback for older Discord.py versions.
+
+## 1.3.0
+
+- Added dropdown and boolean ticket form questions.
+- Preserved native Discord modals for text-only forms and added an ephemeral step form for mixed question types.
+- Extended the modal wizard and add command to configure typed questions.
+
 ## 1.2.0
 
 - Added `[p]tickethub modal` commands to show, build, add, remove, reset, and clear profile modal questions.

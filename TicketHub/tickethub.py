@@ -27,6 +27,7 @@ log = logging.getLogger("red.taakoscogs.tickethub")
 TicketRecord = Dict[str, Any]
 ProfileRecord = Dict[str, Any]
 ModalFieldRecord = Dict[str, Any]
+MODAL_SELECTS_SUPPORTED = hasattr(discord.ui, "Label")
 
 
 class TicketPanelView(discord.ui.View):
@@ -113,7 +114,7 @@ class TicketOpenModal(discord.ui.Modal):
         self.guild = guild
         self.owner = owner
         self.profile_name = profile_name
-        self.text_inputs: List[Tuple[str, discord.ui.TextInput]] = []
+        self.inputs: List[Tuple[str, discord.ui.Item]] = []
 
         for field in fields[:5]:
             label = str(field.get("label") or "Question").strip()[:45]
@@ -123,25 +124,69 @@ class TicketOpenModal(discord.ui.Modal):
             if not display_label.endswith((":", "?")):
                 display_label = f"{display_label}:"
             display_label = display_label[:45]
-            style_value = int(field.get("style") or discord.TextStyle.paragraph.value)
-            style = (
-                discord.TextStyle.short
-                if style_value == discord.TextStyle.short.value
-                else discord.TextStyle.paragraph
-            )
-            default = field.get("default")
-            placeholder = field.get("placeholder")
-            text_input = discord.ui.TextInput(
-                label=display_label,
-                style=style,
-                required=bool(field.get("required", True)),
-                default=str(default)[:4000] if default not in (None, "") else None,
-                placeholder=str(placeholder)[:100] if placeholder not in (None, "") else None,
-                min_length=field.get("min_length"),
-                max_length=field.get("max_length"),
-            )
-            self.add_item(text_input)
-            self.text_inputs.append((label, text_input))
+            question_type = str(field.get("type") or "text")
+            required = bool(field.get("required", True))
+            component: discord.ui.Item
+            if MODAL_SELECTS_SUPPORTED and question_type == "choice":
+                component = discord.ui.Select(
+                    placeholder=str(field.get("placeholder") or "Choose an option")[:100],
+                    options=[
+                        discord.SelectOption(
+                            label=str(choice)[:100],
+                            value=str(choice)[:100],
+                        )
+                        for choice in field.get("choices", [])[:25]
+                    ],
+                    min_values=1 if required else 0,
+                    max_values=1,
+                    required=required,
+                )
+            elif MODAL_SELECTS_SUPPORTED and question_type == "boolean":
+                component = discord.ui.Select(
+                    placeholder="Choose Yes or No",
+                    options=[
+                        discord.SelectOption(label="Yes", value="Yes"),
+                        discord.SelectOption(label="No", value="No"),
+                    ],
+                    min_values=1 if required else 0,
+                    max_values=1,
+                    required=required,
+                )
+            else:
+                style_value = int(field.get("style") or discord.TextStyle.paragraph.value)
+                style = (
+                    discord.TextStyle.short
+                    if style_value == discord.TextStyle.short.value
+                    else discord.TextStyle.paragraph
+                )
+                default = field.get("default")
+                placeholder = field.get("placeholder")
+                component = discord.ui.TextInput(
+                    label=None if MODAL_SELECTS_SUPPORTED else display_label,
+                    style=style,
+                    required=required,
+                    default=str(default)[:4000] if default not in (None, "") else None,
+                    placeholder=str(placeholder)[:100] if placeholder not in (None, "") else None,
+                    min_length=field.get("min_length"),
+                    max_length=field.get("max_length"),
+                )
+
+            if MODAL_SELECTS_SUPPORTED:
+                self.add_item(
+                    discord.ui.Label(
+                        text=display_label,
+                        component=component,
+                    )
+                )
+            else:
+                self.add_item(component)
+            self.inputs.append((label, component))
+
+    @staticmethod
+    def _input_value(component: discord.ui.Item) -> str:
+        if isinstance(component, discord.ui.Select):
+            return str(component.values[0]).strip() if component.values else ""
+        return str(getattr(component, "value", "") or "").strip()
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
         if not interaction.guild or not isinstance(interaction.user, discord.Member):
@@ -159,8 +204,8 @@ class TicketOpenModal(discord.ui.Modal):
 
         await interaction.response.defer(ephemeral=True, thinking=True)
         form_answers = []
-        for label, text_input in self.text_inputs:
-            value = str(text_input.value or "").strip()
+        for label, component in self.inputs:
+            value = self._input_value(component)
             if value:
                 form_answers.append({"label": label, "value": value[:4000]})
         reason = "Opened from ticket panel."
@@ -194,6 +239,256 @@ class TicketOpenModal(discord.ui.Modal):
         else:
             await interaction.response.send_message(
                 "I could not create that ticket.",
+                ephemeral=True,
+            )
+
+
+class TicketQuestionTextModal(discord.ui.Modal):
+    """Collect one text answer for a mixed ticket questionnaire."""
+
+    def __init__(
+        self,
+        questionnaire: "TicketQuestionnaireView",
+        field_index: int,
+        field: ModalFieldRecord,
+    ) -> None:
+        label = str(field.get("label") or "Question").strip()[:45] or "Question"
+        super().__init__(title="Open Ticket", timeout=300)
+        self.questionnaire = questionnaire
+        self.field_index = field_index
+        style_value = int(field.get("style") or discord.TextStyle.paragraph.value)
+        style = (
+            discord.TextStyle.short
+            if style_value == discord.TextStyle.short.value
+            else discord.TextStyle.paragraph
+        )
+        default = field.get("default")
+        placeholder = field.get("placeholder")
+        self.answer = discord.ui.TextInput(
+            label=label,
+            style=style,
+            required=bool(field.get("required", True)),
+            default=str(default)[:4000] if default not in (None, "") else None,
+            placeholder=str(placeholder)[:100] if placeholder not in (None, "") else None,
+            min_length=field.get("min_length"),
+            max_length=field.get("max_length"),
+        )
+        self.add_item(self.answer)
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        await self.questionnaire.record_answer(
+            interaction,
+            self.field_index,
+            str(self.answer.value or "").strip(),
+        )
+
+
+class TicketQuestionnaireView(discord.ui.View):
+    """Collect dropdown, boolean, and text ticket answers one question at a time."""
+
+    def __init__(
+        self,
+        cog: "TicketHub",
+        guild: discord.Guild,
+        owner: discord.Member,
+        profile_name: str,
+        fields: Sequence[ModalFieldRecord],
+    ) -> None:
+        super().__init__(timeout=300)
+        self.cog = cog
+        self.guild = guild
+        self.owner = owner
+        self.profile_name = profile_name
+        self.fields = list(fields[:5])
+        self.field_index = 0
+        self.form_answers: List[Dict[str, str]] = []
+        self._build_items()
+
+    @property
+    def current_field(self) -> ModalFieldRecord:
+        return self.fields[self.field_index]
+
+    def question_embed(self) -> discord.Embed:
+        field = self.current_field
+        question_type = str(field.get("type") or "text")
+        description = str(field.get("label") or "Question")
+        if question_type == "choice":
+            choices = "\n".join(
+                f"- {choice}" for choice in field.get("choices", [])
+            )
+            if choices:
+                description = f"{description}\n\n{choices}"
+        embed = discord.Embed(
+            title=f"Open Ticket - Question {self.field_index + 1}/{len(self.fields)}",
+            description=description,
+            color=discord.Color(TicketHub.DEFAULT_COLOR),
+        )
+        required = "Required" if field.get("required", True) else "Optional"
+        embed.set_footer(text=f"{required} {question_type} question")
+        return embed
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user and interaction.user.id == self.owner.id:
+            return True
+        await interaction.response.send_message(
+            "Only the ticket opener can answer this form.",
+            ephemeral=True,
+        )
+        return False
+
+    def _build_items(self) -> None:
+        self.clear_items()
+        field = self.current_field
+        question_type = str(field.get("type") or "text")
+
+        if question_type == "choice":
+            select = discord.ui.Select(
+                placeholder=str(field.get("placeholder") or "Choose an option")[:100],
+                options=[
+                    discord.SelectOption(label=str(choice)[:100], value=str(choice)[:100])
+                    for choice in field.get("choices", [])[:25]
+                ],
+                min_values=1,
+                max_values=1,
+            )
+            select.callback = self._choice_callback
+            self.add_item(select)
+        elif question_type == "boolean":
+            yes = discord.ui.Button(label="Yes", style=discord.ButtonStyle.success)
+            yes.callback = self._yes_callback
+            self.add_item(yes)
+            no = discord.ui.Button(label="No", style=discord.ButtonStyle.danger)
+            no.callback = self._no_callback
+            self.add_item(no)
+        else:
+            answer = discord.ui.Button(
+                label="Answer",
+                style=discord.ButtonStyle.primary,
+            )
+            answer.callback = self._text_callback
+            self.add_item(answer)
+
+        if not field.get("required", True):
+            skip = discord.ui.Button(label="Skip", style=discord.ButtonStyle.secondary)
+            skip.callback = self._skip_callback
+            self.add_item(skip)
+
+        cancel = discord.ui.Button(label="Cancel", style=discord.ButtonStyle.secondary)
+        cancel.callback = self._cancel_callback
+        self.add_item(cancel)
+
+    async def _text_callback(self, interaction: discord.Interaction) -> None:
+        await interaction.response.send_modal(
+            TicketQuestionTextModal(self, self.field_index, self.current_field)
+        )
+
+    async def _choice_callback(self, interaction: discord.Interaction) -> None:
+        values = (interaction.data or {}).get("values") or []
+        if not values:
+            await interaction.response.send_message(
+                "Choose an option before continuing.",
+                ephemeral=True,
+            )
+            return
+        await self.record_answer(interaction, self.field_index, str(values[0]))
+
+    async def _yes_callback(self, interaction: discord.Interaction) -> None:
+        await self.record_answer(interaction, self.field_index, "Yes")
+
+    async def _no_callback(self, interaction: discord.Interaction) -> None:
+        await self.record_answer(interaction, self.field_index, "No")
+
+    async def _skip_callback(self, interaction: discord.Interaction) -> None:
+        await self.record_answer(interaction, self.field_index, "")
+
+    async def _cancel_callback(self, interaction: discord.Interaction) -> None:
+        self.stop()
+        await interaction.response.edit_message(
+            content="Ticket creation cancelled.",
+            embed=None,
+            view=None,
+        )
+
+    async def record_answer(
+        self,
+        interaction: discord.Interaction,
+        field_index: int,
+        value: str,
+    ) -> None:
+        if field_index != self.field_index:
+            await interaction.response.send_message(
+                "That question is no longer active.",
+                ephemeral=True,
+            )
+            return
+        field = self.current_field
+        cleaned = value.strip()
+        if cleaned:
+            self.form_answers.append(
+                {
+                    "label": str(field.get("label") or "Question")[:45],
+                    "value": cleaned[:4000],
+                }
+            )
+        self.field_index += 1
+        if self.field_index < len(self.fields):
+            self._build_items()
+            await interaction.response.edit_message(
+                content=None,
+                embed=self.question_embed(),
+                view=self,
+            )
+            return
+        await self._finish(interaction)
+
+    async def _finish(self, interaction: discord.Interaction) -> None:
+        self.stop()
+        await interaction.response.defer()
+        reason = "Opened from ticket panel."
+        if (
+            len(self.form_answers) == 1
+            and self.form_answers[0]["label"].strip().lower() == "reason"
+        ):
+            reason = self.form_answers[0]["value"][:1000]
+        try:
+            record, channel = await self.cog._create_ticket(
+                self.guild,
+                self.owner,
+                self.profile_name,
+                reason=reason,
+                form_answers=self.form_answers,
+            )
+        except commands.CommandError as error:
+            await interaction.edit_original_response(
+                content=str(error),
+                embed=None,
+                view=None,
+            )
+            return
+        await interaction.edit_original_response(
+            content=f"Ticket #{record['id']} opened: {channel.mention}",
+            embed=None,
+            view=None,
+        )
+
+    async def on_error(
+        self,
+        interaction: discord.Interaction,
+        error: Exception,
+        item: discord.ui.Item,
+    ) -> None:
+        log.exception(
+            "TicketHub ticket questionnaire failed.",
+            exc_info=(type(error), error, error.__traceback__),
+        )
+        if interaction.response.is_done():
+            await interaction.followup.send(
+                "I could not continue that ticket form.",
+                ephemeral=True,
+            )
+        else:
+            await interaction.response.send_message(
+                "I could not continue that ticket form.",
                 ephemeral=True,
             )
 
@@ -291,12 +586,14 @@ class TicketHub(commands.Cog):
         return [
             {
                 "label": "Reason",
+                "type": "text",
                 "style": discord.TextStyle.paragraph.value,
                 "required": True,
                 "default": "",
                 "placeholder": "Enter the reason for creating the ticket...",
                 "min_length": 1,
                 "max_length": 1000,
+                "choices": [],
             }
         ]
 
@@ -401,6 +698,42 @@ class TicketHub(commands.Cog):
         return cleaned
 
     @classmethod
+    def _modal_type_name(cls, value: Any) -> Optional[str]:
+        cleaned = cls._clean_modal_text(value, 20).lower()
+        aliases = {
+            "": "text",
+            "text": "text",
+            "short": "text",
+            "paragraph": "text",
+            "choice": "choice",
+            "choices": "choice",
+            "dropdown": "choice",
+            "select": "choice",
+            "boolean": "boolean",
+            "bool": "boolean",
+            "yesno": "boolean",
+            "yes/no": "boolean",
+        }
+        return aliases.get(cleaned)
+
+    @classmethod
+    def _clean_modal_choices(cls, value: Any) -> List[str]:
+        if isinstance(value, str):
+            raw_choices = value.split(",")
+        elif isinstance(value, (list, tuple)):
+            raw_choices = value
+        else:
+            raw_choices = []
+        choices: List[str] = []
+        for raw_choice in raw_choices:
+            choice = cls._clean_modal_text(raw_choice, 100)
+            if choice and choice not in choices:
+                choices.append(choice)
+            if len(choices) >= 25:
+                break
+        return choices
+
+    @classmethod
     def _sanitize_modal_fields(cls, value: Any) -> Optional[List[ModalFieldRecord]]:
         if not isinstance(value, list):
             return None
@@ -411,6 +744,11 @@ class TicketHub(commands.Cog):
             label = cls._clean_modal_text(raw_field.get("label"), 45)
             if not label:
                 continue
+            question_type = cls._modal_type_name(raw_field.get("type")) or "text"
+            choices = cls._clean_modal_choices(raw_field.get("choices"))
+            if question_type == "choice" and len(choices) < 2:
+                question_type = "text"
+                choices = []
             style = (
                 cls._clean_modal_int(raw_field.get("style"), default=2, minimum=1, maximum=2)
                 or 2
@@ -430,12 +768,14 @@ class TicketHub(commands.Cog):
             fields.append(
                 {
                     "label": label,
+                    "type": question_type,
                     "style": style,
                     "required": cls._clean_modal_bool(raw_field.get("required"), default=True),
                     "default": cls._clean_modal_text(raw_field.get("default"), 4000),
                     "placeholder": cls._clean_modal_text(raw_field.get("placeholder"), 100),
                     "min_length": min_length,
                     "max_length": max_length,
+                    "choices": choices,
                 }
             )
         return fields or None
@@ -819,15 +1159,31 @@ class TicketHub(commands.Cog):
                     interaction.user,
                     profile_name,
                 )
-                await interaction.response.send_modal(
-                    TicketOpenModal(
+                if MODAL_SELECTS_SUPPORTED or all(
+                    str(field.get("type") or "text") == "text" for field in modal_fields
+                ):
+                    await interaction.response.send_modal(
+                        TicketOpenModal(
+                            self,
+                            interaction.guild,
+                            interaction.user,
+                            profile_name,
+                            modal_fields,
+                        )
+                    )
+                else:
+                    questionnaire = TicketQuestionnaireView(
                         self,
                         interaction.guild,
                         interaction.user,
                         profile_name,
                         modal_fields,
                     )
-                )
+                    await interaction.response.send_message(
+                        embed=questionnaire.question_embed(),
+                        view=questionnaire,
+                        ephemeral=True,
+                    )
                 return
         except commands.CommandError as error:
             await interaction.response.send_message(str(error), ephemeral=True)
@@ -1832,10 +2188,18 @@ search.addEventListener('input', () => {{
         lines = []
         for index, field in enumerate(fields, start=1):
             label = cls._clean_modal_text(field.get("label"), 45) or "Question"
-            style = cls._modal_style_name(field.get("style"))
+            question_type = cls._modal_type_name(field.get("type")) or "text"
             required = "required" if field.get("required", True) else "optional"
             placeholder = cls._clean_modal_text(field.get("placeholder"), 100) or "none"
-            lines.append(f"{index}. {label} ({style}, {required}, placeholder: {placeholder})")
+            if question_type == "choice":
+                choices = ", ".join(cls._clean_modal_choices(field.get("choices")))
+                details = f"choice, {required}, options: {choices}"
+            elif question_type == "boolean":
+                details = f"boolean, {required}"
+            else:
+                style = cls._modal_style_name(field.get("style"))
+                details = f"text/{style}, {required}, placeholder: {placeholder}"
+            lines.append(f"{index}. {label} ({details})")
         return lines
 
     async def _send_modal_settings(self, ctx: commands.Context, profile_name: str = "main") -> None:
@@ -1886,6 +2250,22 @@ search.addEventListener('input', () => {{
             if answer in {"no", "n", "false", "f", "0", "optional", "off"}:
                 return False
             await ctx.send("Reply with `yes` or `no`.")
+
+    async def _prompt_modal_type(self, ctx: commands.Context, prompt: str) -> str:
+        while True:
+            answer = await self._wait_for_setup_reply(ctx, prompt)
+            question_type = self._modal_type_name(answer)
+            if question_type is not None:
+                return question_type
+            await ctx.send("Reply with `text`, `choice`, or `boolean`.")
+
+    async def _prompt_modal_choices(self, ctx: commands.Context, prompt: str) -> List[str]:
+        while True:
+            answer = await self._wait_for_setup_reply(ctx, prompt)
+            choices = self._clean_modal_choices(answer)
+            if 2 <= len(choices) <= 25:
+                return choices
+            await ctx.send("Provide between 2 and 25 comma-separated choices.")
 
     async def _prompt_optional_modal_text(
         self,
@@ -2078,28 +2458,43 @@ search.addEventListener('input', () => {{
                     ctx,
                     f"Question {index}/{count}: What should the label be?",
                 )
-                style = await self._prompt_modal_style(
+                question_type = await self._prompt_modal_type(
                     ctx,
-                    f"Question {index}/{count}: Should this be `short` or `paragraph`?",
+                    f"Question {index}/{count}: Should this be `text`, `choice`, or `boolean`?",
                 )
                 required = await self._prompt_modal_bool(
                     ctx,
                     f"Question {index}/{count}: Should this be required? Reply `yes` or `no`.",
                 )
-                placeholder = await self._prompt_optional_modal_text(
-                    ctx,
-                    f"Question {index}/{count}: Placeholder text? Reply `none` to skip.",
-                    limit=100,
-                )
+                style = discord.TextStyle.paragraph.value
+                placeholder = ""
+                choices: List[str] = []
+                if question_type == "text":
+                    style = await self._prompt_modal_style(
+                        ctx,
+                        f"Question {index}/{count}: Should this be `short` or `paragraph`?",
+                    )
+                    placeholder = await self._prompt_optional_modal_text(
+                        ctx,
+                        f"Question {index}/{count}: Placeholder text? Reply `none` to skip.",
+                        limit=100,
+                    )
+                elif question_type == "choice":
+                    choices = await self._prompt_modal_choices(
+                        ctx,
+                        f"Question {index}/{count}: Enter comma-separated choices.",
+                    )
                 fields.append(
                     {
                         "label": label,
+                        "type": question_type,
                         "style": style,
                         "required": required,
                         "default": "",
                         "placeholder": placeholder,
                         "min_length": None,
                         "max_length": None,
+                        "choices": choices,
                     }
                 )
         except commands.CommandError as error:
@@ -2120,11 +2515,28 @@ search.addEventListener('input', () => {{
         self,
         ctx: commands.Context,
         profile_name: str,
+        question_type: str = "text",
         *,
-        label: str,
+        label: str = "",
     ) -> None:
-        """Add a required paragraph question to a profile modal."""
+        """Add a text, choice, or boolean question to a profile form."""
         assert ctx.guild is not None
+        normalized_type = self._modal_type_name(question_type)
+        if normalized_type is None:
+            label = f"{question_type} {label}".strip()
+            normalized_type = "text"
+        choices: List[str] = []
+        if normalized_type == "choice":
+            if "|" not in label:
+                await ctx.send(
+                    "Choice questions must use `Question label | choice one, choice two`."
+                )
+                return
+            label, raw_choices = (part.strip() for part in label.split("|", 1))
+            choices = self._clean_modal_choices(raw_choices)
+            if len(choices) < 2:
+                await ctx.send("Choice questions need between 2 and 25 choices.")
+                return
         label = label.strip()
         if not 1 <= len(label) <= 45:
             await ctx.send("Question labels must be between 1 and 45 characters.")
@@ -2137,12 +2549,14 @@ search.addEventListener('input', () => {{
         fields.append(
             {
                 "label": label,
+                "type": normalized_type,
                 "style": discord.TextStyle.paragraph.value,
                 "required": True,
                 "default": "",
                 "placeholder": "",
                 "min_length": None,
                 "max_length": None,
+                "choices": choices,
             }
         )
         profile["creating_modal"] = self._sanitize_modal_fields(fields)

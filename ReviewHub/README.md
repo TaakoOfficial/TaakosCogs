@@ -20,6 +20,7 @@ ReviewHub-style reviews, vouches, review requests, stats, leaderboards, reports,
 - Posts public review embeds to a configured channel.
 - Adds persistent submit, report, and useful buttons.
 - Supports `/rateme` request messages with a submit button and modal.
+- Uses a native 1–5 star dropdown in review submission modals on current Red installations.
 - Includes Classic and Detailed review embed templates.
 - Tracks server and user stats, useful votes, and top 10 leaderboards.
 - Stores reports and can forward report alerts to a staff channel.

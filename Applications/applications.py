@@ -25,6 +25,7 @@ ApplicationDict = Dict[str, Any]
 ResponseDict = Dict[str, Any]
 QuestionDict = Dict[str, Any]
 PollDict = Dict[str, Any]
+MODAL_SELECTS_SUPPORTED = hasattr(discord.ui, "Label")
 
 
 def utc_ts() -> int:
@@ -249,6 +250,192 @@ class DecisionModal(discord.ui.Modal):
         )
 
 
+class ApplicationFormModal(discord.ui.Modal):
+    """Collect an application in one native Discord modal."""
+
+    def __init__(
+        self,
+        cog: "Applications",
+        guild_id: int,
+        application: str,
+        app: ApplicationDict,
+        *,
+        bypass: bool = False,
+    ) -> None:
+        super().__init__(
+            title=truncate(app.get("name") or "Application", 45),
+            timeout=600.0,
+        )
+        self.cog = cog
+        self.guild_id = guild_id
+        self.application = application
+        self.bypass = bypass
+        self.questions = list(app.get("questions", [])[:5])
+        self.inputs: List[Tuple[QuestionDict, discord.ui.Item]] = []
+
+        for question in self.questions:
+            question_type = str(question.get("type") or "text").lower()
+            question_label = truncate(question.get("text") or "Question", 45)
+            required = bool(question.get("required", True))
+            placeholder: Optional[str] = None
+            max_length = 4000
+            style = discord.TextStyle.paragraph
+            component: discord.ui.Item
+            if MODAL_SELECTS_SUPPORTED and question_type == "boolean":
+                component = discord.ui.Select(
+                    placeholder="Choose Yes or No",
+                    options=[
+                        discord.SelectOption(label="Yes", value="Yes"),
+                        discord.SelectOption(label="No", value="No"),
+                    ],
+                    min_values=1 if required else 0,
+                    max_values=1,
+                    required=required,
+                )
+            elif (
+                MODAL_SELECTS_SUPPORTED
+                and question_type == "choice"
+                and not question.get("allow_other")
+            ):
+                component = discord.ui.Select(
+                    placeholder="Choose an answer",
+                    options=[
+                        discord.SelectOption(
+                            label=truncate(choice, 100),
+                            value=str(choice)[:100],
+                        )
+                        for choice in question.get("choices", [])[:25]
+                    ],
+                    min_values=1 if required else 0,
+                    max_values=1,
+                    required=required,
+                )
+            else:
+                if question_type == "boolean":
+                    placeholder = "Enter Yes or No"
+                    max_length = 5
+                    style = discord.TextStyle.short
+                elif question_type == "choice":
+                    choices = ", ".join(
+                        str(choice)[:100] for choice in question.get("choices", [])
+                    )
+                    placeholder = truncate(f"Choose: {choices}", 100)
+                    max_length = 100
+                    style = discord.TextStyle.short
+                component = discord.ui.TextInput(
+                    label=None if MODAL_SELECTS_SUPPORTED else question_label,
+                    style=style,
+                    required=required,
+                    placeholder=placeholder,
+                    max_length=max_length,
+                )
+
+            if MODAL_SELECTS_SUPPORTED:
+                self.add_item(
+                    discord.ui.Label(
+                        text=question_label,
+                        component=component,
+                    )
+                )
+            else:
+                self.add_item(component)
+            self.inputs.append((question, component))
+
+    @staticmethod
+    def _input_value(component: discord.ui.Item) -> str:
+        if isinstance(component, discord.ui.Select):
+            return str(component.values[0]).strip() if component.values else ""
+        return str(getattr(component, "value", "") or "").strip()
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        answers: List[Dict[str, str]] = []
+        for question, component in self.inputs:
+            question_type = str(question.get("type") or "text").lower()
+            value = self._input_value(component)
+            if not value:
+                value = "Skipped"
+            elif question_type == "boolean":
+                lowered = value.lower()
+                if lowered in {"yes", "y", "true", "1"}:
+                    value = "Yes"
+                elif lowered in {"no", "n", "false", "0"}:
+                    value = "No"
+                else:
+                    await interaction.response.send_message(
+                        f"`{question.get('text', 'Question')}` must be answered with Yes or No.",
+                        ephemeral=True,
+                    )
+                    return
+            elif question_type == "choice":
+                choices = [str(choice)[:100] for choice in question.get("choices", [])]
+                matched = next(
+                    (choice for choice in choices if choice.casefold() == value.casefold()),
+                    None,
+                )
+                if matched is not None:
+                    value = matched
+                elif not question.get("allow_other"):
+                    await interaction.response.send_message(
+                        f"`{question.get('text', 'Question')}` must match one of its choices.",
+                        ephemeral=True,
+                    )
+                    return
+            answers.append(
+                {
+                    "question": str(question.get("text") or "Question"),
+                    "type": question_type,
+                    "answer": value,
+                }
+            )
+        await self.cog._submit_modal_application(
+            interaction,
+            self.guild_id,
+            self.application,
+            answers,
+            bypass=self.bypass,
+        )
+
+
+class ApplicationModalLaunchView(discord.ui.View):
+    """Offer a native application modal from a prefix command."""
+
+    def __init__(
+        self,
+        cog: "Applications",
+        author_id: int,
+        application: str,
+        *,
+        bypass: bool = False,
+    ) -> None:
+        super().__init__(timeout=300.0)
+        self.cog = cog
+        self.author_id = author_id
+        self.application = application
+        self.bypass = bypass
+        button = discord.ui.Button(
+            label="Open Application Form",
+            style=discord.ButtonStyle.primary,
+        )
+        button.callback = self._open_callback
+        self.add_item(button)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user and interaction.user.id == self.author_id:
+            return True
+        await interaction.response.send_message(
+            "This application form is not for you.",
+            ephemeral=True,
+        )
+        return False
+
+    async def _open_callback(self, interaction: discord.Interaction) -> None:
+        await self.cog._start_application_from_interaction(
+            interaction,
+            self.application,
+            bypass=self.bypass,
+        )
+
+
 class ReviewView(discord.ui.View):
     def __init__(
         self,
@@ -258,6 +445,7 @@ class ReviewView(discord.ui.View):
         response_id: str,
         *,
         disabled: bool = False,
+        voting_enabled: bool = True,
     ) -> None:
         super().__init__(timeout=None)
         self.cog = cog
@@ -283,32 +471,33 @@ class ReviewView(discord.ui.View):
         deny.callback = self._deny_callback
         self.add_item(deny)
 
-        upvote = discord.ui.Button(
-            label="Upvote",
-            style=discord.ButtonStyle.secondary,
-            custom_id=f"applications:vote:{guild_id}:{application}:{response_id}:up",
-            disabled=disabled,
-        )
-        upvote.callback = self._upvote_callback
-        self.add_item(upvote)
+        if voting_enabled:
+            upvote = discord.ui.Button(
+                label="Upvote",
+                style=discord.ButtonStyle.secondary,
+                custom_id=f"applications:vote:{guild_id}:{application}:{response_id}:up",
+                disabled=disabled,
+            )
+            upvote.callback = self._upvote_callback
+            self.add_item(upvote)
 
-        neutral = discord.ui.Button(
-            label="Neutral",
-            style=discord.ButtonStyle.secondary,
-            custom_id=f"applications:vote:{guild_id}:{application}:{response_id}:neutral",
-            disabled=disabled,
-        )
-        neutral.callback = self._neutral_callback
-        self.add_item(neutral)
+            neutral = discord.ui.Button(
+                label="Neutral",
+                style=discord.ButtonStyle.secondary,
+                custom_id=f"applications:vote:{guild_id}:{application}:{response_id}:neutral",
+                disabled=disabled,
+            )
+            neutral.callback = self._neutral_callback
+            self.add_item(neutral)
 
-        downvote = discord.ui.Button(
-            label="Downvote",
-            style=discord.ButtonStyle.secondary,
-            custom_id=f"applications:vote:{guild_id}:{application}:{response_id}:down",
-            disabled=disabled,
-        )
-        downvote.callback = self._downvote_callback
-        self.add_item(downvote)
+            downvote = discord.ui.Button(
+                label="Downvote",
+                style=discord.ButtonStyle.secondary,
+                custom_id=f"applications:vote:{guild_id}:{application}:{response_id}:down",
+                disabled=disabled,
+            )
+            downvote.callback = self._downvote_callback
+            self.add_item(downvote)
 
     async def _accept_callback(self, interaction: discord.Interaction) -> None:
         await interaction.response.send_modal(
@@ -524,6 +713,7 @@ class Applications(commands.Cog):
             "color": cls.DEFAULT_COLOR,
             "cooldown_minutes": 0,
             "allow_multiple_pending": False,
+            "form_mode": "dm",
             "panel_message": "Click below to apply for **{application}**.",
             "button_label": "Apply",
             "button_style": "green",
@@ -563,6 +753,8 @@ class Applications(commands.Cog):
         app.setdefault("color", cls.DEFAULT_COLOR)
         app.setdefault("cooldown_minutes", 0)
         app.setdefault("allow_multiple_pending", False)
+        if app.get("form_mode") not in {"dm", "modal"}:
+            app["form_mode"] = "dm"
         app.setdefault("panel_message", "Click below to apply for **{application}**.")
         app.setdefault("button_label", "Apply")
         app.setdefault("button_style", "green")
@@ -625,7 +817,15 @@ class Applications(commands.Cog):
                 for response in app.get("responses", []):
                     if response.get("status") == "pending":
                         self.bot.add_view(
-                            ReviewView(self, guild_id, key, response.get("id", "unknown"))
+                            ReviewView(
+                                self,
+                                guild_id,
+                                key,
+                                response.get("id", "unknown"),
+                                voting_enabled=bool(
+                                    app.get("voting", {}).get("enabled", True)
+                                ),
+                            )
                         )
 
             for poll_id, poll in data.get("polls", {}).items():
@@ -850,6 +1050,7 @@ class Applications(commands.Cog):
         embed.add_field(
             name="Features",
             value=(
+                f"Form mode: {str(app.get('form_mode', 'dm')).upper()}\n"
                 f"Threads: {bool_text(bool(app.get('thread_enabled', True)))}\n"
                 f"Notifications: {bool_text(bool(app.get('notification_enabled', True)))}\n"
                 f"Review voting: {bool_text(bool(app.get('voting', {}).get('enabled', True)))}"
@@ -930,6 +1131,48 @@ class Applications(commands.Cog):
             )
         embed.set_footer(text=guild.name)
         return embed
+
+    @staticmethod
+    def _modal_form_error(app: ApplicationDict) -> Optional[str]:
+        questions = app.get("questions", [])
+        if not questions:
+            return "Modal forms need at least one question."
+        if len(questions) > 5:
+            return "Modal forms can contain at most 5 questions."
+        if any(
+            str(question.get("type") or "text").lower() == "attachment"
+            for question in questions
+        ):
+            return "Modal forms cannot contain attachment questions."
+        if any(
+            str(question.get("type") or "text").lower() == "choice"
+            and not question.get("choices")
+            for question in questions
+        ):
+            return "Every modal choice question needs at least one configured choice."
+        return None
+
+    def _application_intro_embed(
+        self,
+        guild: discord.Guild,
+        app: ApplicationDict,
+    ) -> discord.Embed:
+        return discord.Embed(
+            title=app.get("name", "Application"),
+            description=(
+                f"{app.get('description', '')}\n\n"
+                "Answer each question in this DM. You can type `cancel` on text prompts."
+            ),
+            color=discord.Color(int(app.get("color", self.DEFAULT_COLOR))),
+        ).set_footer(text=guild.name)
+
+    async def _send_application_intro(
+        self,
+        guild: discord.Guild,
+        member: discord.Member,
+        app: ApplicationDict,
+    ) -> discord.Message:
+        return await member.send(embed=self._application_intro_embed(guild, app))
 
     async def _ask_question(
         self,
@@ -1043,11 +1286,63 @@ class Applications(commands.Cog):
         reason = await self._can_member_apply(target, app, bypass=bypass)
         if reason:
             raise commands.UserFeedbackCheckFailure(reason)
+        if app.get("form_mode", "dm") == "modal":
+            modal_error = self._modal_form_error(app)
+            if modal_error:
+                raise commands.UserFeedbackCheckFailure(modal_error)
+            context_interaction = getattr(ctx, "interaction", None)
+            if context_interaction is not None and target.id == ctx.author.id:
+                await context_interaction.response.send_modal(
+                    ApplicationFormModal(
+                        self,
+                        ctx.guild.id,
+                        key,
+                        app,
+                        bypass=bypass,
+                    )
+                )
+                return
+            await ctx.send(
+                f"{target.mention}, click below to open the **{app['name']}** form.",
+                view=ApplicationModalLaunchView(
+                    self,
+                    target.id,
+                    key,
+                    bypass=bypass,
+                ),
+                allowed_mentions=discord.AllowedMentions(users=True),
+            )
+            return
+        try:
+            await self._send_application_intro(ctx.guild, target, app)
+        except discord.HTTPException:
+            if target.id == ctx.author.id:
+                failure = (
+                    "I couldn't send you a DM. Enable direct messages from server "
+                    "members and try again."
+                )
+            else:
+                failure = (
+                    f"I couldn't DM {target.mention}. They need to enable direct "
+                    "messages from server members and try again."
+                )
+            await ctx.send(
+                failure,
+                allowed_mentions=discord.AllowedMentions(users=True),
+            )
+            return
         await ctx.send(
             f"I sent the **{app['name']}** application to {target.mention}'s DMs.",
             allowed_mentions=discord.AllowedMentions(users=True),
         )
-        await self._run_application_flow(ctx.guild, target, key, app, bypass=bypass)
+        await self._run_application_flow(
+            ctx.guild,
+            target,
+            key,
+            app,
+            bypass=bypass,
+            intro_sent=True,
+        )
 
     async def _start_application_from_interaction(
         self,
@@ -1071,11 +1366,42 @@ class Applications(commands.Cog):
         if reason:
             await interaction.response.send_message(reason, ephemeral=True)
             return
+        if app.get("form_mode", "dm") == "modal":
+            modal_error = self._modal_form_error(app)
+            if modal_error:
+                await interaction.response.send_message(modal_error, ephemeral=True)
+                return
+            await interaction.response.send_modal(
+                ApplicationFormModal(
+                    self,
+                    interaction.guild.id,
+                    key,
+                    app,
+                    bypass=bypass,
+                )
+            )
+            return
+        try:
+            await self._send_application_intro(interaction.guild, interaction.user, app)
+        except discord.HTTPException:
+            await interaction.response.send_message(
+                "I couldn't send you a DM. Enable direct messages from server members "
+                "and try again.",
+                ephemeral=True,
+            )
+            return
         await interaction.response.send_message(
             f"I sent the **{app['name']}** application to your DMs.",
             ephemeral=True,
         )
-        await self._run_application_flow(interaction.guild, interaction.user, key, app, bypass=bypass)
+        await self._run_application_flow(
+            interaction.guild,
+            interaction.user,
+            key,
+            app,
+            bypass=bypass,
+            intro_sent=True,
+        )
 
     async def _run_application_flow(
         self,
@@ -1085,20 +1411,13 @@ class Applications(commands.Cog):
         app: ApplicationDict,
         *,
         bypass: bool = False,
+        intro_sent: bool = False,
     ) -> None:
-        try:
-            await member.send(
-                embed=discord.Embed(
-                    title=app.get("name", "Application"),
-                    description=(
-                        f"{app.get('description', '')}\n\n"
-                        "Answer each question in this DM. You can type `cancel` on text prompts."
-                    ),
-                    color=discord.Color(int(app.get("color", self.DEFAULT_COLOR))),
-                ).set_footer(text=guild.name)
-            )
-        except discord.Forbidden:
-            return
+        if not intro_sent:
+            try:
+                await self._send_application_intro(guild, member, app)
+            except discord.HTTPException:
+                return
 
         if not bypass:
             await self._apply_role_action(member, app, "apply_add")
@@ -1112,51 +1431,19 @@ class Applications(commands.Cog):
             with contextlib.suppress(discord.HTTPException):
                 await member.send(f"Stored answer for question {idx}.")
 
-        response: ResponseDict = {
-            "id": make_id(),
-            "user_id": member.id,
-            "answers": answers,
-            "status": "pending",
-            "created_at": utc_ts(),
-            "reviewed_by": None,
-            "reviewed_at": None,
-            "review_reason": "",
-            "message_id": None,
-            "channel_id": app.get("channel_id"),
-            "thread_id": None,
-            "votes": {"up": [], "neutral": [], "down": []},
-        }
-
-        channel = guild.get_channel(app.get("channel_id"))
-        if not isinstance(channel, discord.TextChannel):
-            with contextlib.suppress(discord.HTTPException):
-                await member.send("This application is missing a valid response channel.")
-            return
-
-        view = ReviewView(self, guild.id, key, response["id"])
-        message = await channel.send(embed=self._response_embed(guild, app, response), view=view)
-        response["message_id"] = message.id
-        response["channel_id"] = channel.id
-        self.bot.add_view(view)
-
-        if app.get("thread_enabled", True):
-            thread_name = self._render_template(
-                app.get("thread_name", "{application} - {user}"),
-                guild=guild,
-                member=member,
-                app=app,
-                response=response,
+        try:
+            response, latest_app = await self._submit_application_response(
+                guild,
+                member,
+                key,
+                answers,
             )
+        except (commands.CommandError, discord.HTTPException) as exc:
             with contextlib.suppress(discord.HTTPException):
-                thread = await message.create_thread(name=truncate(thread_name, 90))
-                response["thread_id"] = thread.id
-
-        latest_app = (await self._get_apps(guild.id)).get(key, app)
-        latest_app.setdefault("responses", []).append(response)
-        await self._save_app(guild.id, latest_app)
-
-        await self._apply_role_action(member, latest_app, "submit_add")
-        await self._send_notifications(guild, member, latest_app, response, message)
+                await member.send(
+                    str(exc) or "I could not post your application for staff review."
+                )
+            return
 
         completion = self._render_template(
             latest_app.get("completion_message", ""),
@@ -1167,6 +1454,130 @@ class Applications(commands.Cog):
         )
         with contextlib.suppress(discord.HTTPException):
             await member.send(completion)
+
+    async def _submit_modal_application(
+        self,
+        interaction: discord.Interaction,
+        guild_id: int,
+        application: str,
+        answers: Sequence[Dict[str, str]],
+        *,
+        bypass: bool = False,
+    ) -> None:
+        guild = interaction.guild or self.bot.get_guild(guild_id)
+        if guild is None or not isinstance(interaction.user, discord.Member):
+            await interaction.response.send_message(
+                "Applications can only be submitted from a server.",
+                ephemeral=True,
+            )
+            return
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        try:
+            key, app = await self._get_app(guild_id, application)
+            reason = await self._can_member_apply(interaction.user, app, bypass=bypass)
+            if reason:
+                raise commands.CommandError(reason)
+            modal_error = self._modal_form_error(app)
+            if modal_error:
+                raise commands.CommandError(modal_error)
+            response, latest_app = await self._submit_application_response(
+                guild,
+                interaction.user,
+                key,
+                answers,
+                apply_role=not bypass,
+            )
+        except (commands.CommandError, discord.HTTPException) as exc:
+            await interaction.followup.send(
+                str(exc) or "I could not post your application for staff review.",
+                ephemeral=True,
+            )
+            return
+
+        completion = self._render_template(
+            latest_app.get("completion_message", ""),
+            guild=guild,
+            member=interaction.user,
+            app=latest_app,
+            response=response,
+        )
+        await interaction.followup.send(
+            truncate(completion or "Your application was submitted.", 2000),
+            ephemeral=True,
+        )
+        if completion:
+            with contextlib.suppress(discord.HTTPException):
+                await interaction.user.send(completion)
+
+    async def _submit_application_response(
+        self,
+        guild: discord.Guild,
+        member: discord.Member,
+        key: str,
+        answers: Sequence[Dict[str, str]],
+        *,
+        apply_role: bool = False,
+    ) -> Tuple[ResponseDict, ApplicationDict]:
+        latest_app = (await self._get_apps(guild.id)).get(key)
+        if latest_app is None:
+            raise commands.CommandError("That application no longer exists.")
+        channel = guild.get_channel(latest_app.get("channel_id"))
+        if not isinstance(channel, discord.TextChannel):
+            raise commands.CommandError(
+                "This application is missing a valid response channel."
+            )
+
+        if apply_role:
+            await self._apply_role_action(member, latest_app, "apply_add")
+
+        response: ResponseDict = {
+            "id": make_id(),
+            "user_id": member.id,
+            "answers": list(answers),
+            "status": "pending",
+            "created_at": utc_ts(),
+            "reviewed_by": None,
+            "reviewed_at": None,
+            "review_reason": "",
+            "message_id": None,
+            "channel_id": channel.id,
+            "thread_id": None,
+            "votes": {"up": [], "neutral": [], "down": []},
+        }
+
+        voting_enabled = bool(latest_app.get("voting", {}).get("enabled", True))
+        view = ReviewView(
+            self,
+            guild.id,
+            key,
+            response["id"],
+            voting_enabled=voting_enabled,
+        )
+        message = await channel.send(
+            embed=self._response_embed(guild, latest_app, response),
+            view=view,
+        )
+        response["message_id"] = message.id
+        self.bot.add_view(view)
+
+        if latest_app.get("thread_enabled", True):
+            thread_name = self._render_template(
+                latest_app.get("thread_name", "{application} - {user}"),
+                guild=guild,
+                member=member,
+                app=latest_app,
+                response=response,
+            )
+            with contextlib.suppress(discord.HTTPException):
+                thread = await message.create_thread(name=truncate(thread_name, 90))
+                response["thread_id"] = thread.id
+
+        latest_app.setdefault("responses", []).append(response)
+        await self._save_app(guild.id, latest_app)
+
+        await self._apply_role_action(member, latest_app, "submit_add")
+        await self._send_notifications(guild, member, latest_app, response, message)
+        return response, latest_app
 
     async def _send_notifications(
         self,
@@ -1275,13 +1686,48 @@ class Applications(commands.Cog):
                 message = await channel.fetch_message(response["message_id"])
                 await message.edit(
                     embed=self._response_embed(guild, app, response),
-                    view=ReviewView(self, guild_id, key, response_id, disabled=True),
+                    view=ReviewView(
+                        self,
+                        guild_id,
+                        key,
+                        response_id,
+                        disabled=True,
+                        voting_enabled=bool(
+                            app.get("voting", {}).get("enabled", True)
+                        ),
+                    ),
                 )
 
         await interaction.followup.send(
             f"Application response `{response_id}` marked as **{decision}**.",
             ephemeral=True,
         )
+
+    async def _refresh_application_review_views(
+        self,
+        guild: discord.Guild,
+        key: str,
+        app: ApplicationDict,
+    ) -> None:
+        voting_enabled = bool(app.get("voting", {}).get("enabled", True))
+        for response in app.get("responses", []):
+            channel = guild.get_channel(response.get("channel_id"))
+            if not isinstance(channel, discord.TextChannel) or not response.get("message_id"):
+                continue
+            try:
+                message = await channel.fetch_message(int(response["message_id"]))
+                await message.edit(
+                    view=ReviewView(
+                        self,
+                        guild.id,
+                        key,
+                        str(response.get("id") or "unknown"),
+                        disabled=response.get("status") != "pending",
+                        voting_enabled=voting_enabled,
+                    )
+                )
+            except discord.HTTPException:
+                continue
 
     async def _record_vote(
         self,
@@ -1743,6 +2189,27 @@ class Applications(commands.Cog):
         await self._save_app(ctx.guild.id, app)
         await ctx.send(f"Multiple pending responses are now {bool_text(enabled)}.")
 
+    @application_config_group.command(name="form", aliases=["formmode", "input"])
+    async def application_config_form(
+        self,
+        ctx: commands.GuildContext,
+        name: str,
+        mode: str,
+    ) -> None:
+        """Choose whether applicants answer in DMs or a native Discord modal."""
+        await self._require_setup_manager(ctx)
+        key, app = await self._get_app(ctx.guild.id, name)
+        mode = mode.lower()
+        if mode not in {"dm", "modal"}:
+            raise commands.UserFeedbackCheckFailure("Form mode must be `dm` or `modal`.")
+        if mode == "modal":
+            modal_error = self._modal_form_error(app)
+            if modal_error:
+                raise commands.UserFeedbackCheckFailure(modal_error)
+        app["form_mode"] = mode
+        await self._save_app(ctx.guild.id, app)
+        await ctx.send(f"**{app['name']}** now uses the **{mode}** form flow.")
+
     @application_config_group.command(name="thread")
     async def application_config_thread(
         self,
@@ -1875,6 +2342,7 @@ class Applications(commands.Cog):
         key, app = await self._get_app(ctx.guild.id, name)
         app["voting"] = {"enabled": enabled, "threshold": int(threshold)}
         await self._save_app(ctx.guild.id, app)
+        await self._refresh_application_review_views(ctx.guild, key, app)
         await ctx.send(f"Voting is now {bool_text(enabled)} for **{app['name']}**.")
 
     @application_group.group(name="question", aliases=["questions", "q"])
@@ -1909,6 +2377,17 @@ class Applications(commands.Cog):
             raise commands.UserFeedbackCheckFailure(f"Applications can have at most {self.MAX_QUESTIONS} questions.")
         allow_other = False
         text = question.strip()
+        if not text:
+            raise commands.UserFeedbackCheckFailure("Question text cannot be empty.")
+        if app.get("form_mode", "dm") == "modal":
+            if question_type == "attachment":
+                raise commands.UserFeedbackCheckFailure(
+                    "Modal forms cannot contain attachment questions."
+                )
+            if len(app.get("questions", [])) >= 5:
+                raise commands.UserFeedbackCheckFailure(
+                    "Modal forms can contain at most 5 questions."
+                )
         if question_type == "choice":
             choice_values = parse_csv_values(choices)
             if not choice_values:
