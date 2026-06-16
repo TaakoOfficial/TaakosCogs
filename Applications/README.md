@@ -109,6 +109,7 @@ can enter a custom answer. Attachment questions require DM mode.
 | `[p]application config notifications <name> <true_or_false>`            | Enable or disable notifications.                                     |
 | `[p]application config notifychannels <name> <channels>`                | Set extra notification channels by mention or ID.                    |
 | `[p]application config notifyroles <name> <roles>`                      | Set notification ping roles by mention or ID.                        |
+| `[p]application config notifytarget <name> <channel\|thread\|both>`     | Choose where notification roles are pinged.                          |
 | `[p]application config voting <name> <true_or_false> [threshold]`       | Enable or disable reviewer voting.                                   |
 | `[p]application config button <name> <label_or_emoji_or_style> <value>` | Configure the panel button.                                          |
 | `[p]application config message <name> <type> <message>`                 | Configure panel, notification, completion, accept, or deny messages. |
@@ -214,7 +215,7 @@ The cog supports these placeholders in panel, notification, completion, accept, 
 
 - Red-DiscordBot 3.5.0 or newer.
 - `Send Messages`, `Embed Links`, and `Read Message History` in application channels.
-- `Create Public Threads` if response threads are enabled.
+- `Create Public Threads` and `Send Messages in Threads` if response threads or thread notification pings are enabled.
 - `Manage Roles` if the cog should give or remove roles.
 - The bot role must be higher than any role it gives or removes.
 - Users need open DMs with the bot for DM-mode applications. If the initial DM fails, the cog tells the applicant to enable DMs instead of reporting that the form was sent.

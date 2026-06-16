@@ -636,6 +636,7 @@ class Applications(commands.Cog):
     QUESTION_TIMEOUT = 600.0
     VALID_QUESTION_TYPES = ("text", "boolean", "choice", "attachment")
     VALID_BUTTON_STYLES = ("green", "red", "gray", "blurple")
+    VALID_NOTIFICATION_ROLE_TARGETS = ("channel", "thread", "both")
     ROLE_LISTS = {
         "manager": "manager",
         "whitelist": "whitelist",
@@ -726,6 +727,7 @@ class Applications(commands.Cog):
             ),
             "notification_channel_ids": [],
             "notification_role_ids": [],
+            "notification_role_target": "channel",
             "completion_message": (
                 "Your application for **{application}** was submitted.\n"
                 "Response ID: `{response_id}`"
@@ -768,6 +770,7 @@ class Applications(commands.Cog):
         app.setdefault("notification_enabled", True)
         app.setdefault("notification_channel_ids", [])
         app.setdefault("notification_role_ids", [])
+        app["notification_role_target"] = cls._notification_role_target(app)
         app.setdefault(
             "completion_message",
             "Your application for **{application}** was submitted.\nResponse ID: `{response_id}`",
@@ -787,6 +790,23 @@ class Applications(commands.Cog):
             response.setdefault("votes", {"up": [], "neutral": [], "down": []})
             response.setdefault("status", "pending")
         return app
+
+    @classmethod
+    def _notification_role_target(cls, app: ApplicationDict) -> str:
+        target = str(app.get("notification_role_target") or "channel").strip().lower()
+        aliases = {
+            "channels": "channel",
+            "response": "channel",
+            "responses": "channel",
+            "review": "channel",
+            "reviews": "channel",
+            "threads": "thread",
+            "reviewthread": "thread",
+            "reviewthreads": "thread",
+            "all": "both",
+        }
+        target = aliases.get(target, target)
+        return target if target in cls.VALID_NOTIFICATION_ROLE_TARGETS else "channel"
 
     async def _restore_persistent_views(self) -> None:
         all_guilds = await self.config.all_guilds()
@@ -1053,6 +1073,7 @@ class Applications(commands.Cog):
                 f"Form mode: {str(app.get('form_mode', 'dm')).upper()}\n"
                 f"Threads: {bool_text(bool(app.get('thread_enabled', True)))}\n"
                 f"Notifications: {bool_text(bool(app.get('notification_enabled', True)))}\n"
+                f"Notification role pings: {self._notification_role_target(app)}\n"
                 f"Review voting: {bool_text(bool(app.get('voting', {}).get('enabled', True)))}"
             ),
             inline=False,
@@ -1560,6 +1581,7 @@ class Applications(commands.Cog):
         response["message_id"] = message.id
         self.bot.add_view(view)
 
+        thread: Optional[discord.Thread] = None
         if latest_app.get("thread_enabled", True):
             thread_name = self._render_template(
                 latest_app.get("thread_name", "{application} - {user}"),
@@ -1576,7 +1598,7 @@ class Applications(commands.Cog):
         await self._save_app(guild.id, latest_app)
 
         await self._apply_role_action(member, latest_app, "submit_add")
-        await self._send_notifications(guild, member, latest_app, response, message)
+        await self._send_notifications(guild, member, latest_app, response, message, thread)
         return response, latest_app
 
     async def _send_notifications(
@@ -1586,6 +1608,7 @@ class Applications(commands.Cog):
         app: ApplicationDict,
         response: ResponseDict,
         response_message: discord.Message,
+        thread: Optional[discord.Thread] = None,
     ) -> None:
         if not app.get("notification_enabled", True):
             return
@@ -1601,8 +1624,10 @@ class Applications(commands.Cog):
             for role_id in app.get("notification_role_ids", [])
             if (role := guild.get_role(role_id))
         )
-        if role_mentions:
-            content = f"{role_mentions} {content}".strip()
+        role_target = self._notification_role_target(app)
+        channel_content = content
+        if role_mentions and role_target in {"channel", "both"}:
+            channel_content = f"{role_mentions} {content}".strip()
         allowed = discord.AllowedMentions(roles=True, users=True, everyone=False)
         channel_ids = unique_ids([app.get("channel_id"), *app.get("notification_channel_ids", [])])
         for channel_id in channel_ids:
@@ -1611,12 +1636,19 @@ class Applications(commands.Cog):
                 continue
             with contextlib.suppress(discord.HTTPException):
                 await channel.send(
-                    content=truncate(content, 2000),
+                    content=truncate(channel_content, 2000),
                     reference=(
                         response_message.to_reference(fail_if_not_exists=False)
                         if channel.id == response_message.channel.id
                         else None
                     ),
+                    allowed_mentions=allowed,
+                )
+        if role_mentions and role_target in {"thread", "both"} and thread is not None:
+            thread_content = f"{role_mentions} {content}".strip()
+            with contextlib.suppress(discord.HTTPException):
+                await thread.send(
+                    content=truncate(thread_content, 2000),
                     allowed_mentions=allowed,
                 )
 
@@ -2328,6 +2360,46 @@ class Applications(commands.Cog):
         app["notification_role_ids"] = valid
         await self._save_app(ctx.guild.id, app)
         await ctx.send(f"Stored {len(valid)} notification role(s).")
+
+    @application_config_group.command(
+        name="notifytarget",
+        aliases=["notificationtarget", "notifyroletarget", "pingtarget"],
+    )
+    async def application_config_notifytarget(
+        self,
+        ctx: commands.GuildContext,
+        name: str,
+        target: str,
+    ) -> None:
+        """Set where notification roles are pinged: channel, thread, or both."""
+        await self._require_setup_manager(ctx)
+        _key, app = await self._get_app(ctx.guild.id, name)
+        raw_target = target.strip().lower()
+        valid_inputs = {
+            *self.VALID_NOTIFICATION_ROLE_TARGETS,
+            "channels",
+            "response",
+            "responses",
+            "review",
+            "reviews",
+            "threads",
+            "reviewthread",
+            "reviewthreads",
+            "all",
+        }
+        if raw_target not in valid_inputs:
+            raise commands.UserFeedbackCheckFailure(
+                "Notification role ping target must be `channel`, `thread`, or `both`."
+            )
+        normalized = self._notification_role_target({"notification_role_target": raw_target})
+        app["notification_role_target"] = normalized
+        await self._save_app(ctx.guild.id, app)
+        note = ""
+        if normalized in {"thread", "both"} and not app.get("thread_enabled", True):
+            note = " Thread pings only work when response threads are enabled."
+        await ctx.send(
+            f"Notification role pings for **{app['name']}** will go to **{normalized}**.{note}"
+        )
 
     @application_config_group.command(name="voting")
     async def application_config_voting(
