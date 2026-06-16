@@ -16,7 +16,7 @@ Ticket panels, configurable modal forms, ticket lifecycle controls, AAA3A Ticket
 
 - Posts ticket panels with persistent Open Ticket buttons.
 - Supports configurable and imported modal questions before panel-created tickets open.
-- Creates private ticket channels with owner, support role, and viewer role permissions.
+- Creates private ticket channels, or private thread tickets under a configured parent channel.
 - Supports claim, unclaim, close, reopen, delete, add member, remove member, and list workflows.
 - Generates HTML transcripts with DiscordChatExporterPy, plus a built-in fallback renderer and plain-text transcript.
 - Sends transcripts to a transcript/log channel and optionally DMs the ticket owner.
@@ -25,7 +25,7 @@ Ticket panels, configurable modal forms, ticket lifecycle controls, AAA3A Ticket
 
 ## How Transcripts Work
 
-When a transcript is generated, TicketHub reads the ticket channel history and creates:
+When a transcript is generated, TicketHub reads the ticket channel or thread history and creates:
 
 - `ticket-<id>-transcript.html`
 - `ticket-<id>-transcript.txt`
@@ -34,7 +34,7 @@ The HTML file is generated with DiscordChatExporterPy when `chat-exporter` is av
 
 ## How Ticket Modals Work
 
-When a profile has form questions configured, clicking that profile's panel button collects the answers before the ticket channel is created. Current Red installations show text, dropdown, and boolean questions together in a native Discord modal. Older Discord.py versions fall back to the existing ephemeral step form for dropdown and boolean questions. Submitted answers are stored on the ticket record and shown in the ticket channel.
+When a profile has form questions configured, clicking that profile's panel button collects the answers before the ticket is created. Current Red installations show text, dropdown, and boolean questions together in a native Discord modal. Older Discord.py versions fall back to the existing ephemeral step form for dropdown and boolean questions. Submitted answers are stored on the ticket record and shown in the ticket channel or thread.
 
 ```text
 [p]tickethub modal wizard main
@@ -42,6 +42,17 @@ When a profile has form questions configured, clicking that profile's panel butt
 [p]tickethub modal add main choice "Department | Billing, Technical, Other"
 [p]tickethub modal show main
 ```
+
+## Thread Tickets
+
+Profiles use normal private ticket channels by default. To create private thread tickets instead, set a parent text channel and switch the profile mode:
+
+```text
+[p]tickethub threadparent main #support
+[p]tickethub mode main thread
+```
+
+Thread tickets add the ticket opener and cached members of configured support roles to the private thread. Discord does not support per-thread role permission overwrites, so support-role and viewer-role behavior is stricter and more configurable in channel mode. The parent channel must allow the ticket opener to view the channel, send messages in threads, and read message history.
 
 ## AAA3A Import
 
@@ -87,6 +98,8 @@ Existing open ticket records, modlog cases, forum tags, and panel buttons are no
 | `[p]tickethub modal clear [profile]`                  | Disable modal questions.                           |
 | `[p]tickethub category <profile> [category]`          | Set the open-ticket category.                      |
 | `[p]tickethub closedcategory <profile> [category]`    | Set the closed-ticket category.                    |
+| `[p]tickethub mode <profile> <channel\|thread>`       | Choose channel or private-thread tickets.          |
+| `[p]tickethub threadparent <profile> [channel]`       | Set the parent channel for thread tickets.         |
 | `[p]tickethub logchannel <profile> [channel]`         | Set the ticket log channel.                        |
 | `[p]tickethub transcriptchannel <profile> [channel]`  | Set the transcript channel.                        |
 | `[p]tickethub supportrole add <profile> <role>`       | Add a support role.                                |
@@ -98,7 +111,7 @@ Existing open ticket records, modlog cases, forum tags, and panel buttons are no
 | `[p]tickethub unclaim [ticket_id]`                    | Unclaim a ticket.                                  |
 | `[p]tickethub close [ticket_id] [reason]`             | Close a ticket.                                    |
 | `[p]tickethub reopen [ticket_id]`                     | Reopen a ticket.                                   |
-| `[p]tickethub delete [ticket_id] [reason]`            | Delete a ticket channel after saving a transcript. |
+| `[p]tickethub delete [ticket_id] [reason]`            | Delete a ticket channel/thread after transcript.   |
 | `[p]tickethub transcript [ticket_id]`                 | Generate and send a transcript.                    |
 | `[p]tickethub addmember <member> [ticket_id]`         | Add a member to a ticket.                          |
 | `[p]tickethub removemember <member> [ticket_id]`      | Remove a member from a ticket.                     |
@@ -124,19 +137,28 @@ Or configure directly:
 [p]tickethub panel main #support
 ```
 
+Thread-ticket setup:
+
+```text
+[p]tickethub threadparent main #support
+[p]tickethub mode main thread
+```
+
 ## Requirements
 
 - Red-DiscordBot 3.5.0 or newer.
 - Python 3.9 or newer.
 - `chat-exporter` for DiscordChatExporterPy-based HTML transcripts. Red installs this from the cog metadata.
 - Bot permission to `Manage Channels` for ticket channel creation and permission updates.
+- For thread mode, bot permissions to `Create Private Threads`, `Send Messages in Threads`, `Manage Threads`, `Embed Links`, and `Read Message History` in the parent channel.
+- For thread mode, ticket openers need `View Channel`, `Send Messages in Threads`, and `Read Message History` in the parent channel.
 - Bot permissions to `Send Messages`, `Embed Links`, `Attach Files`, and `Read Message History` in ticket and log channels.
 - Manage Server permission, Red admin, or equivalent for configuration and staff management commands.
 
 ## Data
 
-TicketHub stores per-guild ticket profiles, panel message IDs, channel/category/role IDs, ticket records, ticket owner IDs, claimed/closed staff IDs, participant IDs, ticket reasons, modal form answers, close reasons, timestamps, and ticket lifecycle event metadata.
+TicketHub stores per-guild ticket profiles, panel message IDs, channel/thread/category/role IDs, ticket records, ticket owner IDs, claimed/closed staff IDs, participant IDs, ticket reasons, modal form answers, close reasons, timestamps, and ticket lifecycle event metadata.
 
 HTML and text transcripts are generated on demand from Discord message history and sent directly to configured Discord destinations.
 
-Imported modal answers are stored on ticket records and shown in the ticket channel.
+Imported modal answers are stored on ticket records and shown in the ticket channel or thread.

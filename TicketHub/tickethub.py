@@ -9,7 +9,7 @@ import io
 import logging
 import re
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 import discord
 from redbot.core import Config, commands
@@ -27,6 +27,7 @@ log = logging.getLogger("red.taakoscogs.tickethub")
 TicketRecord = Dict[str, Any]
 ProfileRecord = Dict[str, Any]
 ModalFieldRecord = Dict[str, Any]
+TicketLocation = Union[discord.TextChannel, discord.Thread]
 MODAL_SELECTS_SUPPORTED = hasattr(discord.ui, "Label")
 
 
@@ -558,6 +559,8 @@ class TicketHub(commands.Cog):
             "panel_message_id": None,
             "ticket_category_id": None,
             "closed_category_id": None,
+            "ticket_mode": "channel",
+            "thread_parent_channel_id": None,
             "log_channel_id": None,
             "transcript_channel_id": None,
             "support_role_ids": [],
@@ -796,7 +799,18 @@ class TicketHub(commands.Cog):
             profile["creating_modal"] = TicketHub._sanitize_modal_fields(
                 profile.get("creating_modal")
             )
+            profile["ticket_mode"] = TicketHub._ticket_mode(profile)
+            try:
+                thread_parent_id = profile.get("thread_parent_channel_id")
+                profile["thread_parent_channel_id"] = int(thread_parent_id) if thread_parent_id else None
+            except (TypeError, ValueError):
+                profile["thread_parent_channel_id"] = None
         return profile
+
+    @staticmethod
+    def _ticket_mode(profile: ProfileRecord) -> str:
+        mode = str(profile.get("ticket_mode") or "channel").lower()
+        return "thread" if mode == "thread" else "channel"
 
     async def _get_profiles(self, guild: discord.Guild) -> Dict[str, ProfileRecord]:
         raw_profiles = await self.config.guild(guild).profiles()
@@ -848,6 +862,17 @@ class TicketHub(commands.Cog):
         return channel if isinstance(channel, discord.TextChannel) else None
 
     @staticmethod
+    def _thread_parent_channel(
+        guild: discord.Guild,
+        profile: ProfileRecord,
+    ) -> Optional[discord.TextChannel]:
+        for key in ("thread_parent_channel_id", "panel_channel_id"):
+            channel = TicketHub._profile_channel(guild, profile, key)
+            if channel is not None:
+                return channel
+        return None
+
+    @staticmethod
     def _profile_category(
         guild: discord.Guild,
         profile: ProfileRecord,
@@ -892,6 +917,55 @@ class TicketHub(commands.Cog):
             return False, "You do not have a role allowed to open tickets."
         return True, ""
 
+    def _validate_thread_parent_permissions(
+        self,
+        guild: discord.Guild,
+        owner: discord.Member,
+        profile: ProfileRecord,
+    ) -> None:
+        parent = self._thread_parent_channel(guild, profile)
+        if parent is None:
+            raise commands.CommandError(
+                "Thread ticket mode needs a thread parent channel. "
+                "Set one with `[p]tickethub threadparent <profile> #channel`."
+            )
+        me = guild.me
+        if me is None:
+            raise commands.CommandError("I could not inspect my server permissions.")
+
+        bot_perms = parent.permissions_for(me)
+        missing = []
+        if not bot_perms.view_channel:
+            missing.append("View Channel")
+        if not getattr(bot_perms, "create_private_threads", False):
+            missing.append("Create Private Threads")
+        if not getattr(bot_perms, "send_messages_in_threads", False):
+            missing.append("Send Messages in Threads")
+        if not getattr(bot_perms, "manage_threads", False):
+            missing.append("Manage Threads")
+        if not bot_perms.read_message_history:
+            missing.append("Read Message History")
+        if not bot_perms.embed_links:
+            missing.append("Embed Links")
+        if missing:
+            raise commands.CommandError(
+                f"I need {', '.join(missing)} in {parent.mention} to create thread tickets."
+            )
+
+        owner_perms = parent.permissions_for(owner)
+        owner_missing = []
+        if not owner_perms.view_channel:
+            owner_missing.append("View Channel")
+        if not getattr(owner_perms, "send_messages_in_threads", False):
+            owner_missing.append("Send Messages in Threads")
+        if not owner_perms.read_message_history:
+            owner_missing.append("Read Message History")
+        if owner_missing:
+            raise commands.CommandError(
+                f"{owner.mention} needs {', '.join(owner_missing)} in {parent.mention} "
+                "to use thread tickets."
+            )
+
     async def _validate_ticket_open_request(
         self,
         guild: discord.Guild,
@@ -921,7 +995,9 @@ class TicketHub(commands.Cog):
         me = guild.me
         if me is None:
             raise commands.CommandError("I could not inspect my server permissions.")
-        if not me.guild_permissions.manage_channels:
+        if self._ticket_mode(profile) == "thread":
+            self._validate_thread_parent_permissions(guild, owner, profile)
+        elif not me.guild_permissions.manage_channels:
             raise commands.CommandError("I need `Manage Channels` to create ticket channels.")
 
         return profile_name, profile
@@ -1093,18 +1169,24 @@ class TicketHub(commands.Cog):
         self,
         guild: discord.Guild,
         record: TicketRecord,
-    ) -> Optional[discord.TextChannel]:
+    ) -> Optional[TicketLocation]:
         channel_id = record.get("channel_id")
         if not channel_id:
             return None
-        channel = guild.get_channel(int(channel_id))
-        if isinstance(channel, discord.TextChannel):
+        channel_id = int(channel_id)
+        channel = guild.get_channel(channel_id)
+        if isinstance(channel, (discord.TextChannel, discord.Thread)):
             return channel
+        get_thread = getattr(guild, "get_thread", None)
+        if callable(get_thread):
+            thread = get_thread(channel_id)
+            if isinstance(thread, discord.Thread):
+                return thread
         try:
-            channel = await guild.fetch_channel(int(channel_id))
+            channel = await guild.fetch_channel(channel_id)
         except (discord.NotFound, discord.Forbidden, discord.HTTPException):
             return None
-        return channel if isinstance(channel, discord.TextChannel) else None
+        return channel if isinstance(channel, (discord.TextChannel, discord.Thread)) else None
 
     async def _find_ticket_by_channel(
         self,
@@ -1115,7 +1197,7 @@ class TicketHub(commands.Cog):
         for key, record in tickets.items():
             if int(record.get("channel_id") or 0) == int(channel_id):
                 return key, record
-        raise commands.BadArgument("This channel is not a tracked TicketHub ticket.")
+        raise commands.BadArgument("This channel or thread is not a tracked TicketHub ticket.")
 
     async def _find_ticket_by_control_message(
         self,
@@ -1256,7 +1338,7 @@ class TicketHub(commands.Cog):
         *,
         reason: Optional[str] = None,
         form_answers: Optional[Sequence[Dict[str, str]]] = None,
-    ) -> Tuple[TicketRecord, discord.TextChannel]:
+    ) -> Tuple[TicketRecord, TicketLocation]:
         profile_name, profile = await self._validate_ticket_open_request(
             guild,
             owner,
@@ -1274,22 +1356,36 @@ class TicketHub(commands.Cog):
                 guild=guild,
                 profile=profile_name,
             )
-            overwrites = self._ticket_overwrites(guild, owner, profile, closed=False)
-            try:
-                channel = await guild.create_text_channel(
+            mode = self._ticket_mode(profile)
+            if mode == "thread":
+                channel = await self._create_ticket_thread(
+                    guild,
+                    owner,
+                    profile,
                     channel_name,
-                    category=category,
-                    overwrites=overwrites,
-                    reason=f"TicketHub ticket #{ticket_id} opened by {owner}",
+                    ticket_id,
                 )
-            except discord.HTTPException as exc:
-                raise commands.CommandError("I could not create the ticket channel.") from exc
+            else:
+                overwrites = self._ticket_overwrites(guild, owner, profile, closed=False)
+                try:
+                    channel = await guild.create_text_channel(
+                        channel_name,
+                        category=category,
+                        overwrites=overwrites,
+                        reason=f"TicketHub ticket #{ticket_id} opened by {owner}",
+                    )
+                except discord.HTTPException as exc:
+                    raise commands.CommandError("I could not create the ticket channel.") from exc
 
             record: TicketRecord = {
                 "id": ticket_id,
                 "profile": profile_name,
                 "owner_id": owner.id,
                 "channel_id": channel.id,
+                "location_type": mode,
+                "thread_parent_channel_id": (
+                    channel.parent_id if isinstance(channel, discord.Thread) else None
+                ),
                 "message_id": None,
                 "status": "open",
                 "claimed_by": None,
@@ -1328,7 +1424,7 @@ class TicketHub(commands.Cog):
                     await channel.delete(reason="TicketHub failed to send ticket controls.")
                 except discord.HTTPException:
                     pass
-                raise commands.CommandError("I created the channel but could not send the ticket panel.") from exc
+                raise commands.CommandError("I created the ticket but could not send the ticket panel.") from exc
             record["message_id"] = message.id
             async with self.config.guild(guild).tickets() as tickets:
                 tickets[str(ticket_id)] = record
@@ -1342,6 +1438,77 @@ class TicketHub(commands.Cog):
             color=self.OPEN_COLOR,
         )
         return record, channel
+
+    async def _create_ticket_thread(
+        self,
+        guild: discord.Guild,
+        owner: discord.Member,
+        profile: ProfileRecord,
+        channel_name: str,
+        ticket_id: int,
+    ) -> discord.Thread:
+        parent = self._thread_parent_channel(guild, profile)
+        if parent is None:
+            raise commands.CommandError(
+                "Thread ticket mode needs a thread parent channel. "
+                "Set one with `[p]tickethub threadparent <profile> #channel`."
+            )
+        try:
+            try:
+                thread = await parent.create_thread(
+                    name=channel_name,
+                    type=discord.ChannelType.private_thread,
+                    invitable=False,
+                    reason=f"TicketHub ticket #{ticket_id} opened by {owner}",
+                )
+            except TypeError:
+                thread = await parent.create_thread(
+                    name=channel_name,
+                    type=discord.ChannelType.private_thread,
+                    reason=f"TicketHub ticket #{ticket_id} opened by {owner}",
+                )
+        except discord.HTTPException as exc:
+            raise commands.CommandError("I could not create the ticket thread.") from exc
+
+        try:
+            await thread.add_user(owner)
+        except discord.HTTPException as exc:
+            try:
+                await thread.delete(reason="TicketHub failed to add ticket owner.")
+            except discord.HTTPException:
+                pass
+            raise commands.CommandError(
+                "I created the ticket thread but could not add the ticket owner."
+            ) from exc
+
+        await self._add_cached_support_members_to_thread(guild, thread, profile, owner)
+        return thread
+
+    async def _add_cached_support_members_to_thread(
+        self,
+        guild: discord.Guild,
+        thread: discord.Thread,
+        profile: ProfileRecord,
+        owner: discord.Member,
+    ) -> None:
+        members: Dict[int, discord.Member] = {}
+        for role_id in profile.get("support_role_ids") or []:
+            role = guild.get_role(int(role_id))
+            if role is None:
+                continue
+            for member in role.members:
+                if member.id != owner.id and not member.bot:
+                    members[member.id] = member
+        for member in members.values():
+            try:
+                await thread.add_user(member)
+            except discord.HTTPException:
+                log.debug(
+                    "Failed to add support member %s to TicketHub thread %s in guild %s",
+                    member.id,
+                    thread.id,
+                    guild.id,
+                )
 
     def _ticket_overwrites(
         self,
@@ -1513,24 +1680,39 @@ class TicketHub(commands.Cog):
         )
         channel = await self._fetch_ticket_channel(guild, record)
         if channel is not None:
-            overwrites = self._ticket_overwrites(guild, owner, profile, closed=True)
-            closed_category = self._profile_category(guild, profile, "closed_category_id")
-            try:
-                await channel.edit(
-                    category=closed_category or channel.category,
-                    overwrites=overwrites,
-                    name=f"closed-{channel.name}"[:100] if not channel.name.startswith("closed-") else channel.name,
-                    reason=f"TicketHub ticket #{record['id']} closed",
-                )
-            except discord.HTTPException:
-                log.exception("Failed to edit closed ticket channel in guild %s", guild.id)
-            try:
-                await channel.send(
-                    f"Ticket closed by {member.mention}. Reason: {record['close_reason']}",
-                    allowed_mentions=discord.AllowedMentions(users=True, roles=False, everyone=False),
-                )
-            except discord.HTTPException:
-                pass
+            if isinstance(channel, discord.Thread):
+                try:
+                    if channel.archived or channel.locked:
+                        await channel.edit(
+                            archived=False,
+                            locked=False,
+                            reason=f"TicketHub ticket #{record['id']} preparing to close",
+                        )
+                    await channel.send(
+                        f"Ticket closed by {member.mention}. Reason: {record['close_reason']}",
+                        allowed_mentions=discord.AllowedMentions(users=True, roles=False, everyone=False),
+                    )
+                except discord.HTTPException:
+                    log.exception("Failed to post closed ticket thread notice in guild %s", guild.id)
+            else:
+                overwrites = self._ticket_overwrites(guild, owner, profile, closed=True)
+                closed_category = self._profile_category(guild, profile, "closed_category_id")
+                try:
+                    await channel.edit(
+                        category=closed_category or channel.category,
+                        overwrites=overwrites,
+                        name=f"closed-{channel.name}"[:100] if not channel.name.startswith("closed-") else channel.name,
+                        reason=f"TicketHub ticket #{record['id']} closed",
+                    )
+                except discord.HTTPException:
+                    log.exception("Failed to edit closed ticket channel in guild %s", guild.id)
+                try:
+                    await channel.send(
+                        f"Ticket closed by {member.mention}. Reason: {record['close_reason']}",
+                        allowed_mentions=discord.AllowedMentions(users=True, roles=False, everyone=False),
+                    )
+                except discord.HTTPException:
+                    pass
 
         async with self.config.guild(guild).tickets() as tickets:
             tickets[str(record["id"])] = record
@@ -1560,6 +1742,16 @@ class TicketHub(commands.Cog):
                 await channel.send(transcript_note[:1900])
             except discord.HTTPException:
                 pass
+        if isinstance(channel, discord.Thread):
+            try:
+                await channel.edit(
+                    name=f"closed-{channel.name}"[:100] if not channel.name.startswith("closed-") else channel.name,
+                    archived=True,
+                    locked=True,
+                    reason=f"TicketHub ticket #{record['id']} closed",
+                )
+            except discord.HTTPException:
+                log.exception("Failed to archive closed ticket thread in guild %s", guild.id)
 
     async def _reopen_ticket(
         self,
@@ -1585,18 +1777,30 @@ class TicketHub(commands.Cog):
         )
         channel = await self._fetch_ticket_channel(guild, record)
         if channel is not None:
-            open_category = self._profile_category(guild, profile, "ticket_category_id")
-            overwrites = self._ticket_overwrites(guild, owner, profile, closed=False)
-            try:
-                await channel.edit(
-                    category=open_category or channel.category,
-                    overwrites=overwrites,
-                    name=channel.name.removeprefix("closed-")[:100],
-                    reason=f"TicketHub ticket #{record['id']} reopened",
-                )
-                await channel.send(f"Ticket reopened by {member.mention}.")
-            except discord.HTTPException:
-                log.exception("Failed to reopen ticket channel in guild %s", guild.id)
+            if isinstance(channel, discord.Thread):
+                try:
+                    await channel.edit(
+                        archived=False,
+                        locked=False,
+                        name=channel.name.removeprefix("closed-")[:100],
+                        reason=f"TicketHub ticket #{record['id']} reopened",
+                    )
+                    await channel.send(f"Ticket reopened by {member.mention}.")
+                except discord.HTTPException:
+                    log.exception("Failed to reopen ticket thread in guild %s", guild.id)
+            else:
+                open_category = self._profile_category(guild, profile, "ticket_category_id")
+                overwrites = self._ticket_overwrites(guild, owner, profile, closed=False)
+                try:
+                    await channel.edit(
+                        category=open_category or channel.category,
+                        overwrites=overwrites,
+                        name=channel.name.removeprefix("closed-")[:100],
+                        reason=f"TicketHub ticket #{record['id']} reopened",
+                    )
+                    await channel.send(f"Ticket reopened by {member.mention}.")
+                except discord.HTTPException:
+                    log.exception("Failed to reopen ticket channel in guild %s", guild.id)
         async with self.config.guild(guild).tickets() as tickets:
             tickets[str(record["id"])] = record
         await self._update_ticket_message(guild, record, profile)
@@ -1628,7 +1832,7 @@ class TicketHub(commands.Cog):
             try:
                 await channel.delete(reason=reason or f"TicketHub ticket #{record['id']} deleted")
             except discord.HTTPException as exc:
-                raise commands.CommandError("I could not delete that ticket channel.") from exc
+                raise commands.CommandError("I could not delete that ticket channel or thread.") from exc
         await self._send_log(
             guild,
             profile,
@@ -1647,7 +1851,7 @@ class TicketHub(commands.Cog):
     ) -> str:
         channel = await self._fetch_ticket_channel(guild, record)
         if channel is None:
-            raise commands.CommandError("I could not find that ticket channel.")
+            raise commands.CommandError("I could not find that ticket channel or thread.")
         messages = await self._collect_messages(channel)
         html_transcript = await self._render_chat_exporter_transcript(guild, channel, messages)
         if html_transcript is None:
@@ -1718,7 +1922,7 @@ class TicketHub(commands.Cog):
             return "Transcript generated, but failed to send to " + ", ".join(failed_targets) + "."
         return "Transcript generated, but I could not send it to any configured destination."
 
-    async def _collect_messages(self, channel: discord.TextChannel) -> List[discord.Message]:
+    async def _collect_messages(self, channel: TicketLocation) -> List[discord.Message]:
         messages: List[discord.Message] = []
         try:
             async for message in channel.history(limit=self.MAX_TRANSCRIPT_MESSAGES, oldest_first=True):
@@ -1730,7 +1934,7 @@ class TicketHub(commands.Cog):
     async def _render_chat_exporter_transcript(
         self,
         guild: discord.Guild,
-        channel: discord.TextChannel,
+        channel: TicketLocation,
         messages: Sequence[discord.Message],
     ) -> Optional[str]:
         if chat_exporter is None:
@@ -1757,7 +1961,7 @@ class TicketHub(commands.Cog):
     def _render_text_transcript(
         self,
         guild: discord.Guild,
-        channel: discord.TextChannel,
+        channel: TicketLocation,
         record: TicketRecord,
         messages: Sequence[discord.Message],
     ) -> str:
@@ -1785,7 +1989,7 @@ class TicketHub(commands.Cog):
     def _render_html_transcript(
         self,
         guild: discord.Guild,
-        channel: discord.TextChannel,
+        channel: TicketLocation,
         record: TicketRecord,
         profile: ProfileRecord,
         messages: Sequence[discord.Message],
@@ -1984,9 +2188,9 @@ search.addEventListener('input', () => {{
             if not record:
                 raise commands.BadArgument(f"No ticket with ID `{ticket_id}` was found.")
             return str(ticket_id), record
-        if isinstance(ctx.channel, discord.TextChannel):
+        if isinstance(ctx.channel, (discord.TextChannel, discord.Thread)):
             return await self._find_ticket_by_channel(ctx.guild, ctx.channel.id)
-        raise commands.BadArgument("Run this in a ticket channel or provide a ticket ID.")
+        raise commands.BadArgument("Run this in a ticket channel/thread or provide a ticket ID.")
 
     async def _send_settings(self, ctx: commands.Context) -> None:
         assert ctx.guild is not None
@@ -2015,10 +2219,17 @@ search.addEventListener('input', () => {{
         for name, profile in sorted(profiles.items()):
             panel_channel = self._profile_channel(ctx.guild, profile, "panel_channel_id")
             ticket_category = self._profile_category(ctx.guild, profile, "ticket_category_id")
+            ticket_mode = self._ticket_mode(profile)
+            thread_parent = self._thread_parent_channel(ctx.guild, profile)
+            location_text = (
+                f"thread parent {thread_parent.mention if thread_parent else 'not set'}"
+                if ticket_mode == "thread"
+                else f"category {ticket_category.name if ticket_category else 'not set'}"
+            )
             modal_count = len(profile.get("creating_modal") or [])
             profile_lines.append(
                 f"`{name}` - panel {panel_channel.mention if panel_channel else 'not set'} "
-                f"- category {ticket_category.name if ticket_category else 'not set'} "
+                f"- mode {ticket_mode} - {location_text} "
                 f"- modal fields {modal_count}"
             )
         embed.add_field(
@@ -2400,6 +2611,44 @@ search.addEventListener('input', () => {{
         await self._set_profile(ctx.guild, profile_name, profile)
         await ctx.send(f"Closed-ticket category for `{profile_name}` set to {category.name if category else 'none'}.")
 
+    @tickethub.command(name="mode", aliases=["ticketmode"])
+    @commands.admin_or_permissions(manage_guild=True)
+    async def tickethub_mode(
+        self,
+        ctx: commands.Context,
+        profile_name: str,
+        mode: str,
+    ) -> None:
+        """Set whether a profile opens ticket channels or private threads."""
+        assert ctx.guild is not None
+        mode = mode.lower()
+        if mode not in {"channel", "thread"}:
+            await ctx.send("Ticket mode must be `channel` or `thread`.")
+            return
+        profile = await self._ensure_profile(ctx.guild, profile_name)
+        profile["ticket_mode"] = mode
+        await self._set_profile(ctx.guild, profile_name, profile)
+        extra = ""
+        if mode == "thread" and self._thread_parent_channel(ctx.guild, profile) is None:
+            extra = "\nSet a thread parent with `[p]tickethub threadparent <profile> #channel`."
+        await ctx.send(f"Ticket mode for `{profile_name}` set to **{mode}**.{extra}")
+
+    @tickethub.command(name="threadparent", aliases=["threadchannel"])
+    @commands.admin_or_permissions(manage_guild=True)
+    async def tickethub_thread_parent(
+        self,
+        ctx: commands.Context,
+        profile_name: str,
+        channel: Optional[discord.TextChannel] = None,
+    ) -> None:
+        """Set the parent channel used for private thread tickets."""
+        assert ctx.guild is not None
+        profile = await self._ensure_profile(ctx.guild, profile_name)
+        profile["thread_parent_channel_id"] = channel.id if channel else None
+        await self._set_profile(ctx.guild, profile_name, profile)
+        target = channel.mention if channel else "panel channel fallback"
+        await ctx.send(f"Thread-ticket parent for `{profile_name}` set to {target}.")
+
     @tickethub.command(name="logchannel")
     @commands.admin_or_permissions(manage_guild=True)
     async def tickethub_log_channel(
@@ -2765,7 +3014,7 @@ search.addEventListener('input', () => {{
         *,
         reason: Optional[str] = None,
     ) -> None:
-        """Delete a ticket channel after saving a transcript."""
+        """Delete a ticket channel or thread after saving a transcript."""
         assert ctx.guild is not None
         if not isinstance(ctx.author, discord.Member):
             return
@@ -2816,17 +3065,20 @@ search.addEventListener('input', () => {{
                 return
             channel = await self._fetch_ticket_channel(ctx.guild, record)
             if channel is None:
-                await ctx.send("I could not find that ticket channel.")
+                await ctx.send("I could not find that ticket channel or thread.")
                 return
-            await channel.set_permissions(
-                member,
-                view_channel=True,
-                send_messages=record.get("status") == "open",
-                read_message_history=True,
-                attach_files=record.get("status") == "open",
-                embed_links=record.get("status") == "open",
-                reason=f"TicketHub member added by {ctx.author}",
-            )
+            if isinstance(channel, discord.Thread):
+                await channel.add_user(member)
+            else:
+                await channel.set_permissions(
+                    member,
+                    view_channel=True,
+                    send_messages=record.get("status") == "open",
+                    read_message_history=True,
+                    attach_files=record.get("status") == "open",
+                    embed_links=record.get("status") == "open",
+                    reason=f"TicketHub member added by {ctx.author}",
+                )
             participants = {int(member_id) for member_id in record.get("participants", [])}
             participants.add(member.id)
             record["participants"] = sorted(participants)
@@ -2860,13 +3112,16 @@ search.addEventListener('input', () => {{
                 return
             channel = await self._fetch_ticket_channel(ctx.guild, record)
             if channel is None:
-                await ctx.send("I could not find that ticket channel.")
+                await ctx.send("I could not find that ticket channel or thread.")
                 return
-            await channel.set_permissions(
-                member,
-                overwrite=None,
-                reason=f"TicketHub member removed by {ctx.author}",
-            )
+            if isinstance(channel, discord.Thread):
+                await channel.remove_user(member)
+            else:
+                await channel.set_permissions(
+                    member,
+                    overwrite=None,
+                    reason=f"TicketHub member removed by {ctx.author}",
+                )
             record["participants"] = [
                 member_id for member_id in record.get("participants", []) if int(member_id) != member.id
             ]
@@ -2909,7 +3164,7 @@ search.addEventListener('input', () => {{
             channel = await self._fetch_ticket_channel(ctx.guild, record)
             lines.append(
                 f"#{record.get('id')} | {record.get('status')} | {self._user_ref(record.get('owner_id'))} "
-                f"| {channel.mention if channel else 'missing channel'} | `{record.get('profile')}`"
+                f"| {channel.mention if channel else 'missing location'} | `{record.get('profile')}`"
             )
         for page in pagify("\n".join(lines), page_length=1800):
             await ctx.send(box(page))
@@ -3043,6 +3298,7 @@ search.addEventListener('input', () => {{
                 "profile",
                 "owner_id",
                 "channel_id",
+                "location_type",
                 "status",
                 "claimed_by",
                 "created_at",
@@ -3059,6 +3315,7 @@ search.addEventListener('input', () => {{
                     record.get("profile"),
                     record.get("owner_id"),
                     record.get("channel_id"),
+                    record.get("location_type") or "channel",
                     record.get("status"),
                     record.get("claimed_by"),
                     self._format_export_time(record.get("created_at")),
