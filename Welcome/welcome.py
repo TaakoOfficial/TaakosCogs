@@ -14,6 +14,12 @@ import discord
 from redbot.core import Config, commands
 from redbot.core.utils.chat_formatting import box, pagify
 
+try:
+    from PIL import Image, ImageDraw, ImageOps, UnidentifiedImageError
+except ImportError:
+    Image = ImageDraw = ImageOps = None
+    UnidentifiedImageError = OSError
+
 log = logging.getLogger("red.taakoscogs.welcome")
 
 
@@ -80,6 +86,7 @@ class Welcome(commands.Cog):
             embed_json="",
             image=self._empty_image_data(),
             image_mode="embed",
+            avatar_overlay=self._default_avatar_overlay(),
         )
 
     @staticmethod
@@ -90,6 +97,48 @@ class Welcome(commands.Cog):
             "content_type": None,
             "data_base64": None,
         }
+
+    @staticmethod
+    def _default_avatar_overlay() -> Dict[str, Any]:
+        return {
+            "enabled": False,
+            "x_percent": 81.0,
+            "y_percent": 50.0,
+            "size_percent": 21.0,
+        }
+
+    @classmethod
+    def _normalize_avatar_overlay(cls, raw_value: Any) -> Dict[str, Any]:
+        overlay = cls._default_avatar_overlay()
+        if isinstance(raw_value, dict):
+            overlay.update(raw_value)
+
+        overlay["enabled"] = bool(overlay.get("enabled"))
+        for key in ("x_percent", "y_percent", "size_percent"):
+            try:
+                overlay[key] = float(overlay[key])
+            except (TypeError, ValueError):
+                overlay[key] = cls._default_avatar_overlay()[key]
+
+        overlay["x_percent"] = max(0.0, min(100.0, overlay["x_percent"]))
+        overlay["y_percent"] = max(0.0, min(100.0, overlay["y_percent"]))
+        overlay["size_percent"] = max(1.0, min(100.0, overlay["size_percent"]))
+        return overlay
+
+    @staticmethod
+    def _validate_percentage(
+        label: str, value: float, minimum: float, maximum: float
+    ) -> float:
+        try:
+            number = float(value)
+        except (TypeError, ValueError) as exc:
+            raise commands.BadArgument(f"{label} must be a number.") from exc
+
+        if not minimum <= number <= maximum:
+            raise commands.BadArgument(
+                f"{label} must be between {minimum:g} and {maximum:g}."
+            )
+        return number
 
     @staticmethod
     def _format_datetime(value: Optional[datetime]) -> str:
@@ -412,6 +461,148 @@ class Welcome(commands.Cog):
                     "data_base64": base64.b64encode(data).decode("ascii"),
                 }
 
+    @staticmethod
+    def _discord_asset_size(size: int = 1024) -> int:
+        normalized = 16
+        target = max(16, min(1024, size))
+        while normalized < target:
+            normalized *= 2
+        return normalized
+
+    @staticmethod
+    def _member_avatar_url(member: discord.Member, size: int = 1024) -> str:
+        asset = member.display_avatar
+        normalized_size = Welcome._discord_asset_size(size)
+
+        try:
+            return str(asset.replace(size=normalized_size, static_format="png").url)
+        except (AttributeError, TypeError, ValueError):
+            pass
+
+        try:
+            sized_asset = asset.with_size(normalized_size)
+            try:
+                sized_asset = sized_asset.with_static_format("png")
+            except (AttributeError, ValueError):
+                pass
+            return str(sized_asset.url)
+        except (AttributeError, TypeError, ValueError):
+            pass
+
+        url = str(asset.url)
+        separator = "&" if "?" in url else "?"
+        return f"{url}{separator}size={normalized_size}"
+
+    async def _download_member_avatar(self, member: discord.Member) -> bytes:
+        url = self._member_avatar_url(member)
+        timeout = aiohttp.ClientTimeout(total=30)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.get(url) as response:
+                if response.status != 200:
+                    raise commands.CommandError(
+                        f"Failed to download the member avatar. HTTP status: {response.status}"
+                    )
+
+                content_type = response.headers.get("Content-Type", "").split(";")[0].lower()
+                if not content_type.startswith("image/"):
+                    raise commands.CommandError("The member avatar URL did not return an image.")
+
+                data = await response.read()
+                if len(data) > self.IMAGE_SIZE_LIMIT:
+                    raise commands.CommandError("The member avatar is larger than 8 MB.")
+                return data
+
+    @staticmethod
+    def _resampling_filter() -> Any:
+        resampling = getattr(Image, "Resampling", Image)
+        return getattr(resampling, "LANCZOS")
+
+    @classmethod
+    def _avatar_overlay_filename(cls, original_filename: str, extension: str) -> str:
+        name = os.path.splitext(original_filename or "welcome-image")[0]
+        safe_name = re.sub(r"[^a-zA-Z0-9._-]", "-", name).strip("-") or "welcome-image"
+        return f"{safe_name[:32]}-avatar{extension}"
+
+    @classmethod
+    def _save_composited_image(
+        cls, image: Any, original_filename: str
+    ) -> Tuple[bytes, str]:
+        png_buffer = io.BytesIO()
+        image.save(png_buffer, format="PNG", optimize=True)
+        png_data = png_buffer.getvalue()
+        if len(png_data) <= cls.IMAGE_SIZE_LIMIT:
+            return png_data, cls._avatar_overlay_filename(original_filename, ".png")
+
+        rgb_image = Image.new("RGB", image.size, (255, 255, 255))
+        rgb_image.paste(image, mask=image.getchannel("A"))
+        for quality in (92, 86, 80, 74, 68):
+            jpeg_buffer = io.BytesIO()
+            rgb_image.save(
+                jpeg_buffer,
+                format="JPEG",
+                quality=quality,
+                optimize=True,
+                progressive=True,
+            )
+            jpeg_data = jpeg_buffer.getvalue()
+            if len(jpeg_data) <= cls.IMAGE_SIZE_LIMIT:
+                return jpeg_data, cls._avatar_overlay_filename(original_filename, ".jpg")
+
+        raise commands.CommandError(
+            "The rendered welcome image is larger than 8 MB after adding the avatar."
+        )
+
+    def _compose_avatar_overlay(
+        self,
+        image_data: bytes,
+        avatar_data: bytes,
+        filename: str,
+        avatar_overlay: Dict[str, Any],
+    ) -> Tuple[bytes, str]:
+        if Image is None or ImageDraw is None or ImageOps is None:
+            raise commands.CommandError(
+                "Pillow is required to render welcome avatar overlays."
+            )
+
+        try:
+            with Image.open(io.BytesIO(image_data)) as base_image:
+                try:
+                    base_image.seek(0)
+                except EOFError:
+                    pass
+                base = ImageOps.exif_transpose(base_image).convert("RGBA")
+
+            with Image.open(io.BytesIO(avatar_data)) as avatar_image:
+                try:
+                    avatar_image.seek(0)
+                except EOFError:
+                    pass
+                avatar = ImageOps.exif_transpose(avatar_image).convert("RGBA")
+        except (UnidentifiedImageError, OSError) as exc:
+            raise commands.CommandError(
+                "The welcome image or member avatar could not be processed."
+            ) from exc
+
+        width, height = base.size
+        diameter = round(width * float(avatar_overlay["size_percent"]) / 100)
+        diameter = max(1, min(diameter, width, height))
+        center_x = round(width * float(avatar_overlay["x_percent"]) / 100)
+        center_y = round(height * float(avatar_overlay["y_percent"]) / 100)
+        left = max(0, min(width - diameter, center_x - diameter // 2))
+        top = max(0, min(height - diameter, center_y - diameter // 2))
+
+        avatar = ImageOps.fit(
+            avatar,
+            (diameter, diameter),
+            method=self._resampling_filter(),
+        )
+        mask = Image.new("L", (diameter, diameter), 0)
+        draw = ImageDraw.Draw(mask)
+        draw.ellipse((0, 0, diameter - 1, diameter - 1), fill=255)
+        base.paste(avatar, (left, top), mask)
+
+        return self._save_composited_image(base, filename)
+
     def _deserialize_embed_json(self, raw_value: Any) -> Optional[Dict[str, Any]]:
         if not raw_value:
             return None
@@ -443,6 +634,8 @@ class Welcome(commands.Cog):
         else:
             image_data = {**self._empty_image_data(), **image_data}
 
+        avatar_overlay = self._normalize_avatar_overlay(await guild_conf.avatar_overlay())
+
         return {
             "enabled": await guild_conf.enabled(),
             "include_bots": await guild_conf.include_bots(),
@@ -451,23 +644,44 @@ class Welcome(commands.Cog):
             "embed_json": self._deserialize_embed_json(await guild_conf.embed_json()),
             "image": image_data,
             "image_mode": await guild_conf.image_mode(),
+            "avatar_overlay": avatar_overlay,
         }
 
-    @staticmethod
-    def _build_image_file(image_data: Dict[str, Optional[str]]) -> Optional[discord.File]:
+    async def _build_image_file(
+        self,
+        image_data: Dict[str, Optional[str]],
+        member: discord.Member,
+        avatar_overlay: Dict[str, Any],
+    ) -> Optional[discord.File]:
         encoded = image_data.get("data_base64")
         filename = image_data.get("filename")
         if not encoded or not filename:
             return None
 
         data = base64.b64decode(encoded)
+        if avatar_overlay.get("enabled"):
+            try:
+                avatar_data = await self._download_member_avatar(member)
+                data, filename = self._compose_avatar_overlay(
+                    data,
+                    avatar_data,
+                    filename,
+                    avatar_overlay,
+                )
+            except Exception:
+                log.exception(
+                    "Failed to render welcome avatar overlay in guild %s for member %s",
+                    member.guild.id,
+                    member.id,
+                )
+
         return discord.File(io.BytesIO(data), filename=filename)
 
     def _build_embed(
         self,
         embed_json: Optional[Dict[str, Any]],
         member: discord.Member,
-        image_data: Dict[str, Optional[str]],
+        attachment_filename: Optional[str],
         image_mode: str,
     ) -> Optional[discord.Embed]:
         if not embed_json:
@@ -475,8 +689,8 @@ class Welcome(commands.Cog):
 
         rendered = self._normalise_embed_dict(self._render_data(embed_json, member))
         embed = discord.Embed.from_dict(rendered)
-        if image_mode == "embed" and image_data.get("filename") and not embed.image.url:
-            embed.set_image(url=f"attachment://{image_data['filename']}")
+        if image_mode == "embed" and attachment_filename and not embed.image.url:
+            embed.set_image(url=f"attachment://{attachment_filename}")
         return embed
 
     async def _send_welcome_message(
@@ -489,8 +703,15 @@ class Welcome(commands.Cog):
         content = self._render_string(content_template, member).strip()
         image_data = settings.get("image") or self._empty_image_data()
         image_mode = settings.get("image_mode") or "embed"
-        file = self._build_image_file(image_data)
-        embed = self._build_embed(settings.get("embed_json"), member, image_data, image_mode)
+        avatar_overlay = settings.get("avatar_overlay") or self._default_avatar_overlay()
+        file = await self._build_image_file(image_data, member, avatar_overlay)
+        attachment_filename = getattr(file, "filename", None)
+        embed = self._build_embed(
+            settings.get("embed_json"),
+            member,
+            attachment_filename,
+            image_mode,
+        )
         me = channel.guild.me or channel.guild.get_member(self.bot.user.id)
         permissions = channel.permissions_for(me) if me else None
         should_attach_file = False
@@ -615,7 +836,7 @@ class Welcome(commands.Cog):
             raise commands.CommandError("I could not build a preview for this embed.")
 
         try:
-            self._build_embed(embed_json, preview_member, self._empty_image_data(), "embed")
+            self._build_embed(embed_json, preview_member, None, "embed")
         except Exception as exc:
             raise commands.BadArgument(f"That JSON could not be converted into a Discord embed: {exc}")
 
@@ -661,6 +882,48 @@ class Welcome(commands.Cog):
 
         await ctx.send("The cached image will now be used as the embed image when possible.")
 
+    @welcome.command(name="avataroverlay", aliases=["avatar", "pfp"])
+    async def welcome_avatar_overlay(
+        self,
+        ctx: commands.Context,
+        enabled: bool,
+        x_percent: Optional[float] = None,
+        y_percent: Optional[float] = None,
+        size_percent: Optional[float] = None,
+    ) -> None:
+        """Toggle member avatar rendering on the cached welcome image."""
+        current = await self.config.guild(ctx.guild).avatar_overlay()
+        avatar_overlay = self._normalize_avatar_overlay(current)
+        if x_percent is not None:
+            avatar_overlay["x_percent"] = self._validate_percentage(
+                "Center X percent", x_percent, 0.0, 100.0
+            )
+        if y_percent is not None:
+            avatar_overlay["y_percent"] = self._validate_percentage(
+                "Center Y percent", y_percent, 0.0, 100.0
+            )
+        if size_percent is not None:
+            avatar_overlay["size_percent"] = self._validate_percentage(
+                "Diameter percent", size_percent, 1.0, 100.0
+            )
+
+        avatar_overlay["enabled"] = enabled
+        await self.config.guild(ctx.guild).avatar_overlay.set(avatar_overlay)
+
+        state = "enabled" if enabled else "disabled"
+        message = (
+            f"Avatar overlay is now {state}. Center: "
+            f"{avatar_overlay['x_percent']:.1f}% x, "
+            f"{avatar_overlay['y_percent']:.1f}% y. Diameter: "
+            f"{avatar_overlay['size_percent']:.1f}% of image width."
+        )
+
+        image_data = await self.config.guild(ctx.guild).image()
+        if enabled and not (isinstance(image_data, dict) and image_data.get("data_base64")):
+            message += " Set a cached welcome image with `welcome image <url>` first."
+
+        await ctx.send(message)
+
     @welcome.command(name="placeholders")
     async def welcome_placeholders(self, ctx: commands.Context) -> None:
         """Show the available member and guild placeholders."""
@@ -705,6 +968,7 @@ class Welcome(commands.Cog):
         channel_id = settings.get("channel_id")
         channel = ctx.guild.get_channel(channel_id) if channel_id else None
         image_data = settings.get("image") or {}
+        avatar_overlay = settings.get("avatar_overlay") or self._default_avatar_overlay()
 
         embed = discord.Embed(title="Welcome Settings", color=discord.Color.blurple())
         embed.add_field(
@@ -746,6 +1010,20 @@ class Welcome(commands.Cog):
         embed.add_field(
             name="Image Mode",
             value=(settings.get("image_mode") or "embed").title(),
+            inline=True,
+        )
+        embed.add_field(
+            name="Avatar Overlay",
+            value="Yes" if avatar_overlay.get("enabled") else "No",
+            inline=True,
+        )
+        embed.add_field(
+            name="Avatar Position",
+            value=(
+                f"{avatar_overlay['x_percent']:.1f}% x, "
+                f"{avatar_overlay['y_percent']:.1f}% y, "
+                f"{avatar_overlay['size_percent']:.1f}% diameter"
+            ),
             inline=True,
         )
         embed.add_field(
