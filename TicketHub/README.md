@@ -14,7 +14,8 @@ Ticket panels, configurable modal forms, ticket lifecycle controls, AAA3A Ticket
 
 ## Highlights
 
-- Posts ticket panels with persistent Open Ticket buttons.
+- Posts ticket panels with persistent Open Ticket buttons or dropdowns.
+- Attaches a ticket panel to an existing embed/message sent by the same bot.
 - Supports configurable and imported modal questions before panel-created tickets open.
 - Creates private ticket channels, or private thread tickets under a configured parent channel.
 - Supports claim, unclaim, close, reopen, delete, add member, remove member, and list workflows.
@@ -87,7 +88,8 @@ Existing open ticket records, modlog cases, forum tags, and panel buttons are no
 | `[p]tickethub` or `[p]thub`                           | Show settings, profiles, and setup hints.          |
 | `[p]tickethub walkthrough [profile]`                  | Walk through basic setup.                          |
 | `[p]tickethub enable [true_or_false]`                 | Enable or disable TicketHub.                       |
-| `[p]tickethub panel [profile] [channel]`              | Post a ticket panel.                               |
+| `[p]tickethub panel [profile] [channel] [style]`      | Post a button or dropdown ticket panel.            |
+| `[p]tickethub attachpanel <profile> <message> [style]` | Attach a panel to an existing bot-authored message. |
 | `[p]tickethub profile [profile]`                      | Create a profile if it does not exist.             |
 | `[p]tickethub open [profile] [reason]`                | Open a ticket by command.                          |
 | `[p]tickethub modal [profile]`                        | Show modal questions for a profile.                |
@@ -134,8 +136,19 @@ Or configure directly:
 [p]tickethub logchannel main #ticket-logs
 [p]tickethub transcriptchannel main #ticket-transcripts
 [p]tickethub supportrole add main @Support
-[p]tickethub panel main #support
+[p]tickethub panel main #support button
 ```
+
+Use `dropdown` as the final argument to post a dropdown panel instead. TicketHub can
+also preserve an existing message's content and embeds while adding its panel:
+
+```text
+[p]tickethub attachpanel main https://discord.com/channels/server/channel/message dropdown
+```
+
+The existing message must have been sent by the same bot and cannot already contain
+unrelated buttons or select menus. Running `attachpanel` again on the same profile and
+message can switch its panel style.
 
 Thread-ticket setup:
 
@@ -157,7 +170,7 @@ Thread-ticket setup:
 
 ## Data
 
-TicketHub stores per-guild ticket profiles, panel message IDs, channel/thread/category/role IDs, ticket records, ticket owner IDs, claimed/closed staff IDs, participant IDs, ticket reasons, modal form answers, close reasons, timestamps, and ticket lifecycle event metadata.
+TicketHub stores per-guild ticket profiles, panel message IDs and styles, channel/thread/category/role IDs, ticket records, ticket owner IDs, claimed/closed staff IDs, participant IDs, ticket reasons, modal form answers, close reasons, timestamps, and ticket lifecycle event metadata.
 
 HTML and text transcripts are generated on demand from Discord message history and sent directly to configured Discord destinations.
 

@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.5.0
+
+- Added persistent dropdown ticket panels as an alternative to buttons.
+- Added `[p]tickethub attachpanel` to attach a panel to an existing message sent by the bot while preserving its content and embeds.
+- Added panel style persistence to TicketHub profiles.
+
 ## 1.4.0
 
 - Added native modal dropdowns for choice and boolean ticket questions on current Red installations.

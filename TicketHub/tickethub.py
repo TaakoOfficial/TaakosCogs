@@ -52,6 +52,34 @@ class TicketPanelView(discord.ui.View):
         await self.cog.handle_panel_open(interaction)
 
 
+class TicketPanelSelectView(discord.ui.View):
+    """Persistent dropdown view for ticket panel messages."""
+
+    def __init__(self, cog: "TicketHub") -> None:
+        super().__init__(timeout=None)
+        self.cog = cog
+
+    @discord.ui.select(
+        placeholder="Open a ticket...",
+        min_values=1,
+        max_values=1,
+        options=[
+            discord.SelectOption(
+                label="Open Ticket",
+                value="open",
+                emoji="\N{ENVELOPE WITH DOWNWARDS ARROW ABOVE}",
+            )
+        ],
+        custom_id="taakoscogs:tickethub:open-select",
+    )
+    async def open_ticket(
+        self,
+        interaction: discord.Interaction,
+        select: discord.ui.Select,
+    ) -> None:
+        await self.cog.handle_panel_open(interaction)
+
+
 class TicketControlView(discord.ui.View):
     """Persistent view for ticket control messages."""
 
@@ -519,11 +547,13 @@ class TicketHub(commands.Cog):
         )
         self._locks: Dict[int, asyncio.Lock] = {}
         self._panel_view = TicketPanelView(self)
+        self._panel_select_view = TicketPanelSelectView(self)
         self._control_view = TicketControlView(self)
 
     async def cog_load(self) -> None:
         """Register persistent views."""
         self.bot.add_view(self._panel_view)
+        self.bot.add_view(self._panel_select_view)
         self.bot.add_view(self._control_view)
 
     async def red_delete_data_for_user(self, *, requester: str, user_id: int) -> None:
@@ -557,6 +587,7 @@ class TicketHub(commands.Cog):
             "enabled": True,
             "panel_channel_id": None,
             "panel_message_id": None,
+            "panel_style": "button",
             "ticket_category_id": None,
             "closed_category_id": None,
             "ticket_mode": "channel",
@@ -799,6 +830,7 @@ class TicketHub(commands.Cog):
             profile["creating_modal"] = TicketHub._sanitize_modal_fields(
                 profile.get("creating_modal")
             )
+            profile["panel_style"] = TicketHub._panel_style(profile.get("panel_style"))
             profile["ticket_mode"] = TicketHub._ticket_mode(profile)
             try:
                 thread_parent_id = profile.get("thread_parent_channel_id")
@@ -806,6 +838,37 @@ class TicketHub(commands.Cog):
             except (TypeError, ValueError):
                 profile["thread_parent_channel_id"] = None
         return profile
+
+    @staticmethod
+    def _panel_style(value: Any) -> str:
+        style = str(value or "button").strip().lower()
+        if style in {"dropdown", "menu", "select", "selectmenu", "select-menu"}:
+            return "dropdown"
+        return "button"
+
+    @classmethod
+    def _parse_panel_style(cls, value: Any) -> str:
+        style = str(value or "button").strip().lower()
+        aliases = {
+            "button": "button",
+            "buttons": "button",
+            "dropdown": "dropdown",
+            "menu": "dropdown",
+            "select": "dropdown",
+            "selectmenu": "dropdown",
+            "select-menu": "dropdown",
+        }
+        try:
+            return aliases[style]
+        except KeyError as exc:
+            raise commands.BadArgument(
+                "Panel style must be `button` or `dropdown`."
+            ) from exc
+
+    def _panel_view_for_style(self, style: Any) -> discord.ui.View:
+        if self._panel_style(style) == "dropdown":
+            return self._panel_select_view
+        return self._panel_view
 
     @staticmethod
     def _ticket_mode(profile: ProfileRecord) -> str:
@@ -2229,6 +2292,7 @@ search.addEventListener('input', () => {{
             modal_count = len(profile.get("creating_modal") or [])
             profile_lines.append(
                 f"`{name}` - panel {panel_channel.mention if panel_channel else 'not set'} "
+                f"- style {self._panel_style(profile.get('panel_style'))} "
                 f"- mode {ticket_mode} - {location_text} "
                 f"- modal fields {modal_count}"
             )
@@ -2241,7 +2305,8 @@ search.addEventListener('input', () => {{
             name="Start Here",
             value=(
                 f"`{prefix}tickethub walkthrough`\n"
-                f"`{prefix}tickethub panel main #tickets`\n"
+                f"`{prefix}tickethub panel main #tickets button`\n"
+                f"`{prefix}tickethub attachpanel main <message-link> dropdown`\n"
                 f"`{prefix}tickethub import aaa3a main` for migration preview"
             ),
             inline=False,
@@ -2496,20 +2561,76 @@ search.addEventListener('input', () => {{
         profile_name: str,
         profile: ProfileRecord,
         channel: discord.TextChannel,
+        style: str = "button",
     ) -> discord.Message:
         me = guild.me
         if me is None:
             raise commands.CommandError("I could not inspect my server permissions.")
         perms = channel.permissions_for(me)
         if not perms.send_messages or not perms.embed_links:
-            raise commands.CommandError(f"I need `Send Messages` and `Embed Links` in {channel.mention}.")
+            raise commands.CommandError(
+                f"I need `Send Messages` and `Embed Links` in {channel.mention}."
+            )
+        style = self._parse_panel_style(style)
         embed = self._panel_embed(guild, profile_name, profile)
         try:
-            message = await channel.send(embed=embed, view=self._panel_view)
+            message = await channel.send(
+                embed=embed,
+                view=self._panel_view_for_style(style),
+            )
         except discord.HTTPException as exc:
             raise commands.CommandError("I could not post the ticket panel.") from exc
         profile["panel_channel_id"] = channel.id
         profile["panel_message_id"] = message.id
+        profile["panel_style"] = style
+        await self._set_profile(guild, profile_name, profile)
+        return message
+
+    async def _attach_panel(
+        self,
+        guild: discord.Guild,
+        profile_name: str,
+        profile: ProfileRecord,
+        message: discord.Message,
+        style: str = "button",
+    ) -> discord.Message:
+        me = guild.me
+        if me is None:
+            raise commands.CommandError("I could not inspect my server identity.")
+        if message.guild is None or message.guild.id != guild.id:
+            raise commands.BadArgument("The panel message must be in this server.")
+        if message.author.id != me.id:
+            raise commands.BadArgument(
+                "I can only attach a panel to a message sent by this bot."
+            )
+        tracked_profile_names = [
+            name
+            for name, tracked_profile in (await self._get_profiles(guild)).items()
+            if int(tracked_profile.get("panel_message_id") or 0) == message.id
+        ]
+        other_profile_name = next(
+            (name for name in tracked_profile_names if name != profile_name),
+            None,
+        )
+        if other_profile_name:
+            raise commands.BadArgument(
+                f"That message is already the panel for `{other_profile_name}`."
+            )
+        if message.components and profile_name not in tracked_profile_names:
+            raise commands.BadArgument(
+                "That message already has components. Remove them before attaching "
+                "a TicketHub panel."
+            )
+        style = self._parse_panel_style(style)
+        try:
+            await message.edit(view=self._panel_view_for_style(style))
+        except discord.HTTPException as exc:
+            raise commands.CommandError(
+                "I could not attach the ticket panel to that message."
+            ) from exc
+        profile["panel_channel_id"] = message.channel.id
+        profile["panel_message_id"] = message.id
+        profile["panel_style"] = style
         await self._set_profile(guild, profile_name, profile)
         return message
 
@@ -2554,8 +2675,9 @@ search.addEventListener('input', () => {{
         ctx: commands.Context,
         profile_name: str = "main",
         channel: Optional[discord.TextChannel] = None,
+        style: str = "button",
     ) -> None:
-        """Post a ticket panel for a profile."""
+        """Post a button or dropdown ticket panel for a profile."""
         assert ctx.guild is not None
         if channel is None:
             if not isinstance(ctx.channel, discord.TextChannel):
@@ -2565,12 +2687,51 @@ search.addEventListener('input', () => {{
         profile_name = self._clean_name(profile_name)
         profile = await self._ensure_profile(ctx.guild, profile_name)
         try:
-            message = await self._post_panel(ctx.guild, profile_name, profile, channel)
+            message = await self._post_panel(
+                ctx.guild,
+                profile_name,
+                profile,
+                channel,
+                style,
+            )
         except commands.CommandError as error:
             await ctx.send(str(error))
             return
         await self.config.guild(ctx.guild).enabled.set(True)
-        await ctx.send(f"Ticket panel posted for `{profile_name}`: {message.jump_url}")
+        await ctx.send(
+            f"Ticket {profile['panel_style']} panel posted for `{profile_name}`: "
+            f"{message.jump_url}"
+        )
+
+    @tickethub.command(name="attachpanel")
+    @commands.admin_or_permissions(manage_guild=True)
+    async def tickethub_attachpanel(
+        self,
+        ctx: commands.Context,
+        profile_name: str,
+        message: discord.Message,
+        style: str = "button",
+    ) -> None:
+        """Attach a button or dropdown panel to an existing bot-authored message."""
+        assert ctx.guild is not None
+        profile_name = self._clean_name(profile_name)
+        profile = await self._ensure_profile(ctx.guild, profile_name)
+        try:
+            message = await self._attach_panel(
+                ctx.guild,
+                profile_name,
+                profile,
+                message,
+                style,
+            )
+        except commands.CommandError as error:
+            await ctx.send(str(error))
+            return
+        await self.config.guild(ctx.guild).enabled.set(True)
+        await ctx.send(
+            f"Ticket {profile['panel_style']} panel attached for `{profile_name}`: "
+            f"{message.jump_url}"
+        )
 
     @tickethub.command(name="profile")
     @commands.admin_or_permissions(manage_guild=True)
