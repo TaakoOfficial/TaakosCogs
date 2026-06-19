@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.11.0
+
+- Added Members controls with Discord user pickers and configurable owner add/remove permissions.
+- Added closed-ticket Reopen and Delete controls plus a required reopen-reason modal.
+- Added create-for, show, recovery, panel clearing, profile-role, ticket-role, owner-permission, close-on-leave, auto-delete, and control-emoji commands.
+- Added speak-role access, ticket-role assignment, claimed/unclaimed list filters, and owner transcript access.
+- Added restart-safe closed-ticket auto-delete and automatic closing when an owner leaves.
+- Expanded AAA3A profile imports for member permissions, speak/ticket roles, close-on-leave, and control emojis.
+
 ## 1.10.0
 
 - Added a support-only Lock button that changes to Unlock while active.

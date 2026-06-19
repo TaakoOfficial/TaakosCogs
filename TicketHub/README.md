@@ -20,7 +20,9 @@ Ticket panels, configurable modal forms, ticket lifecycle controls, AAA3A Ticket
 - Supports configurable, independently numbered channel names for each profile.
 - Supports configurable and imported modal questions before panel-created tickets open.
 - Creates private ticket channels, or private thread tickets under a configured parent channel.
-- Supports claim, unclaim, close, reopen, delete, add member, remove member, and list workflows.
+- Supports claim, unclaim, lock, close, reopen, delete, recovery, member management, and list workflows.
+- Provides persistent ticket controls for Members, Claim, Lock, Close/Reopen, Transcript, and Delete.
+- Supports close-on-leave, configurable closed-ticket auto-delete, ticket roles, and control emojis.
 - Changes Claim to Unclaim and makes other support members read-only while a ticket is claimed.
 - Generates HTML transcripts with DiscordChatExporterPy, plus a built-in fallback renderer and plain-text transcript.
 - Sends transcripts to a transcript/log channel and optionally DMs the ticket owner.
@@ -82,6 +84,16 @@ removes those members from a locked private thread and restores them when it is 
 The same behavior is available through `[p]tickethub lock [ticket_id]` and
 `[p]tickethub unlock [ticket_id]`.
 
+## Managing Members
+
+The **Members** button opens Discord member pickers for adding or removing ticket
+participants. Support staff can always use them. Profile settings can also allow the
+ticket opener to add or remove members with `[p]tickethub ownerpermission`.
+
+When a ticket closes, its control changes to **Reopen** and requires a reopen reason.
+Closed tickets also expose a support-only **Delete** control. The same operations are
+available through commands.
+
 ## Closing Tickets
 
 The ticket **Close** button opens a modal requiring a close reason. Submitting it posts
@@ -102,6 +114,19 @@ with the command skips that button and posts the confirmation immediately:
 Pending confirmations and their timeout are restored after a bot restart. The ticket
 opener, close requester, and support staff can cancel or confirm the prompt.
 
+## Lifecycle Automation
+
+Profiles close an owner's open tickets when they leave by default. Configure this with:
+
+```text
+[p]tickethub closeonleave main true
+[p]tickethub autodelete main 24
+[p]tickethub autodelete main off
+```
+
+Auto-delete timers survive cog and bot restarts. Setting the value to `0` deletes a
+closed ticket after a five-second grace period.
+
 ## AAA3A Import
 
 TicketHub can read settings from AAA3A's loaded `Tickets` cog and map one profile into TicketHub:
@@ -121,12 +146,29 @@ Mapped settings include:
 - welcome and custom messages
 - modal form questions, including AAA3A's default reason modal behavior
 - transcript setting
-- owner close/reopen settings
-- support, view, ping, whitelist, and blacklist roles
+- owner close/reopen/member-management settings and close-on-leave
+- support, speak, view, ping, whitelist, and blacklist roles
+- ticket role, control emojis, and closed-ticket auto-delete
 - open and closed categories
 - log channel
 
 Existing open ticket records, modlog cases, forum tags, and panel buttons are not imported.
+
+## AAA3A Functional Parity
+
+TicketHub covers AAA3A's general ticket workflows: ticket creation for yourself or
+another member, profile panels, button/dropdown attachment, configurable forms and
+roles, member pickers, claim/unclaim, lock/unlock, close confirmation, reopen reasons,
+transcripts, deletion, ticket recovery, close-on-leave, and auto-delete.
+
+The following AAA3A-specific integrations are intentionally outside TicketHub's parity
+target:
+
+- Dank Memer payout automation, excluded by project requirement.
+- Cross-server ban appeals and appeal approval.
+- AAA3A Dashboard integration.
+- Forum-channel tags; TicketHub uses private threads under text channels.
+- AAA3A modlog cases; TicketHub sends equivalent lifecycle events to its configured log channel.
 
 ## Commands
 
@@ -137,6 +179,7 @@ Existing open ticket records, modlog cases, forum tags, and panel buttons are no
 | `[p]tickethub enable [true_or_false]`                 | Enable or disable TicketHub.                       |
 | `[p]tickethub panel [profile] [channel] [style]`      | Post a button or dropdown ticket panel.            |
 | `[p]tickethub attachpanel <profile> <message> [style]` | Attach a panel to an existing bot-authored message. |
+| `[p]tickethub clearpanel <message>`                    | Remove tracked TicketHub controls from a message.  |
 | `[p]tickethub multipanel`                             | Show multi-profile panel management commands.      |
 | `[p]tickethub multipanel add <message> <profile> <style> <emoji> <name> \| <description>` | Add a profile option. |
 | `[p]tickethub multipanel remove <message> <profile>`  | Remove a profile option.                           |
@@ -144,9 +187,10 @@ Existing open ticket records, modlog cases, forum tags, and panel buttons are no
 | `[p]tickethub multipanel placeholder <message> <text>` | Set its dropdown placeholder.                     |
 | `[p]tickethub multipanel show <message>`              | Show its configured profile options.               |
 | `[p]tickethub multipanel clear <message>`             | Remove the multi-panel components and configuration. |
-| `[p]tickethub profile [profile]`                      | Create a profile if it does not exist.             |
+| `[p]tickethub profile [profile]`                      | Create a profile and show its settings.            |
 | `[p]tickethub channelname [profile] [template]`       | Show or set a profile's channel-name template.     |
 | `[p]tickethub open [profile] [reason]`                | Open a ticket by command.                          |
+| `[p]tickethub createfor <member> [profile] [reason]`  | Create a ticket for another member.                |
 | `[p]tickethub modal [profile]`                        | Show modal questions for a profile.                |
 | `[p]tickethub modal wizard [profile]`                 | Walk through creating a custom ticket modal.       |
 | `[p]tickethub modal add <profile> [type] <label>`     | Add a text, boolean, or choice form question.       |
@@ -161,6 +205,13 @@ Existing open ticket records, modlog cases, forum tags, and panel buttons are no
 | `[p]tickethub transcriptchannel <profile> [channel]`  | Set the transcript channel.                        |
 | `[p]tickethub supportrole add <profile> <role>`       | Add a support role.                                |
 | `[p]tickethub supportrole remove <profile> <role>`    | Remove a support role.                             |
+| `[p]tickethub roles add <profile> <type> <role>`      | Add a support/speak/view/ping/access role.         |
+| `[p]tickethub roles remove <profile> <type> <role>`   | Remove a configured profile role.                  |
+| `[p]tickethub ticketrole <profile> [role]`            | Set or clear the role assigned to ticket openers.  |
+| `[p]tickethub ownerpermission <profile> <action> <bool>` | Configure owner close/reopen/member permissions. |
+| `[p]tickethub closeonleave <profile> <bool>`          | Toggle automatic closing when an owner leaves.     |
+| `[p]tickethub autodelete <profile> <hours\|off>`      | Configure closed-ticket deletion.                  |
+| `[p]tickethub emoji <profile> <action> <emoji>`       | Configure a ticket-control emoji.                  |
 | `[p]tickethub maxopen <profile> <amount>`             | Set max open tickets per member.                   |
 | `[p]tickethub transcripts <profile> <true_or_false>`  | Enable or disable transcripts on close/delete.     |
 | `[p]tickethub dmtranscript <profile> <true_or_false>` | Enable or disable transcript DMs to ticket owners. |
@@ -169,12 +220,14 @@ Existing open ticket records, modlog cases, forum tags, and panel buttons are no
 | `[p]tickethub lock [ticket_id]`                       | Prevent the opener and added members from posting. |
 | `[p]tickethub unlock [ticket_id]`                     | Restore posting access to locked ticket members.   |
 | `[p]tickethub close [ticket_id] [reason]`             | Request closure with a reason and confirmation.    |
-| `[p]tickethub reopen [ticket_id]`                     | Reopen a ticket.                                   |
+| `[p]tickethub reopen [ticket_id] [reason]`            | Reopen a ticket with an optional reason.           |
 | `[p]tickethub delete [ticket_id] [reason]`            | Delete a ticket channel/thread after transcript.   |
+| `[p]tickethub recover [channel]`                      | Recover a record from its TicketHub control embed. |
 | `[p]tickethub transcript [ticket_id]`                 | Generate and send a transcript.                    |
 | `[p]tickethub addmember <member> [ticket_id]`         | Add a member to a ticket.                          |
 | `[p]tickethub removemember <member> [ticket_id]`      | Remove a member from a ticket.                     |
-| `[p]tickethub list [open \| closed \| all] [owner]`   | List tickets.                                      |
+| `[p]tickethub list [status] [owner]`                  | List open/claimed/unclaimed/closed/all tickets.     |
+| `[p]tickethub show [ticket_id]`                       | Show a ticket's stored details.                    |
 | `[p]tickethub import aaa3a [profile] [confirm]`       | Preview or apply an AAA3A Tickets profile import.  |
 | `[p]tickethub export`                                 | Export TicketHub ticket records as CSV.            |
 
@@ -269,6 +322,7 @@ Thread-ticket setup:
 - Python 3.9 or newer.
 - `chat-exporter` for DiscordChatExporterPy-based HTML transcripts. Red installs this from the cog metadata.
 - Bot permission to `Manage Channels` for ticket channel creation and permission updates.
+- Bot permission to `Manage Roles` when a profile ticket role is configured.
 - For thread mode, bot permissions to `Create Private Threads`, `Send Messages in Threads`, `Manage Threads`, `Embed Links`, and `Read Message History` in the parent channel.
 - For thread mode, ticket openers need `View Channel`, `Send Messages in Threads`, and `Read Message History` in the parent channel.
 - Bot permissions to `Send Messages`, `Embed Links`, `Attach Files`, and `Read Message History` in ticket and log channels.
@@ -276,7 +330,7 @@ Thread-ticket setup:
 
 ## Data
 
-TicketHub stores per-guild ticket profiles and their next ticket numbers, panel message IDs and styles, multi-panel option labels/descriptions/emojis, channel/thread/category/role IDs, global and profile-local ticket IDs, ticket records, ticket owner IDs, claimed/locked/unlocked/closed staff IDs, participant IDs, ticket reasons, modal form answers, pending close requester/reason/expiry data, close reasons, timestamps, and ticket lifecycle event metadata.
+TicketHub stores per-guild ticket profiles and their next ticket numbers, panel message IDs and styles, multi-panel option labels/descriptions/emojis, control emojis, lifecycle settings, channel/thread/category/role IDs, global and profile-local ticket IDs, ticket records, ticket owner IDs, claimed/locked/unlocked/closed/reopened staff IDs, participant IDs, ticket reasons, modal form answers, pending close requester/reason/expiry data, close and reopen reasons, timestamps, and ticket lifecycle event metadata.
 
 HTML and text transcripts are generated on demand from Discord message history and sent directly to configured Discord destinations.
 
