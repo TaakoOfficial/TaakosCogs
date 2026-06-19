@@ -220,6 +220,177 @@ class TicketControlView(discord.ui.View):
         await self.cog.handle_ticket_button(interaction, "transcript")
 
 
+class TicketCloseReasonModal(discord.ui.Modal):
+    """Collect a close reason before posting the confirmation prompt."""
+
+    def __init__(
+        self,
+        cog: "TicketHub",
+        guild_id: int,
+        ticket_id: int,
+        requester_id: int,
+    ) -> None:
+        super().__init__(title="Close Ticket", timeout=300)
+        self.cog = cog
+        self.guild_id = guild_id
+        self.ticket_id = ticket_id
+        self.requester_id = requester_id
+        self.reason = discord.ui.TextInput(
+            label="Reason for closing",
+            style=discord.TextStyle.paragraph,
+            placeholder="Why should this ticket be closed?",
+            required=True,
+            min_length=1,
+            max_length=1000,
+        )
+        self.add_item(self.reason)
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        if interaction.user.id != self.requester_id:
+            await interaction.response.send_message(
+                "Only the person who started this close request can submit the reason.",
+                ephemeral=True,
+            )
+            return
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        try:
+            message = await self.cog.start_close_confirmation(
+                interaction,
+                self.guild_id,
+                self.ticket_id,
+                self.requester_id,
+                str(self.reason.value),
+            )
+        except commands.CommandError as error:
+            await interaction.followup.send(str(error), ephemeral=True)
+            return
+        await interaction.followup.send(
+            f"Close confirmation posted: {message.jump_url}",
+            ephemeral=True,
+        )
+
+    async def on_error(self, interaction: discord.Interaction, error: Exception) -> None:
+        log.exception(
+            "TicketHub close-reason modal failed.",
+            exc_info=(type(error), error, error.__traceback__),
+        )
+        if interaction.response.is_done():
+            await interaction.followup.send(
+                "I could not start that close confirmation.",
+                ephemeral=True,
+            )
+        else:
+            await interaction.response.send_message(
+                "I could not start that close confirmation.",
+                ephemeral=True,
+            )
+
+
+class TicketCloseReasonLauncherView(discord.ui.View):
+    """Temporary command view that can open a Discord modal."""
+
+    def __init__(
+        self,
+        cog: "TicketHub",
+        guild_id: int,
+        ticket_id: int,
+        requester_id: int,
+    ) -> None:
+        super().__init__(timeout=300)
+        self.cog = cog
+        self.guild_id = guild_id
+        self.ticket_id = ticket_id
+        self.requester_id = requester_id
+        self.enter_reason.custom_id = (
+            f"taakoscogs:tickethub:close-reason:{ticket_id}:{requester_id}"
+        )
+
+    @discord.ui.button(
+        label="Enter Close Reason",
+        emoji="\N{MEMO}",
+        style=discord.ButtonStyle.danger,
+        custom_id="taakoscogs:tickethub:close-reason",
+    )
+    async def enter_reason(
+        self,
+        interaction: discord.Interaction,
+        button: discord.ui.Button,
+    ) -> None:
+        if interaction.user.id != self.requester_id:
+            await interaction.response.send_message(
+                "Only the person who ran the close command can use this button.",
+                ephemeral=True,
+            )
+            return
+        try:
+            await self.cog.validate_close_request_ids(
+                self.guild_id,
+                self.ticket_id,
+                interaction.user.id,
+            )
+        except commands.CommandError as error:
+            await interaction.response.send_message(str(error), ephemeral=True)
+            return
+        await interaction.response.send_modal(
+            TicketCloseReasonModal(
+                self.cog,
+                self.guild_id,
+                self.ticket_id,
+                self.requester_id,
+            )
+        )
+        self.stop()
+        if interaction.message is not None:
+            try:
+                await interaction.message.edit(view=None)
+            except discord.HTTPException:
+                pass
+
+
+class TicketCloseConfirmationView(discord.ui.View):
+    """Persistent Cancel/Close confirmation controls."""
+
+    def __init__(self, cog: "TicketHub", ticket_id: int) -> None:
+        super().__init__(timeout=None)
+        self.cog = cog
+        self.ticket_id = ticket_id
+        self.cancel.custom_id = f"taakoscogs:tickethub:close-cancel:{ticket_id}"
+        self.confirm.custom_id = f"taakoscogs:tickethub:close-confirm:{ticket_id}"
+
+    @discord.ui.button(
+        label="Cancel",
+        style=discord.ButtonStyle.secondary,
+        custom_id="taakoscogs:tickethub:close-cancel",
+    )
+    async def cancel(
+        self,
+        interaction: discord.Interaction,
+        button: discord.ui.Button,
+    ) -> None:
+        await self.cog.handle_close_confirmation(
+            interaction,
+            self.ticket_id,
+            confirmed=False,
+        )
+
+    @discord.ui.button(
+        label="Close",
+        emoji="\N{CROSS MARK}",
+        style=discord.ButtonStyle.danger,
+        custom_id="taakoscogs:tickethub:close-confirm",
+    )
+    async def confirm(
+        self,
+        interaction: discord.Interaction,
+        button: discord.ui.Button,
+    ) -> None:
+        await self.cog.handle_close_confirmation(
+            interaction,
+            self.ticket_id,
+            confirmed=True,
+        )
+
+
 class TicketOpenModal(discord.ui.Modal):
     """Dynamic modal shown before opening a ticket from a panel."""
 
@@ -624,6 +795,7 @@ class TicketHub(commands.Cog):
     CLOSED_COLOR = 0xED4245
     CLAIMED_COLOR = 0xFEE75C
     MAX_TRANSCRIPT_MESSAGES = 5000
+    CLOSE_CONFIRMATION_TIMEOUT = 300
     CHANNEL_TEMPLATE_FIELDS = {
         "id",
         "ticket_id",
@@ -657,6 +829,8 @@ class TicketHub(commands.Cog):
         self._panel_select_view = TicketPanelSelectView(self)
         self._control_view = TicketControlView(self)
         self._multi_panel_views: Dict[int, TicketMultiPanelView] = {}
+        self._close_confirmation_views: Dict[Tuple[int, int], TicketCloseConfirmationView] = {}
+        self._close_confirmation_tasks: Dict[Tuple[int, int], asyncio.Task] = {}
 
     async def cog_load(self) -> None:
         """Register persistent views."""
@@ -664,6 +838,15 @@ class TicketHub(commands.Cog):
         self.bot.add_view(self._panel_select_view)
         self.bot.add_view(self._control_view)
         await self._restore_multi_panel_views()
+        await self._restore_close_confirmations()
+
+    def cog_unload(self) -> None:
+        for task in self._close_confirmation_tasks.values():
+            task.cancel()
+        self._close_confirmation_tasks.clear()
+        for view in self._close_confirmation_views.values():
+            view.stop()
+        self._close_confirmation_views.clear()
 
     async def red_delete_data_for_user(self, *, requester: str, user_id: int) -> None:
         """Remove stored ticket references for a Discord user ID."""
@@ -679,6 +862,12 @@ class TicketHub(commands.Cog):
                         record["claimed_by"] = None
                     if str(record.get("closed_by")) == user_key:
                         record["closed_by"] = None
+                    pending_close = record.get("pending_close")
+                    if (
+                        isinstance(pending_close, dict)
+                        and str(pending_close.get("requested_by")) == user_key
+                    ):
+                        pending_close["requested_by"] = None
                     record["participants"] = [
                         member_id
                         for member_id in record.get("participants", [])
@@ -1734,6 +1923,29 @@ class TicketHub(commands.Cog):
         if interaction.message is None:
             await interaction.response.send_message("I could not identify this ticket.", ephemeral=True)
             return
+        if action == "close":
+            try:
+                _key, record = await self._find_ticket_by_control_message(
+                    interaction.guild,
+                    interaction.message.id,
+                )
+                await self._validate_close_request(
+                    interaction.guild,
+                    record,
+                    interaction.user,
+                )
+            except commands.CommandError as error:
+                await interaction.response.send_message(str(error), ephemeral=True)
+                return
+            await interaction.response.send_modal(
+                TicketCloseReasonModal(
+                    self,
+                    interaction.guild.id,
+                    int(record["id"]),
+                    interaction.user.id,
+                )
+            )
+            return
         await interaction.response.defer(ephemeral=True, thinking=True)
         try:
             _key, record = await self._find_ticket_by_control_message(
@@ -1756,14 +1968,6 @@ class TicketHub(commands.Cog):
                         interaction.user,
                     )
                     await interaction.followup.send("Ticket claimed.", ephemeral=True)
-            elif action == "close":
-                await self._close_ticket(
-                    interaction.guild,
-                    record,
-                    interaction.user,
-                    reason="Closed from ticket controls.",
-                )
-                await interaction.followup.send("Ticket closed.", ephemeral=True)
             elif action == "transcript":
                 if not self._is_support_member(interaction.user, profile):
                     await interaction.followup.send(
@@ -1854,6 +2058,7 @@ class TicketHub(commands.Cog):
                 "closed_at": None,
                 "closed_by": None,
                 "close_reason": None,
+                "pending_close": None,
                 "participants": [owner.id],
                 "events": [
                     {
@@ -2317,14 +2522,23 @@ class TicketHub(commands.Cog):
             color=self.DEFAULT_COLOR,
         )
 
-    async def _close_ticket(
+    async def _get_ticket_record_by_id(
+        self,
+        guild: discord.Guild,
+        ticket_id: int,
+    ) -> TicketRecord:
+        tickets = await self.config.guild(guild).tickets()
+        record = tickets.get(str(ticket_id))
+        if record is None:
+            raise commands.BadArgument(f"No ticket with ID `{ticket_id}` was found.")
+        return record
+
+    async def _validate_close_request(
         self,
         guild: discord.Guild,
         record: TicketRecord,
         member: discord.Member,
-        *,
-        reason: Optional[str] = None,
-    ) -> None:
+    ) -> ProfileRecord:
         profile = await self._get_profile(guild, str(record.get("profile") or "main"))
         owner = guild.get_member(int(record["owner_id"])) if record.get("owner_id") else None
         owner_is_closing = owner is not None and owner.id == member.id
@@ -2333,8 +2547,428 @@ class TicketHub(commands.Cog):
                 raise commands.CommandError("You do not have permission to close this ticket.")
         if record.get("status") == "closed":
             raise commands.CommandError("This ticket is already closed.")
+        return profile
+
+    async def validate_close_request_ids(
+        self,
+        guild_id: int,
+        ticket_id: int,
+        requester_id: int,
+    ) -> Tuple[discord.Guild, TicketRecord, discord.Member]:
+        guild = self.bot.get_guild(guild_id)
+        if guild is None:
+            raise commands.CommandError("I could not find that server.")
+        requester = guild.get_member(requester_id)
+        if requester is None:
+            raise commands.CommandError("I could not find the close requester in this server.")
+        record = await self._get_ticket_record_by_id(guild, ticket_id)
+        await self._validate_close_request(guild, record, requester)
+        return guild, record, requester
+
+    def _close_confirmation_embed(
+        self,
+        reason: str,
+        *,
+        state: str = "pending",
+    ) -> discord.Embed:
+        reason = reason.strip()[:1000] or "No reason provided."
+        if state == "cancelled":
+            return discord.Embed(
+                title="Close Cancelled",
+                description=(
+                    "This ticket will remain open.\n\n"
+                    f"**Close reason provided:**\n{reason}"
+                ),
+                color=self.OPEN_COLOR,
+                timestamp=self._now(),
+            )
+        if state == "closed":
+            return discord.Embed(
+                title="Ticket Closed",
+                description=(
+                    "This ticket has been closed.\n\n"
+                    f"**Reason:**\n{reason}"
+                ),
+                color=self.CLOSED_COLOR,
+                timestamp=self._now(),
+            )
+        embed = discord.Embed(
+            title="Close Ticket",
+            description=(
+                "If you would like to close this ticket, press the **Close** button. "
+                "If you would like to keep this ticket open for further assistance, "
+                "press **Cancel**.\n\n"
+                "**Note: If there is no response within 5 minutes, the ticket will "
+                "be closed automatically.**"
+            ),
+            color=self.CLOSED_COLOR,
+            timestamp=self._now(),
+        )
+        embed.add_field(name="Reason", value=reason, inline=False)
+        return embed
+
+    def _cancel_close_confirmation_resources(self, guild_id: int, ticket_id: int) -> None:
+        key = (guild_id, ticket_id)
+        task = self._close_confirmation_tasks.pop(key, None)
+        if task is not None and task is not asyncio.current_task():
+            task.cancel()
+        view = self._close_confirmation_views.pop(key, None)
+        if view is not None:
+            view.stop()
+
+    def _schedule_close_confirmation(
+        self,
+        guild_id: int,
+        ticket_id: int,
+        expires_at: float,
+    ) -> None:
+        key = (guild_id, ticket_id)
+        previous = self._close_confirmation_tasks.pop(key, None)
+        if previous is not None:
+            previous.cancel()
+        task = asyncio.create_task(
+            self._close_confirmation_timeout(guild_id, ticket_id, expires_at)
+        )
+        self._close_confirmation_tasks[key] = task
+
+        def remove_finished(completed: asyncio.Task) -> None:
+            if self._close_confirmation_tasks.get(key) is completed:
+                self._close_confirmation_tasks.pop(key, None)
+
+        task.add_done_callback(remove_finished)
+
+    async def _fetch_close_confirmation_message(
+        self,
+        guild: discord.Guild,
+        record: TicketRecord,
+        pending: Dict[str, Any],
+    ) -> Optional[discord.Message]:
+        channel = await self._fetch_ticket_channel(guild, record)
+        if channel is None or not pending.get("message_id"):
+            return None
+        try:
+            return await channel.fetch_message(int(pending["message_id"]))
+        except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+            return None
+
+    async def _restore_close_confirmations(self) -> None:
+        all_guilds = await self.config.all_guilds()
+        for guild_id, guild_data in all_guilds.items():
+            for record in (guild_data.get("tickets") or {}).values():
+                pending = record.get("pending_close")
+                if (
+                    not isinstance(pending, dict)
+                    or record.get("status") != "open"
+                    or not pending.get("message_id")
+                ):
+                    continue
+                try:
+                    ticket_id = int(record["id"])
+                    message_id = int(pending["message_id"])
+                    expires_at = float(pending["expires_at"])
+                except (KeyError, TypeError, ValueError):
+                    continue
+                view = TicketCloseConfirmationView(self, ticket_id)
+                self.bot.add_view(view, message_id=message_id)
+                self._close_confirmation_views[(int(guild_id), ticket_id)] = view
+                self._schedule_close_confirmation(int(guild_id), ticket_id, expires_at)
+
+    async def _start_close_confirmation(
+        self,
+        guild: discord.Guild,
+        record: TicketRecord,
+        requester: discord.Member,
+        reason: str,
+    ) -> discord.Message:
+        async with self._guild_lock(guild.id):
+            current_record = await self._get_ticket_record_by_id(
+                guild,
+                int(record["id"]),
+            )
+            return await self._start_close_confirmation_unlocked(
+                guild,
+                current_record,
+                requester,
+                reason,
+            )
+
+    async def _start_close_confirmation_unlocked(
+        self,
+        guild: discord.Guild,
+        record: TicketRecord,
+        requester: discord.Member,
+        reason: str,
+    ) -> discord.Message:
+        await self._validate_close_request(guild, record, requester)
+        existing = record.get("pending_close")
+        if isinstance(existing, dict) and float(existing.get("expires_at") or 0) > self._now_ts():
+            raise commands.CommandError(
+                "This ticket already has an active close confirmation."
+            )
+        channel = await self._fetch_ticket_channel(guild, record)
+        if channel is None:
+            raise commands.CommandError("I could not find that ticket channel or thread.")
+        owner = guild.get_member(int(record["owner_id"])) if record.get("owner_id") else None
+        target = owner or requester
+        clean_reason = reason.strip()[:1000] or "No reason provided."
+        view = TicketCloseConfirmationView(self, int(record["id"]))
+        try:
+            message = await channel.send(
+                f"{target.mention}, is there anything else we can help you with?",
+                embed=self._close_confirmation_embed(clean_reason),
+                view=view,
+                allowed_mentions=discord.AllowedMentions(
+                    users=True,
+                    roles=False,
+                    everyone=False,
+                ),
+            )
+        except discord.HTTPException as exc:
+            raise commands.CommandError(
+                "I could not post the close confirmation in the ticket."
+            ) from exc
+        expires_at = self._now_ts() + self.CLOSE_CONFIRMATION_TIMEOUT
+        record["pending_close"] = {
+            "requested_by": requester.id,
+            "reason": clean_reason,
+            "message_id": message.id,
+            "expires_at": expires_at,
+        }
+        record.setdefault("events", []).append(
+            {
+                "type": "close_requested",
+                "actor_id": requester.id,
+                "at": self._now_ts(),
+                "reason": clean_reason,
+            }
+        )
+        async with self.config.guild(guild).tickets() as tickets:
+            tickets[str(record["id"])] = record
+        ticket_id = int(record["id"])
+        self._close_confirmation_views[(guild.id, ticket_id)] = view
+        self._schedule_close_confirmation(guild.id, ticket_id, expires_at)
+        return message
+
+    async def start_close_confirmation(
+        self,
+        interaction: discord.Interaction,
+        guild_id: int,
+        ticket_id: int,
+        requester_id: int,
+        reason: str,
+    ) -> discord.Message:
+        if interaction.guild_id != guild_id or interaction.user.id != requester_id:
+            raise commands.CommandError("This close request is not valid here.")
+        guild, record, requester = await self.validate_close_request_ids(
+            guild_id,
+            ticket_id,
+            requester_id,
+        )
+        return await self._start_close_confirmation(
+            guild,
+            record,
+            requester,
+            reason,
+        )
+
+    async def _clear_pending_close(
+        self,
+        guild: discord.Guild,
+        record: TicketRecord,
+    ) -> None:
+        record["pending_close"] = None
+        async with self.config.guild(guild).tickets() as tickets:
+            tickets[str(record["id"])] = record
+        self._cancel_close_confirmation_resources(guild.id, int(record["id"]))
+
+    async def _resolve_close_confirmation(
+        self,
+        guild: discord.Guild,
+        ticket_id: int,
+        member: discord.Member,
+        *,
+        confirmed: bool,
+        expected_expires_at: Optional[float] = None,
+    ) -> Tuple[TicketRecord, str]:
+        async with self._guild_lock(guild.id):
+            record = await self._get_ticket_record_by_id(guild, ticket_id)
+            pending = record.get("pending_close")
+            if not isinstance(pending, dict):
+                raise commands.CommandError(
+                    "This close confirmation is no longer active."
+                )
+            if (
+                expected_expires_at is not None
+                and float(pending.get("expires_at") or 0) != expected_expires_at
+            ):
+                raise commands.CommandError(
+                    "This close confirmation has been replaced."
+                )
+            reason = str(pending.get("reason") or "No reason provided.")
+            if confirmed:
+                await self._close_ticket(
+                    guild,
+                    record,
+                    member,
+                    reason=reason,
+                    permission_checked=True,
+                )
+            else:
+                record.setdefault("events", []).append(
+                    {
+                        "type": "close_cancelled",
+                        "actor_id": member.id,
+                        "at": self._now_ts(),
+                    }
+                )
+                await self._clear_pending_close(guild, record)
+            return record, reason
+
+    async def handle_close_confirmation(
+        self,
+        interaction: discord.Interaction,
+        ticket_id: int,
+        *,
+        confirmed: bool,
+    ) -> None:
+        if not interaction.guild or not isinstance(interaction.user, discord.Member):
+            await interaction.response.send_message(
+                "This confirmation only works in a server.",
+                ephemeral=True,
+            )
+            return
+        try:
+            record = await self._get_ticket_record_by_id(interaction.guild, ticket_id)
+            pending = record.get("pending_close")
+            if not isinstance(pending, dict):
+                raise commands.CommandError("This close confirmation is no longer active.")
+            profile = await self._get_profile(
+                interaction.guild,
+                str(record.get("profile") or "main"),
+            )
+            allowed_ids = {
+                int(record.get("owner_id") or 0),
+                int(pending.get("requested_by") or 0),
+            }
+            if (
+                interaction.user.id not in allowed_ids
+                and not self._is_support_member(interaction.user, profile)
+            ):
+                raise commands.CommandError(
+                    "Only the ticket opener, close requester, or support staff can use this."
+                )
+        except commands.CommandError as error:
+            await interaction.response.send_message(str(error), ephemeral=True)
+            return
+
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        try:
+            record, reason = await self._resolve_close_confirmation(
+                interaction.guild,
+                ticket_id,
+                interaction.user,
+                confirmed=confirmed,
+            )
+        except commands.CommandError as error:
+            await interaction.followup.send(str(error), ephemeral=True)
+            return
+        if not confirmed:
+            if interaction.message is not None:
+                try:
+                    await interaction.message.edit(
+                        content=f"Close request cancelled by {interaction.user}.",
+                        embed=self._close_confirmation_embed(reason, state="cancelled"),
+                        view=None,
+                    )
+                except discord.HTTPException:
+                    pass
+            await interaction.followup.send(
+                "Close cancelled. The ticket will remain open.",
+                ephemeral=True,
+            )
+            return
+
+        if interaction.message is not None:
+            try:
+                await interaction.message.edit(
+                    content=f"Ticket closed by {interaction.user}.",
+                    embed=self._close_confirmation_embed(reason, state="closed"),
+                    view=None,
+                )
+            except discord.HTTPException:
+                pass
+        await interaction.followup.send("Ticket closed.", ephemeral=True)
+
+    async def _close_confirmation_timeout(
+        self,
+        guild_id: int,
+        ticket_id: int,
+        expires_at: float,
+    ) -> None:
+        try:
+            await self.bot.wait_until_red_ready()
+            await asyncio.sleep(max(0.0, expires_at - self._now_ts()))
+            guild = self.bot.get_guild(guild_id)
+            if guild is None:
+                return
+            record = await self._get_ticket_record_by_id(guild, ticket_id)
+            pending = record.get("pending_close")
+            if (
+                not isinstance(pending, dict)
+                or record.get("status") != "open"
+                or float(pending.get("expires_at") or 0) != expires_at
+            ):
+                return
+            actor = guild.get_member(int(pending.get("requested_by") or 0)) or guild.me
+            if actor is None:
+                return
+            message = await self._fetch_close_confirmation_message(guild, record, pending)
+            reason = str(pending.get("reason") or "No reason provided.")
+            record, reason = await self._resolve_close_confirmation(
+                guild,
+                ticket_id,
+                actor,
+                confirmed=True,
+                expected_expires_at=expires_at,
+            )
+            if message is not None:
+                try:
+                    await message.edit(
+                        content="Close confirmation timed out; ticket closed automatically.",
+                        embed=self._close_confirmation_embed(reason, state="closed"),
+                        view=None,
+                    )
+                except discord.HTTPException:
+                    pass
+        except asyncio.CancelledError:
+            raise
+        except (commands.CommandError, discord.HTTPException):
+            log.exception(
+                "Failed to auto-close TicketHub ticket %s in guild %s.",
+                ticket_id,
+                guild_id,
+            )
+
+    async def _close_ticket(
+        self,
+        guild: discord.Guild,
+        record: TicketRecord,
+        member: discord.Member,
+        *,
+        reason: Optional[str] = None,
+        permission_checked: bool = False,
+    ) -> None:
+        if permission_checked:
+            profile = await self._get_profile(guild, str(record.get("profile") or "main"))
+            if record.get("status") == "closed":
+                raise commands.CommandError("This ticket is already closed.")
+        else:
+            profile = await self._validate_close_request(guild, record, member)
+        owner = guild.get_member(int(record["owner_id"])) if record.get("owner_id") else None
 
         record["status"] = "closed"
+        record["pending_close"] = None
+        self._cancel_close_confirmation_resources(guild.id, int(record["id"]))
         record["closed_at"] = self._now_ts()
         record["closed_by"] = member.id
         record["close_reason"] = (reason or "No reason provided.")[:1000]
@@ -2515,6 +3149,7 @@ class TicketHub(commands.Cog):
         channel = await self._fetch_ticket_channel(guild, record)
         async with self.config.guild(guild).tickets() as tickets:
             tickets.pop(str(record["id"]), None)
+        self._cancel_close_confirmation_resources(guild.id, int(record["id"]))
         if channel is not None:
             try:
                 await channel.delete(reason=reason or f"TicketHub ticket #{record['id']} deleted")
@@ -4048,17 +4683,38 @@ search.addEventListener('input', () => {{
         *,
         reason: Optional[str] = None,
     ) -> None:
-        """Close a ticket."""
+        """Request ticket closure with a reason and confirmation."""
         assert ctx.guild is not None
         if not isinstance(ctx.author, discord.Member):
             return
         try:
             _key, record = await self._resolve_ticket_argument(ctx, ticket_id)
-            await self._close_ticket(ctx.guild, record, ctx.author, reason=reason)
+            await self._validate_close_request(ctx.guild, record, ctx.author)
         except commands.CommandError as error:
             await ctx.send(str(error))
             return
-        await ctx.send(f"Ticket #{record['id']} closed.")
+        if reason:
+            try:
+                message = await self._start_close_confirmation(
+                    ctx.guild,
+                    record,
+                    ctx.author,
+                    reason,
+                )
+            except commands.CommandError as error:
+                await ctx.send(str(error))
+                return
+            await ctx.send(f"Close confirmation posted: {message.jump_url}")
+            return
+        await ctx.send(
+            "Click below to enter the close reason.",
+            view=TicketCloseReasonLauncherView(
+                self,
+                ctx.guild.id,
+                int(record["id"]),
+                ctx.author.id,
+            ),
+        )
 
     @tickethub.command(name="reopen")
     @commands.guild_only()

@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.9.0
+
+- Added a required close-reason modal to the ticket Close button.
+- Added a red confirmation embed with the reason and Cancel/Close buttons.
+- Added automatic closure after five minutes without a response.
+- Added restart-safe pending confirmation state and requester-only modal launchers for prefix commands.
+- Changed `[p]tickethub close` to use the same confirmation workflow.
+
 ## 1.8.0
 
 - Changed the Claim button to Unclaim while a ticket is claimed.

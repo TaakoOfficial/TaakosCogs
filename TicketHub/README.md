@@ -69,6 +69,26 @@ read-only. Unclaiming restores their send permissions and changes the button bac
 The `[p]tickethub claim` and `[p]tickethub unclaim` commands apply the same permission
 changes as the button. Added members remain read-only while a claim lock is active.
 
+## Closing Tickets
+
+The ticket **Close** button opens a modal requiring a close reason. Submitting it posts
+a red **Close Ticket** confirmation in the ticket channel, mentions the ticket opener,
+shows the reason, and provides **Cancel** and **Close** buttons. Cancel keeps the ticket
+open; Close completes the normal close/transcript workflow. If nobody responds within
+five minutes, TicketHub closes the ticket automatically.
+
+Prefix commands cannot directly open Discord modals, so `[p]tickethub close` sends an
+**Enter Close Reason** button that only the command author can use. Supplying a reason
+with the command skips that button and posts the confirmation immediately:
+
+```text
+[p]tickethub close
+[p]tickethub close 42 Duplicate request
+```
+
+Pending confirmations and their timeout are restored after a bot restart. The ticket
+opener, close requester, and support staff can cancel or confirm the prompt.
+
 ## AAA3A Import
 
 TicketHub can read settings from AAA3A's loaded `Tickets` cog and map one profile into TicketHub:
@@ -133,7 +153,7 @@ Existing open ticket records, modlog cases, forum tags, and panel buttons are no
 | `[p]tickethub dmtranscript <profile> <true_or_false>` | Enable or disable transcript DMs to ticket owners. |
 | `[p]tickethub claim [ticket_id]`                      | Claim a ticket.                                    |
 | `[p]tickethub unclaim [ticket_id]`                    | Unclaim a ticket.                                  |
-| `[p]tickethub close [ticket_id] [reason]`             | Close a ticket.                                    |
+| `[p]tickethub close [ticket_id] [reason]`             | Request closure with a reason and confirmation.    |
 | `[p]tickethub reopen [ticket_id]`                     | Reopen a ticket.                                   |
 | `[p]tickethub delete [ticket_id] [reason]`            | Delete a ticket channel/thread after transcript.   |
 | `[p]tickethub transcript [ticket_id]`                 | Generate and send a transcript.                    |
@@ -241,7 +261,7 @@ Thread-ticket setup:
 
 ## Data
 
-TicketHub stores per-guild ticket profiles and their next ticket numbers, panel message IDs and styles, multi-panel option labels/descriptions/emojis, channel/thread/category/role IDs, global and profile-local ticket IDs, ticket records, ticket owner IDs, claimed/closed staff IDs, participant IDs, ticket reasons, modal form answers, close reasons, timestamps, and ticket lifecycle event metadata.
+TicketHub stores per-guild ticket profiles and their next ticket numbers, panel message IDs and styles, multi-panel option labels/descriptions/emojis, channel/thread/category/role IDs, global and profile-local ticket IDs, ticket records, ticket owner IDs, claimed/closed staff IDs, participant IDs, ticket reasons, modal form answers, pending close requester/reason/expiry data, close reasons, timestamps, and ticket lifecycle event metadata.
 
 HTML and text transcripts are generated on demand from Discord message history and sent directly to configured Discord destinations.
 

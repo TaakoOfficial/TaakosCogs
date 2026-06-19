@@ -4,10 +4,10 @@
     "author": [
         "Taako"
     ],
-    "version": "1.8.0",
-    "description": "A Red DiscordBot cog for single and multi-profile ticket panels, claim-locked support workflows, profile-numbered channel templates, configurable forms, AAA3A imports, and HTML transcripts.",
+    "version": "1.9.0",
+    "description": "A Red DiscordBot cog for single and multi-profile ticket panels, claim locking, modal close confirmations, profile-numbered channels, configurable forms, AAA3A imports, and HTML transcripts.",
     "install_msg": "tickethub loaded. Use `[p]tickethub walkthrough` to set up your first panel, or `[p]tickethub import aaa3a main` to preview an AAA3A Tickets profile import.",
-    "short": "Multi-profile ticket panels, claim locking, numbered channels, and transcripts.",
+    "short": "Ticket panels with claim locking, close confirmations, and transcripts.",
     "tags": [
         "tickets",
         "support",
@@ -29,5 +29,5 @@
     "hidden": false,
     "disabled": false,
     "type": "COG",
-    "end_user_data_statement": "This cog stores per-guild ticket profiles and their next ticket numbers, panel message IDs and styles, multi-panel option labels/descriptions/emojis, channel/category/role IDs, global and profile-local ticket IDs, ticket records, ticket owner IDs, claimed/closed staff IDs, participant IDs, ticket reasons, modal form answers, close reasons, timestamps, and ticket lifecycle event metadata. HTML and text transcripts are generated on demand from Discord message history and sent directly to configured Discord destinations."
+    "end_user_data_statement": "This cog stores per-guild ticket profiles and their next ticket numbers, panel message IDs and styles, multi-panel option labels/descriptions/emojis, channel/category/role IDs, global and profile-local ticket IDs, ticket records, ticket owner IDs, claimed/closed staff IDs, participant IDs, ticket reasons, modal form answers, pending close requester/reason/expiry data, close reasons, timestamps, and ticket lifecycle event metadata. HTML and text transcripts are generated on demand from Discord message history and sent directly to configured Discord destinations."
 }
