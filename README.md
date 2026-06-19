@@ -36,6 +36,7 @@ To update installed cogs:
 | [YALC](./YALC)                         | Server logging           | Message/member/channel/role logging, event filters, retention settings, ignore lists, Tupperbox/PluralKit-aware filtering.                  |
 | [Applications](./Applications)         | Staff applications       | Configurable forms, application panels, DM questionnaires, review buttons, role actions, CSV exports, and polls.                            |
 | [Welcome](./Welcome)                   | Join messages            | Configurable welcome messages, placeholders, JSON embeds, cached welcome images, and avatar overlays.                                        |
+| [Captcha](./Captcha)                   | Member verification      | Persistent verification buttons, per-click random modal codes, existing-message attachment, and configurable success roles.                 |
 | [InviteTracker](./InviteTracker)       | Invite tracking          | Invite-use detection, join sources, fake joins, leaver counts, leaderboards, log embeds, and CSV exports.                                   |
 | [SuggestionBox](./SuggestionBox)       | Community feedback       | Suggestions with persistent arrow voting buttons, optional discussion threads, staff review states, comments, review logs, and CSV exports. |
 | [RepBoard](./RepBoard)                 | Community reputation     | Member kudos, public rep board posts, cooldowns, daily limits, profiles, leaderboards, moderation removal, and CSV exports.                 |
@@ -61,13 +62,14 @@ To update installed cogs:
 Install these if you want better moderation visibility, invite attribution, feedback workflows, community reputation, support tickets, and role operations:
 
 ```text
-[p]cog install taakoscogs Toolz YALC Applications Welcome InviteTracker SuggestionBox RepBoard ReviewHub TicketHub tempvoice Giveaway
+[p]cog install taakoscogs Toolz YALC Applications Welcome Captcha InviteTracker SuggestionBox RepBoard ReviewHub TicketHub tempvoice Giveaway
 ```
 
 - `toolz` gives staff role/user lookup, audit, export, and role-triggered message tools.
 - `YALC` gives detailed server logging.
 - `applications` handles staff applications, review workflows, and approval roles.
 - `welcome` handles onboarding messages.
+- `captcha` verifies new members with randomized modal codes and assigns a configured role.
 - `invitetracker` tracks invite joins, fake joins, leavers, join sources, and leaderboards.
 - `suggestionbox` collects community suggestions with voting, optional discussion threads, staff review states, comments, and exports.
 - `repboard` gives members a lightweight kudos and reputation leaderboard system.
@@ -162,6 +164,7 @@ Some features also need Discord privileged intents:
 - Role-triggered messages in `toolz` need Server Members intent.
 - Member logging and member update features in logging cogs may also need Server Members intent.
 - Role assignment features in `applications` need Manage Roles and a bot role above the target roles.
+- Captcha role assignment needs Manage Roles and a bot role above the verification role.
 - Temporary voice creation in `tempvoice` needs Manage Channels and Move Members.
 
 ## Data and Privacy
@@ -170,6 +173,7 @@ Each cog includes its own data statement in `info.json`. In short:
 
 - `flipper`, `randomweather`, `emojiporter`, `zodiaccolorroles`, and `uppercase` do not persistently store end user data.
 - `toolz` stores per-guild role-message settings such as role IDs, channel IDs, and message templates.
+- `captcha` stores panel message/channel IDs, role IDs, and button labels; verification challenges are transient in memory.
 - `YALC`, `applications`, `welcome`, `invitetracker`, `suggestionbox`, `repboard`, `reviewhub`, `tickethub`, `tempvoice`, `giveaway`, `fivemstatus`, `fable`, `paranoia`, `rpcalander`, and `whmcs` store the settings or records needed for their features.
 - `invitetracker` stores invite cache metadata, inviter stats, tracked member join-source records, Discord user IDs, invite codes, timestamps, fake-join flags, and unknown join counts.
 - `suggestionbox` stores suggestion text, author IDs, voter IDs, staff reviewer IDs, message/channel/thread IDs, votes, statuses, staff notes, review reasons, and timestamps.
@@ -189,6 +193,7 @@ Start with each cog's README:
 - [YALC README](./YALC/README.md)
 - [Applications README](./Applications/README.md)
 - [Welcome README](./Welcome/README.md)
+- [Captcha README](./Captcha/README.md)
 - [InviteTracker README](./InviteTracker/README.md)
 - [SuggestionBox README](./SuggestionBox/README.md)
 - [RepBoard README](./RepBoard/README.md)

@@ -1,0 +1,30 @@
+{
+    "$schema": "https://raw.githubusercontent.com/Cog-Creators/Red-DiscordBot/V3/develop/schema/red_cog.schema.json",
+    "name": "Captcha",
+    "author": [
+        "Taako"
+    ],
+    "version": "1.0.0",
+    "description": "Button-and-modal captcha verification with per-click random codes, configurable success roles, predefined panels, and attachment to existing bot messages.",
+    "install_msg": "captcha loaded. Use `[p]captcha post #channel @Verified` or `[p]captcha attach <message-link> @Verified`.",
+    "short": "Random-code modal verification with configurable role rewards.",
+    "tags": [
+        "captcha",
+        "verification",
+        "roles",
+        "security",
+        "moderation",
+        "utility"
+    ],
+    "requirements": [],
+    "min_bot_version": "3.5.0",
+    "min_python_version": [
+        3,
+        9,
+        0
+    ],
+    "hidden": false,
+    "disabled": false,
+    "type": "COG",
+    "end_user_data_statement": "This cog stores per-guild captcha panel message IDs, channel IDs, role IDs, and button labels. Verification codes and user IDs are held transiently in memory for code rotation and active modal validation and are not stored persistently."
+}

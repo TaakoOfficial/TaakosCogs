@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 import secrets
-import string
 from typing import Any, Dict, Optional, Tuple
 
 import discord
@@ -37,7 +36,7 @@ class CaptchaCodeModal(discord.ui.Modal):
         self.code = code
         self.answer = discord.ui.TextInput(
             label="Enter the code shown in the title",
-            placeholder=code,
+            placeholder="Type the six-character code",
             required=True,
             min_length=len(code),
             max_length=len(code),
@@ -157,6 +156,8 @@ class Captcha(commands.Cog):
         for key in list(self._active_challenges):
             if key[2] == user_id:
                 self._active_challenges.pop(key, None)
+        for key in list(self._last_codes):
+            if key[2] == user_id:
                 self._last_codes.pop(key, None)
 
     @classmethod
@@ -212,6 +213,7 @@ class Captcha(commands.Cog):
         message: discord.Message,
         role: discord.Role,
         label: str,
+        view: CaptchaPanelView,
     ) -> None:
         record: PanelRecord = {
             "message_id": message.id,
@@ -225,7 +227,7 @@ class Captcha(commands.Cog):
         previous = self._panel_views.pop(key, None)
         if previous is not None:
             previous.stop()
-        self._panel_views[key] = CaptchaPanelView(self, message.id, label)
+        self._panel_views[key] = view
 
     async def _remove_panel_record(self, guild_id: int, message_id: int) -> bool:
         removed = False
@@ -237,6 +239,8 @@ class Captcha(commands.Cog):
         for key in list(self._active_challenges):
             if key[:2] == (guild_id, message_id):
                 self._active_challenges.pop(key, None)
+        for key in list(self._last_codes):
+            if key[:2] == (guild_id, message_id):
                 self._last_codes.pop(key, None)
         return removed
 
@@ -253,7 +257,7 @@ class Captcha(commands.Cog):
             await message.edit(view=view)
         except discord.HTTPException as exc:
             raise commands.CommandError("I could not attach the verification button.") from exc
-        await self._save_panel(guild, message, role, label)
+        await self._save_panel(guild, message, role, label, view)
 
     async def start_challenge(
         self,
@@ -269,8 +273,16 @@ class Captcha(commands.Cog):
         if interaction.user.bot:
             await interaction.response.send_message("Bots cannot verify.", ephemeral=True)
             return
+        if interaction.message is None or interaction.message.id != message_id:
+            await interaction.response.send_message(
+                "This verification button is not attached to the expected message.",
+                ephemeral=True,
+            )
+            return
         try:
             panel = await self._get_panel(interaction.guild, message_id)
+            if str(panel.get("channel_id")) != str(interaction.channel_id):
+                raise commands.CommandError("This verification panel is not valid here.")
             role = interaction.guild.get_role(int(panel.get("role_id") or 0))
             if role is None:
                 raise commands.CommandError(
@@ -423,10 +435,16 @@ class Captcha(commands.Cog):
             color=self.DEFAULT_COLOR,
         )
         embed.set_footer(text="Each verification attempt uses a new code.")
+        message = None
         try:
             message = await channel.send(embed=embed)
             await self._install_panel(ctx.guild, message, role, label)
         except (commands.CommandError, discord.HTTPException) as error:
+            if message is not None:
+                try:
+                    await message.delete()
+                except discord.HTTPException:
+                    pass
             await ctx.send(str(error))
             return
         await ctx.send(f"Captcha panel posted: {message.jump_url}")
@@ -510,4 +528,13 @@ class Captcha(commands.Cog):
         guild_id = getattr(payload, "guild_id", None)
         message_id = getattr(payload, "message_id", None)
         if guild_id is not None and message_id is not None:
+            await self._remove_panel_record(int(guild_id), int(message_id))
+
+    @commands.Cog.listener()
+    async def on_raw_bulk_message_delete(self, payload: Any) -> None:
+        guild_id = getattr(payload, "guild_id", None)
+        message_ids = getattr(payload, "message_ids", ())
+        if guild_id is None:
+            return
+        for message_id in message_ids:
             await self._remove_panel_record(int(guild_id), int(message_id))
