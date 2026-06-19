@@ -17,6 +17,7 @@ Ticket panels, configurable modal forms, ticket lifecycle controls, AAA3A Ticket
 - Posts ticket panels with persistent Open Ticket buttons or dropdowns.
 - Attaches a ticket panel to an existing embed/message sent by the same bot.
 - Builds multi-profile panels with a custom emoji, name, and description per option.
+- Supports configurable, independently numbered channel names for each profile.
 - Supports configurable and imported modal questions before panel-created tickets open.
 - Creates private ticket channels, or private thread tickets under a configured parent channel.
 - Supports claim, unclaim, close, reopen, delete, add member, remove member, and list workflows.
@@ -99,6 +100,7 @@ Existing open ticket records, modlog cases, forum tags, and panel buttons are no
 | `[p]tickethub multipanel show <message>`              | Show its configured profile options.               |
 | `[p]tickethub multipanel clear <message>`             | Remove the multi-panel components and configuration. |
 | `[p]tickethub profile [profile]`                      | Create a profile if it does not exist.             |
+| `[p]tickethub channelname [profile] [template]`       | Show or set a profile's channel-name template.     |
 | `[p]tickethub open [profile] [reason]`                | Open a ticket by command.                          |
 | `[p]tickethub modal [profile]`                        | Show modal questions for a profile.                |
 | `[p]tickethub modal wizard [profile]`                 | Walk through creating a custom ticket modal.       |
@@ -187,6 +189,26 @@ Discord buttons cannot display descriptions. TicketHub retains them when button 
 is selected so they return if the panel is switched back to a dropdown. Multi-panel
 components are persistent across bot restarts.
 
+## Ticket Channel Names
+
+Each profile has its own channel-name template and ticket-number sequence. For example:
+
+```text
+[p]tickethub channelname support {id}-support-{owner_name}
+[p]tickethub channelname billing {id}-billing-{owner_display_name}
+```
+
+For new profiles, `{id}` starts at `1` and increments independently. Upgraded profiles
+continue above their highest existing ticket number to avoid reused names. TicketHub
+also retains a guild-wide internal ID so commands and stored records remain
+unambiguous; use `{global_id}` if that number should appear in the channel name.
+
+Supported placeholders are `{id}`, `{ticket_id}`, `{profile_id}`, `{global_id}`,
+`{owner_display_name}`, `{owner_name}`, `{owner_mention}`, `{owner_id}`, `{guild_name}`,
+`{guild_id}`, and `{profile}`. The first three all mean the profile-local number. Run
+the command without a template to show the current template and next profile ID, or
+use `reset` to restore `ticket-{id}-{owner_name}`.
+
 Thread-ticket setup:
 
 ```text
@@ -207,7 +229,7 @@ Thread-ticket setup:
 
 ## Data
 
-TicketHub stores per-guild ticket profiles, panel message IDs and styles, multi-panel option labels/descriptions/emojis, channel/thread/category/role IDs, ticket records, ticket owner IDs, claimed/closed staff IDs, participant IDs, ticket reasons, modal form answers, close reasons, timestamps, and ticket lifecycle event metadata.
+TicketHub stores per-guild ticket profiles and their next ticket numbers, panel message IDs and styles, multi-panel option labels/descriptions/emojis, channel/thread/category/role IDs, global and profile-local ticket IDs, ticket records, ticket owner IDs, claimed/closed staff IDs, participant IDs, ticket reasons, modal form answers, close reasons, timestamps, and ticket lifecycle event metadata.
 
 HTML and text transcripts are generated on demand from Discord message history and sent directly to configured Discord destinations.
 

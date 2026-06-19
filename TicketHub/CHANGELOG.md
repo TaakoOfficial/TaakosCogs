@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.7.0
+
+- Added `[p]tickethub channelname` to show or set the channel-name template for a profile.
+- Changed `{id}` in channel and ticket-message templates to an independently incrementing profile-local number.
+- Added `{global_id}` for the existing guild-wide internal ticket ID.
+- Added safe lazy initialization so upgraded profiles continue above their existing ticket numbers.
+
 ## 1.6.0
 
 - Added persistent multi-profile panels.

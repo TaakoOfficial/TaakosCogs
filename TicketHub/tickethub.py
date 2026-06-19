@@ -620,6 +620,19 @@ class TicketHub(commands.Cog):
     CLOSED_COLOR = 0xED4245
     CLAIMED_COLOR = 0xFEE75C
     MAX_TRANSCRIPT_MESSAGES = 5000
+    CHANNEL_TEMPLATE_FIELDS = {
+        "id",
+        "ticket_id",
+        "profile_id",
+        "global_id",
+        "owner_display_name",
+        "owner_name",
+        "owner_mention",
+        "owner_id",
+        "guild_name",
+        "guild_id",
+        "profile",
+    }
 
     def __init__(self, bot: Red) -> None:
         self.bot = bot
@@ -693,6 +706,7 @@ class TicketHub(commands.Cog):
             "blacklist_role_ids": [],
             "max_open_tickets_by_member": 3,
             "channel_name": "ticket-{id}-{owner_name}",
+            "next_profile_ticket_id": None,
             "panel_title": "Need Help?",
             "panel_message": "Open a ticket and staff will help you as soon as possible.",
             "welcome_message": (
@@ -924,6 +938,15 @@ class TicketHub(commands.Cog):
             )
             profile["panel_style"] = TicketHub._panel_style(profile.get("panel_style"))
             profile["ticket_mode"] = TicketHub._ticket_mode(profile)
+            try:
+                next_profile_ticket_id = profile.get("next_profile_ticket_id")
+                profile["next_profile_ticket_id"] = (
+                    max(1, int(next_profile_ticket_id))
+                    if next_profile_ticket_id is not None
+                    else None
+                )
+            except (TypeError, ValueError):
+                profile["next_profile_ticket_id"] = None
             try:
                 thread_parent_id = profile.get("thread_parent_channel_id")
                 profile["thread_parent_channel_id"] = int(thread_parent_id) if thread_parent_id else None
@@ -1393,6 +1416,7 @@ class TicketHub(commands.Cog):
         template: Optional[str],
         *,
         ticket_id: int,
+        global_ticket_id: int,
         owner: discord.Member,
         guild: discord.Guild,
         profile: str,
@@ -1400,6 +1424,9 @@ class TicketHub(commands.Cog):
         template = template or "ticket-{id}-{owner_name}"
         values = {
             "id": str(ticket_id),
+            "ticket_id": str(ticket_id),
+            "profile_id": str(ticket_id),
+            "global_id": str(global_ticket_id),
             "owner_display_name": owner.display_name,
             "owner_name": owner.name,
             "owner_mention": owner.mention,
@@ -1415,6 +1442,50 @@ class TicketHub(commands.Cog):
         rendered = re.sub(r"[^a-z0-9_-]+", "-", rendered)
         rendered = rendered.strip("-_") or f"ticket-{ticket_id}"
         return rendered[:95]
+
+    @classmethod
+    def _validate_channel_name_template(cls, value: str) -> str:
+        template = value.strip()
+        if template.lower() in {"default", "reset"}:
+            return "ticket-{id}-{owner_name}"
+        if not 1 <= len(template) <= 200:
+            raise commands.BadArgument(
+                "Channel name templates must be between 1 and 200 characters."
+            )
+        placeholders = set(re.findall(r"\{([^{}]+)\}", template))
+        unknown = placeholders - cls.CHANNEL_TEMPLATE_FIELDS
+        if unknown:
+            supported = ", ".join(f"`{{{name}}}`" for name in sorted(cls.CHANNEL_TEMPLATE_FIELDS))
+            raise commands.BadArgument(
+                f"Unknown placeholder(s): {', '.join(sorted(unknown))}. "
+                f"Supported placeholders: {supported}."
+            )
+        without_placeholders = re.sub(r"\{[^{}]+\}", "", template)
+        if "{" in without_placeholders or "}" in without_placeholders:
+            raise commands.BadArgument("Channel name template braces are not balanced.")
+        return template
+
+    @staticmethod
+    def _next_profile_ticket_number(
+        profile: ProfileRecord,
+        tickets: Dict[str, TicketRecord],
+        profile_name: str,
+    ) -> int:
+        try:
+            configured_next = max(1, int(profile.get("next_profile_ticket_id") or 1))
+        except (TypeError, ValueError):
+            configured_next = 1
+        existing_numbers = []
+        for record in tickets.values():
+            if str(record.get("profile") or "main") != profile_name:
+                continue
+            try:
+                existing_numbers.append(
+                    int(record.get("profile_ticket_id") or record.get("id") or 0)
+                )
+            except (TypeError, ValueError):
+                continue
+        return max(configured_next, max(existing_numbers, default=0) + 1)
 
     def _ticket_embed(
         self,
@@ -1434,7 +1505,10 @@ class TicketHub(commands.Cog):
         )
         embed.add_field(name="Status", value=status.title(), inline=True)
         embed.add_field(name="Owner", value=self._user_ref(record.get("owner_id")), inline=True)
-        embed.add_field(name="Profile", value=f"`{record.get('profile')}`", inline=True)
+        profile_value = f"`{record.get('profile')}`"
+        if record.get("profile_ticket_id") is not None:
+            profile_value += f"\nProfile ID: **#{record['profile_ticket_id']}**"
+        embed.add_field(name="Profile", value=profile_value, inline=True)
         embed.add_field(
             name="Claimed By",
             value=self._user_ref(record.get("claimed_by")),
@@ -1704,10 +1778,17 @@ class TicketHub(commands.Cog):
 
         async with self._guild_lock(guild.id):
             ticket_id = int(await self.config.guild(guild).next_ticket_id())
+            tickets = await self.config.guild(guild).tickets()
+            profile_ticket_id = self._next_profile_ticket_number(
+                profile,
+                tickets,
+                profile_name,
+            )
             category = self._profile_category(guild, profile, "ticket_category_id")
             channel_name = self._format_template(
                 profile.get("channel_name"),
-                ticket_id=ticket_id,
+                ticket_id=profile_ticket_id,
+                global_ticket_id=ticket_id,
                 owner=owner,
                 guild=guild,
                 profile=profile_name,
@@ -1735,6 +1816,7 @@ class TicketHub(commands.Cog):
 
             record: TicketRecord = {
                 "id": ticket_id,
+                "profile_ticket_id": profile_ticket_id,
                 "profile": profile_name,
                 "owner_id": owner.id,
                 "channel_id": channel.id,
@@ -1763,8 +1845,20 @@ class TicketHub(commands.Cog):
                 "transcript_count": 0,
             }
 
-            welcome = self._render_ticket_text(profile.get("welcome_message"), owner, guild, ticket_id)
-            custom = self._render_ticket_text(profile.get("custom_message"), owner, guild, ticket_id)
+            welcome = self._render_ticket_text(
+                profile.get("welcome_message"),
+                owner,
+                guild,
+                profile_ticket_id,
+                global_ticket_id=ticket_id,
+            )
+            custom = self._render_ticket_text(
+                profile.get("custom_message"),
+                owner,
+                guild,
+                profile_ticket_id,
+                global_ticket_id=ticket_id,
+            )
             ping_text = self._role_mentions(guild, profile.get("ping_role_ids") or [])
             intro = "\n".join(part for part in (owner.mention, ping_text, welcome, custom) if part)
             embed = self._ticket_embed(guild, record, profile)
@@ -1784,6 +1878,8 @@ class TicketHub(commands.Cog):
             record["message_id"] = message.id
             async with self.config.guild(guild).tickets() as tickets:
                 tickets[str(ticket_id)] = record
+            profile["next_profile_ticket_id"] = profile_ticket_id + 1
+            await self._set_profile(guild, profile_name, profile)
             await self.config.guild(guild).next_ticket_id.set(ticket_id + 1)
 
         await self._send_log(
@@ -1922,11 +2018,18 @@ class TicketHub(commands.Cog):
         owner: discord.Member,
         guild: discord.Guild,
         ticket_id: int,
+        *,
+        global_ticket_id: Optional[int] = None,
     ) -> str:
         if not template:
             return ""
         values = {
             "id": str(ticket_id),
+            "ticket_id": str(ticket_id),
+            "profile_id": str(ticket_id),
+            "global_id": str(
+                global_ticket_id if global_ticket_id is not None else ticket_id
+            ),
             "owner_display_name": owner.display_name,
             "owner_name": owner.name,
             "owner_mention": owner.mention,
@@ -3285,6 +3388,42 @@ search.addEventListener('input', () => {{
         await self._ensure_profile(ctx.guild, profile_name)
         await ctx.send(f"TicketHub profile `{profile_name}` is ready.")
 
+    @tickethub.command(name="channelname", aliases=["channeltemplate"])
+    @commands.admin_or_permissions(manage_guild=True)
+    async def tickethub_channel_name(
+        self,
+        ctx: commands.Context,
+        profile_name: str = "main",
+        *,
+        template: Optional[str] = None,
+    ) -> None:
+        """Show or set the ticket channel-name template for a profile."""
+        assert ctx.guild is not None
+        profile_name = self._clean_name(profile_name)
+        profile = await self._ensure_profile(ctx.guild, profile_name)
+        if template is None:
+            next_number = self._next_profile_ticket_number(
+                profile,
+                await self.config.guild(ctx.guild).tickets(),
+                profile_name,
+            )
+            await ctx.send(
+                f"Channel name template for `{profile_name}`: "
+                f"`{profile.get('channel_name') or 'ticket-{id}-{owner_name}'}`\n"
+                f"Next profile ID: **{next_number}**"
+            )
+            return
+        try:
+            template = self._validate_channel_name_template(template)
+        except commands.CommandError as error:
+            await ctx.send(str(error))
+            return
+        profile["channel_name"] = template
+        await self._set_profile(ctx.guild, profile_name, profile)
+        await ctx.send(
+            f"Channel name template for `{profile_name}` set to `{template}`."
+        )
+
     @tickethub.command(name="category")
     @commands.admin_or_permissions(manage_guild=True)
     async def tickethub_category(
@@ -3866,9 +4005,11 @@ search.addEventListener('input', () => {{
         lines = []
         for record in records[:100]:
             channel = await self._fetch_ticket_channel(ctx.guild, record)
+            profile_ticket_id = record.get("profile_ticket_id") or record.get("id")
             lines.append(
-                f"#{record.get('id')} | {record.get('status')} | {self._user_ref(record.get('owner_id'))} "
-                f"| {channel.mention if channel else 'missing location'} | `{record.get('profile')}`"
+                f"#{record.get('id')} | `{record.get('profile')}` #{profile_ticket_id} "
+                f"| {record.get('status')} | {self._user_ref(record.get('owner_id'))} "
+                f"| {channel.mention if channel else 'missing location'}"
             )
         for page in pagify("\n".join(lines), page_length=1800):
             await ctx.send(box(page))
@@ -3999,6 +4140,7 @@ search.addEventListener('input', () => {{
         writer.writerow(
             [
                 "id",
+                "profile_ticket_id",
                 "profile",
                 "owner_id",
                 "channel_id",
@@ -4016,6 +4158,7 @@ search.addEventListener('input', () => {{
             writer.writerow(
                 [
                     record.get("id"),
+                    record.get("profile_ticket_id"),
                     record.get("profile"),
                     record.get("owner_id"),
                     record.get("channel_id"),
