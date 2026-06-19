@@ -16,6 +16,7 @@ Ticket panels, configurable modal forms, ticket lifecycle controls, AAA3A Ticket
 
 - Posts ticket panels with persistent Open Ticket buttons or dropdowns.
 - Attaches a ticket panel to an existing embed/message sent by the same bot.
+- Builds multi-profile panels with a custom emoji, name, and description per option.
 - Supports configurable and imported modal questions before panel-created tickets open.
 - Creates private ticket channels, or private thread tickets under a configured parent channel.
 - Supports claim, unclaim, close, reopen, delete, add member, remove member, and list workflows.
@@ -90,6 +91,13 @@ Existing open ticket records, modlog cases, forum tags, and panel buttons are no
 | `[p]tickethub enable [true_or_false]`                 | Enable or disable TicketHub.                       |
 | `[p]tickethub panel [profile] [channel] [style]`      | Post a button or dropdown ticket panel.            |
 | `[p]tickethub attachpanel <profile> <message> [style]` | Attach a panel to an existing bot-authored message. |
+| `[p]tickethub multipanel`                             | Show multi-profile panel management commands.      |
+| `[p]tickethub multipanel add <message> <profile> <style> <emoji> <name> \| <description>` | Add a profile option. |
+| `[p]tickethub multipanel remove <message> <profile>`  | Remove a profile option.                           |
+| `[p]tickethub multipanel style <message> <style>`     | Switch a multi-panel between buttons and dropdown. |
+| `[p]tickethub multipanel placeholder <message> <text>` | Set its dropdown placeholder.                     |
+| `[p]tickethub multipanel show <message>`              | Show its configured profile options.               |
+| `[p]tickethub multipanel clear <message>`             | Remove the multi-panel components and configuration. |
 | `[p]tickethub profile [profile]`                      | Create a profile if it does not exist.             |
 | `[p]tickethub open [profile] [reason]`                | Open a ticket by command.                          |
 | `[p]tickethub modal [profile]`                        | Show modal questions for a profile.                |
@@ -150,6 +158,35 @@ The existing message must have been sent by the same bot and cannot already cont
 unrelated buttons or select menus. Running `attachpanel` again on the same profile and
 message can switch its panel style.
 
+## Multi-Profile Panels
+
+A multi-panel attaches several TicketHub profiles to one existing message. Each option
+has its own display name, emoji, and brief description. The target message must have
+been sent by the same bot and cannot already contain unrelated components.
+
+Add dropdown options one at a time using a message link:
+
+```text
+[p]tickethub multipanel add <message-link> billing dropdown 💳 Billing | Payment and invoice help
+[p]tickethub multipanel add <message-link> technical dropdown 🛠️ Technical | Product and account problems
+[p]tickethub multipanel add <message-link> other dropdown ❓ Other | Anything else
+```
+
+Every referenced profile must already exist. Names are limited to 80 characters and
+descriptions to 100 characters. Use `none` when an option should not have an emoji.
+
+Switch the same panel to buttons or customize its dropdown placeholder:
+
+```text
+[p]tickethub multipanel style <message-link> button
+[p]tickethub multipanel style <message-link> dropdown
+[p]tickethub multipanel placeholder <message-link> What can we help you with?
+```
+
+Discord buttons cannot display descriptions. TicketHub retains them when button mode
+is selected so they return if the panel is switched back to a dropdown. Multi-panel
+components are persistent across bot restarts.
+
 Thread-ticket setup:
 
 ```text
@@ -170,7 +207,7 @@ Thread-ticket setup:
 
 ## Data
 
-TicketHub stores per-guild ticket profiles, panel message IDs and styles, channel/thread/category/role IDs, ticket records, ticket owner IDs, claimed/closed staff IDs, participant IDs, ticket reasons, modal form answers, close reasons, timestamps, and ticket lifecycle event metadata.
+TicketHub stores per-guild ticket profiles, panel message IDs and styles, multi-panel option labels/descriptions/emojis, channel/thread/category/role IDs, ticket records, ticket owner IDs, claimed/closed staff IDs, participant IDs, ticket reasons, modal form answers, close reasons, timestamps, and ticket lifecycle event metadata.
 
 HTML and text transcripts are generated on demand from Discord message history and sent directly to configured Discord destinations.
 

@@ -27,6 +27,7 @@ log = logging.getLogger("red.taakoscogs.tickethub")
 TicketRecord = Dict[str, Any]
 ProfileRecord = Dict[str, Any]
 ModalFieldRecord = Dict[str, Any]
+MultiPanelRecord = Dict[str, Any]
 TicketLocation = Union[discord.TextChannel, discord.Thread]
 MODAL_SELECTS_SUPPORTED = hasattr(discord.ui, "Label")
 
@@ -78,6 +79,94 @@ class TicketPanelSelectView(discord.ui.View):
         select: discord.ui.Select,
     ) -> None:
         await self.cog.handle_panel_open(interaction)
+
+
+class TicketMultiPanelButton(discord.ui.Button):
+    """Button that opens a specific profile from a multi-panel."""
+
+    def __init__(
+        self,
+        cog: "TicketHub",
+        message_id: int,
+        option: Dict[str, Any],
+        *,
+        row: int,
+    ) -> None:
+        self.cog = cog
+        self.profile_name = str(option["profile"])
+        super().__init__(
+            label=str(option["label"]),
+            emoji=option.get("emoji") or None,
+            style=discord.ButtonStyle.secondary,
+            custom_id=(f"taakoscogs:tickethub:multi:{message_id}:{self.profile_name}"),
+            row=row,
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await self.cog.handle_panel_open(interaction, self.profile_name)
+
+
+class TicketMultiPanelSelect(discord.ui.Select):
+    """Dropdown that routes each option to its configured profile."""
+
+    def __init__(
+        self,
+        cog: "TicketHub",
+        message_id: int,
+        record: MultiPanelRecord,
+    ) -> None:
+        self.cog = cog
+        super().__init__(
+            placeholder=str(record.get("placeholder") or "Choose a ticket type...")[
+                :100
+            ],
+            min_values=1,
+            max_values=1,
+            options=[
+                discord.SelectOption(
+                    label=str(option["label"]),
+                    value=str(option["profile"]),
+                    description=option.get("description") or None,
+                    emoji=option.get("emoji") or None,
+                )
+                for option in record.get("options", [])
+            ],
+            custom_id=f"taakoscogs:tickethub:multi-select:{message_id}",
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if not self.values:
+            await interaction.response.send_message(
+                "Choose a ticket type first.",
+                ephemeral=True,
+            )
+            return
+        await self.cog.handle_panel_open(interaction, self.values[0])
+
+
+class TicketMultiPanelView(discord.ui.View):
+    """Persistent multi-profile ticket panel view."""
+
+    def __init__(
+        self,
+        cog: "TicketHub",
+        message_id: int,
+        record: MultiPanelRecord,
+    ) -> None:
+        super().__init__(timeout=None)
+        style = cog._panel_style(record.get("style"))
+        if style == "dropdown":
+            self.add_item(TicketMultiPanelSelect(cog, message_id, record))
+            return
+        for index, option in enumerate(record.get("options", [])):
+            self.add_item(
+                TicketMultiPanelButton(
+                    cog,
+                    message_id,
+                    option,
+                    row=index // 5,
+                )
+            )
 
 
 class TicketControlView(discord.ui.View):
@@ -544,17 +633,20 @@ class TicketHub(commands.Cog):
             next_ticket_id=1,
             profiles={"main": self._default_profile()},
             tickets={},
+            multi_panels={},
         )
         self._locks: Dict[int, asyncio.Lock] = {}
         self._panel_view = TicketPanelView(self)
         self._panel_select_view = TicketPanelSelectView(self)
         self._control_view = TicketControlView(self)
+        self._multi_panel_views: Dict[int, TicketMultiPanelView] = {}
 
     async def cog_load(self) -> None:
         """Register persistent views."""
         self.bot.add_view(self._panel_view)
         self.bot.add_view(self._panel_select_view)
         self.bot.add_view(self._control_view)
+        await self._restore_multi_panel_views()
 
     async def red_delete_data_for_user(self, *, requester: str, user_id: int) -> None:
         """Remove stored ticket references for a Discord user ID."""
@@ -869,6 +961,199 @@ class TicketHub(commands.Cog):
         if self._panel_style(style) == "dropdown":
             return self._panel_select_view
         return self._panel_view
+
+    @classmethod
+    def _sanitize_multi_panel_record(
+        cls,
+        value: Any,
+        *,
+        message_id: Optional[int] = None,
+    ) -> Optional[MultiPanelRecord]:
+        if not isinstance(value, dict):
+            return None
+        try:
+            cleaned_message_id = int(value.get("message_id") or message_id or 0)
+            channel_id = int(value.get("channel_id") or 0)
+        except (TypeError, ValueError):
+            return None
+        if not cleaned_message_id or not channel_id:
+            return None
+        options: List[Dict[str, Any]] = []
+        seen_profiles = set()
+        for raw_option in (value.get("options") or [])[:25]:
+            if not isinstance(raw_option, dict):
+                continue
+            try:
+                profile_name = cls._clean_name(str(raw_option.get("profile") or ""))
+            except commands.BadArgument:
+                continue
+            if profile_name in seen_profiles:
+                continue
+            label = str(raw_option.get("label") or "").strip()[:80]
+            if not label:
+                continue
+            description = str(raw_option.get("description") or "").strip()[:100]
+            emoji = str(raw_option.get("emoji") or "").strip()[:100]
+            options.append(
+                {
+                    "profile": profile_name,
+                    "label": label,
+                    "description": description or None,
+                    "emoji": emoji or None,
+                }
+            )
+            seen_profiles.add(profile_name)
+        placeholder = str(value.get("placeholder") or "Choose a ticket type...").strip()
+        return {
+            "channel_id": channel_id,
+            "message_id": cleaned_message_id,
+            "style": cls._panel_style(value.get("style")),
+            "placeholder": placeholder[:100] or "Choose a ticket type...",
+            "options": options,
+        }
+
+    @staticmethod
+    def _multi_panel_emoji(value: str) -> Optional[str]:
+        emoji = value.strip()
+        if emoji.lower() in {"none", "no", "off", "clear", "-"}:
+            return None
+        if not emoji or len(emoji) > 100:
+            raise commands.BadArgument(
+                "Provide one Unicode/custom emoji, or use `none`."
+            )
+        return emoji
+
+    @staticmethod
+    def _multi_panel_option_text(details: str) -> Tuple[str, Optional[str]]:
+        label, separator, description = details.partition("|")
+        label = label.strip()
+        description = description.strip() if separator else ""
+        if not 1 <= len(label) <= 80:
+            raise commands.BadArgument(
+                "Multi-panel option names must be between 1 and 80 characters."
+            )
+        if len(description) > 100:
+            raise commands.BadArgument(
+                "Multi-panel option descriptions cannot exceed 100 characters."
+            )
+        return label, description or None
+
+    def _build_multi_panel_view(
+        self,
+        record: MultiPanelRecord,
+    ) -> TicketMultiPanelView:
+        cleaned = self._sanitize_multi_panel_record(record)
+        if cleaned is None or not cleaned["options"]:
+            raise commands.BadArgument(
+                "A multi-panel needs at least one valid profile option."
+            )
+        try:
+            return TicketMultiPanelView(
+                self,
+                int(cleaned["message_id"]),
+                cleaned,
+            )
+        except (TypeError, ValueError) as exc:
+            raise commands.BadArgument(
+                "One of the configured panel emojis is not valid for Discord."
+            ) from exc
+
+    async def _restore_multi_panel_views(self) -> None:
+        all_guilds = await self.config.all_guilds()
+        for guild_data in all_guilds.values():
+            multi_panels = guild_data.get("multi_panels") or {}
+            if not isinstance(multi_panels, dict):
+                continue
+            for message_key, raw_record in multi_panels.items():
+                try:
+                    message_id = int(message_key)
+                except (TypeError, ValueError):
+                    continue
+                record = self._sanitize_multi_panel_record(
+                    raw_record,
+                    message_id=message_id,
+                )
+                if record is None or not record["options"]:
+                    continue
+                try:
+                    view = self._build_multi_panel_view(record)
+                    self.bot.add_view(view, message_id=message_id)
+                except (commands.CommandError, TypeError, ValueError):
+                    log.exception(
+                        "Failed to restore TicketHub multi-panel message %s.",
+                        message_id,
+                    )
+                    continue
+                self._multi_panel_views[message_id] = view
+
+    async def _get_multi_panel_record(
+        self,
+        guild: discord.Guild,
+        message_id: int,
+    ) -> MultiPanelRecord:
+        panels = await self.config.guild(guild).multi_panels()
+        record = self._sanitize_multi_panel_record(
+            panels.get(str(message_id)),
+            message_id=message_id,
+        )
+        if record is None:
+            raise commands.BadArgument(
+                "That message is not a tracked TicketHub multi-panel."
+            )
+        return record
+
+    async def _save_multi_panel(
+        self,
+        guild: discord.Guild,
+        message: discord.Message,
+        record: MultiPanelRecord,
+    ) -> MultiPanelRecord:
+        cleaned = self._sanitize_multi_panel_record(record, message_id=message.id)
+        if cleaned is None or not cleaned["options"]:
+            raise commands.BadArgument(
+                "A multi-panel needs at least one valid profile option."
+            )
+        view = self._build_multi_panel_view(cleaned)
+        panels = await self.config.guild(guild).multi_panels()
+        previous_record = self._sanitize_multi_panel_record(
+            panels.get(str(message.id)),
+            message_id=message.id,
+        )
+        previous_view = self._multi_panel_views.get(message.id)
+        if previous_view is not None:
+            previous_view.stop()
+        try:
+            await message.edit(view=view)
+        except discord.HTTPException as exc:
+            if previous_record is not None and previous_record["options"]:
+                restored_view = self._build_multi_panel_view(previous_record)
+                self.bot.add_view(restored_view, message_id=message.id)
+                self._multi_panel_views[message.id] = restored_view
+            raise commands.CommandError(
+                "I could not update that multi-panel message."
+            ) from exc
+        async with self.config.guild(guild).multi_panels() as panels:
+            panels[str(message.id)] = cleaned
+        self._multi_panel_views[message.id] = view
+        return cleaned
+
+    async def _clear_multi_panel(
+        self,
+        guild: discord.Guild,
+        message: discord.Message,
+    ) -> None:
+        await self._get_multi_panel_record(guild, message.id)
+        try:
+            await message.edit(view=None)
+        except discord.HTTPException as exc:
+            raise commands.CommandError(
+                "I could not remove the components from that message."
+            ) from exc
+        async with self.config.guild(guild).multi_panels() as panels:
+            panels.pop(str(message.id), None)
+        view = self._multi_panel_views.pop(message.id, None)
+        if view is not None:
+            view.stop()
 
     @staticmethod
     def _ticket_mode(profile: ProfileRecord) -> str:
@@ -1284,7 +1569,11 @@ class TicketHub(commands.Cog):
                 return name, profile
         raise commands.BadArgument("This panel is not tracked by TicketHub.")
 
-    async def handle_panel_open(self, interaction: discord.Interaction) -> None:
+    async def handle_panel_open(
+        self,
+        interaction: discord.Interaction,
+        profile_name: Optional[str] = None,
+    ) -> None:
         """Open a ticket from a persistent panel button."""
         if not interaction.guild or not isinstance(interaction.user, discord.Member):
             await interaction.response.send_message("This button only works in a server.", ephemeral=True)
@@ -1293,10 +1582,14 @@ class TicketHub(commands.Cog):
             await interaction.response.send_message("I could not identify this panel.", ephemeral=True)
             return
         try:
-            profile_name, profile = await self._find_panel_profile(
-                interaction.guild,
-                interaction.message.id,
-            )
+            if profile_name is None:
+                profile_name, profile = await self._find_panel_profile(
+                    interaction.guild,
+                    interaction.message.id,
+                )
+            else:
+                profile_name = self._clean_name(profile_name)
+                profile = await self._get_profile(interaction.guild, profile_name)
             modal_fields = profile.get("creating_modal")
             if modal_fields:
                 await self._validate_ticket_open_request(
@@ -2259,6 +2552,7 @@ search.addEventListener('input', () => {{
         assert ctx.guild is not None
         profiles = await self._get_profiles(ctx.guild)
         tickets = await self.config.guild(ctx.guild).tickets()
+        multi_panels = await self.config.guild(ctx.guild).multi_panels()
         enabled = await self.config.guild(ctx.guild).enabled()
         open_count = sum(1 for record in tickets.values() if record.get("status") == "open")
         closed_count = sum(1 for record in tickets.values() if record.get("status") == "closed")
@@ -2273,6 +2567,7 @@ search.addEventListener('input', () => {{
             value=(
                 f"Enabled: **{'Yes' if enabled else 'No'}**\n"
                 f"Profiles: **{self._count(len(profiles))}**\n"
+                f"Multi-panels: **{self._count(len(multi_panels))}**\n"
                 f"Open tickets: **{self._count(open_count)}**\n"
                 f"Closed tickets: **{self._count(closed_count)}**"
             ),
@@ -2307,6 +2602,7 @@ search.addEventListener('input', () => {{
                 f"`{prefix}tickethub walkthrough`\n"
                 f"`{prefix}tickethub panel main #tickets button`\n"
                 f"`{prefix}tickethub attachpanel main <message-link> dropdown`\n"
+                f"`{prefix}tickethub multipanel` for multi-profile panels\n"
                 f"`{prefix}tickethub import aaa3a main` for migration preview"
             ),
             inline=False,
@@ -2732,6 +3028,253 @@ search.addEventListener('input', () => {{
             f"Ticket {profile['panel_style']} panel attached for `{profile_name}`: "
             f"{message.jump_url}"
         )
+
+    @tickethub.group(
+        name="multipanel",
+        aliases=["mpanel"],
+        invoke_without_command=True,
+    )
+    @commands.admin_or_permissions(manage_guild=True)
+    async def tickethub_multi_panel(self, ctx: commands.Context) -> None:
+        """Manage messages that offer multiple TicketHub profiles."""
+        prefix = ctx.clean_prefix
+        await ctx.send(
+            "Multi-panel commands:\n"
+            f"`{prefix}tickethub multipanel add <message> <profile> "
+            "<button|dropdown> <emoji|none> <name> | <description>`\n"
+            f"`{prefix}tickethub multipanel remove <message> <profile>`\n"
+            f"`{prefix}tickethub multipanel style <message> <button|dropdown>`\n"
+            f"`{prefix}tickethub multipanel placeholder <message> <text>`\n"
+            f"`{prefix}tickethub multipanel show <message>`\n"
+            f"`{prefix}tickethub multipanel clear <message>`"
+        )
+
+    @tickethub_multi_panel.command(name="add", aliases=["option"])
+    @commands.admin_or_permissions(manage_guild=True)
+    async def tickethub_multi_panel_add(
+        self,
+        ctx: commands.Context,
+        message: discord.Message,
+        profile_name: str,
+        style: str,
+        emoji: str,
+        *,
+        details: str,
+    ) -> None:
+        """Add a named profile option to a multi-panel message."""
+        assert ctx.guild is not None
+        try:
+            if message.guild is None or message.guild.id != ctx.guild.id:
+                raise commands.BadArgument("The panel message must be in this server.")
+            if ctx.guild.me is None or message.author.id != ctx.guild.me.id:
+                raise commands.BadArgument(
+                    "I can only attach a multi-panel to a message sent by this bot."
+                )
+            profile_name = self._clean_name(profile_name)
+            profile = await self._get_profile(ctx.guild, profile_name)
+            style = self._parse_panel_style(style)
+            emoji_value = self._multi_panel_emoji(emoji)
+            label, description = self._multi_panel_option_text(details)
+
+            panels = await self.config.guild(ctx.guild).multi_panels()
+            raw_record = panels.get(str(message.id))
+            if raw_record is None:
+                if message.components:
+                    raise commands.BadArgument(
+                        "That message already has components. Remove them before "
+                        "creating a TicketHub multi-panel."
+                    )
+                profiles = await self._get_profiles(ctx.guild)
+                tracked_profile = next(
+                    (
+                        name
+                        for name, profile in profiles.items()
+                        if int(profile.get("panel_message_id") or 0) == message.id
+                    ),
+                    None,
+                )
+                if tracked_profile:
+                    raise commands.BadArgument(
+                        f"That message is already the single panel for `{tracked_profile}`."
+                    )
+                record: MultiPanelRecord = {
+                    "channel_id": message.channel.id,
+                    "message_id": message.id,
+                    "style": style,
+                    "placeholder": "Choose a ticket type...",
+                    "options": [],
+                }
+            else:
+                record = self._sanitize_multi_panel_record(
+                    raw_record,
+                    message_id=message.id,
+                )
+                if record is None:
+                    raise commands.BadArgument(
+                        "That multi-panel configuration is invalid; clear it and try again."
+                    )
+                if record["style"] != style:
+                    raise commands.BadArgument(
+                        f"That multi-panel uses `{record['style']}`. Use the `style` "
+                        "subcommand to change all its options."
+                    )
+            if any(
+                option["profile"] == profile_name for option in record.get("options", [])
+            ):
+                raise commands.BadArgument(
+                    f"Profile `{profile_name}` is already on that multi-panel."
+                )
+            if len(record.get("options", [])) >= 25:
+                raise commands.BadArgument(
+                    "A Discord multi-panel can contain at most 25 profile options."
+                )
+            record["options"].append(
+                {
+                    "profile": profile_name,
+                    "label": label,
+                    "description": description,
+                    "emoji": emoji_value,
+                }
+            )
+            record = await self._save_multi_panel(ctx.guild, message, record)
+            profile["panel_channel_id"] = message.channel.id
+            await self._set_profile(ctx.guild, profile_name, profile)
+        except commands.CommandError as error:
+            await ctx.send(str(error))
+            return
+        await self.config.guild(ctx.guild).enabled.set(True)
+        description_note = (
+            " Descriptions are displayed only when the panel uses a dropdown."
+            if description and record["style"] == "button"
+            else ""
+        )
+        await ctx.send(
+            f"Added **{label}** (`{profile_name}`) to the {record['style']} "
+            f"multi-panel: {message.jump_url}.{description_note}"
+        )
+
+    @tickethub_multi_panel.command(name="remove")
+    @commands.admin_or_permissions(manage_guild=True)
+    async def tickethub_multi_panel_remove(
+        self,
+        ctx: commands.Context,
+        message: discord.Message,
+        profile_name: str,
+    ) -> None:
+        """Remove a profile option from a multi-panel."""
+        assert ctx.guild is not None
+        try:
+            profile_name = self._clean_name(profile_name)
+            record = await self._get_multi_panel_record(ctx.guild, message.id)
+            options = [
+                option
+                for option in record["options"]
+                if option["profile"] != profile_name
+            ]
+            if len(options) == len(record["options"]):
+                raise commands.BadArgument(
+                    f"Profile `{profile_name}` is not on that multi-panel."
+                )
+            if not options:
+                await self._clear_multi_panel(ctx.guild, message)
+            else:
+                record["options"] = options
+                await self._save_multi_panel(ctx.guild, message, record)
+        except commands.CommandError as error:
+            await ctx.send(str(error))
+            return
+        await ctx.send(
+            f"Removed `{profile_name}` from the multi-panel: {message.jump_url}"
+        )
+
+    @tickethub_multi_panel.command(name="style")
+    @commands.admin_or_permissions(manage_guild=True)
+    async def tickethub_multi_panel_style(
+        self,
+        ctx: commands.Context,
+        message: discord.Message,
+        style: str,
+    ) -> None:
+        """Switch every option between buttons and one dropdown."""
+        assert ctx.guild is not None
+        try:
+            style = self._parse_panel_style(style)
+            record = await self._get_multi_panel_record(ctx.guild, message.id)
+            record["style"] = style
+            await self._save_multi_panel(ctx.guild, message, record)
+        except commands.CommandError as error:
+            await ctx.send(str(error))
+            return
+        await ctx.send(f"Multi-panel style changed to **{style}**: {message.jump_url}")
+
+    @tickethub_multi_panel.command(name="placeholder")
+    @commands.admin_or_permissions(manage_guild=True)
+    async def tickethub_multi_panel_placeholder(
+        self,
+        ctx: commands.Context,
+        message: discord.Message,
+        *,
+        placeholder: str,
+    ) -> None:
+        """Set the dropdown placeholder for a multi-panel."""
+        assert ctx.guild is not None
+        placeholder = placeholder.strip()
+        if not 1 <= len(placeholder) <= 100:
+            await ctx.send("Dropdown placeholders must be between 1 and 100 characters.")
+            return
+        try:
+            record = await self._get_multi_panel_record(ctx.guild, message.id)
+            record["placeholder"] = placeholder
+            await self._save_multi_panel(ctx.guild, message, record)
+        except commands.CommandError as error:
+            await ctx.send(str(error))
+            return
+        await ctx.send(f"Multi-panel placeholder updated: {message.jump_url}")
+
+    @tickethub_multi_panel.command(name="show")
+    @commands.admin_or_permissions(manage_guild=True)
+    async def tickethub_multi_panel_show(
+        self,
+        ctx: commands.Context,
+        message: discord.Message,
+    ) -> None:
+        """Show the options configured on a multi-panel."""
+        assert ctx.guild is not None
+        try:
+            record = await self._get_multi_panel_record(ctx.guild, message.id)
+        except commands.CommandError as error:
+            await ctx.send(str(error))
+            return
+        lines = [
+            f"Style: {record['style']}",
+            f"Placeholder: {record['placeholder']}",
+        ]
+        for index, option in enumerate(record["options"], start=1):
+            emoji_text = f"{option['emoji']} " if option.get("emoji") else ""
+            description_text = (
+                f" — {option['description']}" if option.get("description") else ""
+            )
+            lines.append(
+                f"{index}. {emoji_text}{option['label']} (`{option['profile']}`)"
+                f"{description_text}"
+            )
+        await ctx.send(box("\n".join(lines)))
+
+    @tickethub_multi_panel.command(name="clear")
+    @commands.admin_or_permissions(manage_guild=True)
+    async def tickethub_multi_panel_clear(
+        self,
+        ctx: commands.Context,
+        message: discord.Message,
+    ) -> None:
+        """Remove a multi-panel and all its components from a message."""
+        assert ctx.guild is not None
+        try:
+            await self._clear_multi_panel(ctx.guild, message)
+        except commands.CommandError as error:
+            await ctx.send(str(error))
+            return
+        await ctx.send(f"Multi-panel removed: {message.jump_url}")
 
     @tickethub.command(name="profile")
     @commands.admin_or_permissions(manage_guild=True)

@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.6.0
+
+- Added persistent multi-profile panels.
+- Added custom emoji, display name, and brief description fields for each profile option.
+- Added commands to add/remove options, switch button/dropdown layouts, customize the dropdown placeholder, inspect configuration, and clear a multi-panel.
+
 ## 1.5.0
 
 - Added persistent dropdown ticket panels as an alternative to buttons.
