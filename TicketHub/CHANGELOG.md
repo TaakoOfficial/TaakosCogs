@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.10.0
+
+- Added a support-only Lock button that changes to Unlock while active.
+- Locked ticket owners and added members can no longer post until staff unlock the ticket.
+- Added `[p]tickethub lock` and `[p]tickethub unlock` commands.
+- Preserved lock restrictions across claim/unclaim, close/reopen, and bot restarts.
+- Added lock lifecycle metadata to ticket records and CSV exports.
+
 ## 1.9.0
 
 - Added a required close-reason modal to the ticket Close button.

@@ -69,6 +69,19 @@ read-only. Unclaiming restores their send permissions and changes the button bac
 The `[p]tickethub claim` and `[p]tickethub unclaim` commands apply the same permission
 changes as the button. Added members remain read-only while a claim lock is active.
 
+## Locking Tickets
+
+Support staff can press **Lock** to stop the ticket opener and manually added members
+from posting while keeping the ticket open for staff. The button changes to **Unlock**,
+which restores member access without changing the ticket's claim state.
+
+For channel tickets, locked members remain able to read the channel. Discord does not
+support per-member send overrides inside private threads, so TicketHub temporarily
+removes those members from a locked private thread and restores them when it is unlocked.
+
+The same behavior is available through `[p]tickethub lock [ticket_id]` and
+`[p]tickethub unlock [ticket_id]`.
+
 ## Closing Tickets
 
 The ticket **Close** button opens a modal requiring a close reason. Submitting it posts
@@ -153,6 +166,8 @@ Existing open ticket records, modlog cases, forum tags, and panel buttons are no
 | `[p]tickethub dmtranscript <profile> <true_or_false>` | Enable or disable transcript DMs to ticket owners. |
 | `[p]tickethub claim [ticket_id]`                      | Claim a ticket.                                    |
 | `[p]tickethub unclaim [ticket_id]`                    | Unclaim a ticket.                                  |
+| `[p]tickethub lock [ticket_id]`                       | Prevent the opener and added members from posting. |
+| `[p]tickethub unlock [ticket_id]`                     | Restore posting access to locked ticket members.   |
 | `[p]tickethub close [ticket_id] [reason]`             | Request closure with a reason and confirmation.    |
 | `[p]tickethub reopen [ticket_id]`                     | Reopen a ticket.                                   |
 | `[p]tickethub delete [ticket_id] [reason]`            | Delete a ticket channel/thread after transcript.   |
@@ -261,7 +276,7 @@ Thread-ticket setup:
 
 ## Data
 
-TicketHub stores per-guild ticket profiles and their next ticket numbers, panel message IDs and styles, multi-panel option labels/descriptions/emojis, channel/thread/category/role IDs, global and profile-local ticket IDs, ticket records, ticket owner IDs, claimed/closed staff IDs, participant IDs, ticket reasons, modal form answers, pending close requester/reason/expiry data, close reasons, timestamps, and ticket lifecycle event metadata.
+TicketHub stores per-guild ticket profiles and their next ticket numbers, panel message IDs and styles, multi-panel option labels/descriptions/emojis, channel/thread/category/role IDs, global and profile-local ticket IDs, ticket records, ticket owner IDs, claimed/locked/unlocked/closed staff IDs, participant IDs, ticket reasons, modal form answers, pending close requester/reason/expiry data, close reasons, timestamps, and ticket lifecycle event metadata.
 
 HTML and text transcripts are generated on demand from Discord message history and sent directly to configured Discord destinations.
 
