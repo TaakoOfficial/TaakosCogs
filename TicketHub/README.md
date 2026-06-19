@@ -154,22 +154,6 @@ Mapped settings include:
 
 Existing open ticket records, modlog cases, forum tags, and panel buttons are not imported.
 
-## AAA3A Functional Parity
-
-TicketHub covers AAA3A's general ticket workflows: ticket creation for yourself or
-another member, profile panels, button/dropdown attachment, configurable forms and
-roles, member pickers, claim/unclaim, lock/unlock, close confirmation, reopen reasons,
-transcripts, deletion, ticket recovery, close-on-leave, and auto-delete.
-
-The following AAA3A-specific integrations are intentionally outside TicketHub's parity
-target:
-
-- Dank Memer payout automation, excluded by project requirement.
-- Cross-server ban appeals and appeal approval.
-- AAA3A Dashboard integration.
-- Forum-channel tags; TicketHub uses private threads under text channels.
-- AAA3A modlog cases; TicketHub sends equivalent lifecycle events to its configured log channel.
-
 ## Commands
 
 | Command                                               | Description                                        |
