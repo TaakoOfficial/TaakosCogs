@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import secrets
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import discord
 from redbot.core import Config, commands
@@ -200,6 +200,43 @@ class Captcha(commands.Cog):
                 "Move my highest role above the verification role before using it."
             )
 
+    def _validate_roles(
+        self,
+        guild: discord.Guild,
+        roles: Sequence[discord.Role],
+    ) -> List[discord.Role]:
+        unique_roles = list({role.id: role for role in roles}.values())
+        if not unique_roles:
+            raise commands.BadArgument("Configure at least one verification role.")
+        if len(unique_roles) > 10:
+            raise commands.BadArgument("A captcha panel can assign at most 10 roles.")
+        for role in unique_roles:
+            self._validate_role(guild, role)
+        return unique_roles
+
+    def _panel_roles(
+        self,
+        guild: discord.Guild,
+        panel: PanelRecord,
+    ) -> List[discord.Role]:
+        raw_role_ids = panel.get("role_ids")
+        if not isinstance(raw_role_ids, list):
+            raw_role_ids = [panel.get("role_id")]
+        role_ids = []
+        for raw_role_id in raw_role_ids:
+            try:
+                role_id = int(raw_role_id)
+            except (TypeError, ValueError):
+                continue
+            if role_id not in role_ids:
+                role_ids.append(role_id)
+        roles = [guild.get_role(role_id) for role_id in role_ids]
+        if not roles or any(role is None for role in roles):
+            raise commands.CommandError(
+                "One or more verification roles no longer exist. Please contact server staff."
+            )
+        return self._validate_roles(guild, roles)
+
     async def _get_panel(self, guild: discord.Guild, message_id: int) -> PanelRecord:
         panels = await self.config.guild(guild).panels()
         record = panels.get(str(message_id))
@@ -211,14 +248,14 @@ class Captcha(commands.Cog):
         self,
         guild: discord.Guild,
         message: discord.Message,
-        role: discord.Role,
+        roles: Sequence[discord.Role],
         label: str,
         view: CaptchaPanelView,
     ) -> None:
         record: PanelRecord = {
             "message_id": message.id,
             "channel_id": message.channel.id,
-            "role_id": role.id,
+            "role_ids": [role.id for role in roles],
             "button_label": label,
         }
         async with self.config.guild(guild).panels() as panels:
@@ -248,7 +285,7 @@ class Captcha(commands.Cog):
         self,
         guild: discord.Guild,
         message: discord.Message,
-        role: discord.Role,
+        roles: Sequence[discord.Role],
         label: str,
     ) -> None:
         label = label.strip()[:80] or "Verify"
@@ -257,7 +294,7 @@ class Captcha(commands.Cog):
             await message.edit(view=view)
         except discord.HTTPException as exc:
             raise commands.CommandError("I could not attach the verification button.") from exc
-        await self._save_panel(guild, message, role, label, view)
+        await self._save_panel(guild, message, roles, label, view)
 
     async def start_challenge(
         self,
@@ -283,18 +320,14 @@ class Captcha(commands.Cog):
             panel = await self._get_panel(interaction.guild, message_id)
             if str(panel.get("channel_id")) != str(interaction.channel_id):
                 raise commands.CommandError("This verification panel is not valid here.")
-            role = interaction.guild.get_role(int(panel.get("role_id") or 0))
-            if role is None:
-                raise commands.CommandError(
-                    "The verification role no longer exists. Please contact server staff."
-                )
-            self._validate_role(interaction.guild, role)
+            roles = self._panel_roles(interaction.guild, panel)
         except commands.CommandError as error:
             await interaction.response.send_message(str(error), ephemeral=True)
             return
-        if role in interaction.user.roles:
+        missing_roles = [role for role in roles if role not in interaction.user.roles]
+        if not missing_roles:
             await interaction.response.send_message(
-                f"You already have {role.mention}.",
+                "You already have every role assigned by this verification panel.",
                 ephemeral=True,
             )
             return
@@ -360,14 +393,13 @@ class Captcha(commands.Cog):
             return
         try:
             panel = await self._get_panel(interaction.guild, message_id)
-            role = interaction.guild.get_role(int(panel.get("role_id") or 0))
-            if role is None:
-                raise commands.CommandError("The verification role no longer exists.")
-            self._validate_role(interaction.guild, role)
-            await interaction.user.add_roles(
-                role,
-                reason=f"Captcha completed from panel {message_id}",
-            )
+            roles = self._panel_roles(interaction.guild, panel)
+            missing_roles = [role for role in roles if role not in interaction.user.roles]
+            if missing_roles:
+                await interaction.user.add_roles(
+                    *missing_roles,
+                    reason=f"Captcha completed from panel {message_id}",
+                )
         except commands.CommandError as error:
             self._active_challenges.pop(key, None)
             await interaction.response.send_message(str(error), ephemeral=True)
@@ -380,8 +412,13 @@ class Captcha(commands.Cog):
             )
             return
         self._active_challenges.pop(key, None)
+        assigned_mentions = ", ".join(role.mention for role in missing_roles)
         await interaction.response.send_message(
-            f"Verification successful. You received {role.mention}.",
+            (
+                f"Verification successful. You received {assigned_mentions}."
+                if assigned_mentions
+                else "Verification successful. You already had the configured roles."
+            ),
             ephemeral=True,
         )
 
@@ -405,7 +442,7 @@ class Captcha(commands.Cog):
             name="Setup",
             value=(
                 f"`{ctx.clean_prefix}captcha post #channel @Verified`\n"
-                f"`{ctx.clean_prefix}captcha attach <message-link> @Verified`"
+                f"`{ctx.clean_prefix}captcha attach <message-link> @Verified @Member`"
             ),
             inline=False,
         )
@@ -418,14 +455,14 @@ class Captcha(commands.Cog):
         self,
         ctx: commands.Context,
         channel: discord.TextChannel,
-        role: discord.Role,
+        roles: commands.Greedy[discord.Role],
         *,
         label: str = "Verify",
     ) -> None:
-        """Post the predefined captcha message and configure its success role."""
+        """Post the predefined captcha message and configure its success roles."""
         assert ctx.guild is not None
         try:
-            self._validate_role(ctx.guild, role)
+            roles = self._validate_roles(ctx.guild, roles)
         except commands.CommandError as error:
             await ctx.send(str(error))
             return
@@ -438,7 +475,7 @@ class Captcha(commands.Cog):
         message = None
         try:
             message = await channel.send(embed=embed)
-            await self._install_panel(ctx.guild, message, role, label)
+            await self._install_panel(ctx.guild, message, roles, label)
         except (commands.CommandError, discord.HTTPException) as error:
             if message is not None:
                 try:
@@ -456,7 +493,7 @@ class Captcha(commands.Cog):
         self,
         ctx: commands.Context,
         message: discord.Message,
-        role: discord.Role,
+        roles: commands.Greedy[discord.Role],
         *,
         label: str = "Verify",
     ) -> None:
@@ -473,8 +510,8 @@ class Captcha(commands.Cog):
             await ctx.send("That message already has components I do not manage.")
             return
         try:
-            self._validate_role(ctx.guild, role)
-            await self._install_panel(ctx.guild, message, role, label)
+            roles = self._validate_roles(ctx.guild, roles)
+            await self._install_panel(ctx.guild, message, roles, label)
         except commands.CommandError as error:
             await ctx.send(str(error))
             return
@@ -513,11 +550,15 @@ class Captcha(commands.Cog):
         lines = []
         for message_id, record in panels.items():
             channel = ctx.guild.get_channel(int(record.get("channel_id") or 0))
-            role = ctx.guild.get_role(int(record.get("role_id") or 0))
+            try:
+                roles = self._panel_roles(ctx.guild, record)
+                role_text = " ".join(role.mention for role in roles)
+            except commands.CommandError:
+                role_text = "missing role"
             lines.append(
                 f"Message {message_id} | "
                 f"{channel.mention if channel else 'missing channel'} | "
-                f"{role.mention if role else 'missing role'} | "
+                f"{role_text} | "
                 f"button `{record.get('button_label') or 'Verify'}`"
             )
         for page in pagify("\n".join(lines), page_length=1800):
