@@ -172,9 +172,13 @@ class TicketMultiPanelView(discord.ui.View):
 class TicketControlView(discord.ui.View):
     """Persistent view for ticket control messages."""
 
-    def __init__(self, cog: "TicketHub") -> None:
+    def __init__(self, cog: "TicketHub", *, claimed: bool = False) -> None:
         super().__init__(timeout=None)
         self.cog = cog
+        if claimed:
+            self.claim.label = "Unclaim"
+            self.claim.emoji = "\N{OPEN LOCK}"
+            self.claim.style = discord.ButtonStyle.secondary
 
     @discord.ui.button(
         label="Claim",
@@ -187,7 +191,7 @@ class TicketControlView(discord.ui.View):
         interaction: discord.Interaction,
         button: discord.ui.Button,
     ) -> None:
-        await self.cog.handle_ticket_button(interaction, "claim")
+        await self.cog.handle_ticket_button(interaction, "claim_toggle")
 
     @discord.ui.button(
         label="Close",
@@ -1275,9 +1279,14 @@ class TicketHub(commands.Cog):
         return any(int(role_id) in member_role_ids for role_id in role_ids)
 
     def _is_support_member(self, member: discord.Member, profile: ProfileRecord) -> bool:
-        if member.guild_permissions.manage_guild:
+        if self._has_admin_permissions(member):
             return True
         return self._member_has_any_role(member, profile.get("support_role_ids") or [])
+
+    @staticmethod
+    def _has_admin_permissions(member: discord.Member) -> bool:
+        permissions = member.guild_permissions
+        return permissions.administrator or permissions.manage_guild
 
     def _can_create_ticket(self, member: discord.Member, profile: ProfileRecord) -> Tuple[bool, str]:
         blacklist = profile.get("blacklist_role_ids") or []
@@ -1732,9 +1741,21 @@ class TicketHub(commands.Cog):
                 interaction.message.id,
             )
             profile = await self._get_profile(interaction.guild, str(record.get("profile") or "main"))
-            if action == "claim":
-                await self._claim_ticket(interaction.guild, record, interaction.user)
-                await interaction.followup.send("Ticket claimed.", ephemeral=True)
+            if action == "claim_toggle":
+                if record.get("claimed_by"):
+                    await self._unclaim_ticket(
+                        interaction.guild,
+                        record,
+                        interaction.user,
+                    )
+                    await interaction.followup.send("Ticket unclaimed.", ephemeral=True)
+                else:
+                    await self._claim_ticket(
+                        interaction.guild,
+                        record,
+                        interaction.user,
+                    )
+                    await interaction.followup.send("Ticket claimed.", ephemeral=True)
             elif action == "close":
                 await self._close_ticket(
                     interaction.guild,
@@ -1941,15 +1962,16 @@ class TicketHub(commands.Cog):
         guild: discord.Guild,
         thread: discord.Thread,
         profile: ProfileRecord,
-        owner: discord.Member,
+        owner: Optional[discord.Member],
     ) -> None:
         members: Dict[int, discord.Member] = {}
+        owner_id = owner.id if owner is not None else None
         for role_id in profile.get("support_role_ids") or []:
             role = guild.get_role(int(role_id))
             if role is None:
                 continue
             for member in role.members:
-                if member.id != owner.id and not member.bot:
+                if member.id != owner_id and not member.bot:
                     members[member.id] = member
         for member in members.values():
             try:
@@ -1962,6 +1984,137 @@ class TicketHub(commands.Cog):
                     guild.id,
                 )
 
+    async def _restore_thread_claim_access(
+        self,
+        guild: discord.Guild,
+        thread: discord.Thread,
+        profile: ProfileRecord,
+        owner: Optional[discord.Member],
+        participant_ids: Sequence[int],
+    ) -> None:
+        if owner is not None:
+            try:
+                await thread.add_user(owner)
+            except discord.HTTPException:
+                log.debug(
+                    "Failed to restore owner %s to TicketHub thread %s",
+                    owner.id,
+                    thread.id,
+                )
+        await self._add_cached_support_members_to_thread(
+            guild,
+            thread,
+            profile,
+            owner,
+        )
+        for participant_id in participant_ids:
+            try:
+                participant = guild.get_member(int(participant_id))
+            except (TypeError, ValueError):
+                continue
+            if participant is None or participant.bot:
+                continue
+            try:
+                await thread.add_user(participant)
+            except discord.HTTPException:
+                log.debug(
+                    "Failed to restore participant %s to TicketHub thread %s",
+                    participant.id,
+                    thread.id,
+                )
+
+    async def _set_ticket_claim_access(
+        self,
+        guild: discord.Guild,
+        record: TicketRecord,
+        profile: ProfileRecord,
+        claimed_by: Optional[discord.Member],
+    ) -> None:
+        channel = await self._fetch_ticket_channel(guild, record)
+        if channel is None:
+            raise commands.CommandError("I could not find that ticket channel or thread.")
+        owner = guild.get_member(int(record["owner_id"])) if record.get("owner_id") else None
+        participant_ids = record.get("participants") or []
+        action = "claimed" if claimed_by is not None else "unclaimed"
+        if isinstance(channel, discord.TextChannel):
+            overwrites = self._ticket_overwrites(
+                guild,
+                owner,
+                profile,
+                closed=False,
+                claimed_by=claimed_by,
+                participant_ids=participant_ids,
+            )
+            try:
+                await channel.edit(
+                    overwrites=overwrites,
+                    reason=f"TicketHub ticket #{record['id']} {action}",
+                )
+            except discord.HTTPException as exc:
+                raise commands.CommandError(
+                    "I could not update the ticket's send permissions."
+                ) from exc
+            return
+
+        if claimed_by is None:
+            await self._restore_thread_claim_access(
+                guild,
+                channel,
+                profile,
+                owner,
+                participant_ids,
+            )
+            return
+
+        allowed_ids = {claimed_by.id}
+        if owner is not None:
+            allowed_ids.add(owner.id)
+        if guild.me is not None:
+            allowed_ids.add(guild.me.id)
+        administrators = [
+            member
+            for member in guild.members
+            if not member.bot and self._has_admin_permissions(member)
+        ]
+        allowed_ids.update(member.id for member in administrators)
+        for member in [owner, claimed_by, *administrators]:
+            if member is None:
+                continue
+            try:
+                await channel.add_user(member)
+            except discord.HTTPException as exc:
+                raise commands.CommandError(
+                    "I could not add all required members before locking the ticket thread."
+                ) from exc
+        try:
+            thread_members = await channel.fetch_members()
+        except discord.HTTPException:
+            thread_members = channel.members
+        removed_members: List[discord.abc.Snowflake] = []
+        failed_member_ids: List[int] = []
+        for thread_member in thread_members:
+            member_id = int(thread_member.id)
+            member = guild.get_member(member_id)
+            if member_id in allowed_ids:
+                continue
+            if member is not None and self._has_admin_permissions(member):
+                continue
+            target = member or thread_member
+            try:
+                await channel.remove_user(target)
+                removed_members.append(target)
+            except discord.HTTPException:
+                failed_member_ids.append(member_id)
+        if failed_member_ids:
+            for removed_member in removed_members:
+                try:
+                    await channel.add_user(removed_member)
+                except discord.HTTPException:
+                    pass
+            raise commands.CommandError(
+                "I could not lock the ticket thread for every member."
+            )
+
     def _ticket_overwrites(
         self,
         guild: discord.Guild,
@@ -1969,7 +2122,10 @@ class TicketHub(commands.Cog):
         profile: ProfileRecord,
         *,
         closed: bool,
+        claimed_by: Optional[discord.Member] = None,
+        participant_ids: Sequence[int] = (),
     ) -> Dict[discord.abc.Snowflake, discord.PermissionOverwrite]:
+        claim_locked = claimed_by is not None and not closed
         overwrites: Dict[discord.abc.Snowflake, discord.PermissionOverwrite] = {
             guild.default_role: discord.PermissionOverwrite(view_channel=False),
         }
@@ -1997,10 +2153,10 @@ class TicketHub(commands.Cog):
             if role is not None:
                 overwrites[role] = discord.PermissionOverwrite(
                     view_channel=True,
-                    send_messages=True,
+                    send_messages=not claim_locked,
                     read_message_history=True,
-                    attach_files=True,
-                    embed_links=True,
+                    attach_files=not claim_locked,
+                    embed_links=not claim_locked,
                 )
         for role_id in profile.get("view_role_ids") or []:
             role = guild.get_role(int(role_id))
@@ -2010,6 +2166,48 @@ class TicketHub(commands.Cog):
                     send_messages=False,
                     read_message_history=True,
                 )
+        if claim_locked:
+            for role in guild.roles:
+                if role.permissions.administrator or role.permissions.manage_guild:
+                    overwrites[role] = discord.PermissionOverwrite(
+                        view_channel=True,
+                        send_messages=True,
+                        read_message_history=True,
+                        attach_files=True,
+                        embed_links=True,
+                    )
+        owner_id = owner.id if owner is not None else None
+        claimed_by_id = claimed_by.id if claimed_by is not None else None
+        for participant_id in participant_ids:
+            try:
+                participant = guild.get_member(int(participant_id))
+            except (TypeError, ValueError):
+                continue
+            if participant is None or participant.id == owner_id:
+                continue
+            can_send = (
+                not closed
+                and (
+                    not claim_locked
+                    or participant.id == claimed_by_id
+                    or self._has_admin_permissions(participant)
+                )
+            )
+            overwrites[participant] = discord.PermissionOverwrite(
+                view_channel=True,
+                send_messages=can_send,
+                read_message_history=True,
+                attach_files=can_send,
+                embed_links=can_send,
+            )
+        if claimed_by is not None and claimed_by.id != owner_id and not closed:
+            overwrites[claimed_by] = discord.PermissionOverwrite(
+                view_channel=True,
+                send_messages=True,
+                read_message_history=True,
+                attach_files=True,
+                embed_links=True,
+            )
         return overwrites
 
     @staticmethod
@@ -2054,7 +2252,10 @@ class TicketHub(commands.Cog):
             return
         try:
             message = await channel.fetch_message(int(record["message_id"]))
-            await message.edit(embed=self._ticket_embed(guild, record, profile), view=self._control_view)
+            await message.edit(
+                embed=self._ticket_embed(guild, record, profile),
+                view=TicketControlView(self, claimed=bool(record.get("claimed_by"))),
+            )
         except discord.HTTPException:
             log.exception("Failed to update TicketHub ticket message in guild %s", guild.id)
 
@@ -2069,6 +2270,9 @@ class TicketHub(commands.Cog):
             raise commands.CommandError("Only support staff can claim tickets.")
         if record.get("status") != "open":
             raise commands.CommandError("Only open tickets can be claimed.")
+        if record.get("claimed_by"):
+            raise commands.CommandError("This ticket is already claimed.")
+        await self._set_ticket_claim_access(guild, record, profile, member)
         record["claimed_by"] = member.id
         record.setdefault("events", []).append(
             {"type": "claimed", "actor_id": member.id, "at": self._now_ts()}
@@ -2093,6 +2297,11 @@ class TicketHub(commands.Cog):
         profile = await self._get_profile(guild, str(record.get("profile") or "main"))
         if not self._is_support_member(member, profile):
             raise commands.CommandError("Only support staff can unclaim tickets.")
+        if record.get("status") != "open":
+            raise commands.CommandError("Only open tickets can be unclaimed.")
+        if not record.get("claimed_by"):
+            raise commands.CommandError("This ticket is not claimed.")
+        await self._set_ticket_claim_access(guild, record, profile, None)
         record["claimed_by"] = None
         record.setdefault("events", []).append(
             {"type": "unclaimed", "actor_id": member.id, "at": self._now_ts()}
@@ -2234,6 +2443,11 @@ class TicketHub(commands.Cog):
         record.setdefault("events", []).append(
             {"type": "reopened", "actor_id": member.id, "at": self._now_ts()}
         )
+        claimed_by = (
+            guild.get_member(int(record["claimed_by"]))
+            if record.get("claimed_by")
+            else None
+        )
         channel = await self._fetch_ticket_channel(guild, record)
         if channel is not None:
             if isinstance(channel, discord.Thread):
@@ -2247,9 +2461,23 @@ class TicketHub(commands.Cog):
                     await channel.send(f"Ticket reopened by {member.mention}.")
                 except discord.HTTPException:
                     log.exception("Failed to reopen ticket thread in guild %s", guild.id)
+                if claimed_by is not None:
+                    await self._set_ticket_claim_access(
+                        guild,
+                        record,
+                        profile,
+                        claimed_by,
+                    )
             else:
                 open_category = self._profile_category(guild, profile, "ticket_category_id")
-                overwrites = self._ticket_overwrites(guild, owner, profile, closed=False)
+                overwrites = self._ticket_overwrites(
+                    guild,
+                    owner,
+                    profile,
+                    closed=False,
+                    claimed_by=claimed_by,
+                    participant_ids=record.get("participants") or [],
+                )
                 try:
                     await channel.edit(
                         category=open_category or channel.category,
@@ -3910,16 +4138,26 @@ search.addEventListener('input', () => {{
             if channel is None:
                 await ctx.send("I could not find that ticket channel or thread.")
                 return
+            claim_locked = bool(record.get("claimed_by")) and record.get("status") == "open"
+            can_send_while_claimed = (
+                self._has_admin_permissions(member)
+                or member.id == int(record.get("owner_id") or 0)
+                or member.id == int(record.get("claimed_by") or 0)
+            )
+            can_send = record.get("status") == "open" and (
+                not claim_locked or can_send_while_claimed
+            )
             if isinstance(channel, discord.Thread):
-                await channel.add_user(member)
+                if can_send:
+                    await channel.add_user(member)
             else:
                 await channel.set_permissions(
                     member,
                     view_channel=True,
-                    send_messages=record.get("status") == "open",
+                    send_messages=can_send,
                     read_message_history=True,
-                    attach_files=record.get("status") == "open",
-                    embed_links=record.get("status") == "open",
+                    attach_files=can_send,
+                    embed_links=can_send,
                     reason=f"TicketHub member added by {ctx.author}",
                 )
             participants = {int(member_id) for member_id in record.get("participants", [])}
@@ -3933,7 +4171,14 @@ search.addEventListener('input', () => {{
         except (commands.CommandError, discord.HTTPException) as error:
             await ctx.send(str(error))
             return
-        await ctx.send(f"{member.mention} added to ticket #{record['id']}.")
+        claim_note = ""
+        if claim_locked and not can_send:
+            claim_note = (
+                " They will be added to the private thread when it is unclaimed."
+                if isinstance(channel, discord.Thread)
+                else " They will remain read-only until it is unclaimed."
+            )
+        await ctx.send(f"{member.mention} added to ticket #{record['id']}.{claim_note}")
 
     @tickethub.command(name="removemember")
     @commands.guild_only()
@@ -3958,7 +4203,10 @@ search.addEventListener('input', () => {{
                 await ctx.send("I could not find that ticket channel or thread.")
                 return
             if isinstance(channel, discord.Thread):
-                await channel.remove_user(member)
+                try:
+                    await channel.remove_user(member)
+                except discord.NotFound:
+                    pass
             else:
                 await channel.set_permissions(
                     member,

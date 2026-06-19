@@ -21,6 +21,7 @@ Ticket panels, configurable modal forms, ticket lifecycle controls, AAA3A Ticket
 - Supports configurable and imported modal questions before panel-created tickets open.
 - Creates private ticket channels, or private thread tickets under a configured parent channel.
 - Supports claim, unclaim, close, reopen, delete, add member, remove member, and list workflows.
+- Changes Claim to Unclaim and makes other support members read-only while a ticket is claimed.
 - Generates HTML transcripts with DiscordChatExporterPy, plus a built-in fallback renderer and plain-text transcript.
 - Sends transcripts to a transcript/log channel and optionally DMs the ticket owner.
 - Imports profile settings from AAA3A's `Tickets` cog with dry-run preview before applying.
@@ -55,7 +56,18 @@ Profiles use normal private ticket channels by default. To create private thread
 [p]tickethub mode main thread
 ```
 
-Thread tickets add the ticket opener and cached members of configured support roles to the private thread. Discord does not support per-thread role permission overwrites, so support-role and viewer-role behavior is stricter and more configurable in channel mode. The parent channel must allow the ticket opener to view the channel, send messages in threads, and read message history.
+Thread tickets add the ticket opener and cached members of configured support roles to the private thread. Discord does not support per-thread role permission overwrites, so claiming a private-thread ticket removes everyone except the opener, claimer, TicketHub bot, and cached members with Manage Server/Administrator permission. Support members and added participants are restored when the ticket is unclaimed. The parent channel must allow the ticket opener to view the channel, send messages in threads, and read message history.
+
+## Claim Locking
+
+Claiming an open ticket changes its **Claim** button to **Unclaim**. For channel tickets,
+the opener, claimer, and members with Manage Server or Administrator permission can
+continue sending messages; other support members and added participants become
+read-only. Unclaiming restores their send permissions and changes the button back to
+**Claim**.
+
+The `[p]tickethub claim` and `[p]tickethub unclaim` commands apply the same permission
+changes as the button. Added members remain read-only while a claim lock is active.
 
 ## AAA3A Import
 

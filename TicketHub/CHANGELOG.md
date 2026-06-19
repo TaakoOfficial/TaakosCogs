@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.8.0
+
+- Changed the Claim button to Unclaim while a ticket is claimed.
+- Added claim-time send locking so only the opener, claimer, and server administrators can send in channel tickets.
+- Added private-thread claim locking by temporarily removing other members and restoring support/participants on unclaim.
+- Applied the same permission transitions to claim/unclaim commands and newly added ticket participants.
+
 ## 1.7.0
 
 - Added `[p]tickethub channelname` to show or set the channel-name template for a profile.

@@ -4,10 +4,10 @@
     "author": [
         "Taako"
     ],
-    "version": "1.7.0",
-    "description": "A Red DiscordBot cog for single and multi-profile button/dropdown ticket panels, profile-numbered channel templates, configurable modal forms, ticket lifecycle controls, AAA3A Tickets profile imports, and DiscordChatExporterPy-backed HTML transcripts.",
+    "version": "1.8.0",
+    "description": "A Red DiscordBot cog for single and multi-profile ticket panels, claim-locked support workflows, profile-numbered channel templates, configurable forms, AAA3A imports, and HTML transcripts.",
     "install_msg": "tickethub loaded. Use `[p]tickethub walkthrough` to set up your first panel, or `[p]tickethub import aaa3a main` to preview an AAA3A Tickets profile import.",
-    "short": "Multi-profile ticket panels, numbered channel templates, forms, and transcripts.",
+    "short": "Multi-profile ticket panels, claim locking, numbered channels, and transcripts.",
     "tags": [
         "tickets",
         "support",
