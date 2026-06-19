@@ -42,7 +42,7 @@ Custom welcome messages for Red-DiscordBot servers.
 | `[p]welcome test [member]`                   | Preview the welcome output.                            |
 
 Avatar overlay coordinates are percentages of the cached image. For a banner like the
-example with a circle on the right, start with `[p]welcome avataroverlay true 81 50 21`
+example with a circle on the right, start with `[p]welcome avataroverlay true 82 52 17`
 and adjust from there.
 
 ## Requirements

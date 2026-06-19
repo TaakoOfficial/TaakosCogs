@@ -102,9 +102,9 @@ class Welcome(commands.Cog):
     def _default_avatar_overlay() -> Dict[str, Any]:
         return {
             "enabled": False,
-            "x_percent": 81.0,
-            "y_percent": 50.0,
-            "size_percent": 21.0,
+            "x_percent": 82.0,
+            "y_percent": 52.0,
+            "size_percent": 17.0,
         }
 
     @classmethod
@@ -123,6 +123,20 @@ class Welcome(commands.Cog):
         overlay["x_percent"] = max(0.0, min(100.0, overlay["x_percent"]))
         overlay["y_percent"] = max(0.0, min(100.0, overlay["y_percent"]))
         overlay["size_percent"] = max(1.0, min(100.0, overlay["size_percent"]))
+
+        # Move guilds still using the original preset to the refined right-side cutout.
+        if (
+            overlay["x_percent"],
+            overlay["y_percent"],
+            overlay["size_percent"],
+        ) == (81.0, 50.0, 21.0):
+            overlay.update(
+                {
+                    "x_percent": 82.0,
+                    "y_percent": 52.0,
+                    "size_percent": 17.0,
+                }
+            )
         return overlay
 
     @staticmethod
