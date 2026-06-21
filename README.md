@@ -42,6 +42,7 @@ To update installed cogs:
 | [RepBoard](./RepBoard)                 | Community reputation     | Member kudos, public rep board posts, cooldowns, daily limits, profiles, leaderboards, moderation removal, and CSV exports.                 |
 | [ReviewHub](./ReviewHub)               | Reviews and vouches      | reviewhub-style reviews, vouches, review requests, stats, leaderboards, reports, useful votes, templates, and CSV exports.                  |
 | [TicketHub](./TicketHub)               | Support tickets          | Ticket panels, private channels, claim/close controls, AAA3A Tickets profile imports, HTML transcripts, and owner transcript DMs.           |
+| [SlashLink](./SlashLink)               | Prefix/slash compatibility | Red-managed application-command gateways for loaded prefix-only cogs, with permission-aware autocomplete and normal `[p]slash` controls. |
 | [tempvoice](./tempvoice)               | Voice channel automation | Join-to-create temporary voice channels, embedded owner controls, rename/lock/limit/transfer buttons, claiming, and cleanup.                |
 | [Giveaway](./Giveaway)                 | Community events         | Timed giveaways, reaction entry, rerolls, cancellation, attached giveaways, prefix and slash command support.                               |
 | [Uppercase](./Uppercase)               | Channel setup            | Create and rename text channels with uppercase-style names using `/create-channel` and `/rename-channel`.                                  |
@@ -171,7 +172,7 @@ Some features also need Discord privileged intents:
 
 Each cog includes its own data statement in `info.json`. In short:
 
-- `flipper`, `randomweather`, `emojiporter`, `zodiaccolorroles`, and `uppercase` do not persistently store end user data.
+- `flipper`, `randomweather`, `emojiporter`, `zodiaccolorroles`, `uppercase`, and `slashlink` do not persistently store end user data.
 - `toolz` stores per-guild role-message settings such as role IDs, channel IDs, and message templates.
 - `captcha` stores panel message/channel IDs, role IDs, and button labels; verification challenges are transient in memory.
 - `YALC`, `applications`, `welcome`, `invitetracker`, `suggestionbox`, `repboard`, `reviewhub`, `tickethub`, `tempvoice`, `giveaway`, `fivemstatus`, `fable`, `paranoia`, `rpcalander`, and `whmcs` store the settings or records needed for their features.
@@ -199,6 +200,7 @@ Start with each cog's README:
 - [RepBoard README](./RepBoard/README.md)
 - [ReviewHub README](./ReviewHub/README.md)
 - [TicketHub README](./TicketHub/README.md)
+- [SlashLink README](./SlashLink/README.md)
 - [Giveaway README](./Giveaway/README.md)
 - [Uppercase README](./Uppercase/README.md)
 - [EmojiPorter README](./EmojiPorter/README.md)
