@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.0
+
+- Added native `/invitetracker` and `/invites` subcommands.
+
 ## 1.0.0
 
 - Initial InviteTracker cog.

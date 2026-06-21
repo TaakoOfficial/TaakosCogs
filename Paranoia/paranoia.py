@@ -125,12 +125,12 @@ class Paranoia(commands.Cog):
             return message.author.display_name
         return user.display_name
 
-    @commands.group(name="paranoia", invoke_without_command=True)
+    @commands.hybrid_group(name="paranoia", invoke_without_command=True)
     async def paranoia(self, ctx):
         """Main command group for Paranoia game."""
         await ctx.send_help(ctx.command)
 
-    @paranoia.command(name="start")
+    @paranoia.command(name="start", with_app_command=False)
     async def start_game(self, ctx, *players: discord.Member):
         """
         Start a new Paranoia game.
@@ -138,6 +138,58 @@ class Paranoia(commands.Cog):
         Usage: `[p]paranoia start @player1 @player2 @player3`
         Minimum 3 players required.
         """
+        await self._start_game(ctx, players)
+
+    @paranoia.app_command.command(name="start", description="Start a new Paranoia game.")
+    @discord.app_commands.describe(
+        player_1="First player",
+        player_2="Second player",
+        player_3="Third player",
+        player_4="Optional fourth player",
+        player_5="Optional fifth player",
+        player_6="Optional sixth player",
+        player_7="Optional seventh player",
+        player_8="Optional eighth player",
+        player_9="Optional ninth player",
+        player_10="Optional tenth player",
+    )
+    @discord.app_commands.guild_only()
+    async def start_game_slash(
+        self,
+        interaction: discord.Interaction,
+        player_1: discord.Member,
+        player_2: discord.Member,
+        player_3: discord.Member,
+        player_4: Optional[discord.Member] = None,
+        player_5: Optional[discord.Member] = None,
+        player_6: Optional[discord.Member] = None,
+        player_7: Optional[discord.Member] = None,
+        player_8: Optional[discord.Member] = None,
+        player_9: Optional[discord.Member] = None,
+        player_10: Optional[discord.Member] = None,
+    ) -> None:
+        """Native slash wrapper for the variadic prefix command."""
+        ctx = await commands.Context.from_interaction(interaction)
+        players = tuple(
+            player
+            for player in (
+                player_1,
+                player_2,
+                player_3,
+                player_4,
+                player_5,
+                player_6,
+                player_7,
+                player_8,
+                player_9,
+                player_10,
+            )
+            if player is not None
+        )
+        await self._start_game(ctx, players)
+
+    async def _start_game(self, ctx, players):
+        """Start a game for prefix and application-command entry points."""
         # Check if command is being used in a guild context
         if not ctx.guild:
             await ctx.send("❌ This command can only be used in a server channel, not in DMs!")

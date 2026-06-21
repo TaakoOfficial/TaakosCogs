@@ -677,7 +677,7 @@ class RepBoard(commands.Cog):
                 continue
             return value
 
-    @commands.group(name="repboard", invoke_without_command=True)
+    @commands.hybrid_group(name="repboard", invoke_without_command=True)
     @commands.guild_only()
     @commands.bot_has_permissions(embed_links=True)
     async def repboard(self, ctx: commands.Context) -> None:

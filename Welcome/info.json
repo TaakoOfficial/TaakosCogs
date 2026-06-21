@@ -20,5 +20,5 @@
     "disabled": false,
     "type": "COG",
     "short": "Custom welcome messages with placeholders, embeds, cached images, and avatar overlays.",
-    "version": "1.1.0"
+    "version": "1.2.0"
 }

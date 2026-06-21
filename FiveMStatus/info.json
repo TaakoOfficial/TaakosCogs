@@ -4,7 +4,7 @@
     "author": [
         "Taako"
     ],
-    "version": "1.1.0",
+    "version": "1.2.0",
     "description": "A Red DiscordBot cog that posts and refreshes a FiveM server status panel with live player counts, connect command, restart countdowns, uptime tracking, images, Join Server buttons, and link buttons.",
     "install_msg": "fivemstatus loaded. Use `[p]fivem setup <ip:port|cfx_code> [#channel]` to post a live FiveM status panel.",
     "short": "Live FiveM server status panel.",

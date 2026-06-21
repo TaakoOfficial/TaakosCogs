@@ -87,7 +87,7 @@ class FiveMStatus(commands.Cog):
         """Wait until the bot is ready before polling FiveM servers."""
         await self.bot.wait_until_ready()
 
-    @commands.group(name="fivemstatus", aliases=["fivem"], invoke_without_command=True)
+    @commands.hybrid_group(name="fivemstatus", aliases=["fivem"], invoke_without_command=True)
     @commands.guild_only()
     async def fivemstatus(self, ctx: commands.Context) -> None:
         """Configure and post a live FiveM server status panel."""

@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.13.0
+
+- Added native application commands under `/ticket` without requiring SlashBridge.
+- Organized setup commands under `/ticket config` and privileged maintenance commands under `/ticket admin`.
+- Kept `tickethub` and `thub` as prefix aliases for the new `ticket` command group.
+
 ## 1.12.0
 
 - Redesigned ticket cards with owner avatars, clear state indicators, structured request details, and richer timestamps.

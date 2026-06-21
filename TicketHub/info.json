@@ -4,9 +4,9 @@
     "author": [
         "Taako"
     ],
-    "version": "1.12.0",
+    "version": "1.13.0",
     "description": "A Red DiscordBot cog with polished ticket and log cards, AAA3A-compatible controls, member management, lifecycle automation, profile panels, configurable forms, imports, recovery, and HTML transcripts.",
-    "install_msg": "tickethub loaded. Use `[p]tickethub walkthrough` to set up your first panel, or `[p]tickethub import aaa3a main` to preview an AAA3A Tickets profile import.",
+    "install_msg": "TicketHub loaded. Use `/ticket help` for native commands or `[p]ticket` for prefix help. Start with `/ticket config walkthrough`.",
     "short": "Ticket panels, member controls, lifecycle automation, recovery, and transcripts.",
     "tags": [
         "tickets",
@@ -15,7 +15,8 @@
         "html",
         "migration",
         "utility",
-        "moderation"
+        "moderation",
+        "slash"
     ],
     "requirements": [
         "chat-exporter>=3.1.0"

@@ -4,7 +4,7 @@
     "author": [
         "Taako"
     ],
-    "version": "1.0.0",
+    "version": "1.1.0",
     "description": "A Red DiscordBot cog for community suggestions with persistent arrow voting buttons, optional discussion threads, staff review states, comments, review logs, and CSV exports.",
     "install_msg": "suggestionbox loaded. Use `[p]suggestionbox setup [#suggestions] [#review-log]` to start collecting suggestions.",
     "short": "Community suggestions with voting, threads, review states, comments, and exports.",

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.0
+
+- Added native `/captcha` commands, including slash-safe role options for posting and attaching panels.
+
 ## 1.1.0
 
 - Added support for assigning up to ten roles from one captcha panel.

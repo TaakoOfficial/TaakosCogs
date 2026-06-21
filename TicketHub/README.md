@@ -12,6 +12,18 @@ Ticket panels, configurable modal forms, ticket lifecycle controls, AAA3A Ticket
 [p]load TicketHub
 ```
 
+Enable and publish TicketHub's native application commands with Red's built-in slash manager:
+
+```text
+[p]slash enablecog TicketHub
+[p]slash sync
+```
+
+Discord exposes the command tree as `/ticket`. Use `/ticket help` for the main menu,
+`/ticket config …` for profiles, panels, and forms, and `/ticket admin …` for roles,
+automation, imports, and exports. Prefix users can use `[p]ticket`; `[p]tickethub` and
+`[p]thub` remain aliases.
+
 ## Highlights
 
 - Posts ticket panels with persistent Open Ticket buttons or dropdowns.
@@ -27,7 +39,7 @@ Ticket panels, configurable modal forms, ticket lifecycle controls, AAA3A Ticket
 - Generates HTML transcripts with DiscordChatExporterPy, plus a built-in fallback renderer and plain-text transcript.
 - Sends transcripts to a transcript/log channel and optionally DMs the ticket owner.
 - Imports profile settings from AAA3A's `Tickets` cog with dry-run preview before applying.
-- Keeps commands under `[p]tickethub` so it can coexist with another `[p]ticket` cog during migration.
+- Provides native commands under `/ticket`, with configuration and administration organized into subgroups.
 
 ## How Transcripts Work
 
@@ -43,10 +55,10 @@ The HTML file is generated with DiscordChatExporterPy when `chat-exporter` is av
 When a profile has form questions configured, clicking that profile's panel button collects the answers before the ticket is created. Current Red installations show text, dropdown, and boolean questions together in a native Discord modal. Older Discord.py versions fall back to the existing ephemeral step form for dropdown and boolean questions. Submitted answers are stored on the ticket record and shown in the ticket channel or thread.
 
 ```text
-[p]tickethub modal wizard main
-[p]tickethub modal add main boolean "Is this urgent?"
-[p]tickethub modal add main choice "Department | Billing, Technical, Other"
-[p]tickethub modal show main
+[p]ticket config modal-wizard main
+[p]ticket config modal-add main boolean "Is this urgent?"
+[p]ticket config modal-add main choice "Department | Billing, Technical, Other"
+[p]ticket config modal-show main
 ```
 
 ## Thread Tickets
@@ -54,8 +66,8 @@ When a profile has form questions configured, clicking that profile's panel butt
 Profiles use normal private ticket channels by default. To create private thread tickets instead, set a parent text channel and switch the profile mode:
 
 ```text
-[p]tickethub threadparent main #support
-[p]tickethub mode main thread
+[p]ticket config threadparent main #support
+[p]ticket config mode main thread
 ```
 
 Thread tickets add the ticket opener and cached members of configured support roles to the private thread. Discord does not support per-thread role permission overwrites, so claiming a private-thread ticket removes everyone except the opener, claimer, TicketHub bot, and cached members with Manage Server/Administrator permission. Support members and added participants are restored when the ticket is unclaimed. The parent channel must allow the ticket opener to view the channel, send messages in threads, and read message history.
@@ -68,7 +80,7 @@ continue sending messages; other support members and added participants become
 read-only. Unclaiming restores their send permissions and changes the button back to
 **Claim**.
 
-The `[p]tickethub claim` and `[p]tickethub unclaim` commands apply the same permission
+The `[p]ticket claim` and `[p]ticket unclaim` commands apply the same permission
 changes as the button. Added members remain read-only while a claim lock is active.
 
 ## Locking Tickets
@@ -81,14 +93,14 @@ For channel tickets, locked members remain able to read the channel. Discord doe
 support per-member send overrides inside private threads, so TicketHub temporarily
 removes those members from a locked private thread and restores them when it is unlocked.
 
-The same behavior is available through `[p]tickethub lock [ticket_id]` and
-`[p]tickethub unlock [ticket_id]`.
+The same behavior is available through `[p]ticket lock [ticket_id]` and
+`[p]ticket unlock [ticket_id]`.
 
 ## Managing Members
 
 The **Members** button opens Discord member pickers for adding or removing ticket
 participants. Support staff can always use them. Profile settings can also allow the
-ticket opener to add or remove members with `[p]tickethub ownerpermission`.
+ticket opener to add or remove members with `[p]ticket admin ownerpermission`.
 
 When a ticket closes, its control changes to **Reopen** and requires a reopen reason.
 Closed tickets also expose a support-only **Delete** control. The same operations are
@@ -102,13 +114,13 @@ shows the reason, and provides **Cancel** and **Close** buttons. Cancel keeps th
 open; Close completes the normal close/transcript workflow. If nobody responds within
 five minutes, TicketHub closes the ticket automatically.
 
-Prefix commands cannot directly open Discord modals, so `[p]tickethub close` sends an
+Prefix commands cannot directly open Discord modals, so `[p]ticket close` sends an
 **Enter Close Reason** button that only the command author can use. Supplying a reason
 with the command skips that button and posts the confirmation immediately:
 
 ```text
-[p]tickethub close
-[p]tickethub close 42 Duplicate request
+[p]ticket close
+[p]ticket close 42 Duplicate request
 ```
 
 Pending confirmations and their timeout are restored after a bot restart. The ticket
@@ -119,9 +131,9 @@ opener, close requester, and support staff can cancel or confirm the prompt.
 Profiles close an owner's open tickets when they leave by default. Configure this with:
 
 ```text
-[p]tickethub closeonleave main true
-[p]tickethub autodelete main 24
-[p]tickethub autodelete main off
+[p]ticket admin closeonleave main true
+[p]ticket admin autodelete main 24
+[p]ticket admin autodelete main off
 ```
 
 Auto-delete timers survive cog and bot restarts. Setting the value to `0` deletes a
@@ -132,8 +144,8 @@ closed ticket after a five-second grace period.
 TicketHub can read settings from AAA3A's loaded `Tickets` cog and map one profile into TicketHub:
 
 ```text
-[p]tickethub import aaa3a main
-[p]tickethub import aaa3a main confirm
+[p]ticket admin import-aaa3a main
+[p]ticket admin import-aaa3a main confirm
 ```
 
 The first command is a dry-run preview. The second applies the import.
@@ -158,87 +170,87 @@ Existing open ticket records, modlog cases, forum tags, and panel buttons are no
 
 | Command                                               | Description                                        |
 | ----------------------------------------------------- | -------------------------------------------------- |
-| `[p]tickethub` or `[p]thub`                           | Show the TicketHub help menu.                      |
-| `[p]tickethub status`                                 | Show settings, profiles, and setup hints.          |
-| `[p]tickethub walkthrough [profile]`                  | Walk through basic setup.                          |
-| `[p]tickethub enable [true_or_false]`                 | Enable or disable TicketHub.                       |
-| `[p]tickethub panel [profile] [channel] [style]`      | Post a button or dropdown ticket panel.            |
-| `[p]tickethub attachpanel <profile> <message> [style]` | Attach a panel to an existing bot-authored message. |
-| `[p]tickethub clearpanel <message>`                    | Remove tracked TicketHub controls from a message.  |
-| `[p]tickethub multipanel`                             | Show multi-profile panel management commands.      |
-| `[p]tickethub multipanel add <message> <profile> <style> <emoji> <name> \| <description>` | Add a profile option. |
-| `[p]tickethub multipanel remove <message> <profile>`  | Remove a profile option.                           |
-| `[p]tickethub multipanel style <message> <style>`     | Switch a multi-panel between buttons and dropdown. |
-| `[p]tickethub multipanel placeholder <message> <text>` | Set its dropdown placeholder.                     |
-| `[p]tickethub multipanel show <message>`              | Show its configured profile options.               |
-| `[p]tickethub multipanel clear <message>`             | Remove the multi-panel components and configuration. |
-| `[p]tickethub profile [profile]`                      | Create a profile and show its settings.            |
-| `[p]tickethub channelname [profile] [template]`       | Show or set a profile's channel-name template.     |
-| `[p]tickethub open [profile] [reason]`                | Open a ticket by command.                          |
-| `[p]tickethub createfor <member> [profile] [reason]`  | Create a ticket for another member.                |
-| `[p]tickethub modal [profile]`                        | Show modal questions for a profile.                |
-| `[p]tickethub modal wizard [profile]`                 | Walk through creating a custom ticket modal.       |
-| `[p]tickethub modal add <profile> [type] <label>`     | Add a text, boolean, or choice form question.       |
-| `[p]tickethub modal remove <profile> <index>`         | Remove a modal question.                           |
-| `[p]tickethub modal defaultreason [profile]`          | Use the default Reason modal.                      |
-| `[p]tickethub modal clear [profile]`                  | Disable modal questions.                           |
-| `[p]tickethub category <profile> [category]`          | Set the open-ticket category.                      |
-| `[p]tickethub closedcategory <profile> [category]`    | Set the closed-ticket category.                    |
-| `[p]tickethub mode <profile> <channel\|thread>`       | Choose channel or private-thread tickets.          |
-| `[p]tickethub threadparent <profile> [channel]`       | Set the parent channel for thread tickets.         |
-| `[p]tickethub logchannel <profile> [channel]`         | Set the ticket log channel.                        |
-| `[p]tickethub transcriptchannel <profile> [channel]`  | Set the transcript channel.                        |
-| `[p]tickethub supportrole add <profile> <role>`       | Add a support role.                                |
-| `[p]tickethub supportrole remove <profile> <role>`    | Remove a support role.                             |
-| `[p]tickethub roles add <profile> <type> <role>`      | Add a support/speak/view/ping/access role.         |
-| `[p]tickethub roles remove <profile> <type> <role>`   | Remove a configured profile role.                  |
-| `[p]tickethub ticketrole <profile> [role]`            | Set or clear the role assigned to ticket openers.  |
-| `[p]tickethub ownerpermission <profile> <action> <bool>` | Configure owner close/reopen/member permissions. |
-| `[p]tickethub closeonleave <profile> <bool>`          | Toggle automatic closing when an owner leaves.     |
-| `[p]tickethub autodelete <profile> <hours\|off>`      | Configure closed-ticket deletion.                  |
-| `[p]tickethub emoji <profile> <action> <emoji>`       | Configure a ticket-control emoji.                  |
-| `[p]tickethub maxopen <profile> <amount>`             | Set max open tickets per member.                   |
-| `[p]tickethub transcripts <profile> <true_or_false>`  | Enable or disable transcripts on close/delete.     |
-| `[p]tickethub dmtranscript <profile> <true_or_false>` | Enable or disable transcript DMs to ticket owners. |
-| `[p]tickethub claim [ticket_id]`                      | Claim a ticket.                                    |
-| `[p]tickethub unclaim [ticket_id]`                    | Unclaim a ticket.                                  |
-| `[p]tickethub lock [ticket_id]`                       | Prevent the opener and added members from posting. |
-| `[p]tickethub unlock [ticket_id]`                     | Restore posting access to locked ticket members.   |
-| `[p]tickethub close [ticket_id] [reason]`             | Request closure with a reason and confirmation.    |
-| `[p]tickethub reopen [ticket_id] [reason]`            | Reopen a ticket with an optional reason.           |
-| `[p]tickethub delete [ticket_id] [reason]`            | Delete a ticket channel/thread after transcript.   |
-| `[p]tickethub recover [channel]`                      | Recover a record from its TicketHub control embed. |
-| `[p]tickethub transcript [ticket_id]`                 | Generate and send a transcript.                    |
-| `[p]tickethub addmember <member> [ticket_id]`         | Add a member to a ticket.                          |
-| `[p]tickethub removemember <member> [ticket_id]`      | Remove a member from a ticket.                     |
-| `[p]tickethub list [status] [owner]`                  | List open/claimed/unclaimed/closed/all tickets.     |
-| `[p]tickethub show [ticket_id]`                       | Show a ticket's stored details.                    |
-| `[p]tickethub import aaa3a [profile] [confirm]`       | Preview or apply an AAA3A Tickets profile import.  |
-| `[p]tickethub export`                                 | Export TicketHub ticket records as CSV.            |
+| `[p]ticket` or `[p]thub`                           | Show the TicketHub help menu.                      |
+| `[p]ticket status`                                 | Show settings, profiles, and setup hints.          |
+| `[p]ticket config walkthrough [profile]`                  | Walk through basic setup.                          |
+| `[p]ticket admin enable [true_or_false]`                 | Enable or disable TicketHub.                       |
+| `[p]ticket config panel [profile] [channel] [style]`      | Post a button or dropdown ticket panel.            |
+| `[p]ticket config attachpanel <profile> <message> [style]` | Attach a panel to an existing bot-authored message. |
+| `[p]ticket config clearpanel <message>`                    | Remove tracked TicketHub controls from a message.  |
+| `[p]ticket config multipanel`                             | Show multi-profile panel management commands.      |
+| `[p]ticket config multipanel-add <message> <profile> <style> <emoji> <name> \| <description>` | Add a profile option. |
+| `[p]ticket config multipanel-remove <message> <profile>`  | Remove a profile option.                           |
+| `[p]ticket config multipanel-style <message> <style>`     | Switch a multi-panel between buttons and dropdown. |
+| `[p]ticket config multipanel-placeholder <message> <text>` | Set its dropdown placeholder.                     |
+| `[p]ticket config multipanel-show <message>`              | Show its configured profile options.               |
+| `[p]ticket config multipanel-clear <message>`             | Remove the multi-panel components and configuration. |
+| `[p]ticket config profile [profile]`                      | Create a profile and show its settings.            |
+| `[p]ticket config channelname [profile] [template]`       | Show or set a profile's channel-name template.     |
+| `[p]ticket open [profile] [reason]`                | Open a ticket by command.                          |
+| `[p]ticket createfor <member> [profile] [reason]`  | Create a ticket for another member.                |
+| `[p]ticket config modal [profile]`                        | Show modal questions for a profile.                |
+| `[p]ticket config modal-wizard [profile]`                 | Walk through creating a custom ticket modal.       |
+| `[p]ticket config modal-add <profile> [type] <label>`     | Add a text, boolean, or choice form question.       |
+| `[p]ticket config modal-remove <profile> <index>`         | Remove a modal question.                           |
+| `[p]ticket config modal-defaultreason [profile]`          | Use the default Reason modal.                      |
+| `[p]ticket config modal-clear [profile]`                  | Disable modal questions.                           |
+| `[p]ticket config category <profile> [category]`          | Set the open-ticket category.                      |
+| `[p]ticket config closedcategory <profile> [category]`    | Set the closed-ticket category.                    |
+| `[p]ticket config mode <profile> <channel\|thread>`       | Choose channel or private-thread tickets.          |
+| `[p]ticket config threadparent <profile> [channel]`       | Set the parent channel for thread tickets.         |
+| `[p]ticket config logchannel <profile> [channel]`         | Set the ticket log channel.                        |
+| `[p]ticket config transcriptchannel <profile> [channel]`  | Set the transcript channel.                        |
+| `[p]ticket admin supportrole-add <profile> <role>`       | Add a support role.                                |
+| `[p]ticket admin supportrole-remove <profile> <role>`    | Remove a support role.                             |
+| `[p]ticket admin roles-add <profile> <type> <role>`      | Add a support/speak/view/ping/access role.         |
+| `[p]ticket admin roles-remove <profile> <type> <role>`   | Remove a configured profile role.                  |
+| `[p]ticket admin ticketrole <profile> [role]`            | Set or clear the role assigned to ticket openers.  |
+| `[p]ticket admin ownerpermission <profile> <action> <bool>` | Configure owner close/reopen/member permissions. |
+| `[p]ticket admin closeonleave <profile> <bool>`          | Toggle automatic closing when an owner leaves.     |
+| `[p]ticket admin autodelete <profile> <hours\|off>`      | Configure closed-ticket deletion.                  |
+| `[p]ticket admin emoji <profile> <action> <emoji>`       | Configure a ticket-control emoji.                  |
+| `[p]ticket admin maxopen <profile> <amount>`              | Set max open tickets per member.                   |
+| `[p]ticket admin transcripts <profile> <true_or_false>`  | Enable or disable transcripts on close/delete.     |
+| `[p]ticket admin dmtranscript <profile> <true_or_false>` | Enable or disable transcript DMs to ticket owners. |
+| `[p]ticket claim [ticket_id]`                      | Claim a ticket.                                    |
+| `[p]ticket unclaim [ticket_id]`                    | Unclaim a ticket.                                  |
+| `[p]ticket lock [ticket_id]`                       | Prevent the opener and added members from posting. |
+| `[p]ticket unlock [ticket_id]`                     | Restore posting access to locked ticket members.   |
+| `[p]ticket close [ticket_id] [reason]`             | Request closure with a reason and confirmation.    |
+| `[p]ticket reopen [ticket_id] [reason]`            | Reopen a ticket with an optional reason.           |
+| `[p]ticket delete [ticket_id] [reason]`            | Delete a ticket channel/thread after transcript.   |
+| `[p]ticket recover [channel]`                      | Recover a record from its TicketHub control embed. |
+| `[p]ticket transcript [ticket_id]`                 | Generate and send a transcript.                    |
+| `[p]ticket addmember <member> [ticket_id]`         | Add a member to a ticket.                          |
+| `[p]ticket removemember <member> [ticket_id]`      | Remove a member from a ticket.                     |
+| `[p]ticket list [status] [owner]`                  | List open/claimed/unclaimed/closed/all tickets.     |
+| `[p]ticket show [ticket_id]`                       | Show a ticket's stored details.                    |
+| `[p]ticket admin import-aaa3a [profile] [confirm]`       | Preview or apply an AAA3A Tickets profile import.  |
+| `[p]ticket admin export`                                 | Export TicketHub ticket records as CSV.            |
 
 ## Example Setup
 
 ```text
-[p]tickethub walkthrough
+[p]ticket config walkthrough
 ```
 
 Or configure directly:
 
 ```text
-[p]tickethub profile main
-[p]tickethub category main "Open Tickets"
-[p]tickethub closedcategory main "Closed Tickets"
-[p]tickethub logchannel main #ticket-logs
-[p]tickethub transcriptchannel main #ticket-transcripts
-[p]tickethub supportrole add main @Support
-[p]tickethub panel main #support button
+[p]ticket config profile main
+[p]ticket config category main "Open Tickets"
+[p]ticket config closedcategory main "Closed Tickets"
+[p]ticket config logchannel main #ticket-logs
+[p]ticket config transcriptchannel main #ticket-transcripts
+[p]ticket admin supportrole-add main @Support
+[p]ticket config panel main #support button
 ```
 
 Use `dropdown` as the final argument to post a dropdown panel instead. TicketHub can
 also preserve an existing message's content and embeds while adding its panel:
 
 ```text
-[p]tickethub attachpanel main https://discord.com/channels/server/channel/message dropdown
+[p]ticket config attachpanel main https://discord.com/channels/server/channel/message dropdown
 ```
 
 The existing message must have been sent by the same bot and cannot already contain
@@ -254,9 +266,9 @@ been sent by the same bot and cannot already contain unrelated components.
 Add dropdown options one at a time using a message link:
 
 ```text
-[p]tickethub multipanel add <message-link> billing dropdown 💳 Billing | Payment and invoice help
-[p]tickethub multipanel add <message-link> technical dropdown 🛠️ Technical | Product and account problems
-[p]tickethub multipanel add <message-link> other dropdown ❓ Other | Anything else
+[p]ticket config multipanel-add <message-link> billing dropdown 💳 Billing | Payment and invoice help
+[p]ticket config multipanel-add <message-link> technical dropdown 🛠️ Technical | Product and account problems
+[p]ticket config multipanel-add <message-link> other dropdown ❓ Other | Anything else
 ```
 
 Every referenced profile must already exist. Names are limited to 80 characters and
@@ -265,9 +277,9 @@ descriptions to 100 characters. Use `none` when an option should not have an emo
 Switch the same panel to buttons or customize its dropdown placeholder:
 
 ```text
-[p]tickethub multipanel style <message-link> button
-[p]tickethub multipanel style <message-link> dropdown
-[p]tickethub multipanel placeholder <message-link> What can we help you with?
+[p]ticket config multipanel-style <message-link> button
+[p]ticket config multipanel-style <message-link> dropdown
+[p]ticket config multipanel-placeholder <message-link> What can we help you with?
 ```
 
 Discord buttons cannot display descriptions. TicketHub retains them when button mode
@@ -279,8 +291,8 @@ components are persistent across bot restarts.
 Each profile has its own channel-name template and ticket-number sequence. For example:
 
 ```text
-[p]tickethub channelname support {id}-support-{owner_name}
-[p]tickethub channelname billing {id}-billing-{owner_display_name}
+[p]ticket config channelname support {id}-support-{owner_name}
+[p]ticket config channelname billing {id}-billing-{owner_display_name}
 ```
 
 For new profiles, `{id}` starts at `1` and increments independently. Upgraded profiles
@@ -297,8 +309,8 @@ use `reset` to restore `ticket-{id}-{owner_name}`.
 Thread-ticket setup:
 
 ```text
-[p]tickethub threadparent main #support
-[p]tickethub mode main thread
+[p]ticket config threadparent main #support
+[p]ticket config mode main thread
 ```
 
 ## Requirements

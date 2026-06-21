@@ -4,7 +4,7 @@
     "author": [
         "Taako"
     ],
-    "version": "1.0.0",
+    "version": "1.1.0",
     "description": "A Red DiscordBot cog for community reputation, kudos, public rep boards, leaderboards, moderation, and CSV exports.",
     "install_msg": "repboard loaded. Use `[p]repboard setup` for a quick setup or `[p]repboard walkthrough` for the guided setup.",
     "short": "Community reputation, kudos, rep boards, leaderboards, and exports.",

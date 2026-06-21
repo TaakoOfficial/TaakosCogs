@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.0
+
+- Added native `/suggest`, `/suggestionbox`, and `/suggestions` commands.
+
 ## 1.0.0
 
 - Initial SuggestionBox cog.

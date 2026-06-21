@@ -6291,7 +6291,7 @@ class YALC(DashboardIntegration, commands.Cog):
         except Exception as e:
             self.log.error(f"Failed to log soundboard_sound_delete: {e}", exc_info=True)
 
-    @commands.group(name="yalc", aliases=["logger"], invoke_without_command=True)
+    @commands.hybrid_group(name="yalc", aliases=["logger"], invoke_without_command=True)
     @commands.guild_only()
     async def yalc_group(self, ctx: commands.Context):
         """

@@ -422,7 +422,7 @@ class Captcha(commands.Cog):
             ephemeral=True,
         )
 
-    @commands.group(name="captcha", aliases=["verification"], invoke_without_command=True)
+    @commands.hybrid_group(name="captcha", aliases=["verification"], invoke_without_command=True)
     @commands.guild_only()
     @commands.bot_has_permissions(embed_links=True)
     async def captcha(self, ctx: commands.Context) -> None:
@@ -448,7 +448,7 @@ class Captcha(commands.Cog):
         )
         await ctx.send(embed=embed)
 
-    @captcha.command(name="post")
+    @captcha.command(name="post", with_app_command=False)
     @commands.admin_or_permissions(manage_guild=True)
     @commands.bot_has_permissions(send_messages=True, embed_links=True, manage_roles=True)
     async def captcha_post(
@@ -486,7 +486,60 @@ class Captcha(commands.Cog):
             return
         await ctx.send(f"Captcha panel posted: {message.jump_url}")
 
-    @captcha.command(name="attach")
+    @captcha.app_command.command(name="post", description="Post a captcha verification panel.")
+    @discord.app_commands.describe(
+        channel="Channel where the captcha panel will be posted",
+        role="Role granted after successful verification",
+        role_2="Optional second verification role",
+        role_3="Optional third verification role",
+        role_4="Optional fourth verification role",
+        role_5="Optional fifth verification role",
+        role_6="Optional sixth verification role",
+        role_7="Optional seventh verification role",
+        role_8="Optional eighth verification role",
+        role_9="Optional ninth verification role",
+        role_10="Optional tenth verification role",
+        label="Text displayed on the verification button",
+    )
+    @discord.app_commands.default_permissions(manage_guild=True)
+    @discord.app_commands.guild_only()
+    async def captcha_post_slash(
+        self,
+        interaction: discord.Interaction,
+        channel: discord.TextChannel,
+        role: discord.Role,
+        role_2: Optional[discord.Role] = None,
+        role_3: Optional[discord.Role] = None,
+        role_4: Optional[discord.Role] = None,
+        role_5: Optional[discord.Role] = None,
+        role_6: Optional[discord.Role] = None,
+        role_7: Optional[discord.Role] = None,
+        role_8: Optional[discord.Role] = None,
+        role_9: Optional[discord.Role] = None,
+        role_10: Optional[discord.Role] = None,
+        label: str = "Verify",
+    ) -> None:
+        """Native slash wrapper for the Greedy role-based prefix command."""
+        ctx = await commands.Context.from_interaction(interaction)
+        roles = [
+            item
+            for item in (
+                role,
+                role_2,
+                role_3,
+                role_4,
+                role_5,
+                role_6,
+                role_7,
+                role_8,
+                role_9,
+                role_10,
+            )
+            if item is not None
+        ]
+        await self.captcha_post.callback(self, ctx, channel, roles, label=label)
+
+    @captcha.command(name="attach", with_app_command=False)
     @commands.admin_or_permissions(manage_guild=True)
     @commands.bot_has_permissions(manage_roles=True)
     async def captcha_attach(
@@ -516,6 +569,67 @@ class Captcha(commands.Cog):
             await ctx.send(str(error))
             return
         await ctx.send(f"Captcha button attached: {message.jump_url}")
+
+    @captcha.app_command.command(
+        name="attach",
+        description="Attach captcha verification to an existing bot message.",
+    )
+    @discord.app_commands.describe(
+        message_link="Discord link to the bot-authored message",
+        role="Role granted after successful verification",
+        role_2="Optional second verification role",
+        role_3="Optional third verification role",
+        role_4="Optional fourth verification role",
+        role_5="Optional fifth verification role",
+        role_6="Optional sixth verification role",
+        role_7="Optional seventh verification role",
+        role_8="Optional eighth verification role",
+        role_9="Optional ninth verification role",
+        role_10="Optional tenth verification role",
+        label="Text displayed on the verification button",
+    )
+    @discord.app_commands.default_permissions(manage_guild=True)
+    @discord.app_commands.guild_only()
+    async def captcha_attach_slash(
+        self,
+        interaction: discord.Interaction,
+        message_link: str,
+        role: discord.Role,
+        role_2: Optional[discord.Role] = None,
+        role_3: Optional[discord.Role] = None,
+        role_4: Optional[discord.Role] = None,
+        role_5: Optional[discord.Role] = None,
+        role_6: Optional[discord.Role] = None,
+        role_7: Optional[discord.Role] = None,
+        role_8: Optional[discord.Role] = None,
+        role_9: Optional[discord.Role] = None,
+        role_10: Optional[discord.Role] = None,
+        label: str = "Verify",
+    ) -> None:
+        """Native slash wrapper for message conversion and Greedy roles."""
+        ctx = await commands.Context.from_interaction(interaction)
+        try:
+            message = await commands.MessageConverter().convert(ctx, message_link)
+        except commands.CommandError as error:
+            await ctx.send(str(error))
+            return
+        roles = [
+            item
+            for item in (
+                role,
+                role_2,
+                role_3,
+                role_4,
+                role_5,
+                role_6,
+                role_7,
+                role_8,
+                role_9,
+                role_10,
+            )
+            if item is not None
+        ]
+        await self.captcha_attach.callback(self, ctx, message, roles, label=label)
 
     @captcha.command(name="remove")
     @commands.admin_or_permissions(manage_guild=True)

@@ -783,7 +783,7 @@ class Welcome(commands.Cog):
                 member.id,
             )
 
-    @commands.group(name="welcome", invoke_without_command=True)
+    @commands.hybrid_group(name="welcome", invoke_without_command=True)
     @commands.guild_only()
     @commands.admin_or_permissions(manage_guild=True)
     async def welcome(self, ctx: commands.Context) -> None:

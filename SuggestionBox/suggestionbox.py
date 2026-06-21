@@ -779,7 +779,7 @@ class SuggestionBox(commands.Cog):
         )
         await ctx.send(embed=embed)
 
-    @commands.command(name="suggest")
+    @commands.hybrid_command(name="suggest")
     @commands.guild_only()
     async def suggest(self, ctx: commands.Context, *, suggestion: str) -> None:
         """Submit a suggestion."""
@@ -793,7 +793,11 @@ class SuggestionBox(commands.Cog):
         thread_text = f"\nThread: <#{record['thread_id']}>" if record.get("thread_id") else ""
         await ctx.send(f"Suggestion #{record['id']} submitted: {message.jump_url}{thread_text}")
 
-    @commands.group(name="suggestionbox", aliases=["suggestionset"], invoke_without_command=True)
+    @commands.hybrid_group(
+        name="suggestionbox",
+        aliases=["suggestionset"],
+        invoke_without_command=True,
+    )
     @commands.guild_only()
     @commands.bot_has_permissions(embed_links=True)
     async def suggestionbox(self, ctx: commands.Context) -> None:
@@ -1066,7 +1070,7 @@ class SuggestionBox(commands.Cog):
         """Show current SuggestionBox settings."""
         await self._send_settings(ctx)
 
-    @commands.group(name="suggestions", aliases=["sbox"], invoke_without_command=True)
+    @commands.hybrid_group(name="suggestions", aliases=["sbox"], invoke_without_command=True)
     @commands.guild_only()
     async def suggestions_group(self, ctx: commands.Context) -> None:
         """View and manage suggestions."""

@@ -4,7 +4,7 @@
     "author": [
         "Taako"
     ],
-    "version": "1.1.0",
+    "version": "1.2.0",
     "description": "Button-and-modal captcha verification with per-click random codes, configurable success roles, predefined panels, and attachment to existing bot messages.",
     "install_msg": "captcha loaded. Use `[p]captcha post #channel @Verified [more_roles...]` or `[p]captcha attach <message-link> @Verified [more_roles...]`.",
     "short": "Random-code modal verification with configurable role rewards.",

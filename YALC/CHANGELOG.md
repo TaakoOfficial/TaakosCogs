@@ -1,5 +1,9 @@
 # 📝 YALC Changelog
 
+## [v3.2.0] - 2026-06-21
+
+- Added native `/yalc` subcommands for the complete classic command hierarchy.
+
 ## [v3.1.6] - 2026-05-16
 
 ### ✨ New Features

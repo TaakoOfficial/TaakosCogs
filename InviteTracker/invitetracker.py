@@ -503,7 +503,7 @@ class InviteTracker(commands.Cog):
         )
         await ctx.send(embed=embed)
 
-    @commands.group(name="invitetracker", invoke_without_command=True)
+    @commands.hybrid_group(name="invitetracker", invoke_without_command=True)
     @commands.guild_only()
     @commands.bot_has_permissions(embed_links=True)
     async def invitetracker(self, ctx: commands.Context) -> None:
@@ -641,7 +641,7 @@ class InviteTracker(commands.Cog):
         """Show current InviteTracker settings."""
         await self._send_settings(ctx)
 
-    @commands.group(name="invites", aliases=["inv"], invoke_without_command=True)
+    @commands.hybrid_group(name="invites", aliases=["inv"], invoke_without_command=True)
     @commands.guild_only()
     @commands.bot_has_permissions(embed_links=True)
     async def invites(

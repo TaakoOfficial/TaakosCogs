@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.0
+
+- Added native `/fivemstatus` subcommands for the complete prefix command group.
+
 ## 1.1.0
 
 - Added `[p]fivem joincode`, with `cfxjoin` and `cfxcode` aliases, to set the Join Server button from a CFX join code or URL.
