@@ -4829,7 +4829,7 @@ search.addEventListener('input', () => {{
         """Show TicketHub commands."""
         await ctx.send_help(ctx.command)
 
-    @tickethub.command(name="status", aliases=["settings", "info"])
+    @tickethub.command(name="status", aliases=["settings"])
     async def tickethub_status(self, ctx: commands.Context) -> None:
         """Show TicketHub status, profiles, and setup hints."""
         await self._send_settings(ctx)
