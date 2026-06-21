@@ -1225,6 +1225,81 @@ class TicketHub(commands.Cog):
             return "Unknown"
 
     @staticmethod
+    def _ticket_url(guild_id: int, channel_id: Any) -> Optional[str]:
+        if channel_id in (None, ""):
+            return None
+        try:
+            return f"https://discord.com/channels/{int(guild_id)}/{int(channel_id)}"
+        except (TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def _status_display(record: TicketRecord) -> str:
+        if record.get("status") == "closed":
+            return "🔴 Closed"
+        if record.get("claimed_by"):
+            return "🟡 Claimed"
+        return "🟢 Open"
+
+    @staticmethod
+    def _quote_text(value: Any, limit: int = 1024) -> str:
+        text = str(value or "Not provided.").strip()
+        quoted = "\n".join(f"> {line}" if line else ">" for line in text.splitlines())
+        return quoted[:limit]
+
+    @staticmethod
+    def _event_icon(title: str) -> str:
+        lowered = title.lower()
+        if "deleted" in lowered:
+            return "🗑️"
+        if "reopened" in lowered or "opened" in lowered or "unlocked" in lowered:
+            return "🟢"
+        if "closed" in lowered or "locked" in lowered:
+            return "🔴"
+        if "claimed" in lowered:
+            return "🟡"
+        if "transcript" in lowered:
+            return "📄"
+        if "member" in lowered:
+            return "👥"
+        return "🎫"
+
+    @staticmethod
+    def _set_member_identity(
+        embed: discord.Embed,
+        member: Optional[discord.abc.User],
+        *,
+        fallback_name: Optional[str] = None,
+        thumbnail: bool = True,
+    ) -> None:
+        if member is None:
+            if fallback_name:
+                embed.set_author(name=fallback_name)
+            return
+        avatar_url = str(member.display_avatar.url)
+        embed.set_author(
+            name=f"{member.display_name} ({member.id})",
+            icon_url=avatar_url,
+        )
+        if thumbnail:
+            embed.set_thumbnail(url=avatar_url)
+
+    @staticmethod
+    def _jump_view(url: Optional[str]) -> Optional[discord.ui.View]:
+        if url is None:
+            return None
+        view = discord.ui.View()
+        view.add_item(
+            discord.ui.Button(
+                label="Jump to Ticket",
+                emoji="↗️",
+                style=discord.ButtonStyle.link,
+                url=url,
+            )
+        )
+        return view
+
+    @staticmethod
     def _clean_name(value: str) -> str:
         cleaned = value.strip().lower()
         cleaned = re.sub(r"[^a-z0-9_-]+", "-", cleaned)
@@ -1954,48 +2029,80 @@ class TicketHub(commands.Cog):
         color = self.OPEN_COLOR if status == "open" else self.CLOSED_COLOR
         if record.get("claimed_by") and status == "open":
             color = self.CLAIMED_COLOR
+        profile_name = str(record.get("profile") or "main")
+        profile_label = profile_name.replace("-", " ").replace("_", " ").title()
+        reason = str(record.get("reason") or "No reason provided.")
         embed = discord.Embed(
-            title=f"Ticket #{record.get('id')}",
-            description=str(record.get("reason") or "No reason provided."),
+            title=f"🎫 Ticket #{record.get('id')}  •  {profile_label}",
+            description=f"### Request\n{self._quote_text(reason, 1200)}",
             color=color,
             timestamp=self._now(),
         )
-        embed.add_field(name="Status", value=status.title(), inline=True)
-        embed.add_field(name="Owner", value=self._user_ref(record.get("owner_id")), inline=True)
-        profile_value = f"`{record.get('profile')}`"
-        if record.get("profile_ticket_id") is not None:
-            profile_value += f"\nProfile ID: **#{record['profile_ticket_id']}**"
-        embed.add_field(name="Profile", value=profile_value, inline=True)
+        owner = guild.get_member(int(record["owner_id"])) if record.get("owner_id") else None
+        self._set_member_identity(
+            embed,
+            owner,
+            fallback_name=f"Ticket owner ({record.get('owner_id') or 'unknown'})",
+        )
+        embed.add_field(name="Status", value=self._status_display(record), inline=True)
         embed.add_field(
             name="Claimed By",
-            value=self._user_ref(record.get("claimed_by")),
+            value=(
+                self._user_ref(record.get("claimed_by"))
+                if record.get("claimed_by")
+                else "Waiting for staff"
+            ),
             inline=True,
         )
         embed.add_field(
-            name="Locked",
-            value="Yes" if record.get("locked") else "No",
+            name="Access",
+            value="🔒 Locked" if record.get("locked") else "🔓 Unlocked",
             inline=True,
         )
+        embed.add_field(name="Owner", value=self._user_ref(record.get("owner_id")), inline=True)
+        profile_value = f"`{profile_name}`"
+        if record.get("profile_ticket_id") is not None:
+            profile_value += f" • **#{record['profile_ticket_id']}**"
+        embed.add_field(name="Profile", value=profile_value, inline=True)
         embed.add_field(
             name="Created",
-            value=self._format_ts(record.get("created_at"), "R"),
+            value=(
+                f"{self._format_ts(record.get('created_at'), 'F')}\n"
+                f"{self._format_ts(record.get('created_at'), 'R')}"
+            ),
             inline=True,
         )
         if record.get("closed_at"):
             embed.add_field(
                 name="Closed",
-                value=self._format_ts(record.get("closed_at"), "R"),
+                value=(
+                    f"{self._format_ts(record.get('closed_at'), 'F')}\n"
+                    f"{self._format_ts(record.get('closed_at'), 'R')}"
+                ),
                 inline=True,
             )
             if record.get("close_reason"):
-                embed.add_field(name="Close Reason", value=str(record["close_reason"])[:1024], inline=False)
+                embed.add_field(
+                    name="Close Reason",
+                    value=self._quote_text(record["close_reason"], 600),
+                    inline=False,
+                )
         for answer in self._clean_form_answers(record.get("form_answers")):
+            if (
+                answer["label"].strip().lower() == "reason"
+                and answer["value"].strip() == reason.strip()
+            ):
+                continue
             embed.add_field(
-                name=self._truncate_field(f"Form: {answer['label']}", 256),
-                value=self._truncate_field(answer["value"], 1024),
+                name=self._truncate_field(answer["label"], 256),
+                value=self._quote_text(answer["value"], 600),
                 inline=False,
             )
-        embed.set_footer(text=f"Ticket ID: {record.get('id')}")
+        footer_icon = str(guild.icon.url) if guild.icon else None
+        embed.set_footer(
+            text=f"Ticket ID: {record.get('id')}  •  {guild.name}  •  TicketHub",
+            icon_url=footer_icon,
+        )
         return embed
 
     def _ticket_control_view(
@@ -2063,6 +2170,9 @@ class TicketHub(commands.Cog):
         description: str,
         *,
         color: Optional[int] = None,
+        record: Optional[TicketRecord] = None,
+        ticket_channel: Optional[TicketLocation] = None,
+        include_jump: bool = True,
     ) -> None:
         channel = self._profile_channel(guild, profile, "log_channel_id")
         if channel is None:
@@ -2074,13 +2184,73 @@ class TicketHub(commands.Cog):
         if not perms.send_messages or not perms.embed_links:
             return
         embed = discord.Embed(
-            title=title,
+            title=f"{self._event_icon(title)} {title}",
             description=description,
             color=color or self.DEFAULT_COLOR,
             timestamp=self._now(),
         )
+        ticket_url = None
+        if record is not None:
+            owner = (
+                guild.get_member(int(record["owner_id"]))
+                if record.get("owner_id")
+                else None
+            )
+            self._set_member_identity(
+                embed,
+                owner,
+                fallback_name=f"Ticket owner ({record.get('owner_id') or 'unknown'})",
+            )
+            profile_name = str(record.get("profile") or "main")
+            embed.add_field(
+                name="Ticket",
+                value=f"**#{record.get('id')}**  •  `{profile_name}`",
+                inline=True,
+            )
+            embed.add_field(
+                name="Owner",
+                value=self._user_ref(record.get("owner_id")),
+                inline=True,
+            )
+            embed.add_field(
+                name="Status",
+                value=self._status_display(record),
+                inline=True,
+            )
+            embed.add_field(
+                name="Claimed By",
+                value=(
+                    self._user_ref(record.get("claimed_by"))
+                    if record.get("claimed_by")
+                    else "Not claimed"
+                ),
+                inline=True,
+            )
+            embed.add_field(
+                name="Opened",
+                value=self._format_ts(record.get("created_at"), "R"),
+                inline=True,
+            )
+            location = ticket_channel
+            if location is None and include_jump and record.get("channel_id"):
+                cached = guild.get_channel(int(record["channel_id"]))
+                if isinstance(cached, (discord.TextChannel, discord.Thread)):
+                    location = cached
+            embed.add_field(
+                name="Location",
+                value=location.mention if location is not None else "Channel deleted",
+                inline=True,
+            )
+            if include_jump:
+                ticket_url = self._ticket_url(guild.id, record.get("channel_id"))
+        footer_icon = str(guild.icon.url) if guild.icon else None
+        embed.set_footer(text=f"{guild.name}  •  TicketHub Logs", icon_url=footer_icon)
         try:
-            await channel.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
+            await channel.send(
+                embed=embed,
+                view=self._jump_view(ticket_url),
+                allowed_mentions=discord.AllowedMentions.none(),
+            )
         except discord.HTTPException:
             log.exception("Failed to send TicketHub log in guild %s", guild.id)
 
@@ -2474,7 +2644,14 @@ class TicketHub(commands.Cog):
                 global_ticket_id=ticket_id,
             )
             ping_text = self._role_mentions(guild, profile.get("ping_role_ids") or [])
-            intro = "\n".join(part for part in (owner.mention, ping_text, welcome, custom) if part)
+            mention_parts = [ping_text] if ping_text else []
+            if owner.mention not in welcome:
+                mention_parts.insert(0, owner.mention)
+            mention_line = " ".join(mention_parts)
+            welcome_line = f"### 👋 {welcome}" if welcome else ""
+            intro = "\n".join(
+                part for part in (mention_line, welcome_line, custom) if part
+            )
             embed = self._ticket_embed(guild, record, profile)
             try:
                 message = await channel.send(
@@ -2514,6 +2691,8 @@ class TicketHub(commands.Cog):
             "Ticket Opened",
             f"Ticket #{ticket_id} opened by {owner.mention}: {channel.mention}",
             color=self.OPEN_COLOR,
+            record=record,
+            ticket_channel=channel,
         )
         return record, channel
 
@@ -2939,6 +3118,7 @@ class TicketHub(commands.Cog):
             "Ticket Claimed",
             f"Ticket #{record['id']} claimed by {member.mention}.",
             color=self.CLAIMED_COLOR,
+            record=record,
         )
 
     async def _unclaim_ticket(
@@ -2968,6 +3148,7 @@ class TicketHub(commands.Cog):
             "Ticket Unclaimed",
             f"Ticket #{record['id']} unclaimed by {member.mention}.",
             color=self.DEFAULT_COLOR,
+            record=record,
         )
 
     async def _lock_ticket(
@@ -3010,6 +3191,7 @@ class TicketHub(commands.Cog):
             "Ticket Locked",
             f"Ticket #{record['id']} locked by {member.mention}.",
             color=self.CLOSED_COLOR,
+            record=record,
         )
 
     async def _unlock_ticket(
@@ -3052,6 +3234,7 @@ class TicketHub(commands.Cog):
             "Ticket Unlocked",
             f"Ticket #{record['id']} unlocked by {member.mention}.",
             color=self.OPEN_COLOR,
+            record=record,
         )
 
     def _can_manage_ticket_members(
@@ -3140,6 +3323,7 @@ class TicketHub(commands.Cog):
             "Member Added",
             f"{member.mention} added to ticket #{record['id']} by {actor.mention}.",
             color=self.OPEN_COLOR,
+            record=record,
         )
         if not can_send:
             return (
@@ -3199,6 +3383,7 @@ class TicketHub(commands.Cog):
             "Member Removed",
             f"{member.mention} removed from ticket #{record['id']} by {actor.mention}.",
             color=self.DEFAULT_COLOR,
+            record=record,
         )
 
     async def handle_ticket_member_selection(
@@ -3826,6 +4011,16 @@ class TicketHub(commands.Cog):
             tickets[str(record["id"])] = record
         await self._update_ticket_message(guild, record, profile)
 
+        await self._send_log(
+            guild,
+            profile,
+            "Ticket Closed",
+            f"Ticket #{record['id']} closed by {member.mention}.\nReason: {record['close_reason']}",
+            color=self.CLOSED_COLOR,
+            record=record,
+            ticket_channel=channel,
+        )
+
         transcript_note = ""
         if profile.get("transcripts"):
             try:
@@ -3837,14 +4032,6 @@ class TicketHub(commands.Cog):
                 )
             except commands.CommandError as error:
                 transcript_note = f"\nTranscript failed: {error}"
-
-        await self._send_log(
-            guild,
-            profile,
-            "Ticket Closed",
-            f"Ticket #{record['id']} closed by {member.mention}.\nReason: {record['close_reason']}",
-            color=self.CLOSED_COLOR,
-        )
         if channel is not None and transcript_note:
             try:
                 await channel.send(transcript_note[:1900])
@@ -3963,6 +4150,8 @@ class TicketHub(commands.Cog):
                 f"Reason: {record['reopen_reason']}"
             ),
             color=self.OPEN_COLOR,
+            record=record,
+            ticket_channel=channel,
         )
 
     async def _delete_ticket_channel(
@@ -4002,6 +4191,8 @@ class TicketHub(commands.Cog):
                 else f"Ticket #{record['id']} deleted automatically."
             ),
             color=self.CLOSED_COLOR,
+            record=record,
+            include_jump=False,
         )
 
     async def _recover_ticket_record(
@@ -4034,10 +4225,10 @@ class TicketHub(commands.Cog):
                 "No TicketHub control message was found in that channel."
             )
         footer = str(control_embed.footer.text or "")
-        try:
-            ticket_id = int(footer.split(":", 1)[1].strip())
-        except (IndexError, ValueError) as exc:
-            raise commands.CommandError("The ticket control message has an invalid ID.") from exc
+        ticket_id_match = re.search(r"Ticket ID:\s*(\d+)", footer)
+        if ticket_id_match is None:
+            raise commands.CommandError("The ticket control message has an invalid ID.")
+        ticket_id = int(ticket_id_match.group(1))
         if str(ticket_id) in tickets:
             raise commands.CommandError(f"Ticket ID `{ticket_id}` is already in use.")
         fields = {field.name: field.value for field in control_embed.fields}
@@ -4052,14 +4243,19 @@ class TicketHub(commands.Cog):
             raise commands.CommandError(
                 f"Ticket profile `{profile_name}` no longer exists."
             )
-        profile_id_match = re.search(r"Profile ID:\s*\*\*#(\d+)\*\*", str(fields.get("Profile") or ""))
+        profile_value = str(fields.get("Profile") or "")
+        profile_id_match = re.search(
+            r"(?:Profile ID:\s*|[|•]\s*)\*\*#(\d+)\*\*",
+            profile_value,
+        )
         profile_ticket_id = int(profile_id_match.group(1)) if profile_id_match else ticket_id
-        status = str(fields.get("Status") or "open").strip().lower()
-        if status not in {"open", "closed"}:
-            status = "open"
+        status_value = str(fields.get("Status") or "open").strip().lower()
+        status = "closed" if "closed" in status_value else "open"
         claimed_match = re.search(r"<@!?(\d+)>", str(fields.get("Claimed By") or ""))
-        locked = str(fields.get("Locked") or "No").strip().lower() == "yes"
-        created_at = (
+        locked_value = str(fields.get("Access") or fields.get("Locked") or "No").lower()
+        locked = "locked" in locked_value and "unlocked" not in locked_value
+        created_match = re.search(r"<t:(\d+)", str(fields.get("Created") or ""))
+        created_at = float(created_match.group(1)) if created_match else (
             control_embed.timestamp.timestamp()
             if control_embed.timestamp is not None
             else control_message.created_at.timestamp()
@@ -4088,12 +4284,26 @@ class TicketHub(commands.Cog):
             "locked_at": None,
             "unlocked_by": None,
             "unlocked_at": None,
-            "reason": str(control_embed.description or "Recovered ticket")[:1000],
+            "reason": re.sub(
+                r"(?m)^>\s?",
+                "",
+                re.sub(
+                    r"^###\s+Request\s*",
+                    "",
+                    str(control_embed.description or "Recovered ticket"),
+                    flags=re.IGNORECASE,
+                ),
+            )[:1000],
             "form_answers": [],
             "created_at": created_at,
             "closed_at": closed_at,
             "closed_by": None,
-            "close_reason": str(fields.get("Close Reason") or "")[:1000] or None,
+            "close_reason": re.sub(
+                r"(?m)^>\s?",
+                "",
+                str(fields.get("Close Reason") or ""),
+            )[:1000]
+            or None,
             "reopened_at": None,
             "reopened_by": None,
             "reopen_reason": None,
@@ -4127,8 +4337,66 @@ class TicketHub(commands.Cog):
             "Ticket Recovered",
             f"Ticket #{ticket_id} recovered by {actor.mention}: {channel.mention}",
             color=self.DEFAULT_COLOR,
+            record=record,
+            ticket_channel=channel,
         )
         return record
+
+    def _transcript_embed(
+        self,
+        guild: discord.Guild,
+        record: TicketRecord,
+        *,
+        requested_by: Optional[discord.Member],
+        message_count: int,
+        html_file_name: str,
+        text_file_name: str,
+    ) -> discord.Embed:
+        embed = discord.Embed(
+            title=f"📄 Ticket #{record.get('id')} Transcript",
+            description="A complete archive of this support conversation is attached below.",
+            color=self.DEFAULT_COLOR,
+            timestamp=self._now(),
+        )
+        owner = guild.get_member(int(record["owner_id"])) if record.get("owner_id") else None
+        self._set_member_identity(
+            embed,
+            owner,
+            fallback_name=f"Ticket owner ({record.get('owner_id') or 'unknown'})",
+        )
+        embed.add_field(
+            name="Ticket",
+            value=f"**#{record.get('id')}**  •  `{record.get('profile') or 'main'}`",
+            inline=True,
+        )
+        embed.add_field(name="Status", value=self._status_display(record), inline=True)
+        embed.add_field(name="Messages", value=self._count(message_count), inline=True)
+        embed.add_field(
+            name="Owner",
+            value=self._user_ref(record.get("owner_id")),
+            inline=True,
+        )
+        embed.add_field(
+            name="Generated By",
+            value=requested_by.mention if requested_by is not None else "Automatic",
+            inline=True,
+        )
+        embed.add_field(
+            name="Opened",
+            value=self._format_ts(record.get("created_at"), "R"),
+            inline=True,
+        )
+        embed.add_field(
+            name="Attachments",
+            value=f"`{html_file_name}`\n`{text_file_name}`",
+            inline=False,
+        )
+        footer_icon = str(guild.icon.url) if guild.icon else None
+        embed.set_footer(
+            text=f"{guild.name}  •  TicketHub Transcript",
+            icon_url=footer_icon,
+        )
+        return embed
 
     async def _send_transcript_bundle(
         self,
@@ -4149,6 +4417,15 @@ class TicketHub(commands.Cog):
         text_bytes = self._render_text_transcript(guild, channel, record, messages).encode("utf-8")
         html_file_name = f"ticket-{record['id']}-transcript.html"
         text_file_name = f"ticket-{record['id']}-transcript.txt"
+        transcript_embed = self._transcript_embed(
+            guild,
+            record,
+            requested_by=requested_by,
+            message_count=len(messages),
+            html_file_name=html_file_name,
+            text_file_name=text_file_name,
+        )
+        jump_view = self._jump_view(self._ticket_url(guild.id, channel.id))
 
         sent_targets: List[str] = []
         failed_targets: List[str] = []
@@ -4158,11 +4435,13 @@ class TicketHub(commands.Cog):
         if target_channel is not None:
             try:
                 await target_channel.send(
-                    f"Transcript for ticket #{record['id']}",
+                    embed=transcript_embed,
                     files=[
                         discord.File(io.BytesIO(html_bytes), filename=html_file_name),
                         discord.File(io.BytesIO(text_bytes), filename=text_file_name),
                     ],
+                    view=jump_view,
+                    allowed_mentions=discord.AllowedMentions.none(),
                 )
                 sent_targets.append(target_channel.mention)
             except discord.HTTPException:
@@ -4179,11 +4458,12 @@ class TicketHub(commands.Cog):
             if owner is not None:
                 try:
                     await owner.send(
-                        f"Transcript for your ticket #{record['id']} in {guild.name}.",
+                        embed=transcript_embed,
                         files=[
                             discord.File(io.BytesIO(html_bytes), filename=html_file_name),
                             discord.File(io.BytesIO(text_bytes), filename=text_file_name),
                         ],
+                        view=self._jump_view(self._ticket_url(guild.id, channel.id)),
                     )
                     sent_targets.append("ticket owner DM")
                 except discord.HTTPException:

@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.12.0
+
+- Redesigned ticket cards with owner avatars, clear state indicators, structured request details, and richer timestamps.
+- Redesigned lifecycle logs as complete ticket snapshots with consistent colors and jump-to-ticket buttons.
+- Added polished transcript cards with owner, status, message count, generator, and attachment metadata.
+- Improved the opening welcome layout and kept ticket recovery compatible with both legacy and redesigned cards.
+
 ## 1.11.0
 
 - Added Members controls with Discord user pickers and configurable owner add/remove permissions.
