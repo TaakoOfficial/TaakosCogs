@@ -6,6 +6,7 @@
 - Redesigned lifecycle logs as complete ticket snapshots with consistent colors and jump-to-ticket buttons.
 - Added polished transcript cards with owner, status, message count, generator, and attachment metadata.
 - Improved the opening welcome layout and kept ticket recovery compatible with both legacy and redesigned cards.
+- Changed bare `[p]tickethub` to show the help menu and moved the configuration overview to `[p]tickethub status`.
 
 ## 1.11.0
 

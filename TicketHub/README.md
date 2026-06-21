@@ -158,7 +158,8 @@ Existing open ticket records, modlog cases, forum tags, and panel buttons are no
 
 | Command                                               | Description                                        |
 | ----------------------------------------------------- | -------------------------------------------------- |
-| `[p]tickethub` or `[p]thub`                           | Show settings, profiles, and setup hints.          |
+| `[p]tickethub` or `[p]thub`                           | Show the TicketHub help menu.                      |
+| `[p]tickethub status`                                 | Show settings, profiles, and setup hints.          |
 | `[p]tickethub walkthrough [profile]`                  | Walk through basic setup.                          |
 | `[p]tickethub enable [true_or_false]`                 | Enable or disable TicketHub.                       |
 | `[p]tickethub panel [profile] [channel] [style]`      | Post a button or dropdown ticket panel.            |
