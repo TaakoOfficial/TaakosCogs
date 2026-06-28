@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.14.0
+
+- Allowed TicketHub to load alongside another cog that already owns the `[p]ticket` command by temporarily using `[p]tickethub`.
+- Imported AAA3A `buttons_dropdowns` panel routing so existing AAA3A buttons and dropdowns can open TicketHub tickets without editing the panel message.
+- Added `[p]tickethub admin import-aaa3a-all` to import every AAA3A Tickets profile in one operation.
+- Mapped AAA3A text-channel `forum_channel` settings to TicketHub thread mode during profile import.
+
 ## 1.13.0
 
 - Added native application commands under `/ticket` without requiring SlashBridge.

@@ -24,6 +24,11 @@ Discord exposes the command tree as `/ticket`. Use `/ticket help` for the main m
 automation, imports, and exports. Prefix users can use `[p]ticket`; `[p]tickethub` and
 `[p]thub` remain aliases.
 
+If AAA3A's `Tickets` cog is still loaded, it already owns `[p]ticket`. In that
+side-by-side migration state, TicketHub loads with `[p]tickethub` and `[p]thub`
+so you can run the import before unloading AAA3A. After AAA3A is unloaded, reload
+TicketHub if you want it to claim the `[p]ticket` prefix command.
+
 ## Highlights
 
 - Posts ticket panels with persistent Open Ticket buttons or dropdowns.
@@ -144,11 +149,19 @@ closed ticket after a five-second grace period.
 TicketHub can read settings from AAA3A's loaded `Tickets` cog and map one profile into TicketHub:
 
 ```text
-[p]ticket admin import-aaa3a main
-[p]ticket admin import-aaa3a main confirm
+[p]tickethub admin import-aaa3a main
+[p]tickethub admin import-aaa3a main confirm
 ```
 
-The first command is a dry-run preview. The second applies the import.
+To import every AAA3A profile at once:
+
+```text
+[p]tickethub admin import-aaa3a-all
+[p]tickethub admin import-aaa3a-all confirm
+```
+
+The first command is a dry-run preview. The second applies the import. Import-all
+will create or overwrite TicketHub profiles using the cleaned AAA3A profile names.
 
 Mapped settings include:
 
@@ -163,8 +176,9 @@ Mapped settings include:
 - ticket role, control emojis, and closed-ticket auto-delete
 - open and closed categories
 - log channel
+- existing AAA3A panel button/dropdown routing, so old panel messages can open TicketHub tickets without being rebuilt
 
-Existing open ticket records, modlog cases, forum tags, and panel buttons are not imported.
+Existing open ticket records, modlog cases, and forum tags are not imported.
 
 ## Commands
 
@@ -226,6 +240,7 @@ Existing open ticket records, modlog cases, forum tags, and panel buttons are no
 | `[p]ticket list [status] [owner]`                  | List open/claimed/unclaimed/closed/all tickets.     |
 | `[p]ticket show [ticket_id]`                       | Show a ticket's stored details.                    |
 | `[p]ticket admin import-aaa3a [profile] [confirm]`       | Preview or apply an AAA3A Tickets profile import.  |
+| `[p]ticket admin import-aaa3a-all [confirm]`       | Preview or apply all AAA3A Tickets profile imports. |
 | `[p]ticket admin export`                                 | Export TicketHub ticket records as CSV.            |
 
 ## Example Setup

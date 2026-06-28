@@ -28,6 +28,7 @@ TicketRecord = Dict[str, Any]
 ProfileRecord = Dict[str, Any]
 ModalFieldRecord = Dict[str, Any]
 MultiPanelRecord = Dict[str, Any]
+AAA3APanelRecord = Dict[str, Any]
 TicketLocation = Union[discord.TextChannel, discord.Thread]
 MODAL_SELECTS_SUPPORTED = hasattr(discord.ui, "Label")
 
@@ -79,6 +80,98 @@ class TicketPanelSelectView(discord.ui.View):
         select: discord.ui.Select,
     ) -> None:
         await self.cog.handle_panel_open(interaction)
+
+
+class AAA3APanelButton(discord.ui.Button):
+    """Compatibility button for imported AAA3A Tickets panel messages."""
+
+    def __init__(
+        self,
+        cog: "TicketHub",
+        config_identifier: str,
+        option: Dict[str, Any],
+    ) -> None:
+        self.cog = cog
+        self.config_identifier = config_identifier
+        label = str(option.get("label") or "").strip()[:80] or None
+        emoji = cog._component_emoji(option.get("emoji"))
+        if label is None and emoji is None:
+            label = "Open Ticket"
+        try:
+            style = discord.ButtonStyle(int(option.get("style") or 2))
+        except (TypeError, ValueError):
+            style = discord.ButtonStyle.secondary
+        super().__init__(
+            label=label,
+            emoji=emoji,
+            style=style,
+            custom_id=f"Tickets_{config_identifier}",
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await self.cog.handle_aaa3a_panel_open(
+            interaction,
+            "buttons",
+            self.config_identifier,
+        )
+
+
+class AAA3APanelSelect(discord.ui.Select):
+    """Compatibility dropdown for imported AAA3A Tickets panel messages."""
+
+    def __init__(
+        self,
+        cog: "TicketHub",
+        options: Dict[str, Dict[str, Any]],
+    ) -> None:
+        self.cog = cog
+        select_options = []
+        for config_identifier, option in list(options.items())[:25]:
+            label = str(option.get("label") or option.get("profile") or "Ticket").strip()
+            select_options.append(
+                discord.SelectOption(
+                    label=label[:100] or "Ticket",
+                    value=str(config_identifier)[:100],
+                    description=(
+                        str(option.get("description"))[:100]
+                        if option.get("description")
+                        else None
+                    ),
+                    emoji=cog._component_emoji(option.get("emoji")),
+                )
+            )
+        super().__init__(
+            placeholder="Open a ticket...",
+            min_values=1,
+            max_values=1,
+            options=select_options,
+            custom_id="Tickets_dropdown",
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if not self.values:
+            await interaction.response.send_message(
+                "Choose a ticket type first.",
+                ephemeral=True,
+            )
+            return
+        await self.cog.handle_aaa3a_panel_open(
+            interaction,
+            "dropdown_options",
+            self.values[0],
+        )
+
+
+class AAA3APanelCompatView(discord.ui.View):
+    """Persistent handlers for existing AAA3A Tickets panel components."""
+
+    def __init__(self, cog: "TicketHub", record: AAA3APanelRecord) -> None:
+        super().__init__(timeout=None)
+        for config_identifier, option in (record.get("buttons") or {}).items():
+            self.add_item(AAA3APanelButton(cog, str(config_identifier), option))
+        dropdown_options = record.get("dropdown_options") or {}
+        if dropdown_options:
+            self.add_item(AAA3APanelSelect(cog, dropdown_options))
 
 
 class TicketMultiPanelButton(discord.ui.Button):
@@ -551,12 +644,14 @@ class TicketOpenModal(discord.ui.Modal):
         owner: discord.Member,
         profile_name: str,
         fields: Sequence[ModalFieldRecord],
+        panel_label: Optional[str] = None,
     ) -> None:
         super().__init__(title="Open Ticket", timeout=300)
         self.cog = cog
         self.guild = guild
         self.owner = owner
         self.profile_name = profile_name
+        self.panel_label = panel_label
         self.inputs: List[Tuple[str, discord.ui.Item]] = []
 
         for field in fields[:5]:
@@ -662,6 +757,7 @@ class TicketOpenModal(discord.ui.Modal):
                 self.profile_name,
                 reason=reason,
                 form_answers=form_answers,
+                panel_label=self.panel_label,
             )
         except commands.CommandError as error:
             await interaction.followup.send(str(error), ephemeral=True)
@@ -736,12 +832,14 @@ class TicketQuestionnaireView(discord.ui.View):
         owner: discord.Member,
         profile_name: str,
         fields: Sequence[ModalFieldRecord],
+        panel_label: Optional[str] = None,
     ) -> None:
         super().__init__(timeout=300)
         self.cog = cog
         self.guild = guild
         self.owner = owner
         self.profile_name = profile_name
+        self.panel_label = panel_label
         self.fields = list(fields[:5])
         self.field_index = 0
         self.form_answers: List[Dict[str, str]] = []
@@ -900,6 +998,7 @@ class TicketQuestionnaireView(discord.ui.View):
                 self.profile_name,
                 reason=reason,
                 form_answers=self.form_answers,
+                panel_label=self.panel_label,
             )
         except commands.CommandError as error:
             await interaction.edit_original_response(
@@ -973,17 +1072,46 @@ class TicketHub(commands.Cog):
             profiles={"main": self._default_profile()},
             tickets={},
             multi_panels={},
+            aaa3a_panels={},
         )
         self._locks: Dict[int, asyncio.Lock] = {}
+        self._prefix_conflict_mode = False
         self._panel_view = TicketPanelView(self)
         self._panel_select_view = TicketPanelSelectView(self)
         self._control_view = TicketControlView(self)
         self._closed_control_view = TicketControlView(self, closed=True)
         self._multi_panel_views: Dict[int, TicketMultiPanelView] = {}
+        self._aaa3a_panel_views: Dict[int, AAA3APanelCompatView] = {}
         self._close_confirmation_views: Dict[Tuple[int, int], TicketCloseConfirmationView] = {}
         self._close_confirmation_tasks: Dict[Tuple[int, int], asyncio.Task] = {}
         self._auto_delete_tasks: Dict[Tuple[int, int], asyncio.Task] = {}
         self._control_refresh_task: Optional[asyncio.Task] = None
+
+    def use_conflict_safe_prefix_root(self) -> None:
+        """Rename the prefix root when another loaded cog already owns `ticket`."""
+        self._prefix_conflict_mode = True
+        for command in self.__cog_commands__:
+            if command.name != "ticket":
+                continue
+            command.name = "tickethub"
+            command.aliases = [
+                alias
+                for alias in ("thub",)
+                if self.bot.get_command(alias) is None
+            ]
+            app_command = getattr(command, "app_command", None)
+            if app_command is not None:
+                try:
+                    app_command.name = "tickethub"
+                except Exception:
+                    log.debug("Could not rename TicketHub app command during conflict-safe load.")
+            break
+
+    def _prefix_root(self) -> str:
+        return "tickethub" if self._prefix_conflict_mode else "ticket"
+
+    def _prefixed_root(self, ctx: commands.Context) -> str:
+        return f"{ctx.clean_prefix}{self._prefix_root()}"
 
     async def cog_load(self) -> None:
         """Register persistent views."""
@@ -992,6 +1120,7 @@ class TicketHub(commands.Cog):
         self.bot.add_view(self._control_view)
         self.bot.add_view(self._closed_control_view)
         await self._restore_multi_panel_views()
+        await self._restore_aaa3a_panel_views()
         await self._restore_close_confirmations()
         await self._restore_auto_delete_tasks()
         self._control_refresh_task = asyncio.create_task(
@@ -1011,6 +1140,9 @@ class TicketHub(commands.Cog):
         for view in self._close_confirmation_views.values():
             view.stop()
         self._close_confirmation_views.clear()
+        for view in self._aaa3a_panel_views.values():
+            view.stop()
+        self._aaa3a_panel_views.clear()
 
     async def red_delete_data_for_user(self, *, requester: str, user_id: int) -> None:
         """Remove stored ticket references for a Discord user ID."""
@@ -1699,6 +1831,258 @@ class TicketHub(commands.Cog):
         if view is not None:
             view.stop()
 
+    def _component_emoji(self, value: Any) -> Optional[str]:
+        emoji = str(value or "").strip()
+        if not emoji:
+            return None
+        if emoji.isdigit():
+            cached_emoji = self.bot.get_emoji(int(emoji))
+            return str(cached_emoji) if cached_emoji is not None else None
+        return emoji[:100]
+
+    @classmethod
+    def _sanitize_aaa3a_panel_record(
+        cls,
+        value: Any,
+        *,
+        message_key: Optional[str] = None,
+    ) -> Optional[AAA3APanelRecord]:
+        if not isinstance(value, dict):
+            return None
+        channel_id = value.get("channel_id")
+        message_id = value.get("message_id")
+        if (not channel_id or not message_id) and message_key is not None:
+            try:
+                channel_id, message_id = str(message_key).split("-", 1)
+            except ValueError:
+                return None
+        try:
+            cleaned_channel_id = int(channel_id)
+            cleaned_message_id = int(message_id)
+        except (TypeError, ValueError):
+            return None
+
+        buttons: Dict[str, Dict[str, Any]] = {}
+        raw_buttons = value.get("buttons") or {}
+        if isinstance(raw_buttons, dict):
+            for config_identifier, raw_option in raw_buttons.items():
+                if not isinstance(raw_option, dict):
+                    continue
+                clean_identifier = str(config_identifier).strip()[:100]
+                if not clean_identifier:
+                    continue
+                try:
+                    profile = cls._clean_name(str(raw_option.get("profile") or "main"))
+                except commands.BadArgument:
+                    continue
+                label = cls._clean_modal_text(raw_option.get("label"), 80) or None
+                emoji = cls._clean_modal_text(raw_option.get("emoji"), 100) or None
+                if label is None and emoji is None:
+                    label = "Open Ticket"
+                buttons[clean_identifier] = {
+                    "profile": profile,
+                    "label": label,
+                    "emoji": emoji,
+                    "style": cls._clean_modal_int(
+                        raw_option.get("style"),
+                        default=2,
+                        minimum=1,
+                        maximum=4,
+                    )
+                    or 2,
+                }
+
+        dropdown_options: Dict[str, Dict[str, Any]] = {}
+        raw_dropdown_options = value.get("dropdown_options") or {}
+        if isinstance(raw_dropdown_options, dict):
+            for config_identifier, raw_option in raw_dropdown_options.items():
+                if not isinstance(raw_option, dict):
+                    continue
+                clean_identifier = str(config_identifier).strip()[:100]
+                if not clean_identifier:
+                    continue
+                try:
+                    profile = cls._clean_name(str(raw_option.get("profile") or "main"))
+                except commands.BadArgument:
+                    continue
+                label = cls._clean_modal_text(raw_option.get("label"), 100)
+                if not label:
+                    label = profile
+                dropdown_options[clean_identifier] = {
+                    "profile": profile,
+                    "label": label,
+                    "description": cls._clean_modal_text(
+                        raw_option.get("description"),
+                        100,
+                    )
+                    or None,
+                    "emoji": cls._clean_modal_text(raw_option.get("emoji"), 100) or None,
+                }
+
+        if not buttons and not dropdown_options:
+            return None
+        return {
+            "channel_id": cleaned_channel_id,
+            "message_id": cleaned_message_id,
+            "buttons": buttons,
+            "dropdown_options": dropdown_options,
+        }
+
+    def _build_aaa3a_panel_view(
+        self,
+        record: AAA3APanelRecord,
+    ) -> AAA3APanelCompatView:
+        cleaned = self._sanitize_aaa3a_panel_record(record)
+        if cleaned is None:
+            raise commands.BadArgument("That AAA3A panel record is invalid.")
+        return AAA3APanelCompatView(self, cleaned)
+
+    def _register_aaa3a_panel_view(self, record: AAA3APanelRecord) -> None:
+        cleaned = self._sanitize_aaa3a_panel_record(record)
+        if cleaned is None:
+            return
+        message_id = int(cleaned["message_id"])
+        previous_view = self._aaa3a_panel_views.pop(message_id, None)
+        if previous_view is not None:
+            previous_view.stop()
+        view = self._build_aaa3a_panel_view(cleaned)
+        self.bot.add_view(view, message_id=message_id)
+        self._aaa3a_panel_views[message_id] = view
+
+    async def _restore_aaa3a_panel_views(self) -> None:
+        all_guilds = await self.config.all_guilds()
+        for guild_data in all_guilds.values():
+            panels = guild_data.get("aaa3a_panels") or {}
+            if not isinstance(panels, dict):
+                continue
+            for message_key, raw_record in panels.items():
+                record = self._sanitize_aaa3a_panel_record(
+                    raw_record,
+                    message_key=str(message_key),
+                )
+                if record is None:
+                    continue
+                try:
+                    self._register_aaa3a_panel_view(record)
+                except (commands.CommandError, TypeError, ValueError):
+                    log.exception(
+                        "Failed to restore imported AAA3A Tickets panel %s.",
+                        message_key,
+                    )
+
+    async def _set_aaa3a_panel_records(
+        self,
+        guild: discord.Guild,
+        records: Dict[str, AAA3APanelRecord],
+    ) -> Dict[str, AAA3APanelRecord]:
+        cleaned_records: Dict[str, AAA3APanelRecord] = {}
+        for message_key, record in records.items():
+            cleaned = self._sanitize_aaa3a_panel_record(
+                record,
+                message_key=str(message_key),
+            )
+            if cleaned is None:
+                continue
+            key = f"{cleaned['channel_id']}-{cleaned['message_id']}"
+            cleaned_records[key] = cleaned
+        await self.config.guild(guild).aaa3a_panels.set(cleaned_records)
+        for record in cleaned_records.values():
+            try:
+                self._register_aaa3a_panel_view(record)
+            except (commands.CommandError, TypeError, ValueError):
+                log.exception(
+                    "Failed to register imported AAA3A Tickets panel %s.",
+                    record.get("message_id"),
+                )
+        return cleaned_records
+
+    async def _collect_aaa3a_panel_records(
+        self,
+        guild: discord.Guild,
+    ) -> Dict[str, AAA3APanelRecord]:
+        aaa_cog = self.bot.get_cog("Tickets")
+        if aaa_cog is None or not hasattr(aaa_cog, "config"):
+            return {}
+        try:
+            raw_panels = await aaa_cog.config.guild(guild).buttons_dropdowns()
+        except Exception:
+            log.exception("Could not read AAA3A Tickets panel settings.")
+            return {}
+        if not isinstance(raw_panels, dict):
+            return {}
+        records: Dict[str, AAA3APanelRecord] = {}
+        for message_key, components in raw_panels.items():
+            record = self._sanitize_aaa3a_panel_record(
+                components,
+                message_key=str(message_key),
+            )
+            if record is None:
+                continue
+            key = f"{record['channel_id']}-{record['message_id']}"
+            records[key] = record
+        return records
+
+    def _aaa3a_panel_label(self, option: Dict[str, Any]) -> Optional[str]:
+        label = str(option.get("label") or "").strip()
+        emoji = self._component_emoji(option.get("emoji"))
+        value = f"{emoji} {label}".strip() if emoji else label
+        return value[:100] or None
+
+    async def handle_aaa3a_panel_open(
+        self,
+        interaction: discord.Interaction,
+        component_type: str,
+        config_identifier: str,
+    ) -> None:
+        """Open a TicketHub ticket from an imported AAA3A panel component."""
+        if not interaction.guild or interaction.message is None:
+            await interaction.response.send_message(
+                "I could not identify this imported ticket panel.",
+                ephemeral=True,
+            )
+            return
+        channel_id = getattr(interaction.message.channel, "id", None)
+        if channel_id is None:
+            await interaction.response.send_message(
+                "I could not identify this imported ticket panel.",
+                ephemeral=True,
+            )
+            return
+        panels = await self.config.guild(interaction.guild).aaa3a_panels()
+        key = f"{channel_id}-{interaction.message.id}"
+        record = self._sanitize_aaa3a_panel_record(
+            panels.get(key),
+            message_key=key,
+        )
+        if record is None:
+            for raw_record in panels.values():
+                candidate = self._sanitize_aaa3a_panel_record(raw_record)
+                if (
+                    candidate is not None
+                    and int(candidate.get("message_id") or 0) == interaction.message.id
+                ):
+                    record = candidate
+                    break
+        if record is None:
+            await interaction.response.send_message(
+                "This imported AAA3A ticket panel is not tracked by TicketHub.",
+                ephemeral=True,
+            )
+            return
+        options = record.get(component_type) or {}
+        option = options.get(str(config_identifier))
+        if option is None:
+            await interaction.response.send_message(
+                "That imported AAA3A ticket option is not tracked by TicketHub.",
+                ephemeral=True,
+            )
+            return
+        await self.handle_panel_open(
+            interaction,
+            str(option.get("profile") or "main"),
+            panel_label=self._aaa3a_panel_label(option),
+        )
+
     @staticmethod
     def _ticket_mode(profile: ProfileRecord) -> str:
         mode = str(profile.get("ticket_mode") or "channel").lower()
@@ -2087,6 +2471,12 @@ class TicketHub(commands.Cog):
                     value=self._quote_text(record["close_reason"], 600),
                     inline=False,
                 )
+        if record.get("panel_label"):
+            embed.add_field(
+                name="Panel Option",
+                value=self._quote_text(record["panel_label"], 300),
+                inline=False,
+            )
         for answer in self._clean_form_answers(record.get("form_answers")):
             if (
                 answer["label"].strip().lower() == "reason"
@@ -2314,6 +2704,8 @@ class TicketHub(commands.Cog):
         self,
         interaction: discord.Interaction,
         profile_name: Optional[str] = None,
+        *,
+        panel_label: Optional[str] = None,
     ) -> None:
         """Open a ticket from a persistent panel button."""
         if not interaction.guild or not isinstance(interaction.user, discord.Member):
@@ -2348,6 +2740,7 @@ class TicketHub(commands.Cog):
                             interaction.user,
                             profile_name,
                             modal_fields,
+                            panel_label=panel_label,
                         )
                     )
                 else:
@@ -2357,6 +2750,7 @@ class TicketHub(commands.Cog):
                         interaction.user,
                         profile_name,
                         modal_fields,
+                        panel_label=panel_label,
                     )
                     await interaction.response.send_message(
                         embed=questionnaire.question_embed(),
@@ -2375,6 +2769,7 @@ class TicketHub(commands.Cog):
                 interaction.user,
                 profile_name,
                 reason="Opened from ticket panel.",
+                panel_label=panel_label,
             )
         except commands.CommandError as error:
             await interaction.followup.send(str(error), ephemeral=True)
@@ -2543,6 +2938,7 @@ class TicketHub(commands.Cog):
         *,
         reason: Optional[str] = None,
         form_answers: Optional[Sequence[Dict[str, str]]] = None,
+        panel_label: Optional[str] = None,
     ) -> Tuple[TicketRecord, TicketLocation]:
         profile_name, profile = await self._validate_ticket_open_request(
             guild,
@@ -2550,6 +2946,7 @@ class TicketHub(commands.Cog):
             profile_name,
         )
         clean_form_answers = self._clean_form_answers(form_answers)
+        clean_panel_label = self._clean_modal_text(panel_label, 100) or None
 
         async with self._guild_lock(guild.id):
             ticket_id = int(await self.config.guild(guild).next_ticket_id())
@@ -2609,6 +3006,7 @@ class TicketHub(commands.Cog):
                 "unlocked_at": None,
                 "reason": (reason or "No reason provided.")[:1000],
                 "form_answers": clean_form_answers,
+                "panel_label": clean_panel_label,
                 "created_at": self._now_ts(),
                 "closed_at": None,
                 "closed_by": None,
@@ -4769,7 +5167,7 @@ search.addEventListener('input', () => {{
         enabled = await self.config.guild(ctx.guild).enabled()
         open_count = sum(1 for record in tickets.values() if record.get("status") == "open")
         closed_count = sum(1 for record in tickets.values() if record.get("status") == "closed")
-        prefix = ctx.clean_prefix
+        command_root = self._prefixed_root(ctx)
         embed = discord.Embed(
             title="TicketHub",
             color=self.DEFAULT_COLOR,
@@ -4812,11 +5210,11 @@ search.addEventListener('input', () => {{
         embed.add_field(
             name="Start Here",
             value=(
-                f"`{prefix}ticket config walkthrough`\n"
-                f"`{prefix}ticket config panel main #tickets button`\n"
-                f"`{prefix}ticket config attachpanel main <message-link> dropdown`\n"
-                f"`{prefix}ticket config multipanel` for multi-profile panels\n"
-                f"`{prefix}ticket admin import-aaa3a main` for migration preview"
+                f"`{command_root} config walkthrough`\n"
+                f"`{command_root} config panel main #tickets button`\n"
+                f"`{command_root} config attachpanel main <message-link> dropdown`\n"
+                f"`{command_root} config multipanel` for multi-profile panels\n"
+                f"`{command_root} admin import-aaa3a-all` for migration preview"
             ),
             inline=False,
         )
@@ -4899,7 +5297,8 @@ search.addEventListener('input', () => {{
         await ctx.send(
             f"TicketHub setup complete for profile `{profile_name}`.\n"
             f"Panel: {message.jump_url}\n"
-            f"Users can open tickets from the panel or with `{ctx.clean_prefix}tickethub open {profile_name}`."
+            f"Users can open tickets from the panel or with "
+            f"`{self._prefixed_root(ctx)} open {profile_name}`."
         )
 
     async def _wait_for_setup_reply(
@@ -5331,16 +5730,16 @@ search.addEventListener('input', () => {{
     @commands.admin_or_permissions(manage_guild=True)
     async def tickethub_multi_panel(self, ctx: commands.Context) -> None:
         """Manage messages that offer multiple TicketHub profiles."""
-        prefix = ctx.clean_prefix
+        command_root = self._prefixed_root(ctx)
         await ctx.send(
             "Multi-panel commands:\n"
-            f"`{prefix}ticket config multipanel-add <message> <profile> "
+            f"`{command_root} config multipanel-add <message> <profile> "
             "<button|dropdown> <emoji|none> <name> | <description>`\n"
-            f"`{prefix}ticket config multipanel-remove <message> <profile>`\n"
-            f"`{prefix}ticket config multipanel-style <message> <button|dropdown>`\n"
-            f"`{prefix}ticket config multipanel-placeholder <message> <text>`\n"
-            f"`{prefix}ticket config multipanel-show <message>`\n"
-            f"`{prefix}ticket config multipanel-clear <message>`"
+            f"`{command_root} config multipanel-remove <message> <profile>`\n"
+            f"`{command_root} config multipanel-style <message> <button|dropdown>`\n"
+            f"`{command_root} config multipanel-placeholder <message> <text>`\n"
+            f"`{command_root} config multipanel-show <message>`\n"
+            f"`{command_root} config multipanel-clear <message>`"
         )
 
     @tickethub_config.command(name="multipanel-add", aliases=["multi-add"])
@@ -6589,6 +6988,22 @@ search.addEventListener('input', () => {{
         """Import settings from other ticket systems."""
         await ctx.send_help(ctx.command)
 
+    async def _get_aaa3a_profiles(self, guild: discord.Guild) -> Dict[str, Any]:
+        aaa_cog = self.bot.get_cog("Tickets")
+        if aaa_cog is None or not hasattr(aaa_cog, "config"):
+            raise commands.CommandError(
+                "AAA3A's `Tickets` cog is not loaded, so I cannot read its config."
+            )
+        try:
+            aaa_profiles = await aaa_cog.config.guild(guild).profiles()
+        except Exception as exc:
+            raise commands.CommandError(
+                "I could not read AAA3A Tickets profile settings."
+            ) from exc
+        if not isinstance(aaa_profiles, dict):
+            raise commands.CommandError("I could not read AAA3A Tickets profile settings.")
+        return aaa_profiles
+
     @tickethub_admin.command(name="import-aaa3a")
     @commands.admin_or_permissions(manage_guild=True)
     async def tickethub_import_aaa3a(
@@ -6601,34 +7016,126 @@ search.addEventListener('input', () => {{
         assert ctx.guild is not None
         try:
             mapped_profile, summary = await self._build_aaa3a_import(ctx.guild, aaa3a_profile)
+            panel_records = await self._collect_aaa3a_panel_records(ctx.guild)
         except commands.CommandError as error:
             await ctx.send(str(error))
             return
         target_profile = self._clean_name(aaa3a_profile)
+        panel_count = len(panel_records)
+        button_count = sum(
+            len(record.get("buttons") or {}) for record in panel_records.values()
+        )
+        dropdown_count = sum(
+            len(record.get("dropdown_options") or {}) for record in panel_records.values()
+        )
+        if panel_count:
+            summary.append(
+                "- buttons_dropdowns -> aaa3a_panels: "
+                f"{panel_count} panel message(s), {button_count} button(s), "
+                f"{dropdown_count} dropdown option(s)"
+            )
+        else:
+            summary.append("- buttons_dropdowns -> aaa3a_panels: none found")
         preview = "\n".join(summary)
         if confirmation.lower() != "confirm":
             await ctx.send(
                 "AAA3A Tickets import preview. Nothing has been changed yet.\n"
-                f"Run `{ctx.clean_prefix}ticket admin import-aaa3a {aaa3a_profile} confirm` to apply.\n\n"
+                f"Run `{self._prefixed_root(ctx)} admin import-aaa3a {aaa3a_profile} confirm` to apply.\n\n"
                 + box(preview[:1800])
             )
             return
         await self._set_profile(ctx.guild, target_profile, mapped_profile)
+        saved_panels = await self._set_aaa3a_panel_records(ctx.guild, panel_records)
         await self.config.guild(ctx.guild).enabled.set(True)
-        await ctx.send(f"Imported AAA3A Tickets profile `{aaa3a_profile}` into TicketHub profile `{target_profile}`.")
+        panel_note = (
+            f" Imported {len(saved_panels)} existing AAA3A panel message(s)."
+            if saved_panels
+            else ""
+        )
+        await ctx.send(
+            f"Imported AAA3A Tickets profile `{aaa3a_profile}` into TicketHub "
+            f"profile `{target_profile}`.{panel_note}"
+        )
+
+    @tickethub_admin.command(name="import-aaa3a-all")
+    @commands.admin_or_permissions(manage_guild=True)
+    async def tickethub_import_aaa3a_all(
+        self,
+        ctx: commands.Context,
+        confirmation: str = "",
+    ) -> None:
+        """Import every profile from AAA3A's Tickets cog. Use `confirm` to apply."""
+        assert ctx.guild is not None
+        try:
+            aaa_profiles = await self._get_aaa3a_profiles(ctx.guild)
+            panel_records = await self._collect_aaa3a_panel_records(ctx.guild)
+            mapped_profiles: Dict[str, ProfileRecord] = {}
+            profile_mappings: List[Tuple[str, str]] = []
+            for aaa3a_profile in sorted(aaa_profiles):
+                target_profile = self._clean_name(aaa3a_profile)
+                if target_profile in mapped_profiles:
+                    raise commands.CommandError(
+                        "Multiple AAA3A profiles resolve to the same TicketHub profile "
+                        f"name `{target_profile}`. Rename one in AAA3A before importing all."
+                    )
+                mapped_profile, _summary = await self._build_aaa3a_import(
+                    ctx.guild,
+                    aaa3a_profile,
+                )
+                mapped_profiles[target_profile] = mapped_profile
+                profile_mappings.append((aaa3a_profile, target_profile))
+        except commands.CommandError as error:
+            await ctx.send(str(error))
+            return
+        if not mapped_profiles:
+            await ctx.send("AAA3A Tickets has no profiles to import.")
+            return
+
+        panel_count = len(panel_records)
+        button_count = sum(
+            len(record.get("buttons") or {}) for record in panel_records.values()
+        )
+        dropdown_count = sum(
+            len(record.get("dropdown_options") or {}) for record in panel_records.values()
+        )
+        preview_lines = [
+            "AAA3A Tickets import-all preview. Nothing has been changed yet.",
+            f"Profiles to import: {len(mapped_profiles)}",
+            "Profile mappings:",
+        ]
+        preview_lines.extend(
+            f"- {source_name} -> {target_name}"
+            for source_name, target_name in profile_mappings
+        )
+        preview_lines.append(
+            "Panel routing: "
+            f"{panel_count} panel message(s), {button_count} button(s), "
+            f"{dropdown_count} dropdown option(s)"
+        )
+        preview_lines.append(
+            f"Run `{self._prefixed_root(ctx)} admin import-aaa3a-all confirm` to apply."
+        )
+        if confirmation.lower() != "confirm":
+            for page in pagify("\n".join(preview_lines), page_length=1800):
+                await ctx.send(box(page))
+            return
+
+        async with self.config.guild(ctx.guild).profiles() as profiles:
+            for target_profile, mapped_profile in mapped_profiles.items():
+                profiles[target_profile] = mapped_profile
+        saved_panels = await self._set_aaa3a_panel_records(ctx.guild, panel_records)
+        await self.config.guild(ctx.guild).enabled.set(True)
+        await ctx.send(
+            f"Imported {len(mapped_profiles)} AAA3A Tickets profile(s) into "
+            f"TicketHub. Imported {len(saved_panels)} existing AAA3A panel message(s)."
+        )
 
     async def _build_aaa3a_import(
         self,
         guild: discord.Guild,
         aaa3a_profile: str,
     ) -> Tuple[ProfileRecord, List[str]]:
-        aaa_cog = self.bot.get_cog("Tickets")
-        if aaa_cog is None or not hasattr(aaa_cog, "config"):
-            raise commands.CommandError("AAA3A's `Tickets` cog is not loaded, so I cannot read its config.")
-        try:
-            aaa_profiles = await aaa_cog.config.guild(guild).profiles()
-        except Exception as exc:
-            raise commands.CommandError("I could not read AAA3A Tickets profile settings.") from exc
+        aaa_profiles = await self._get_aaa3a_profiles(guild)
         if aaa3a_profile not in aaa_profiles:
             available = ", ".join(sorted(aaa_profiles)) or "none"
             raise commands.CommandError(f"AAA3A profile `{aaa3a_profile}` was not found. Available: {available}")
@@ -6683,6 +7190,26 @@ search.addEventListener('input', () => {{
                 profile[target_key] = value
             summary.append(f"- {source_key} -> {target_key}: {profile.get(target_key)!r}")
 
+        forum_channel_id = source.get("forum_channel")
+        if forum_channel_id:
+            try:
+                forum_channel = guild.get_channel(int(forum_channel_id))
+            except (TypeError, ValueError):
+                forum_channel = None
+            if isinstance(forum_channel, discord.TextChannel):
+                profile["ticket_mode"] = "thread"
+                profile["thread_parent_channel_id"] = forum_channel.id
+                profile["panel_channel_id"] = profile.get("panel_channel_id") or forum_channel.id
+                summary.append(
+                    "- forum_channel -> ticket_mode/thread_parent_channel_id: "
+                    f"thread in #{forum_channel.name}"
+                )
+            else:
+                summary.append(
+                    "- forum_channel -> thread_parent_channel_id: skipped "
+                    "(TicketHub supports text-channel private threads)"
+                )
+
         auto_delete = source.get("auto_delete_on_close")
         profile["auto_delete_on_close_hours"] = auto_delete
         summary.append(f"- auto_delete_on_close -> auto_delete_on_close_hours: {auto_delete!r}")
@@ -6721,7 +7248,7 @@ search.addEventListener('input', () => {{
         else:
             summary.append("- creating_modal -> creating_modal: none")
         summary.append(
-            "Not imported: existing open ticket records, modlog cases, forum tags, and panel buttons."
+            "Not imported: existing open ticket records, modlog cases, and forum tags."
         )
         return profile, summary
 
