@@ -427,8 +427,7 @@ class TicketReopenReasonModal(discord.ui.Modal):
             label="Reason for reopening",
             style=discord.TextStyle.paragraph,
             placeholder="Why should this ticket be reopened?",
-            required=True,
-            min_length=1,
+            required=False,
             max_length=1000,
         )
         self.add_item(self.reason)
@@ -455,7 +454,7 @@ class TicketReopenReasonModal(discord.ui.Modal):
                 interaction.guild,
                 record,
                 interaction.user,
-                reason=str(self.reason.value),
+                reason=str(self.reason.value or "").strip(),
             )
         except commands.CommandError as error:
             await interaction.followup.send(str(error), ephemeral=True)
@@ -482,8 +481,7 @@ class TicketCloseReasonModal(discord.ui.Modal):
             label="Reason for closing",
             style=discord.TextStyle.paragraph,
             placeholder="Why should this ticket be closed?",
-            required=True,
-            min_length=1,
+            required=False,
             max_length=1000,
         )
         self.add_item(self.reason)
@@ -502,7 +500,7 @@ class TicketCloseReasonModal(discord.ui.Modal):
                 self.guild_id,
                 self.ticket_id,
                 self.requester_id,
-                str(self.reason.value),
+                str(self.reason.value or "").strip(),
             )
         except commands.CommandError as error:
             await interaction.followup.send(str(error), ephemeral=True)
@@ -4419,22 +4417,6 @@ class TicketHub(commands.Cog):
             ticket_channel=channel,
         )
 
-        transcript_note = ""
-        if profile.get("transcripts"):
-            try:
-                transcript_note = "\n" + await self._send_transcript_bundle(
-                    guild,
-                    record,
-                    profile,
-                    requested_by=member,
-                )
-            except commands.CommandError as error:
-                transcript_note = f"\nTranscript failed: {error}"
-        if channel is not None and transcript_note:
-            try:
-                await channel.send(transcript_note[:1900])
-            except discord.HTTPException:
-                pass
         if isinstance(channel, discord.Thread):
             try:
                 await channel.edit(
@@ -6633,7 +6615,7 @@ search.addEventListener('input', () => {{
     @tickethub_admin.command(name="transcripts")
     @commands.admin_or_permissions(manage_guild=True)
     async def tickethub_transcripts(self, ctx: commands.Context, profile_name: str, enabled: bool) -> None:
-        """Enable or disable transcript generation on close/delete."""
+        """Enable or disable automatic transcript generation on ticket delete."""
         assert ctx.guild is not None
         profile = await self._ensure_profile(ctx.guild, profile_name)
         profile["transcripts"] = enabled
@@ -6713,7 +6695,7 @@ search.addEventListener('input', () => {{
         *,
         reason: Optional[str] = None,
     ) -> None:
-        """Request ticket closure with a reason and confirmation."""
+        """Request ticket closure with an optional reason and confirmation."""
         assert ctx.guild is not None
         if not isinstance(ctx.author, discord.Member):
             return
@@ -6723,28 +6705,17 @@ search.addEventListener('input', () => {{
         except commands.CommandError as error:
             await ctx.send(str(error))
             return
-        if reason:
-            try:
-                message = await self._start_close_confirmation(
-                    ctx.guild,
-                    record,
-                    ctx.author,
-                    reason,
-                )
-            except commands.CommandError as error:
-                await ctx.send(str(error))
-                return
-            await ctx.send(f"Close confirmation posted: {message.jump_url}")
+        try:
+            message = await self._start_close_confirmation(
+                ctx.guild,
+                record,
+                ctx.author,
+                reason or "",
+            )
+        except commands.CommandError as error:
+            await ctx.send(str(error))
             return
-        await ctx.send(
-            "Click below to enter the close reason.",
-            view=TicketCloseReasonLauncherView(
-                self,
-                ctx.guild.id,
-                int(record["id"]),
-                ctx.author.id,
-            ),
-        )
+        await ctx.send(f"Close confirmation posted: {message.jump_url}")
 
     @tickethub.command(name="reopen")
     @commands.guild_only()

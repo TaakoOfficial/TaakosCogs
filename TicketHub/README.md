@@ -107,21 +107,20 @@ The **Members** button opens Discord member pickers for adding or removing ticke
 participants. Support staff can always use them. Profile settings can also allow the
 ticket opener to add or remove members with `[p]ticket admin ownerpermission`.
 
-When a ticket closes, its control changes to **Reopen** and requires a reopen reason.
+When a ticket closes, its control changes to **Reopen** with an optional reopen reason.
 Closed tickets also expose a support-only **Delete** control. The same operations are
 available through commands.
 
 ## Closing Tickets
 
-The ticket **Close** button opens a modal requiring a close reason. Submitting it posts
+The ticket **Close** button opens a modal with an optional close reason. Submitting it posts
 a red **Close Ticket** confirmation in the ticket channel, mentions the ticket opener,
 shows the reason, and provides **Cancel** and **Close** buttons. Cancel keeps the ticket
-open; Close completes the normal close/transcript workflow. If nobody responds within
+open; Close closes the ticket without generating a transcript. If nobody responds within
 five minutes, TicketHub closes the ticket automatically.
 
-Prefix commands cannot directly open Discord modals, so `[p]ticket close` sends an
-**Enter Close Reason** button that only the command author can use. Supplying a reason
-with the command skips that button and posts the confirmation immediately:
+`[p]ticket close` posts the same confirmation immediately. Supplying a reason with the
+command shows it in the confirmation prompt:
 
 ```text
 [p]ticket close
@@ -224,13 +223,13 @@ Existing open ticket records, modlog cases, and forum tags are not imported.
 | `[p]ticket admin autodelete <profile> <hours\|off>`      | Configure closed-ticket deletion.                  |
 | `[p]ticket admin emoji <profile> <action> <emoji>`       | Configure a ticket-control emoji.                  |
 | `[p]ticket admin maxopen <profile> <amount>`              | Set max open tickets per member.                   |
-| `[p]ticket admin transcripts <profile> <true_or_false>`  | Enable or disable transcripts on close/delete.     |
+| `[p]ticket admin transcripts <profile> <true_or_false>`  | Enable or disable transcripts on ticket delete.    |
 | `[p]ticket admin dmtranscript <profile> <true_or_false>` | Enable or disable transcript DMs to ticket owners. |
 | `[p]ticket claim [ticket_id]`                      | Claim a ticket.                                    |
 | `[p]ticket unclaim [ticket_id]`                    | Unclaim a ticket.                                  |
 | `[p]ticket lock [ticket_id]`                       | Prevent the opener and added members from posting. |
 | `[p]ticket unlock [ticket_id]`                     | Restore posting access to locked ticket members.   |
-| `[p]ticket close [ticket_id] [reason]`             | Request closure with a reason and confirmation.    |
+| `[p]ticket close [ticket_id] [reason]`             | Request closure with an optional reason.           |
 | `[p]ticket reopen [ticket_id] [reason]`            | Reopen a ticket with an optional reason.           |
 | `[p]ticket delete [ticket_id] [reason]`            | Delete a ticket channel/thread after transcript.   |
 | `[p]ticket recover [channel]`                      | Recover a record from its TicketHub control embed. |
