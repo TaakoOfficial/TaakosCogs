@@ -107,7 +107,7 @@ The same behavior is available through `[p]ticket lock [ticket_id]` and
 
 The **Members** button opens Discord member pickers for adding or removing ticket
 participants. Support staff can always use them. Profile settings can also allow the
-ticket opener to add or remove members with `[p]ticketset ownerpermission`.
+ticket opener to add or remove members with `[p]ticketset behavior ownerpermission`.
 
 When a ticket closes, its control changes to **Reopen** with an optional reopen reason.
 Closed tickets also expose a support-only **Delete** control. The same operations are
@@ -133,8 +133,8 @@ Pending confirmations and their timeout are restored after a bot restart. New cl
 requests use the profile's close timeout, which defaults to five minutes:
 
 ```text
-[p]ticketset closetimeout main 10
-[p]ticketset closetimeout main default
+[p]ticketset behavior closetimeout main 10
+[p]ticketset behavior closetimeout main default
 ```
 
 The ticket opener, close requester, and support staff can cancel or confirm the prompt.
@@ -144,10 +144,10 @@ The ticket opener, close requester, and support staff can cancel or confirm the 
 Profiles close an owner's open tickets when they leave by default. Configure this with:
 
 ```text
-[p]ticketset closeonleave main true
-[p]ticketset closetimeout main 10
-[p]ticketset autodelete main 24
-[p]ticketset autodelete main off
+[p]ticketset behavior closeonleave main true
+[p]ticketset behavior closetimeout main 10
+[p]ticketset behavior autodelete main 24
+[p]ticketset behavior autodelete main off
 ```
 
 Auto-delete timers survive cog and bot restarts. Setting the value to `0` deletes a
@@ -207,10 +207,10 @@ Existing open ticket records, modlog cases, and forum tags are not imported.
 | `[p]ticketset multipanel placeholder <message> <text>` | Set its dropdown placeholder.                     |
 | `[p]ticketset multipanel show <message>`              | Show its configured profile options.               |
 | `[p]ticketset multipanel clear <message>`             | Remove the multi-panel components and configuration. |
-| `[p]ticketset profile [profile]`                      | Show an existing profile's settings.               |
-| `[p]ticketset profiles` or `[p]ticketset profiles list` | List configured profiles and their ticket counts. |
-| `[p]ticketset profiles create <profile>`              | Create a new profile.                              |
-| `[p]ticketset profiles delete <profile> confirm`      | Delete an unused profile.                          |
+| `[p]ticketset profile [profile]` or `[p]ticketset profile show [profile]` | Show an existing profile's settings. |
+| `[p]ticketset profile list`                           | List configured profiles and their ticket counts.  |
+| `[p]ticketset profile create <profile>`               | Create a new profile.                              |
+| `[p]ticketset profile delete <profile> confirm`       | Delete an unused profile.                          |
 | `[p]ticketset channelname [profile] [template]`       | Show or set a profile's channel-name template.     |
 | `[p]ticket open [profile] [reason]`                | Open a ticket by command.                          |
 | `[p]ticket createfor <member> [profile] [reason]`  | Create a ticket for another member.                |
@@ -231,14 +231,14 @@ Existing open ticket records, modlog cases, and forum tags are not imported.
 | `[p]ticketset roles add <profile> <type> <role>`      | Add a support/speak/view/ping/access role.         |
 | `[p]ticketset roles remove <profile> <type> <role>`   | Remove a configured profile role.                  |
 | `[p]ticketset roles ticketrole <profile> [role]`            | Set or clear the role assigned to ticket openers.  |
-| `[p]ticketset ownerpermission <profile> <action> <bool>` | Configure owner close/reopen/member permissions. |
-| `[p]ticketset closeonleave <profile> <bool>`          | Toggle automatic closing when an owner leaves.     |
-| `[p]ticketset closetimeout <profile> <minutes>`       | Configure unanswered close-request timing.         |
-| `[p]ticketset autodelete <profile> <hours\|off>`      | Configure closed-ticket deletion.                  |
-| `[p]ticketset emoji <profile> <action> <emoji>`       | Configure a ticket-control emoji.                  |
-| `[p]ticketset maxopen <profile> <amount>`              | Set max open tickets per member.                   |
-| `[p]ticketset transcripts <profile> <true_or_false>`  | Enable or disable transcripts on ticket delete.    |
-| `[p]ticketset dmtranscript <profile> <true_or_false>` | Enable or disable transcript DMs to ticket owners. |
+| `[p]ticketset behavior ownerpermission <profile> <action> <bool>` | Configure owner close/reopen/member permissions. |
+| `[p]ticketset behavior closeonleave <profile> <bool>` | Toggle automatic closing when an owner leaves.     |
+| `[p]ticketset behavior closetimeout <profile> <minutes>` | Configure unanswered close-request timing.      |
+| `[p]ticketset behavior autodelete <profile> <hours\|off>` | Configure closed-ticket deletion.               |
+| `[p]ticketset behavior emoji <profile> <action> <emoji>` | Configure a ticket-control emoji.                |
+| `[p]ticketset behavior maxopen <profile> <amount>`    | Set max open tickets per member.                   |
+| `[p]ticketset behavior transcripts <profile> <true_or_false>` | Enable or disable transcripts on ticket delete. |
+| `[p]ticketset behavior dmtranscript <profile> <true_or_false>` | Enable or disable transcript DMs to ticket owners. |
 | `[p]ticket claim [ticket_id]`                      | Claim a ticket.                                    |
 | `[p]ticket unclaim [ticket_id]`                    | Unclaim a ticket.                                  |
 | `[p]ticket lock [ticket_id]`                       | Prevent the opener and added members from posting. |

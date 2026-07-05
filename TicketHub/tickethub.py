@@ -4622,9 +4622,23 @@ class TicketHub(commands.Cog):
         ):
             raise commands.CommandError("Only support staff can delete tickets.")
         actor = member or guild.me
-        if profile.get("transcripts"):
-            await self._send_transcript_bundle(guild, record, profile, requested_by=actor)
         channel = await self._fetch_ticket_channel(guild, record)
+        if profile.get("transcripts"):
+            if channel is None:
+                log.info(
+                    "Skipping transcript for TicketHub ticket %s in guild %s because "
+                    "the ticket channel or thread no longer exists.",
+                    record.get("id"),
+                    guild.id,
+                )
+            else:
+                await self._send_transcript_bundle(
+                    guild,
+                    record,
+                    profile,
+                    requested_by=actor,
+                    channel=channel,
+                )
         if channel is not None:
             try:
                 await channel.delete(reason=reason or f"TicketHub ticket #{record['id']} deleted")
@@ -4858,8 +4872,9 @@ class TicketHub(commands.Cog):
         profile: ProfileRecord,
         *,
         requested_by: Optional[discord.Member] = None,
+        channel: Optional[TicketLocation] = None,
     ) -> str:
-        channel = await self._fetch_ticket_channel(guild, record)
+        channel = channel or await self._fetch_ticket_channel(guild, record)
         if channel is None:
             raise commands.CommandError("I could not find that ticket channel or thread.")
         messages = await self._collect_messages(channel)
@@ -6025,9 +6040,11 @@ search.addEventListener('input', () => {{
             return
         await ctx.send(f"Multi-panel removed: {message.jump_url}")
 
-    @tickethub_set.command(name="profile")
-    @commands.admin_or_permissions(manage_guild=True)
-    async def tickethub_profile(self, ctx: commands.Context, profile_name: str = "main") -> None:
+    async def _send_profile_info(
+        self,
+        ctx: commands.Context,
+        profile_name: str = "main",
+    ) -> None:
         """Show an existing profile's settings."""
         assert ctx.guild is not None
         try:
@@ -6180,21 +6197,35 @@ search.addEventListener('input', () => {{
         for page in pagify("\n".join(lines), page_length=1800):
             await ctx.send(box(page))
 
-    @tickethub_set.group(name="profiles", invoke_without_command=True)
+    @tickethub_set.group(name="profile", invoke_without_command=True)
     @commands.admin_or_permissions(manage_guild=True)
-    async def tickethub_profiles(self, ctx: commands.Context) -> None:
-        """List, create, or delete TicketHub profiles."""
-        await self._send_profile_list(ctx)
+    async def tickethub_profile(
+        self,
+        ctx: commands.Context,
+        profile_name: str = "main",
+    ) -> None:
+        """Show, list, create, or delete TicketHub profiles."""
+        await self._send_profile_info(ctx, profile_name)
 
-    @tickethub_profiles.command(name="list", aliases=["show", "ls"])
+    @tickethub_profile.command(name="show")
     @commands.admin_or_permissions(manage_guild=True)
-    async def tickethub_profiles_list(self, ctx: commands.Context) -> None:
+    async def tickethub_profile_show(
+        self,
+        ctx: commands.Context,
+        profile_name: str = "main",
+    ) -> None:
+        """Show an existing profile's settings."""
+        await self._send_profile_info(ctx, profile_name)
+
+    @tickethub_profile.command(name="list", aliases=["ls"])
+    @commands.admin_or_permissions(manage_guild=True)
+    async def tickethub_profile_list(self, ctx: commands.Context) -> None:
         """List configured profiles and ticket counts."""
         await self._send_profile_list(ctx)
 
-    @tickethub_profiles.command(name="create")
+    @tickethub_profile.command(name="create")
     @commands.admin_or_permissions(manage_guild=True)
-    async def tickethub_profiles_create(
+    async def tickethub_profile_create(
         self,
         ctx: commands.Context,
         profile_name: str,
@@ -6217,9 +6248,9 @@ search.addEventListener('input', () => {{
             f"Run `{self._prefixed_set_root(ctx)} profile {clean_profile_name}` to review it."
         )
 
-    @tickethub_profiles.command(name="delete", aliases=["remove", "del"])
+    @tickethub_profile.command(name="delete", aliases=["remove", "del"])
     @commands.admin_or_permissions(manage_guild=True)
-    async def tickethub_profiles_delete(
+    async def tickethub_profile_delete(
         self,
         ctx: commands.Context,
         profile_name: str,
@@ -6295,7 +6326,7 @@ search.addEventListener('input', () => {{
         if confirmation.lower() != "confirm":
             await ctx.send(
                 f"This will delete the unused `{clean_profile_name}` profile. "
-                f"Run `{self._prefixed_set_root(ctx)} profiles delete "
+                f"Run `{self._prefixed_set_root(ctx)} profile delete "
                 f"{clean_profile_name} confirm` to apply."
             )
             return
@@ -6767,7 +6798,13 @@ search.addEventListener('input', () => {{
             f"{role.mention if role is not None else 'disabled'}."
         )
 
-    @tickethub_set.command(name="ownerpermission")
+    @tickethub_set.group(name="behavior", invoke_without_command=True)
+    @commands.admin_or_permissions(manage_guild=True)
+    async def tickethub_behavior(self, ctx: commands.Context) -> None:
+        """Manage profile behavior, lifecycle, transcript, and control settings."""
+        await ctx.send_help(ctx.command)
+
+    @tickethub_behavior.command(name="ownerpermission")
     @commands.admin_or_permissions(manage_guild=True)
     async def tickethub_owner_permission(
         self,
@@ -6796,7 +6833,7 @@ search.addEventListener('input', () => {{
             f"for `{profile_name}`."
         )
 
-    @tickethub_set.command(name="closeonleave")
+    @tickethub_behavior.command(name="closeonleave")
     @commands.admin_or_permissions(manage_guild=True)
     async def tickethub_close_on_leave(
         self,
@@ -6814,7 +6851,7 @@ search.addEventListener('input', () => {{
             f"{'enabled' if enabled else 'disabled'}."
         )
 
-    @tickethub_set.command(
+    @tickethub_behavior.command(
         name="closetimeout",
         aliases=["close-timeout", "closerequesttimeout", "closewait"],
     )
@@ -6883,7 +6920,7 @@ search.addEventListener('input', () => {{
             "Active close confirmations keep their current timeout."
         )
 
-    @tickethub_set.command(name="autodelete")
+    @tickethub_behavior.command(name="autodelete")
     @commands.admin_or_permissions(manage_guild=True)
     async def tickethub_auto_delete(
         self,
@@ -6924,7 +6961,7 @@ search.addEventListener('input', () => {{
             )
         )
 
-    @tickethub_set.command(name="emoji", with_app_command=False)
+    @tickethub_behavior.command(name="emoji")
     @commands.admin_or_permissions(manage_guild=True)
     async def tickethub_control_emoji(
         self,
@@ -6972,7 +7009,7 @@ search.addEventListener('input', () => {{
                 await self._update_ticket_message(ctx.guild, record, profile)
         await ctx.send(f"`{action}` emoji for `{profile_name}` set to {selected}.")
 
-    @tickethub_set.command(name="maxopen")
+    @tickethub_behavior.command(name="maxopen")
     @commands.admin_or_permissions(manage_guild=True)
     async def tickethub_max_open(self, ctx: commands.Context, profile_name: str, amount: int) -> None:
         """Set the max open tickets per member for a profile."""
@@ -6983,7 +7020,7 @@ search.addEventListener('input', () => {{
         await self._set_profile(ctx.guild, profile_name, profile)
         await ctx.send(f"Max open tickets for `{profile_name}` set to **{amount}**.")
 
-    @tickethub_set.command(name="dmtranscript")
+    @tickethub_behavior.command(name="dmtranscript")
     @commands.admin_or_permissions(manage_guild=True)
     async def tickethub_dm_transcript(self, ctx: commands.Context, profile_name: str, enabled: bool) -> None:
         """Choose whether transcripts are DM'd to ticket owners."""
@@ -6993,7 +7030,7 @@ search.addEventListener('input', () => {{
         await self._set_profile(ctx.guild, profile_name, profile)
         await ctx.send(f"Ticket owner transcript DMs for `{profile_name}` are now {'enabled' if enabled else 'disabled'}.")
 
-    @tickethub_set.command(name="transcripts")
+    @tickethub_behavior.command(name="transcripts")
     @commands.admin_or_permissions(manage_guild=True)
     async def tickethub_transcripts(self, ctx: commands.Context, profile_name: str, enabled: bool) -> None:
         """Enable or disable automatic transcript generation on ticket delete."""
