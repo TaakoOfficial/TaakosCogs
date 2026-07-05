@@ -1042,7 +1042,9 @@ class TicketHub(commands.Cog):
     CLOSED_COLOR = 0xED4245
     CLAIMED_COLOR = 0xFEE75C
     MAX_TRANSCRIPT_MESSAGES = 5000
-    CLOSE_CONFIRMATION_TIMEOUT = 300
+    DEFAULT_CLOSE_REQUEST_TIMEOUT_MINUTES = 5
+    MIN_CLOSE_REQUEST_TIMEOUT_MINUTES = 1
+    MAX_CLOSE_REQUEST_TIMEOUT_MINUTES = 4320
     CHANNEL_TEMPLATE_FIELDS = {
         "id",
         "ticket_id",
@@ -1074,6 +1076,7 @@ class TicketHub(commands.Cog):
         )
         self._locks: Dict[int, asyncio.Lock] = {}
         self._prefix_conflict_mode = False
+        self._set_prefix_conflict_mode = False
         self._panel_view = TicketPanelView(self)
         self._panel_select_view = TicketPanelSelectView(self)
         self._control_view = TicketControlView(self)
@@ -1105,11 +1108,37 @@ class TicketHub(commands.Cog):
                     log.debug("Could not rename TicketHub app command during conflict-safe load.")
             break
 
+    def use_conflict_safe_set_root(self) -> None:
+        """Rename the setup prefix root when another cog already owns `ticketset`."""
+        self._set_prefix_conflict_mode = True
+        for command in self.__cog_commands__:
+            if command.name != "ticketset":
+                continue
+            command.name = "tickethubset"
+            command.aliases = [
+                alias
+                for alias in ("thubset",)
+                if self.bot.get_command(alias) is None
+            ]
+            app_command = getattr(command, "app_command", None)
+            if app_command is not None:
+                try:
+                    app_command.name = "tickethubset"
+                except Exception:
+                    log.debug("Could not rename TicketHub setup app command during conflict-safe load.")
+            break
+
     def _prefix_root(self) -> str:
         return "tickethub" if self._prefix_conflict_mode else "ticket"
 
     def _prefixed_root(self, ctx: commands.Context) -> str:
         return f"{ctx.clean_prefix}{self._prefix_root()}"
+
+    def _set_prefix_root(self) -> str:
+        return "tickethubset" if self._set_prefix_conflict_mode else "ticketset"
+
+    def _prefixed_set_root(self, ctx: commands.Context) -> str:
+        return f"{ctx.clean_prefix}{self._set_prefix_root()}"
 
     async def cog_load(self) -> None:
         """Register persistent views."""
@@ -1279,6 +1308,7 @@ class TicketHub(commands.Cog):
             "owner_can_add_members": False,
             "owner_can_remove_members": False,
             "close_on_leave": True,
+            "close_request_timeout_minutes": TicketHub.DEFAULT_CLOSE_REQUEST_TIMEOUT_MINUTES,
             "ticket_role_id": None,
             "speak_role_ids": [],
             "control_emojis": {
@@ -1325,6 +1355,10 @@ class TicketHub(commands.Cog):
     @staticmethod
     def _count(value: int) -> str:
         return f"{value:,}"
+
+    @staticmethod
+    def _format_minutes(value: int) -> str:
+        return f"{value} minute{'s' if value != 1 else ''}"
 
     @staticmethod
     def _format_ts(value: Any, style: str = "F") -> str:
@@ -1603,7 +1637,26 @@ class TicketHub(commands.Cog):
                 profile["thread_parent_channel_id"] = int(thread_parent_id) if thread_parent_id else None
             except (TypeError, ValueError):
                 profile["thread_parent_channel_id"] = None
+            profile["close_request_timeout_minutes"] = (
+                TicketHub._close_request_timeout_minutes(profile)
+            )
         return profile
+
+    @staticmethod
+    def _close_request_timeout_minutes(profile: ProfileRecord) -> int:
+        try:
+            minutes = int(
+                profile.get(
+                    "close_request_timeout_minutes",
+                    TicketHub.DEFAULT_CLOSE_REQUEST_TIMEOUT_MINUTES,
+                )
+            )
+        except (TypeError, ValueError):
+            minutes = TicketHub.DEFAULT_CLOSE_REQUEST_TIMEOUT_MINUTES
+        return max(
+            TicketHub.MIN_CLOSE_REQUEST_TIMEOUT_MINUTES,
+            min(minutes, TicketHub.MAX_CLOSE_REQUEST_TIMEOUT_MINUTES),
+        )
 
     @staticmethod
     def _panel_style(value: Any) -> str:
@@ -2212,7 +2265,7 @@ class TicketHub(commands.Cog):
         if parent is None:
             raise commands.CommandError(
                 "Thread ticket mode needs a thread parent channel. "
-                "Set one with `[p]ticket config threadparent <profile> #channel`."
+                "Set one with `[p]ticketset threadparent <profile> #channel`."
             )
         me = guild.me
         if me is None:
@@ -3104,7 +3157,7 @@ class TicketHub(commands.Cog):
         if parent is None:
             raise commands.CommandError(
                 "Thread ticket mode needs a thread parent channel. "
-                "Set one with `[p]ticket config threadparent <profile> #channel`."
+                "Set one with `[p]ticketset threadparent <profile> #channel`."
             )
         try:
             try:
@@ -3871,6 +3924,7 @@ class TicketHub(commands.Cog):
         reason: str,
         *,
         state: str = "pending",
+        timeout_minutes: Optional[int] = None,
     ) -> discord.Embed:
         reason = reason.strip()[:1000] or "No reason provided."
         if state == "cancelled":
@@ -3893,14 +3947,16 @@ class TicketHub(commands.Cog):
                 color=self.CLOSED_COLOR,
                 timestamp=self._now(),
             )
+        timeout_minutes = timeout_minutes or self.DEFAULT_CLOSE_REQUEST_TIMEOUT_MINUTES
         embed = discord.Embed(
             title="Close Ticket",
             description=(
                 "If you would like to close this ticket, press the **Close** button. "
                 "If you would like to keep this ticket open for further assistance, "
                 "press **Cancel**.\n\n"
-                "**Note: If there is no response within 5 minutes, the ticket will "
-                "be closed automatically.**"
+                "**Note: If there is no response within "
+                f"{self._format_minutes(timeout_minutes)}, the ticket will be closed "
+                "automatically.**"
             ),
             color=self.CLOSED_COLOR,
             timestamp=self._now(),
@@ -4000,7 +4056,7 @@ class TicketHub(commands.Cog):
         requester: discord.Member,
         reason: str,
     ) -> discord.Message:
-        await self._validate_close_request(guild, record, requester)
+        profile = await self._validate_close_request(guild, record, requester)
         existing = record.get("pending_close")
         if isinstance(existing, dict) and float(existing.get("expires_at") or 0) > self._now_ts():
             raise commands.CommandError(
@@ -4012,11 +4068,15 @@ class TicketHub(commands.Cog):
         owner = guild.get_member(int(record["owner_id"])) if record.get("owner_id") else None
         target = owner or requester
         clean_reason = reason.strip()[:1000] or "No reason provided."
+        timeout_minutes = self._close_request_timeout_minutes(profile)
         view = TicketCloseConfirmationView(self, int(record["id"]))
         try:
             message = await channel.send(
                 f"{target.mention}, is there anything else we can help you with?",
-                embed=self._close_confirmation_embed(clean_reason),
+                embed=self._close_confirmation_embed(
+                    clean_reason,
+                    timeout_minutes=timeout_minutes,
+                ),
                 view=view,
                 allowed_mentions=discord.AllowedMentions(
                     users=True,
@@ -4028,7 +4088,7 @@ class TicketHub(commands.Cog):
             raise commands.CommandError(
                 "I could not post the close confirmation in the ticket."
             ) from exc
-        expires_at = self._now_ts() + self.CLOSE_CONFIRMATION_TIMEOUT
+        expires_at = self._now_ts() + (timeout_minutes * 60)
         record["pending_close"] = {
             "requested_by": requester.id,
             "reason": clean_reason,
@@ -5149,7 +5209,7 @@ search.addEventListener('input', () => {{
         enabled = await self.config.guild(ctx.guild).enabled()
         open_count = sum(1 for record in tickets.values() if record.get("status") == "open")
         closed_count = sum(1 for record in tickets.values() if record.get("status") == "closed")
-        command_root = self._prefixed_root(ctx)
+        set_command_root = self._prefixed_set_root(ctx)
         embed = discord.Embed(
             title="TicketHub",
             color=self.DEFAULT_COLOR,
@@ -5192,11 +5252,11 @@ search.addEventListener('input', () => {{
         embed.add_field(
             name="Start Here",
             value=(
-                f"`{command_root} config walkthrough`\n"
-                f"`{command_root} config panel main #tickets button`\n"
-                f"`{command_root} config attachpanel main <message-link> dropdown`\n"
-                f"`{command_root} config multipanel` for multi-profile panels\n"
-                f"`{command_root} admin import-aaa3a-all` for migration preview"
+                f"`{set_command_root} walkthrough`\n"
+                f"`{set_command_root} panel main #tickets button`\n"
+                f"`{set_command_root} attachpanel main <message-link> dropdown`\n"
+                f"`{set_command_root} multipanel` for multi-profile panels\n"
+                f"`{set_command_root} import-aaa3a-all` for migration preview"
             ),
             inline=False,
         )
@@ -5219,19 +5279,20 @@ search.addEventListener('input', () => {{
         """Show TicketHub status, profiles, and setup hints."""
         await self._send_settings(ctx)
 
-    @tickethub.group(name="config", invoke_without_command=True)
+    @commands.hybrid_group(
+        name="ticketset",
+        aliases=["tickethubset", "thubset"],
+        invoke_without_command=True,
+        fallback="help",
+    )
+    @commands.guild_only()
     @commands.admin_or_permissions(manage_guild=True)
-    async def tickethub_config(self, ctx: commands.Context) -> None:
-        """Configure ticket profiles, panels, forms, and destinations."""
+    @commands.bot_has_permissions(embed_links=True)
+    async def tickethub_set(self, ctx: commands.Context) -> None:
+        """Configure TicketHub profiles, panels, roles, automation, and exports."""
         await ctx.send_help(ctx.command)
 
-    @tickethub.group(name="admin", invoke_without_command=True)
-    @commands.admin_or_permissions(manage_guild=True)
-    async def tickethub_admin(self, ctx: commands.Context) -> None:
-        """Configure ticket roles, permissions, automation, and exports."""
-        await ctx.send_help(ctx.command)
-
-    @tickethub_config.command(name="walkthrough", aliases=["wizard"])
+    @tickethub_set.command(name="walkthrough", aliases=["wizard"])
     @commands.admin_or_permissions(manage_guild=True)
     async def tickethub_walkthrough(self, ctx: commands.Context, profile_name: str = "main") -> None:
         """Walk through a basic TicketHub setup."""
@@ -5546,7 +5607,7 @@ search.addEventListener('input', () => {{
         await self._set_profile(guild, profile_name, profile)
         return message
 
-    @tickethub_admin.command(name="enable")
+    @tickethub_set.command(name="enable")
     @commands.admin_or_permissions(manage_guild=True)
     async def tickethub_enable(self, ctx: commands.Context, enabled: bool = True) -> None:
         """Enable or disable TicketHub."""
@@ -5604,7 +5665,7 @@ search.addEventListener('input', () => {{
             return
         await ctx.send(f"Ticket #{record['id']} created for {owner.mention}: {channel.mention}")
 
-    @tickethub_config.command(name="panel")
+    @tickethub_set.command(name="panel")
     @commands.admin_or_permissions(manage_guild=True)
     async def tickethub_panel(
         self,
@@ -5639,7 +5700,7 @@ search.addEventListener('input', () => {{
             f"{message.jump_url}"
         )
 
-    @tickethub_config.command(name="attachpanel")
+    @tickethub_set.command(name="attachpanel")
     @commands.admin_or_permissions(manage_guild=True)
     async def tickethub_attachpanel(
         self,
@@ -5669,7 +5730,7 @@ search.addEventListener('input', () => {{
             f"{message.jump_url}"
         )
 
-    @tickethub_config.command(name="clearpanel")
+    @tickethub_set.command(name="clearpanel")
     @commands.admin_or_permissions(manage_guild=True)
     async def tickethub_clear_panel(
         self,
@@ -5704,7 +5765,7 @@ search.addEventListener('input', () => {{
             return
         await ctx.send(f"TicketHub panel controls removed: {message.jump_url}")
 
-    @tickethub_config.command(
+    @tickethub_set.command(
         name="multipanel",
         aliases=["mpanel"],
         with_app_command=False,
@@ -5712,19 +5773,19 @@ search.addEventListener('input', () => {{
     @commands.admin_or_permissions(manage_guild=True)
     async def tickethub_multi_panel(self, ctx: commands.Context) -> None:
         """Manage messages that offer multiple TicketHub profiles."""
-        command_root = self._prefixed_root(ctx)
+        command_root = self._prefixed_set_root(ctx)
         await ctx.send(
             "Multi-panel commands:\n"
-            f"`{command_root} config multipanel-add <message> <profile> "
+            f"`{command_root} multipanel-add <message> <profile> "
             "<button|dropdown> <emoji|none> <name> | <description>`\n"
-            f"`{command_root} config multipanel-remove <message> <profile>`\n"
-            f"`{command_root} config multipanel-style <message> <button|dropdown>`\n"
-            f"`{command_root} config multipanel-placeholder <message> <text>`\n"
-            f"`{command_root} config multipanel-show <message>`\n"
-            f"`{command_root} config multipanel-clear <message>`"
+            f"`{command_root} multipanel-remove <message> <profile>`\n"
+            f"`{command_root} multipanel-style <message> <button|dropdown>`\n"
+            f"`{command_root} multipanel-placeholder <message> <text>`\n"
+            f"`{command_root} multipanel-show <message>`\n"
+            f"`{command_root} multipanel-clear <message>`"
         )
 
-    @tickethub_config.command(name="multipanel-add", aliases=["multi-add"])
+    @tickethub_set.command(name="multipanel-add", aliases=["multi-add"])
     @commands.admin_or_permissions(manage_guild=True)
     async def tickethub_multi_panel_add(
         self,
@@ -5828,7 +5889,7 @@ search.addEventListener('input', () => {{
             f"multi-panel: {message.jump_url}.{description_note}"
         )
 
-    @tickethub_config.command(name="multipanel-remove", aliases=["multi-remove"])
+    @tickethub_set.command(name="multipanel-remove", aliases=["multi-remove"])
     @commands.admin_or_permissions(manage_guild=True)
     async def tickethub_multi_panel_remove(
         self,
@@ -5862,7 +5923,7 @@ search.addEventListener('input', () => {{
             f"Removed `{profile_name}` from the multi-panel: {message.jump_url}"
         )
 
-    @tickethub_config.command(name="multipanel-style", aliases=["multi-style"])
+    @tickethub_set.command(name="multipanel-style", aliases=["multi-style"])
     @commands.admin_or_permissions(manage_guild=True)
     async def tickethub_multi_panel_style(
         self,
@@ -5882,7 +5943,7 @@ search.addEventListener('input', () => {{
             return
         await ctx.send(f"Multi-panel style changed to **{style}**: {message.jump_url}")
 
-    @tickethub_config.command(name="multipanel-placeholder")
+    @tickethub_set.command(name="multipanel-placeholder")
     @commands.admin_or_permissions(manage_guild=True)
     async def tickethub_multi_panel_placeholder(
         self,
@@ -5906,7 +5967,7 @@ search.addEventListener('input', () => {{
             return
         await ctx.send(f"Multi-panel placeholder updated: {message.jump_url}")
 
-    @tickethub_config.command(name="multipanel-show", aliases=["multi-show"])
+    @tickethub_set.command(name="multipanel-show", aliases=["multi-show"])
     @commands.admin_or_permissions(manage_guild=True)
     async def tickethub_multi_panel_show(
         self,
@@ -5935,7 +5996,7 @@ search.addEventListener('input', () => {{
             )
         await ctx.send(box("\n".join(lines)))
 
-    @tickethub_config.command(name="multipanel-clear", aliases=["multi-clear"])
+    @tickethub_set.command(name="multipanel-clear", aliases=["multi-clear"])
     @commands.admin_or_permissions(manage_guild=True)
     async def tickethub_multi_panel_clear(
         self,
@@ -5951,7 +6012,7 @@ search.addEventListener('input', () => {{
             return
         await ctx.send(f"Multi-panel removed: {message.jump_url}")
 
-    @tickethub_config.command(name="profile")
+    @tickethub_set.command(name="profile")
     @commands.admin_or_permissions(manage_guild=True)
     async def tickethub_profile(self, ctx: commands.Context, profile_name: str = "main") -> None:
         """Create a profile if needed and show its settings."""
@@ -5970,6 +6031,8 @@ search.addEventListener('input', () => {{
                 f"Mode: **{self._ticket_mode(profile)}**\n"
                 f"Max open per member: **{profile.get('max_open_tickets_by_member')}**\n"
                 f"Close on leave: **{bool(profile.get('close_on_leave'))}**\n"
+                "Close request timeout: "
+                f"**{self._format_minutes(self._close_request_timeout_minutes(profile))}**\n"
                 f"Auto-delete hours: **{profile.get('auto_delete_on_close_hours')}**"
             ),
             inline=True,
@@ -5996,7 +6059,7 @@ search.addEventListener('input', () => {{
         )
         await ctx.send(embed=embed)
 
-    @tickethub_config.command(name="channelname", aliases=["channeltemplate"])
+    @tickethub_set.command(name="channelname", aliases=["channeltemplate"])
     @commands.admin_or_permissions(manage_guild=True)
     async def tickethub_channel_name(
         self,
@@ -6032,7 +6095,7 @@ search.addEventListener('input', () => {{
             f"Channel name template for `{profile_name}` set to `{template}`."
         )
 
-    @tickethub_config.command(name="category")
+    @tickethub_set.command(name="category")
     @commands.admin_or_permissions(manage_guild=True)
     async def tickethub_category(
         self,
@@ -6047,7 +6110,7 @@ search.addEventListener('input', () => {{
         await self._set_profile(ctx.guild, profile_name, profile)
         await ctx.send(f"Open-ticket category for `{profile_name}` set to {category.name if category else 'none'}.")
 
-    @tickethub_config.command(name="closedcategory")
+    @tickethub_set.command(name="closedcategory")
     @commands.admin_or_permissions(manage_guild=True)
     async def tickethub_closed_category(
         self,
@@ -6062,7 +6125,7 @@ search.addEventListener('input', () => {{
         await self._set_profile(ctx.guild, profile_name, profile)
         await ctx.send(f"Closed-ticket category for `{profile_name}` set to {category.name if category else 'none'}.")
 
-    @tickethub_config.command(name="mode", aliases=["ticketmode"])
+    @tickethub_set.command(name="mode", aliases=["ticketmode"])
     @commands.admin_or_permissions(manage_guild=True)
     async def tickethub_mode(
         self,
@@ -6081,10 +6144,10 @@ search.addEventListener('input', () => {{
         await self._set_profile(ctx.guild, profile_name, profile)
         extra = ""
         if mode == "thread" and self._thread_parent_channel(ctx.guild, profile) is None:
-            extra = "\nSet a thread parent with `[p]ticket config threadparent <profile> #channel`."
+            extra = "\nSet a thread parent with `[p]ticketset threadparent <profile> #channel`."
         await ctx.send(f"Ticket mode for `{profile_name}` set to **{mode}**.{extra}")
 
-    @tickethub_config.command(name="threadparent", aliases=["threadchannel"])
+    @tickethub_set.command(name="threadparent", aliases=["threadchannel"])
     @commands.admin_or_permissions(manage_guild=True)
     async def tickethub_thread_parent(
         self,
@@ -6100,7 +6163,7 @@ search.addEventListener('input', () => {{
         target = channel.mention if channel else "panel channel fallback"
         await ctx.send(f"Thread-ticket parent for `{profile_name}` set to {target}.")
 
-    @tickethub_config.command(name="logchannel")
+    @tickethub_set.command(name="logchannel")
     @commands.admin_or_permissions(manage_guild=True)
     async def tickethub_log_channel(
         self,
@@ -6115,7 +6178,7 @@ search.addEventListener('input', () => {{
         await self._set_profile(ctx.guild, profile_name, profile)
         await ctx.send(f"Log channel for `{profile_name}` set to {channel.mention if channel else 'none'}.")
 
-    @tickethub_config.command(name="transcriptchannel")
+    @tickethub_set.command(name="transcriptchannel")
     @commands.admin_or_permissions(manage_guild=True)
     async def tickethub_transcript_channel(
         self,
@@ -6130,19 +6193,19 @@ search.addEventListener('input', () => {{
         await self._set_profile(ctx.guild, profile_name, profile)
         await ctx.send(f"Transcript channel for `{profile_name}` set to {channel.mention if channel else 'none'}.")
 
-    @tickethub_config.command(name="modal", with_app_command=False)
+    @tickethub_set.command(name="modal", with_app_command=False)
     @commands.admin_or_permissions(manage_guild=True)
     async def tickethub_modal(self, ctx: commands.Context, profile_name: str = "main") -> None:
         """Manage modal questions shown from ticket panels."""
         await self._send_modal_settings(ctx, profile_name)
 
-    @tickethub_config.command(name="modal-show")
+    @tickethub_set.command(name="modal-show")
     @commands.admin_or_permissions(manage_guild=True)
     async def tickethub_modal_show(self, ctx: commands.Context, profile_name: str = "main") -> None:
         """Show modal questions for a profile."""
         await self._send_modal_settings(ctx, profile_name)
 
-    @tickethub_config.command(name="modal-wizard")
+    @tickethub_set.command(name="modal-wizard")
     @commands.admin_or_permissions(manage_guild=True)
     async def tickethub_modal_wizard(self, ctx: commands.Context, profile_name: str = "main") -> None:
         """Walk through creating a custom ticket modal."""
@@ -6209,7 +6272,7 @@ search.addEventListener('input', () => {{
             + box("\n".join(self._modal_summary_lines(profile["creating_modal"])))
         )
 
-    @tickethub_config.command(name="modal-add")
+    @tickethub_set.command(name="modal-add")
     @commands.admin_or_permissions(manage_guild=True)
     async def tickethub_modal_add(
         self,
@@ -6266,7 +6329,7 @@ search.addEventListener('input', () => {{
             + box("\n".join(self._modal_summary_lines(profile["creating_modal"])))
         )
 
-    @tickethub_config.command(name="modal-remove", aliases=["modal-delete"])
+    @tickethub_set.command(name="modal-remove", aliases=["modal-delete"])
     @commands.admin_or_permissions(manage_guild=True)
     async def tickethub_modal_remove(
         self,
@@ -6294,7 +6357,7 @@ search.addEventListener('input', () => {{
             + box("\n".join(self._modal_summary_lines(profile["creating_modal"])))
         )
 
-    @tickethub_config.command(
+    @tickethub_set.command(
         name="modal-defaultreason",
         aliases=["modal-reason", "modal-default"],
     )
@@ -6311,7 +6374,7 @@ search.addEventListener('input', () => {{
         await self._set_profile(ctx.guild, profile_name, profile)
         await ctx.send(f"`{self._clean_name(profile_name)}` now uses the default Reason modal.")
 
-    @tickethub_config.command(
+    @tickethub_set.command(
         name="modal-clear",
         aliases=["modal-disable", "modal-off"],
     )
@@ -6324,13 +6387,13 @@ search.addEventListener('input', () => {{
         await self._set_profile(ctx.guild, profile_name, profile)
         await ctx.send(f"Modal questions disabled for `{self._clean_name(profile_name)}`.")
 
-    @tickethub_admin.command(name="supportrole", with_app_command=False)
+    @tickethub_set.command(name="supportrole", with_app_command=False)
     @commands.admin_or_permissions(manage_guild=True)
     async def tickethub_support_role(self, ctx: commands.Context) -> None:
         """Manage support roles."""
         await ctx.send_help(ctx.command)
 
-    @tickethub_admin.command(name="supportrole-add")
+    @tickethub_set.command(name="supportrole-add")
     @commands.admin_or_permissions(manage_guild=True)
     async def tickethub_support_role_add(
         self,
@@ -6347,7 +6410,7 @@ search.addEventListener('input', () => {{
         await self._set_profile(ctx.guild, profile_name, profile)
         await ctx.send(f"{role.mention} can now support `{profile_name}` tickets.")
 
-    @tickethub_admin.command(name="supportrole-remove")
+    @tickethub_set.command(name="supportrole-remove")
     @commands.admin_or_permissions(manage_guild=True)
     async def tickethub_support_role_remove(
         self,
@@ -6364,7 +6427,7 @@ search.addEventListener('input', () => {{
         await self._set_profile(ctx.guild, profile_name, profile)
         await ctx.send(f"{role.mention} removed from `{profile_name}` support roles.")
 
-    @tickethub_admin.command(name="roles", with_app_command=False)
+    @tickethub_set.command(name="roles", with_app_command=False)
     @commands.admin_or_permissions(manage_guild=True)
     async def tickethub_roles(self, ctx: commands.Context) -> None:
         """Manage support, speak, view, ping, whitelist, and blacklist roles."""
@@ -6387,7 +6450,7 @@ search.addEventListener('input', () => {{
                 "Role type must be support, speak, view, ping, whitelist, or blacklist."
             ) from exc
 
-    @tickethub_admin.command(name="roles-add")
+    @tickethub_set.command(name="roles-add")
     @commands.admin_or_permissions(manage_guild=True)
     async def tickethub_roles_add(
         self,
@@ -6412,7 +6475,7 @@ search.addEventListener('input', () => {{
             f"{role.mention} added as a `{role_type.lower()}` role for `{profile_name}`."
         )
 
-    @tickethub_admin.command(name="roles-remove")
+    @tickethub_set.command(name="roles-remove")
     @commands.admin_or_permissions(manage_guild=True)
     async def tickethub_roles_remove(
         self,
@@ -6437,7 +6500,7 @@ search.addEventListener('input', () => {{
             f"{role.mention} removed from `{role_type.lower()}` roles for `{profile_name}`."
         )
 
-    @tickethub_admin.command(name="ticketrole")
+    @tickethub_set.command(name="ticketrole")
     @commands.admin_or_permissions(manage_guild=True)
     async def tickethub_ticket_role(
         self,
@@ -6455,7 +6518,7 @@ search.addEventListener('input', () => {{
             f"{role.mention if role is not None else 'disabled'}."
         )
 
-    @tickethub_admin.command(name="ownerpermission")
+    @tickethub_set.command(name="ownerpermission")
     @commands.admin_or_permissions(manage_guild=True)
     async def tickethub_owner_permission(
         self,
@@ -6484,7 +6547,7 @@ search.addEventListener('input', () => {{
             f"for `{profile_name}`."
         )
 
-    @tickethub_admin.command(name="closeonleave")
+    @tickethub_set.command(name="closeonleave")
     @commands.admin_or_permissions(manage_guild=True)
     async def tickethub_close_on_leave(
         self,
@@ -6502,7 +6565,76 @@ search.addEventListener('input', () => {{
             f"{'enabled' if enabled else 'disabled'}."
         )
 
-    @tickethub_admin.command(name="autodelete")
+    @tickethub_set.command(
+        name="closetimeout",
+        aliases=["close-timeout", "closerequesttimeout", "closewait"],
+    )
+    @commands.admin_or_permissions(manage_guild=True)
+    async def tickethub_close_timeout(
+        self,
+        ctx: commands.Context,
+        profile_or_minutes: str = "main",
+        minutes: Optional[str] = None,
+    ) -> None:
+        """Set minutes before unanswered close requests auto-close."""
+        assert ctx.guild is not None
+        profile_name = profile_or_minutes
+        amount_arg = minutes
+        if amount_arg is None:
+            if profile_or_minutes.lower() in {"default", "reset"}:
+                profile_name = "main"
+                amount_arg = profile_or_minutes
+            else:
+                try:
+                    int(profile_or_minutes)
+                except ValueError:
+                    amount_arg = None
+                else:
+                    profile_name = "main"
+                    amount_arg = profile_or_minutes
+
+        profile_name = self._clean_name(profile_name)
+        profile = await self._ensure_profile(ctx.guild, profile_name)
+        if amount_arg is None:
+            await ctx.send(
+                f"Close request timeout for `{profile_name}` is "
+                f"**{self._format_minutes(self._close_request_timeout_minutes(profile))}**."
+            )
+            return
+
+        if amount_arg.lower() in {"default", "reset"}:
+            configured_minutes = self.DEFAULT_CLOSE_REQUEST_TIMEOUT_MINUTES
+        else:
+            try:
+                configured_minutes = int(amount_arg)
+            except ValueError:
+                await ctx.send(
+                    "Minutes must be a whole number from "
+                    f"{self.MIN_CLOSE_REQUEST_TIMEOUT_MINUTES} to "
+                    f"{self.MAX_CLOSE_REQUEST_TIMEOUT_MINUTES}, or `default`."
+                )
+                return
+        if not (
+            self.MIN_CLOSE_REQUEST_TIMEOUT_MINUTES
+            <= configured_minutes
+            <= self.MAX_CLOSE_REQUEST_TIMEOUT_MINUTES
+        ):
+            await ctx.send(
+                "Minutes must be between "
+                f"{self.MIN_CLOSE_REQUEST_TIMEOUT_MINUTES} and "
+                f"{self.MAX_CLOSE_REQUEST_TIMEOUT_MINUTES}."
+            )
+            return
+
+        profile["close_request_timeout_minutes"] = configured_minutes
+        await self._set_profile(ctx.guild, profile_name, profile)
+        await ctx.send(
+            f"Close request timeout for `{profile_name}` set to "
+            f"**{self._format_minutes(configured_minutes)}**. "
+            "Active close confirmations keep their current timeout."
+        )
+
+    @tickethub_set.command(name="autodelete")
     @commands.admin_or_permissions(manage_guild=True)
     async def tickethub_auto_delete(
         self,
@@ -6543,7 +6675,7 @@ search.addEventListener('input', () => {{
             )
         )
 
-    @tickethub_admin.command(name="emoji")
+    @tickethub_set.command(name="emoji")
     @commands.admin_or_permissions(manage_guild=True)
     async def tickethub_control_emoji(
         self,
@@ -6591,7 +6723,7 @@ search.addEventListener('input', () => {{
                 await self._update_ticket_message(ctx.guild, record, profile)
         await ctx.send(f"`{action}` emoji for `{profile_name}` set to {selected}.")
 
-    @tickethub_admin.command(name="maxopen")
+    @tickethub_set.command(name="maxopen")
     @commands.admin_or_permissions(manage_guild=True)
     async def tickethub_max_open(self, ctx: commands.Context, profile_name: str, amount: int) -> None:
         """Set the max open tickets per member for a profile."""
@@ -6602,7 +6734,7 @@ search.addEventListener('input', () => {{
         await self._set_profile(ctx.guild, profile_name, profile)
         await ctx.send(f"Max open tickets for `{profile_name}` set to **{amount}**.")
 
-    @tickethub_admin.command(name="dmtranscript")
+    @tickethub_set.command(name="dmtranscript")
     @commands.admin_or_permissions(manage_guild=True)
     async def tickethub_dm_transcript(self, ctx: commands.Context, profile_name: str, enabled: bool) -> None:
         """Choose whether transcripts are DM'd to ticket owners."""
@@ -6612,7 +6744,7 @@ search.addEventListener('input', () => {{
         await self._set_profile(ctx.guild, profile_name, profile)
         await ctx.send(f"Ticket owner transcript DMs for `{profile_name}` are now {'enabled' if enabled else 'disabled'}.")
 
-    @tickethub_admin.command(name="transcripts")
+    @tickethub_set.command(name="transcripts")
     @commands.admin_or_permissions(manage_guild=True)
     async def tickethub_transcripts(self, ctx: commands.Context, profile_name: str, enabled: bool) -> None:
         """Enable or disable automatic transcript generation on ticket delete."""
@@ -6953,7 +7085,7 @@ search.addEventListener('input', () => {{
             return
         await ctx.send(embed=self._ticket_embed(ctx.guild, record, profile))
 
-    @tickethub_admin.command(name="import", with_app_command=False)
+    @tickethub_set.command(name="import", with_app_command=False)
     @commands.admin_or_permissions(manage_guild=True)
     async def tickethub_import(self, ctx: commands.Context) -> None:
         """Import settings from other ticket systems."""
@@ -6975,7 +7107,7 @@ search.addEventListener('input', () => {{
             raise commands.CommandError("I could not read AAA3A Tickets profile settings.")
         return aaa_profiles
 
-    @tickethub_admin.command(name="import-aaa3a")
+    @tickethub_set.command(name="import-aaa3a")
     @commands.admin_or_permissions(manage_guild=True)
     async def tickethub_import_aaa3a(
         self,
@@ -7011,7 +7143,7 @@ search.addEventListener('input', () => {{
         if confirmation.lower() != "confirm":
             await ctx.send(
                 "AAA3A Tickets import preview. Nothing has been changed yet.\n"
-                f"Run `{self._prefixed_root(ctx)} admin import-aaa3a {aaa3a_profile} confirm` to apply.\n\n"
+                f"Run `{self._prefixed_set_root(ctx)} import-aaa3a {aaa3a_profile} confirm` to apply.\n\n"
                 + box(preview[:1800])
             )
             return
@@ -7028,7 +7160,7 @@ search.addEventListener('input', () => {{
             f"profile `{target_profile}`.{panel_note}"
         )
 
-    @tickethub_admin.command(name="import-aaa3a-all")
+    @tickethub_set.command(name="import-aaa3a-all")
     @commands.admin_or_permissions(manage_guild=True)
     async def tickethub_import_aaa3a_all(
         self,
@@ -7084,7 +7216,7 @@ search.addEventListener('input', () => {{
             f"{dropdown_count} dropdown option(s)"
         )
         preview_lines.append(
-            f"Run `{self._prefixed_root(ctx)} admin import-aaa3a-all confirm` to apply."
+            f"Run `{self._prefixed_set_root(ctx)} import-aaa3a-all confirm` to apply."
         )
         if confirmation.lower() != "confirm":
             for page in pagify("\n".join(preview_lines), page_length=1800):
@@ -7223,7 +7355,7 @@ search.addEventListener('input', () => {{
         )
         return profile, summary
 
-    @tickethub_admin.command(name="export")
+    @tickethub_set.command(name="export")
     @commands.admin_or_permissions(manage_guild=True)
     @commands.bot_has_permissions(attach_files=True)
     async def tickethub_export(self, ctx: commands.Context) -> None:

@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.15.0
+
+- Moved setup, role, automation, import, and export commands to the standalone `[p]ticketset` and `/ticketset` command tree.
+- Added `[p]ticketset closetimeout` to configure how long close requests wait before auto-closing.
+
 ## 1.14.0
 
 - Allowed TicketHub to load alongside another cog that already owns the `[p]ticket` command by temporarily using `[p]tickethub`.
