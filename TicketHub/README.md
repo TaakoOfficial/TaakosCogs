@@ -62,10 +62,10 @@ The HTML file is generated with DiscordChatExporterPy when `chat-exporter` is av
 When a profile has form questions configured, clicking that profile's panel button collects the answers before the ticket is created. Current Red installations show text, dropdown, and boolean questions together in a native Discord modal. Older Discord.py versions fall back to the existing ephemeral step form for dropdown and boolean questions. Submitted answers are stored on the ticket record and shown in the ticket channel or thread.
 
 ```text
-[p]ticketset modal-wizard main
-[p]ticketset modal-add main boolean "Is this urgent?"
-[p]ticketset modal-add main choice "Department | Billing, Technical, Other"
-[p]ticketset modal-show main
+[p]ticketset modal wizard main
+[p]ticketset modal add main boolean "Is this urgent?"
+[p]ticketset modal add main choice "Department | Billing, Technical, Other"
+[p]ticketset modal show main
 ```
 
 ## Thread Tickets
@@ -158,15 +158,15 @@ closed ticket after a five-second grace period.
 TicketHub can read settings from AAA3A's loaded `Tickets` cog and map one profile into TicketHub:
 
 ```text
-[p]tickethubset import-aaa3a main
-[p]tickethubset import-aaa3a main confirm
+[p]tickethubset data import-aaa3a main
+[p]tickethubset data import-aaa3a main confirm
 ```
 
 To import every AAA3A profile at once:
 
 ```text
-[p]tickethubset import-aaa3a-all
-[p]tickethubset import-aaa3a-all confirm
+[p]tickethubset data import-aaa3a-all
+[p]tickethubset data import-aaa3a-all confirm
 ```
 
 The first command is a dry-run preview. The second applies the import. Import-all
@@ -201,33 +201,33 @@ Existing open ticket records, modlog cases, and forum tags are not imported.
 | `[p]ticketset attachpanel <profile> <message> [style]` | Attach a panel to an existing bot-authored message. |
 | `[p]ticketset clearpanel <message>`                    | Remove tracked TicketHub controls from a message.  |
 | `[p]ticketset multipanel`                             | Show multi-profile panel management commands.      |
-| `[p]ticketset multipanel-add <message> <profile> <style> <emoji> <name> \| <description>` | Add a profile option. |
-| `[p]ticketset multipanel-remove <message> <profile>`  | Remove a profile option.                           |
-| `[p]ticketset multipanel-style <message> <style>`     | Switch a multi-panel between buttons and dropdown. |
-| `[p]ticketset multipanel-placeholder <message> <text>` | Set its dropdown placeholder.                     |
-| `[p]ticketset multipanel-show <message>`              | Show its configured profile options.               |
-| `[p]ticketset multipanel-clear <message>`             | Remove the multi-panel components and configuration. |
+| `[p]ticketset multipanel add <message> <profile> <style> <emoji> <name> \| <description>` | Add a profile option. |
+| `[p]ticketset multipanel remove <message> <profile>`  | Remove a profile option.                           |
+| `[p]ticketset multipanel style <message> <style>`     | Switch a multi-panel between buttons and dropdown. |
+| `[p]ticketset multipanel placeholder <message> <text>` | Set its dropdown placeholder.                     |
+| `[p]ticketset multipanel show <message>`              | Show its configured profile options.               |
+| `[p]ticketset multipanel clear <message>`             | Remove the multi-panel components and configuration. |
 | `[p]ticketset profile [profile]`                      | Create a profile and show its settings.            |
 | `[p]ticketset channelname [profile] [template]`       | Show or set a profile's channel-name template.     |
 | `[p]ticket open [profile] [reason]`                | Open a ticket by command.                          |
 | `[p]ticket createfor <member> [profile] [reason]`  | Create a ticket for another member.                |
 | `[p]ticketset modal [profile]`                        | Show modal questions for a profile.                |
-| `[p]ticketset modal-wizard [profile]`                 | Walk through creating a custom ticket modal.       |
-| `[p]ticketset modal-add <profile> [type] <label>`     | Add a text, boolean, or choice form question.       |
-| `[p]ticketset modal-remove <profile> <index>`         | Remove a modal question.                           |
-| `[p]ticketset modal-defaultreason [profile]`          | Use the default Reason modal.                      |
-| `[p]ticketset modal-clear [profile]`                  | Disable modal questions.                           |
+| `[p]ticketset modal wizard [profile]`                 | Walk through creating a custom ticket modal.       |
+| `[p]ticketset modal add <profile> [type] <label>`     | Add a text, boolean, or choice form question.       |
+| `[p]ticketset modal remove <profile> <index>`         | Remove a modal question.                           |
+| `[p]ticketset modal defaultreason [profile]`          | Use the default Reason modal.                      |
+| `[p]ticketset modal clear [profile]`                  | Disable modal questions.                           |
 | `[p]ticketset category <profile> [category]`          | Set the open-ticket category.                      |
 | `[p]ticketset closedcategory <profile> [category]`    | Set the closed-ticket category.                    |
 | `[p]ticketset mode <profile> <channel\|thread>`       | Choose channel or private-thread tickets.          |
 | `[p]ticketset threadparent <profile> [channel]`       | Set the parent channel for thread tickets.         |
 | `[p]ticketset logchannel <profile> [channel]`         | Set the ticket log channel.                        |
 | `[p]ticketset transcriptchannel <profile> [channel]`  | Set the transcript channel.                        |
-| `[p]ticketset supportrole-add <profile> <role>`       | Add a support role.                                |
-| `[p]ticketset supportrole-remove <profile> <role>`    | Remove a support role.                             |
-| `[p]ticketset roles-add <profile> <type> <role>`      | Add a support/speak/view/ping/access role.         |
-| `[p]ticketset roles-remove <profile> <type> <role>`   | Remove a configured profile role.                  |
-| `[p]ticketset ticketrole <profile> [role]`            | Set or clear the role assigned to ticket openers.  |
+| `[p]ticketset roles support-add <profile> <role>`       | Add a support role.                                |
+| `[p]ticketset roles support-remove <profile> <role>`    | Remove a support role.                             |
+| `[p]ticketset roles add <profile> <type> <role>`      | Add a support/speak/view/ping/access role.         |
+| `[p]ticketset roles remove <profile> <type> <role>`   | Remove a configured profile role.                  |
+| `[p]ticketset roles ticketrole <profile> [role]`            | Set or clear the role assigned to ticket openers.  |
 | `[p]ticketset ownerpermission <profile> <action> <bool>` | Configure owner close/reopen/member permissions. |
 | `[p]ticketset closeonleave <profile> <bool>`          | Toggle automatic closing when an owner leaves.     |
 | `[p]ticketset closetimeout <profile> <minutes>`       | Configure unanswered close-request timing.         |
@@ -249,9 +249,9 @@ Existing open ticket records, modlog cases, and forum tags are not imported.
 | `[p]ticket removemember <member> [ticket_id]`      | Remove a member from a ticket.                     |
 | `[p]ticket list [status] [owner]`                  | List open/claimed/unclaimed/closed/all tickets.     |
 | `[p]ticket show [ticket_id]`                       | Show a ticket's stored details.                    |
-| `[p]ticketset import-aaa3a [profile] [confirm]`       | Preview or apply an AAA3A Tickets profile import.  |
-| `[p]ticketset import-aaa3a-all [confirm]`       | Preview or apply all AAA3A Tickets profile imports. |
-| `[p]ticketset export`                                 | Export TicketHub ticket records as CSV.            |
+| `[p]ticketset data import-aaa3a [profile] [confirm]`       | Preview or apply an AAA3A Tickets profile import.  |
+| `[p]ticketset data import-aaa3a-all [confirm]`       | Preview or apply all AAA3A Tickets profile imports. |
+| `[p]ticketset data export`                                 | Export TicketHub ticket records as CSV.            |
 
 ## Example Setup
 
@@ -267,7 +267,7 @@ Or configure directly:
 [p]ticketset closedcategory main "Closed Tickets"
 [p]ticketset logchannel main #ticket-logs
 [p]ticketset transcriptchannel main #ticket-transcripts
-[p]ticketset supportrole-add main @Support
+[p]ticketset roles support-add main @Support
 [p]ticketset panel main #support button
 ```
 
@@ -291,9 +291,9 @@ been sent by the same bot and cannot already contain unrelated components.
 Add dropdown options one at a time using a message link:
 
 ```text
-[p]ticketset multipanel-add <message-link> billing dropdown 💳 Billing | Payment and invoice help
-[p]ticketset multipanel-add <message-link> technical dropdown 🛠️ Technical | Product and account problems
-[p]ticketset multipanel-add <message-link> other dropdown ❓ Other | Anything else
+[p]ticketset multipanel add <message-link> billing dropdown 💳 Billing | Payment and invoice help
+[p]ticketset multipanel add <message-link> technical dropdown 🛠️ Technical | Product and account problems
+[p]ticketset multipanel add <message-link> other dropdown ❓ Other | Anything else
 ```
 
 Every referenced profile must already exist. Names are limited to 80 characters and
@@ -302,9 +302,9 @@ descriptions to 100 characters. Use `none` when an option should not have an emo
 Switch the same panel to buttons or customize its dropdown placeholder:
 
 ```text
-[p]ticketset multipanel-style <message-link> button
-[p]ticketset multipanel-style <message-link> dropdown
-[p]ticketset multipanel-placeholder <message-link> What can we help you with?
+[p]ticketset multipanel style <message-link> button
+[p]ticketset multipanel style <message-link> dropdown
+[p]ticketset multipanel placeholder <message-link> What can we help you with?
 ```
 
 Discord buttons cannot display descriptions. TicketHub retains them when button mode
