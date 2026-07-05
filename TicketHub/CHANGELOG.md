@@ -5,6 +5,8 @@
 - Moved setup, role, automation, import, and export commands to the standalone `[p]ticketset` and `/ticketset` command tree.
 - Grouped high-volume setup commands under `modal`, `multipanel`, `roles`, and `data` to stay within Discord's slash-command child limit.
 - Added `[p]ticketset closetimeout` to configure how long close requests wait before auto-closing.
+- Added `[p]ticketset profiles` commands to list, create, and delete profiles with confirmation for deletion.
+- Improved `[p]ticketset profile` output with cleaner sections for basics, destinations, lifecycle, permissions, and roles.
 
 ## 1.14.0
 

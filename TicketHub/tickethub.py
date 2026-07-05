@@ -1358,7 +1358,20 @@ class TicketHub(commands.Cog):
 
     @staticmethod
     def _format_minutes(value: int) -> str:
-        return f"{value} minute{'s' if value != 1 else ''}"
+        try:
+            minutes = max(0, int(value))
+        except (TypeError, ValueError):
+            minutes = 0
+        if minutes < 60:
+            return f"{minutes} minute{'s' if minutes != 1 else ''}"
+        hours, remaining_minutes = divmod(minutes, 60)
+        hour_text = f"{hours} hour{'s' if hours != 1 else ''}"
+        if remaining_minutes == 0:
+            return hour_text
+        minute_text = (
+            f"{remaining_minutes} minute{'s' if remaining_minutes != 1 else ''}"
+        )
+        return f"{hour_text} {minute_text}"
 
     @staticmethod
     def _format_ts(value: Any, style: str = "F") -> str:
@@ -6015,37 +6028,98 @@ search.addEventListener('input', () => {{
     @tickethub_set.command(name="profile")
     @commands.admin_or_permissions(manage_guild=True)
     async def tickethub_profile(self, ctx: commands.Context, profile_name: str = "main") -> None:
-        """Create a profile if needed and show its settings."""
+        """Show an existing profile's settings."""
         assert ctx.guild is not None
-        profile_name = self._clean_name(profile_name)
-        profile = await self._ensure_profile(ctx.guild, profile_name)
+        try:
+            profile_name = self._clean_name(profile_name)
+            profile = await self._get_profile(ctx.guild, profile_name)
+        except commands.CommandError as error:
+            await ctx.send(str(error))
+            return
+        enabled_text = "Enabled" if profile.get("enabled") else "Disabled"
+        ticket_mode = self._ticket_mode(profile)
+        mode_text = ticket_mode.title()
+        panel_channel = self._profile_channel(ctx.guild, profile, "panel_channel_id")
+        ticket_category = self._profile_category(ctx.guild, profile, "ticket_category_id")
+        closed_category = self._profile_category(ctx.guild, profile, "closed_category_id")
+        thread_parent = self._thread_parent_channel(ctx.guild, profile)
+        log_channel = self._profile_channel(ctx.guild, profile, "log_channel_id")
+        transcript_channel = self._profile_channel(
+            ctx.guild,
+            profile,
+            "transcript_channel_id",
+        )
+        ticket_role = ctx.guild.get_role(int(profile.get("ticket_role_id") or 0))
+        auto_delete_hours = profile.get("auto_delete_on_close_hours")
+        if auto_delete_hours is None:
+            auto_delete_text = "Off"
+        else:
+            try:
+                auto_delete_value = int(auto_delete_hours)
+            except (TypeError, ValueError):
+                auto_delete_text = "Off"
+            else:
+                if auto_delete_value == 0:
+                    auto_delete_text = "Immediate, after a short grace period"
+                else:
+                    auto_delete_text = (
+                        f"{auto_delete_value} "
+                        f"hour{'s' if auto_delete_value != 1 else ''} after close"
+                    )
+        thread_parent_text = (
+            thread_parent.mention if ticket_mode == "thread" and thread_parent else "Not used"
+        )
         embed = discord.Embed(
-            title=f"TicketHub Profile: {profile_name}",
+            title="TicketHub Profile",
+            description=(
+                f"`{profile_name}` - **{enabled_text}** - **{mode_text} tickets**\n"
+                f"Channel template: `{profile.get('channel_name') or 'ticket-{id}-{owner_name}'}`"
+            ),
             color=self.DEFAULT_COLOR,
             timestamp=self._now(),
         )
         embed.add_field(
-            name="Ticket Behavior",
+            name="Basics",
             value=(
-                f"Enabled: **{bool(profile.get('enabled'))}**\n"
-                f"Mode: **{self._ticket_mode(profile)}**\n"
                 f"Max open per member: **{profile.get('max_open_tickets_by_member')}**\n"
-                f"Close on leave: **{bool(profile.get('close_on_leave'))}**\n"
+                f"Panel style: **{self._panel_style(profile.get('panel_style')).title()}**\n"
+                f"Modal questions: **{len(profile.get('creating_modal') or [])}**"
+            ),
+            inline=False,
+        )
+        embed.add_field(
+            name="Destinations",
+            value=(
+                f"Panel: {panel_channel.mention if panel_channel else 'Not set'}\n"
+                f"Open category: {ticket_category.name if ticket_category else 'Not set'}\n"
+                f"Closed category: {closed_category.name if closed_category else 'Not set'}\n"
+                f"Thread parent: {thread_parent_text}\n"
+                f"Logs: {log_channel.mention if log_channel else 'Not set'}\n"
+                f"Transcripts: {transcript_channel.mention if transcript_channel else 'Not set'}"
+            ),
+            inline=False,
+        )
+        embed.add_field(
+            name="Lifecycle",
+            value=(
+                f"Close on leave: **{'Yes' if profile.get('close_on_leave') else 'No'}**\n"
                 "Close request timeout: "
                 f"**{self._format_minutes(self._close_request_timeout_minutes(profile))}**\n"
-                f"Auto-delete hours: **{profile.get('auto_delete_on_close_hours')}**"
+                f"Auto-delete closed tickets: **{auto_delete_text}**\n"
+                f"Transcripts on delete: **{'Enabled' if profile.get('transcripts') else 'Disabled'}**\n"
+                f"DM transcripts: **{'Enabled' if profile.get('dm_transcript') else 'Disabled'}**"
             ),
-            inline=True,
+            inline=False,
         )
         embed.add_field(
             name="Owner Permissions",
             value=(
-                f"Close: **{bool(profile.get('owner_can_close'))}**\n"
-                f"Reopen: **{bool(profile.get('owner_can_reopen'))}**\n"
-                f"Add members: **{bool(profile.get('owner_can_add_members'))}**\n"
-                f"Remove members: **{bool(profile.get('owner_can_remove_members'))}**"
+                f"Close: **{'Allowed' if profile.get('owner_can_close') else 'Blocked'}**\n"
+                f"Reopen: **{'Allowed' if profile.get('owner_can_reopen') else 'Blocked'}**\n"
+                f"Add members: **{'Allowed' if profile.get('owner_can_add_members') else 'Blocked'}**\n"
+                f"Remove members: **{'Allowed' if profile.get('owner_can_remove_members') else 'Blocked'}**"
             ),
-            inline=True,
+            inline=False,
         )
         embed.add_field(
             name="Roles",
@@ -6053,11 +6127,192 @@ search.addEventListener('input', () => {{
                 f"Support: {self._role_mentions(ctx.guild, profile.get('support_role_ids') or []) or 'None'}\n"
                 f"Speak: {self._role_mentions(ctx.guild, profile.get('speak_role_ids') or []) or 'None'}\n"
                 f"View: {self._role_mentions(ctx.guild, profile.get('view_role_ids') or []) or 'None'}\n"
-                f"Ping: {self._role_mentions(ctx.guild, profile.get('ping_role_ids') or []) or 'None'}"
+                f"Ping: {self._role_mentions(ctx.guild, profile.get('ping_role_ids') or []) or 'None'}\n"
+                f"Ticket role: {ticket_role.mention if ticket_role else 'None'}\n"
+                f"Whitelist: {self._role_mentions(ctx.guild, profile.get('whitelist_role_ids') or []) or 'None'}\n"
+                f"Blacklist: {self._role_mentions(ctx.guild, profile.get('blacklist_role_ids') or []) or 'None'}"
             )[:1024],
             inline=False,
         )
+        embed.set_footer(text="TicketHub profile settings")
         await ctx.send(embed=embed)
+
+    async def _send_profile_list(self, ctx: commands.Context) -> None:
+        assert ctx.guild is not None
+        profiles = await self._get_profiles(ctx.guild)
+        tickets = await self.config.guild(ctx.guild).tickets()
+        multi_panels = await self.config.guild(ctx.guild).multi_panels()
+        lines = [f"TicketHub profiles: {len(profiles)}"]
+        for name, profile in sorted(profiles.items()):
+            profile_tickets = [
+                record
+                for record in tickets.values()
+                if str(record.get("profile") or "main") == name
+            ]
+            open_count = sum(
+                1 for record in profile_tickets if record.get("status") == "open"
+            )
+            closed_count = sum(
+                1 for record in profile_tickets if record.get("status") == "closed"
+            )
+            panel = self._profile_channel(ctx.guild, profile, "panel_channel_id")
+            multi_count = 0
+            for message_id, raw_record in multi_panels.items():
+                try:
+                    record = self._sanitize_multi_panel_record(
+                        raw_record,
+                        message_id=int(message_id),
+                    )
+                except (TypeError, ValueError):
+                    record = None
+                if record is None:
+                    continue
+                if any(option["profile"] == name for option in record["options"]):
+                    multi_count += 1
+            lines.append(
+                f"- `{name}` | enabled: {bool(profile.get('enabled'))} "
+                f"| mode: {self._ticket_mode(profile)} "
+                f"| panel: {panel.mention if panel else 'not set'} "
+                f"| multi-panels: {multi_count} "
+                f"| tickets: {len(profile_tickets)} "
+                f"({open_count} open, {closed_count} closed)"
+            )
+        for page in pagify("\n".join(lines), page_length=1800):
+            await ctx.send(box(page))
+
+    @tickethub_set.group(name="profiles", invoke_without_command=True)
+    @commands.admin_or_permissions(manage_guild=True)
+    async def tickethub_profiles(self, ctx: commands.Context) -> None:
+        """List, create, or delete TicketHub profiles."""
+        await self._send_profile_list(ctx)
+
+    @tickethub_profiles.command(name="list", aliases=["show", "ls"])
+    @commands.admin_or_permissions(manage_guild=True)
+    async def tickethub_profiles_list(self, ctx: commands.Context) -> None:
+        """List configured profiles and ticket counts."""
+        await self._send_profile_list(ctx)
+
+    @tickethub_profiles.command(name="create")
+    @commands.admin_or_permissions(manage_guild=True)
+    async def tickethub_profiles_create(
+        self,
+        ctx: commands.Context,
+        profile_name: str,
+    ) -> None:
+        """Create a TicketHub profile."""
+        assert ctx.guild is not None
+        try:
+            clean_profile_name = self._clean_name(profile_name)
+        except commands.BadArgument as error:
+            await ctx.send(str(error))
+            return
+
+        profiles = await self._get_profiles(ctx.guild)
+        if clean_profile_name in profiles:
+            await ctx.send(f"A TicketHub profile named `{clean_profile_name}` already exists.")
+            return
+        await self._set_profile(ctx.guild, clean_profile_name, self._default_profile())
+        await ctx.send(
+            f"Created TicketHub profile `{clean_profile_name}`. "
+            f"Run `{self._prefixed_set_root(ctx)} profile {clean_profile_name}` to review it."
+        )
+
+    @tickethub_profiles.command(name="delete", aliases=["remove", "del"])
+    @commands.admin_or_permissions(manage_guild=True)
+    async def tickethub_profiles_delete(
+        self,
+        ctx: commands.Context,
+        profile_name: str,
+        confirmation: str = "",
+    ) -> None:
+        """Delete an unused TicketHub profile with confirmation."""
+        assert ctx.guild is not None
+        try:
+            clean_profile_name = self._clean_name(profile_name)
+        except commands.BadArgument as error:
+            await ctx.send(str(error))
+            return
+        if clean_profile_name == "main":
+            await ctx.send("The default `main` profile cannot be deleted.")
+            return
+
+        profiles = await self._get_profiles(ctx.guild)
+        profile = profiles.get(clean_profile_name)
+        if profile is None:
+            await ctx.send(f"No TicketHub profile named `{clean_profile_name}` exists.")
+            return
+
+        tickets = await self.config.guild(ctx.guild).tickets()
+        profile_tickets = [
+            record
+            for record in tickets.values()
+            if str(record.get("profile") or "main") == clean_profile_name
+        ]
+        if profile_tickets:
+            open_count = sum(
+                1 for record in profile_tickets if record.get("status") == "open"
+            )
+            closed_count = sum(
+                1 for record in profile_tickets if record.get("status") == "closed"
+            )
+            await ctx.send(
+                f"`{clean_profile_name}` is still used by {len(profile_tickets)} "
+                f"tracked ticket(s): {open_count} open, {closed_count} closed. "
+                "Delete those tickets before deleting the profile."
+            )
+            return
+
+        if profile.get("panel_message_id"):
+            await ctx.send(
+                f"`{clean_profile_name}` still has a single-profile panel configured. "
+                f"Clear it first with `{self._prefixed_set_root(ctx)} clearpanel <message>`."
+            )
+            return
+
+        multi_panels = await self.config.guild(ctx.guild).multi_panels()
+        multi_refs = []
+        for message_id, raw_record in multi_panels.items():
+            try:
+                record = self._sanitize_multi_panel_record(
+                    raw_record,
+                    message_id=int(message_id),
+                )
+            except (TypeError, ValueError):
+                record = None
+            if record is None:
+                continue
+            if any(option["profile"] == clean_profile_name for option in record["options"]):
+                multi_refs.append(message_id)
+        if multi_refs:
+            await ctx.send(
+                f"`{clean_profile_name}` is still used by {len(multi_refs)} "
+                "multi-panel(s). Remove it from those panels first with "
+                f"`{self._prefixed_set_root(ctx)} multipanel remove <message> "
+                f"{clean_profile_name}`."
+            )
+            return
+
+        if confirmation.lower() != "confirm":
+            await ctx.send(
+                f"This will delete the unused `{clean_profile_name}` profile. "
+                f"Run `{self._prefixed_set_root(ctx)} profiles delete "
+                f"{clean_profile_name} confirm` to apply."
+            )
+            return
+
+        async with self.config.guild(ctx.guild).profiles() as stored_profiles:
+            target_key = None
+            for raw_name in stored_profiles:
+                if self._clean_name(str(raw_name)) == clean_profile_name:
+                    target_key = raw_name
+                    break
+            if target_key is None:
+                await ctx.send(f"No TicketHub profile named `{clean_profile_name}` exists.")
+                return
+            stored_profiles.pop(target_key, None)
+            if not stored_profiles:
+                stored_profiles["main"] = self._default_profile()
+        await ctx.send(f"Deleted unused TicketHub profile `{clean_profile_name}`.")
 
     @tickethub_set.command(name="channelname", aliases=["channeltemplate"])
     @commands.admin_or_permissions(manage_guild=True)

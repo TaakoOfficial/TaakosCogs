@@ -207,7 +207,10 @@ Existing open ticket records, modlog cases, and forum tags are not imported.
 | `[p]ticketset multipanel placeholder <message> <text>` | Set its dropdown placeholder.                     |
 | `[p]ticketset multipanel show <message>`              | Show its configured profile options.               |
 | `[p]ticketset multipanel clear <message>`             | Remove the multi-panel components and configuration. |
-| `[p]ticketset profile [profile]`                      | Create a profile and show its settings.            |
+| `[p]ticketset profile [profile]`                      | Show an existing profile's settings.               |
+| `[p]ticketset profiles` or `[p]ticketset profiles list` | List configured profiles and their ticket counts. |
+| `[p]ticketset profiles create <profile>`              | Create a new profile.                              |
+| `[p]ticketset profiles delete <profile> confirm`      | Delete an unused profile.                          |
 | `[p]ticketset channelname [profile] [template]`       | Show or set a profile's channel-name template.     |
 | `[p]ticket open [profile] [reason]`                | Open a ticket by command.                          |
 | `[p]ticket createfor <member> [profile] [reason]`  | Create a ticket for another member.                |
@@ -262,7 +265,6 @@ Existing open ticket records, modlog cases, and forum tags are not imported.
 Or configure directly:
 
 ```text
-[p]ticketset profile main
 [p]ticketset category main "Open Tickets"
 [p]ticketset closedcategory main "Closed Tickets"
 [p]ticketset logchannel main #ticket-logs
