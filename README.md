@@ -49,7 +49,7 @@ To update installed cogs:
 | [EmojiPorter](./EmojiPorter)           | Server migration         | Copy emojis and stickers between servers, list emoji/sticker inventory, skip duplicates automatically.                                      |
 | [ZodiacColorRoles](./ZodiacColorRoles) | Role setup               | Bulk-create zodiac, color, pronoun, and ping preference roles with hybrid command support.                                                  |
 | [FiveMStatus](./FiveMStatus)           | FiveM communities        | Live server status panel with player counts, Join Server button, restart countdowns, uptime tracking, images, and link buttons.             |
-| [cfxstatus](./cfxstatus)               | Cfx.re service checks    | Auto-updating panel that checks Rockstar's official service-status page for Cfx.re Authentication, FiveM, RedM, and related services.       |
+| [cfxstatus](./cfxstatus)               | Cfx.re service checks    | Auto-updating panel that checks the official Cfx.re Statuspage API, with Rockstar's service-status page as a fallback.                     |
 | [RandomWeather](./RandomWeather)       | RP atmosphere            | Seasonal weather simulation, extreme weather events, automatic updates, role notifications, timezone-aware generation.                      |
 | [RPCalander](./RPCalander)             | RP timekeeping           | Daily RP calendar posts, custom timelines, moon phases, blood moon events, separate moon channels.                                          |
 | [Fable](./Fable)                       | RP worldbuilding         | Character profiles, relationships, locations, timelines, visualizations, lore tracking, export tools.                                       |
@@ -89,7 +89,7 @@ Install these for immersive RP communities:
 ```
 
 - `fivemstatus` posts a live FiveM status panel with player counts, connect command, restarts, and buttons.
-- `cfxstatus` posts an auto-updating panel for the official Rockstar Games Cfx.re service status.
+- `cfxstatus` posts an auto-updating panel for the official Cfx.re service status.
 - `fable` tracks characters, relationships, locations, and lore.
 - `randomweather` adds seasonal weather and extreme events.
 - `rpcalander` keeps your in-world calendar and moons moving.

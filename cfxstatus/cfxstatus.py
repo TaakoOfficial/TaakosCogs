@@ -25,6 +25,9 @@ class CfxStatusPayload:
 
     updated_at: Optional[str]
     components: Dict[str, str]
+    source_name: str
+    source_url: str
+    source_note: Optional[str] = None
 
 
 class StatusPageError(RuntimeError):
@@ -55,16 +58,18 @@ class VisibleTextParser(HTMLParser):
 
 
 class CfxStatus(commands.Cog):
-    """Check the official Rockstar Games Cfx.re service status."""
+    """Check the official Cfx.re service status."""
 
     CONFIG_IDENTIFIER = 2026070801
-    STATUS_PAGE_URL = "https://support.rockstargames.com/servicestatus"
+    ROCKSTAR_STATUS_PAGE_URL = "https://support.rockstargames.com/servicestatus"
+    CFX_STATUS_PAGE_URL = "https://status.cfx.re/"
+    CFX_SUMMARY_API_URL = "https://ntfwm21l4wbw.statuspage.io/api/v2/summary.json"
     DEFAULT_POLL_INTERVAL_MINUTES = 5
     MIN_POLL_INTERVAL_MINUTES = 1
     MAX_POLL_INTERVAL_MINUTES = 60
     REQUEST_TIMEOUT = aiohttp.ClientTimeout(total=10)
     REQUEST_HEADERS = {
-        "Accept": "text/html,application/xhtml+xml",
+        "Accept": "application/json,text/html,application/xhtml+xml",
         "User-Agent": (
             "Mozilla/5.0 (compatible; Red-DiscordBot CfxStatus; "
             "+https://github.com/TaakoOfficial/TaakosCogs)"
@@ -77,6 +82,13 @@ class CfxStatus(commands.Cog):
         "Community Servers",
         "Marketplace",
     )
+    STATUSPAGE_COMPONENT_MAP = {
+        "Authentication": ("CnL", "IDMS"),
+        "FiveM": ("FiveM",),
+        "RedM": ("RedM",),
+        "Community Servers": ("Cfx.re Platform Server (FXServer)",),
+        "Marketplace": ("Portal",),
+    }
     OPERATIONAL_COLOR = 0x57F287
     DEGRADED_COLOR = 0xFEE75C
     OUTAGE_COLOR = 0xED4245
@@ -187,8 +199,12 @@ class CfxStatus(commands.Cog):
         await self.config.guild(ctx.guild).enabled.set(True)
 
         try:
-            message = await self._update_status_message(ctx.guild, force_post=True)
-        except (StatusPageError, commands.CommandError) as error:
+            message = await self._update_status_message(
+                ctx.guild,
+                force_post=True,
+                allow_error_embed=True,
+            )
+        except commands.CommandError as error:
             await ctx.send(str(error))
             return
 
@@ -228,8 +244,12 @@ class CfxStatus(commands.Cog):
         """Post a fresh auto-updating status panel in the configured channel."""
         assert ctx.guild is not None
         try:
-            message = await self._update_status_message(ctx.guild, force_post=True)
-        except (StatusPageError, commands.CommandError) as error:
+            message = await self._update_status_message(
+                ctx.guild,
+                force_post=True,
+                allow_error_embed=True,
+            )
+        except commands.CommandError as error:
             await ctx.send(str(error))
             return
 
@@ -247,8 +267,8 @@ class CfxStatus(commands.Cog):
         """Refresh the configured status panel immediately."""
         assert ctx.guild is not None
         try:
-            message = await self._update_status_message(ctx.guild)
-        except (StatusPageError, commands.CommandError) as error:
+            message = await self._update_status_message(ctx.guild, allow_error_embed=True)
+        except commands.CommandError as error:
             await ctx.send(str(error))
             return
 
@@ -319,10 +339,66 @@ class CfxStatus(commands.Cog):
         await ctx.send(embed=self.build_status_embed(payload))
 
     async def fetch_status(self) -> CfxStatusPayload:
+        """Fetch Cfx.re status from the fastest official source available."""
+        errors = []
+
+        try:
+            return await self._fetch_statuspage_status()
+        except StatusPageError as error:
+            errors.append(str(error))
+            log.warning("Cfx.re Statuspage API failed: %s", error)
+
+        try:
+            return await self._fetch_rockstar_status()
+        except StatusPageError as error:
+            errors.append(str(error))
+            log.warning("Rockstar service-status page failed: %s", error)
+
+        detail = " ".join(errors) or "No status source returned data."
+        raise StatusPageError(f"I could not check the Cfx.re service status. {detail}")
+
+    async def _fetch_statuspage_status(self) -> CfxStatusPayload:
+        """Fetch Cfx.re status from the official Statuspage JSON API."""
+        session = await self._get_session()
+        try:
+            async with session.get(self.CFX_SUMMARY_API_URL) as response:
+                if response.status != 200:
+                    raise StatusPageError(
+                        "Cfx.re's Statuspage API returned "
+                        f"HTTP {response.status}."
+                    )
+                data = await response.json(content_type=None)
+        except asyncio.TimeoutError as error:
+            raise StatusPageError("Cfx.re's Statuspage API timed out.") from error
+        except aiohttp.ClientError as error:
+            raise StatusPageError("I could not reach Cfx.re's Statuspage API.") from error
+        except ValueError as error:
+            raise StatusPageError(
+                "Cfx.re's Statuspage API returned invalid JSON."
+            ) from error
+
+        components = self._parse_statuspage_components(data)
+        if not components:
+            raise StatusPageError(
+                "I reached Cfx.re's Statuspage API, but could not find "
+                "the expected components."
+            )
+
+        page = data.get("page") if isinstance(data, dict) else {}
+        updated_at = page.get("updated_at") if isinstance(page, dict) else None
+        return CfxStatusPayload(
+            updated_at=updated_at,
+            components=components,
+            source_name="Cfx.re Statuspage",
+            source_url=self.CFX_STATUS_PAGE_URL,
+            source_note="Official Cfx.re JSON API",
+        )
+
+    async def _fetch_rockstar_status(self) -> CfxStatusPayload:
         """Fetch and parse the Cfx.re section of the Rockstar status page."""
         session = await self._get_session()
         try:
-            async with session.get(self.STATUS_PAGE_URL) as response:
+            async with session.get(self.ROCKSTAR_STATUS_PAGE_URL) as response:
                 if response.status != 200:
                     raise StatusPageError(
                         "Rockstar's service-status page returned "
@@ -362,7 +438,13 @@ class CfxStatus(commands.Cog):
         lines = self._extract_visible_lines(html)
         updated_at = self._extract_updated_at(lines)
         components = self._extract_cfx_components(lines)
-        return CfxStatusPayload(updated_at=updated_at, components=components)
+        return CfxStatusPayload(
+            updated_at=updated_at,
+            components=components,
+            source_name="Rockstar Games Service Status",
+            source_url=self.ROCKSTAR_STATUS_PAGE_URL,
+            source_note=None,
+        )
 
     def build_status_embed(
         self,
@@ -374,10 +456,10 @@ class CfxStatus(commands.Cog):
         embed = discord.Embed(
             title="Cfx.re Platform Status",
             description=(
-                "Official Cfx.re service health from Rockstar Games.\n"
+                "Official Cfx.re service health.\n"
                 f"**{status_text}**"
             ),
-            url=self.STATUS_PAGE_URL,
+            url=payload.source_url,
             color=self._status_color(payload.components),
         )
         embed.timestamp = datetime.now(timezone.utc)
@@ -391,23 +473,22 @@ class CfxStatus(commands.Cog):
             )
 
         if payload.updated_at:
-            embed.add_field(
-                name="Rockstar Updated",
-                value=payload.updated_at,
-                inline=True,
-            )
+            embed.add_field(name="Updated", value=payload.updated_at, inline=True)
         if poll_interval_minutes is not None:
             embed.add_field(
                 name="Auto Refresh",
                 value=f"Every {poll_interval_minutes} minutes",
                 inline=True,
             )
+        source_value = f"[{payload.source_name}]({payload.source_url})"
+        if payload.source_note:
+            source_value = f"{source_value}\n{payload.source_note}"
         embed.add_field(
-            name="Status Page",
-            value=f"[Open Rockstar Service Status]({self.STATUS_PAGE_URL})",
+            name="Source",
+            value=source_value,
             inline=True,
         )
-        embed.set_footer(text="Source: Rockstar Games Service Status | Checked")
+        embed.set_footer(text="Cfx.re status | Checked")
         return embed
 
     def build_error_embed(
@@ -419,7 +500,7 @@ class CfxStatus(commands.Cog):
         embed = discord.Embed(
             title="Cfx.re Platform Status",
             description="The official Cfx.re status could not be checked.",
-            url=self.STATUS_PAGE_URL,
+            url=self.CFX_STATUS_PAGE_URL,
             color=self.UNKNOWN_COLOR,
         )
         embed.timestamp = datetime.now(timezone.utc)
@@ -432,11 +513,14 @@ class CfxStatus(commands.Cog):
                 inline=True,
             )
         embed.add_field(
-            name="Status Page",
-            value=f"[Open Rockstar Service Status]({self.STATUS_PAGE_URL})",
+            name="Status Pages",
+            value=(
+                f"[Cfx.re Status]({self.CFX_STATUS_PAGE_URL})\n"
+                f"[Rockstar Service Status]({self.ROCKSTAR_STATUS_PAGE_URL})"
+            ),
             inline=True,
         )
-        embed.set_footer(text="Source: Rockstar Games Service Status | Checked")
+        embed.set_footer(text="Cfx.re status | Checked")
         return embed
 
     def build_settings_embed(
@@ -491,6 +575,7 @@ class CfxStatus(commands.Cog):
         error: Optional[str] = None,
         *,
         force_post: bool = False,
+        allow_error_embed: bool = False,
     ):
         """Post or edit the configured status panel for a guild."""
         if settings is None:
@@ -501,7 +586,12 @@ class CfxStatus(commands.Cog):
         interval = self._poll_interval(settings)
 
         if payload is None and error is None:
-            payload = await self.fetch_status()
+            try:
+                payload = await self.fetch_status()
+            except StatusPageError as status_error:
+                if not allow_error_embed:
+                    raise
+                error = str(status_error)
 
         if error is not None:
             embed = self.build_error_embed(error, interval)
@@ -619,7 +709,11 @@ class CfxStatus(commands.Cog):
 
     def _component_field_value(self, status: str) -> str:
         """Format a component status for display in an embed field."""
-        return f"**{self._status_label(status)}**\n{status}"
+        label = self._status_label(status)
+        status_text = self._format_status_text(status)
+        if status_text == label:
+            return f"**{label}**"
+        return f"**{label}**\n{status_text}"
 
     def _status_label(self, status: str) -> str:
         if self._is_outage(status):
@@ -631,12 +725,47 @@ class CfxStatus(commands.Cog):
         return "Unknown"
 
     @staticmethod
+    def _format_status_text(status: str) -> str:
+        return status.replace("_", " ").strip().title()
+
+    @staticmethod
     def _utc_timestamp() -> int:
         return int(datetime.now(timezone.utc).timestamp())
 
     @staticmethod
     def _message_url(guild_id: int, channel_id: int, message_id: int) -> str:
         return f"https://discord.com/channels/{guild_id}/{channel_id}/{message_id}"
+
+    def _parse_statuspage_components(self, data: Dict) -> Dict[str, str]:
+        """Map Cfx.re Statuspage API components to the panel's display rows."""
+        if not isinstance(data, dict):
+            return {}
+
+        raw_components = data.get("components")
+        if not isinstance(raw_components, list):
+            return {}
+
+        by_name = {
+            str(component.get("name")): component
+            for component in raw_components
+            if isinstance(component, dict)
+        }
+        components: Dict[str, str] = {}
+
+        for display_name, source_names in self.STATUSPAGE_COMPONENT_MAP.items():
+            source_component = None
+            for source_name in source_names:
+                source_component = by_name.get(source_name)
+                if source_component is not None:
+                    break
+            if source_component is None:
+                continue
+
+            status = source_component.get("status")
+            if isinstance(status, str) and status:
+                components[display_name] = self._format_status_text(status)
+
+        return components
 
     @staticmethod
     def _extract_visible_lines(html: str) -> List[str]:

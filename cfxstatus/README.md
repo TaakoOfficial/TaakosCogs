@@ -1,7 +1,7 @@
 # cfxstatus
 
-Check the official Cfx.re service status from Rockstar Games in Discord, either
-on demand or as an auto-updating status panel.
+Check the official Cfx.re service status in Discord, either on demand or as an
+auto-updating status panel.
 
 [Back to the cog catalog](../README.md)
 
@@ -15,7 +15,7 @@ on demand or as an auto-updating status panel.
 
 ## Highlights
 
-- Fetches Rockstar Games' official service-status page.
+- Fetches the official Cfx.re Statuspage API, with Rockstar Games' service-status page as a fallback.
 - Shows the Cfx.re statuses for Authentication, FiveM, RedM, Community Servers, and Marketplace.
 - Posts a polished embed panel in a channel you choose.
 - Polls automatically and edits the existing panel on a configurable interval.
@@ -48,7 +48,9 @@ on demand or as an auto-updating status panel.
 - Python 3.8 or newer.
 - `aiohttp`.
 - Bot permissions to `View Channel`, `Send Messages`, and `Embed Links` in the chosen status channel.
-- The bot host must be able to reach `https://support.rockstargames.com/servicestatus`.
+- The bot host must be able to reach `https://status.cfx.re/`.
+- Rockstar's service-status page is used as a fallback when reachable:
+  `https://support.rockstargames.com/servicestatus`.
 
 ## Data
 
