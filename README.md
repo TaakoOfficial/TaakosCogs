@@ -2,7 +2,7 @@
 
 A growing collection of cogs for [Red-DiscordBot](https://github.com/Cog-Creators/Red-DiscordBot), focused on practical server tools, roleplay immersion, community feedback, reputation, support tickets, events, invite tracking, and admin workflows.
 
-This repo includes everything from role/user audits, invite tracking, suggestions, reputation, tickets, and logging to RP world tracking, weather simulation, giveaways, welcome automation, emoji migration, party games, and WHMCS support tooling.
+This repo includes everything from role/user audits, invite tracking, suggestions, reputation, tickets, and logging to RP world tracking, Cfx.re service checks, weather simulation, giveaways, welcome automation, emoji migration, party games, and WHMCS support tooling.
 
 ## Quick Install
 
@@ -49,6 +49,7 @@ To update installed cogs:
 | [EmojiPorter](./EmojiPorter)           | Server migration         | Copy emojis and stickers between servers, list emoji/sticker inventory, skip duplicates automatically.                                      |
 | [ZodiacColorRoles](./ZodiacColorRoles) | Role setup               | Bulk-create zodiac, color, pronoun, and ping preference roles with hybrid command support.                                                  |
 | [FiveMStatus](./FiveMStatus)           | FiveM communities        | Live server status panel with player counts, Join Server button, restart countdowns, uptime tracking, images, and link buttons.             |
+| [cfxstatus](./cfxstatus)               | Cfx.re service checks    | Auto-updating panel that checks Rockstar's official service-status page for Cfx.re Authentication, FiveM, RedM, and related services.       |
 | [RandomWeather](./RandomWeather)       | RP atmosphere            | Seasonal weather simulation, extreme weather events, automatic updates, role notifications, timezone-aware generation.                      |
 | [RPCalander](./RPCalander)             | RP timekeeping           | Daily RP calendar posts, custom timelines, moon phases, blood moon events, separate moon channels.                                          |
 | [Fable](./Fable)                       | RP worldbuilding         | Character profiles, relationships, locations, timelines, visualizations, lore tracking, export tools.                                       |
@@ -84,10 +85,11 @@ Install these if you want better moderation visibility, invite attribution, feed
 Install these for immersive RP communities:
 
 ```text
-[p]cog install taakoscogs FiveMStatus Fable RandomWeather RPCalander Paranoia
+[p]cog install taakoscogs FiveMStatus cfxstatus Fable RandomWeather RPCalander Paranoia
 ```
 
 - `fivemstatus` posts a live FiveM status panel with player counts, connect command, restarts, and buttons.
+- `cfxstatus` posts an auto-updating panel for the official Rockstar Games Cfx.re service status.
 - `fable` tracks characters, relationships, locations, and lore.
 - `randomweather` adds seasonal weather and extreme events.
 - `rpcalander` keeps your in-world calendar and moons moving.
@@ -157,6 +159,7 @@ Some cogs have Python package requirements that Red's downloader installs automa
 | welcome       | `aiohttp`        |
 | emojiporter   | `aiohttp`        |
 | fivemstatus   | `aiohttp`        |
+| cfxstatus     | `aiohttp`        |
 | whmcs         | `aiohttp>=3.8.0` |
 
 Some features also need Discord privileged intents:
@@ -182,6 +185,7 @@ Each cog includes its own data statement in `info.json`. In short:
 - `reviewhub` stores review settings, request records, review/vouch records, reviewer/reviewed/reporter/useful-voter/moderator IDs, review text, ratings, message/channel IDs, timestamps, and deletion metadata.
 - `tickethub` stores ticket profiles, panel IDs, channel/category/role IDs, ticket records, owner/staff/participant IDs, reasons, timestamps, and lifecycle events. Transcripts are generated on demand from channel history.
 - `tempvoice` stores temporary voice settings, active temporary channel IDs, owner IDs, permitted user IDs, control panel message/channel IDs, creation timestamps, lock state, and user limits.
+- `cfxstatus` stores Cfx.re status panel settings, including enabled state, channel IDs, message IDs, polling interval, and last poll timestamp.
 - `rpcalander` also uses a local `post_tracker.json` file to prevent duplicate daily posts.
 
 No cog is intended to share stored data with external services unless the feature explicitly requires an external integration, such as WHMCS API access or optional fable export workflows.
@@ -206,6 +210,7 @@ Start with each cog's README:
 - [EmojiPorter README](./EmojiPorter/README.md)
 - [ZodiacColorRoles README](./ZodiacColorRoles/README.md)
 - [FiveMStatus README](./FiveMStatus/README.md)
+- [cfxstatus README](./cfxstatus/README.md)
 - [RandomWeather README](./RandomWeather/README.md)
 - [RPCalander README](./RPCalander/README.md)
 - [Fable README](./Fable/README.md)

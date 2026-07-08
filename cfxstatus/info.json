@@ -1,0 +1,17 @@
+{
+  "$schema": "https://raw.githubusercontent.com/Cog-Creators/Red-DiscordBot/V3/develop/schema/red_cog.schema.json",
+  "name": "cfxstatus",
+  "author": ["Taako"],
+  "version": "1.1.0",
+  "description": "A Red DiscordBot cog that checks the official Rockstar Games service-status page and posts an auto-updating Cfx.re status panel for Authentication, FiveM, RedM, Community Servers, and Marketplace.",
+  "install_msg": "cfxstatus loaded. Use `[p]cfxstatus setup [channel]` to post an auto-updating Cfx.re status panel, or `[p]cfxstatus` for a one-off check.",
+  "short": "Auto-updating official Cfx.re service status panel.",
+  "tags": ["cfx", "cfxre", "fivem", "redm", "status", "rockstar", "utility"],
+  "requirements": ["aiohttp"],
+  "min_bot_version": "3.5.0",
+  "min_python_version": [3, 8, 0],
+  "hidden": false,
+  "disabled": false,
+  "type": "COG",
+  "end_user_data_statement": "This cog stores per-guild Cfx.re status panel settings, including enabled state, channel IDs, message IDs, polling interval, and the last poll timestamp. It does not store Discord end user data."
+}
