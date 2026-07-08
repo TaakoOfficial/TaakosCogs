@@ -13,7 +13,7 @@ def dashboard_page(*args, **kwargs):
     return decorator
 
 
-class DashboardIntegration(object):
+class DashboardIntegration:
     """Dashboard integration for YALC (Yet Another Logging Cog)."""
 
     def __init__(self, bot, *args, **kwargs) -> None:
