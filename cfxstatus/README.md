@@ -26,7 +26,8 @@ auto-updating status panel.
 
 | Command                                  | Description                                                                  |
 | ---------------------------------------- | ---------------------------------------------------------------------------- |
-| `[p]cfxstatus`, `[p]cfx`, or `[p]cfxre`   | Check the current official Cfx.re status once.                               |
+| `[p]cfxstatus`, `[p]cfx`, or `[p]cfxre`   | Show the cfxstatus help page.                                                |
+| `[p]cfxstatus check`                     | Check the current official Cfx.re status once.                               |
 | `[p]cfxstatus setup [channel]`           | Pick a channel, post the status panel, and enable automatic updates.         |
 | `[p]cfxstatus channel [channel]`         | Change the channel used for the auto-updating panel.                         |
 | `[p]cfxstatus post`                      | Post a fresh status panel in the configured channel.                         |

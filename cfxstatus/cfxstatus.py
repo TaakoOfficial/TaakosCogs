@@ -91,6 +91,7 @@ class CfxStatus(commands.Cog):
     }
     OPERATIONAL_COLOR = 0x57F287
     DEGRADED_COLOR = 0xFEE75C
+    PARTIAL_COLOR = 0xF97316
     OUTAGE_COLOR = 0xED4245
     UNKNOWN_COLOR = 0x747F8D
 
@@ -164,7 +165,7 @@ class CfxStatus(commands.Cog):
 
     @status_loop.before_loop
     async def before_status_loop(self) -> None:
-        """Wait until the bot is ready before polling Rockstar."""
+        """Wait until the bot is ready before polling Cfx.re status."""
         await self.bot.wait_until_ready()
 
     @commands.hybrid_group(
@@ -173,7 +174,12 @@ class CfxStatus(commands.Cog):
         invoke_without_command=True,
     )
     async def cfxstatus(self, ctx: commands.Context) -> None:
-        """Check the official Cfx.re service status from Rockstar Games."""
+        """Show Cfx.re status commands."""
+        await ctx.send_help(ctx.command)
+
+    @cfxstatus.command(name="check", aliases=["status", "now"])
+    async def cfxstatus_check(self, ctx: commands.Context) -> None:
+        """Check the current official Cfx.re status once."""
         await self._send_current_status(ctx)
 
     @cfxstatus.command(name="setup")
@@ -267,7 +273,10 @@ class CfxStatus(commands.Cog):
         """Refresh the configured status panel immediately."""
         assert ctx.guild is not None
         try:
-            message = await self._update_status_message(ctx.guild, allow_error_embed=True)
+            message = await self._update_status_message(
+                ctx.guild,
+                allow_error_embed=True,
+            )
         except commands.CommandError as error:
             await ctx.send(str(error))
             return
@@ -371,7 +380,9 @@ class CfxStatus(commands.Cog):
         except asyncio.TimeoutError as error:
             raise StatusPageError("Cfx.re's Statuspage API timed out.") from error
         except aiohttp.ClientError as error:
-            raise StatusPageError("I could not reach Cfx.re's Statuspage API.") from error
+            raise StatusPageError(
+                "I could not reach Cfx.re's Statuspage API."
+            ) from error
         except ValueError as error:
             raise StatusPageError(
                 "Cfx.re's Statuspage API returned invalid JSON."
@@ -453,42 +464,40 @@ class CfxStatus(commands.Cog):
     ) -> discord.Embed:
         """Build the Discord embed for a parsed status payload."""
         status_text = self._overall_status(payload.components)
+        overall_emoji = self._overall_status_emoji(payload.components)
         embed = discord.Embed(
-            title="Cfx.re Platform Status",
+            title=f"{overall_emoji} Cfx.re Platform Status",
             description=(
-                "Official Cfx.re service health.\n"
-                f"**{status_text}**"
+                f"**{status_text}**\n"
+                "Live platform health for FiveM, RedM, and Cfx.re services."
             ),
-            url=payload.source_url,
             color=self._status_color(payload.components),
         )
         embed.timestamp = datetime.now(timezone.utc)
 
-        for component in self.CFX_COMPONENTS:
-            status = payload.components.get(component, "Unknown")
-            embed.add_field(
-                name=component,
-                value=self._component_field_value(status),
-                inline=True,
+        service_lines = [
+            self._component_status_line(
+                component,
+                payload.components.get(component, "Unknown"),
             )
-
-        if payload.updated_at:
-            embed.add_field(name="Updated", value=payload.updated_at, inline=True)
-        if poll_interval_minutes is not None:
-            embed.add_field(
-                name="Auto Refresh",
-                value=f"Every {poll_interval_minutes} minutes",
-                inline=True,
-            )
-        source_value = f"[{payload.source_name}]({payload.source_url})"
-        if payload.source_note:
-            source_value = f"{source_value}\n{payload.source_note}"
+            for component in self.CFX_COMPONENTS
+        ]
         embed.add_field(
-            name="Source",
-            value=source_value,
-            inline=True,
+            name="Service Board",
+            value="\n".join(service_lines),
+            inline=False,
         )
-        embed.set_footer(text="Cfx.re status | Checked")
+
+        details = []
+        if payload.updated_at:
+            details.append(
+                f"Provider update: {self._format_updated_at(payload.updated_at)}"
+            )
+        if poll_interval_minutes is not None:
+            details.append(f"Refresh: every {poll_interval_minutes} minutes")
+        details.append(f"Source: {payload.source_name}")
+        embed.add_field(name="Panel Info", value="\n".join(details), inline=False)
+        embed.set_footer(text="Cfx.re status panel | Last checked")
         return embed
 
     def build_error_embed(
@@ -498,29 +507,27 @@ class CfxStatus(commands.Cog):
     ) -> discord.Embed:
         """Build the Discord embed shown when a scheduled poll fails."""
         embed = discord.Embed(
-            title="Cfx.re Platform Status",
-            description="The official Cfx.re status could not be checked.",
-            url=self.CFX_STATUS_PAGE_URL,
+            title="⚪ Cfx.re Platform Status",
+            description=(
+                "**Unable to check Cfx.re status**\n"
+                "The panel will keep retrying on the next refresh."
+            ),
             color=self.UNKNOWN_COLOR,
         )
         embed.timestamp = datetime.now(timezone.utc)
-        embed.add_field(name="Status", value="Unable to check", inline=True)
-        embed.add_field(name="Error", value=error[:1024], inline=False)
+        embed.add_field(
+            name="Service Board",
+            value="⚪ **Status** - Unknown",
+            inline=False,
+        )
+        embed.add_field(name="Last Error", value=error[:1024], inline=False)
         if poll_interval_minutes is not None:
             embed.add_field(
-                name="Auto Refresh",
+                name="Panel Info",
                 value=f"Every {poll_interval_minutes} minutes",
-                inline=True,
+                inline=False,
             )
-        embed.add_field(
-            name="Status Pages",
-            value=(
-                f"[Cfx.re Status]({self.CFX_STATUS_PAGE_URL})\n"
-                f"[Rockstar Service Status]({self.ROCKSTAR_STATUS_PAGE_URL})"
-            ),
-            inline=True,
-        )
-        embed.set_footer(text="Cfx.re status | Checked")
+        embed.set_footer(text="Cfx.re status panel | Last checked")
         return embed
 
     def build_settings_embed(
@@ -707,15 +714,18 @@ class CfxStatus(commands.Cog):
             min(interval, self.MAX_POLL_INTERVAL_MINUTES),
         )
 
-    def _component_field_value(self, status: str) -> str:
-        """Format a component status for display in an embed field."""
-        label = self._status_label(status)
-        status_text = self._format_status_text(status)
-        if status_text == label:
-            return f"**{label}**"
-        return f"**{label}**\n{status_text}"
+    def _component_status_line(self, component: str, status: str) -> str:
+        """Format a component row for the status-board embed field."""
+        return (
+            f"{self._status_emoji(status)} **{component}** - "
+            f"{self._status_label(status)}"
+        )
 
     def _status_label(self, status: str) -> str:
+        if self._is_partial_outage(status):
+            return "Partial Outage"
+        if self._is_maintenance(status):
+            return "Maintenance"
         if self._is_outage(status):
             return "Unavailable"
         if self._is_degraded(status):
@@ -724,9 +734,48 @@ class CfxStatus(commands.Cog):
             return "Operational"
         return "Unknown"
 
+    def _status_emoji(self, status: str) -> str:
+        if self._is_partial_outage(status):
+            return "🟠"
+        if self._is_maintenance(status):
+            return "🔵"
+        if self._is_outage(status):
+            return "🔴"
+        if self._is_degraded(status):
+            return "🟡"
+        if self._is_operational(status):
+            return "🟢"
+        return "⚪"
+
+    def _overall_status_emoji(self, components: Dict[str, str]) -> str:
+        statuses = list(components.values())
+        if not statuses:
+            return "⚪"
+        if any(self._is_outage(status) for status in statuses):
+            return "🔴"
+        if any(self._is_partial_outage(status) for status in statuses):
+            return "🟠"
+        if any(self._is_maintenance(status) for status in statuses):
+            return "🔵"
+        if any(self._is_degraded(status) for status in statuses):
+            return "🟡"
+        if all(self._is_operational(status) for status in statuses):
+            return "🟢"
+        return "⚪"
+
     @staticmethod
     def _format_status_text(status: str) -> str:
         return status.replace("_", " ").strip().title()
+
+    @staticmethod
+    def _format_updated_at(updated_at: str) -> str:
+        """Return a readable provider update timestamp."""
+        try:
+            parsed = datetime.fromisoformat(updated_at.replace("Z", "+00:00"))
+        except ValueError:
+            return updated_at
+        timestamp = int(parsed.timestamp())
+        return f"<t:{timestamp}:R>"
 
     @staticmethod
     def _utc_timestamp() -> int:
@@ -868,6 +917,10 @@ class CfxStatus(commands.Cog):
             return "All Cfx.re services are operational."
         if any(self._is_outage(status) for status in statuses):
             return "One or more Cfx.re services are unavailable."
+        if any(self._is_partial_outage(status) for status in statuses):
+            return "One or more Cfx.re services have a partial outage."
+        if any(self._is_maintenance(status) for status in statuses):
+            return "One or more Cfx.re services are under maintenance."
         if any(self._is_degraded(status) for status in statuses):
             return "One or more Cfx.re services are degraded."
         return "Cfx.re service status has mixed or unknown results."
@@ -878,6 +931,10 @@ class CfxStatus(commands.Cog):
             return self.UNKNOWN_COLOR
         if any(self._is_outage(status) for status in statuses):
             return self.OUTAGE_COLOR
+        if any(self._is_partial_outage(status) for status in statuses):
+            return self.PARTIAL_COLOR
+        if any(self._is_maintenance(status) for status in statuses):
+            return self.UNKNOWN_COLOR
         if any(self._is_degraded(status) for status in statuses):
             return self.DEGRADED_COLOR
         if all(self._is_operational(status) for status in statuses):
@@ -894,13 +951,25 @@ class CfxStatus(commands.Cog):
         lowered = status.lower()
         return any(
             keyword in lowered
-            for keyword in ("degraded", "limited", "maintenance", "partial")
+            for keyword in ("degraded", "limited")
         )
 
     @staticmethod
     def _is_outage(status: str) -> bool:
         lowered = status.lower()
+        if "partial" in lowered:
+            return False
         return any(
             keyword in lowered
             for keyword in ("outage", "unavailable", "offline", "down")
         )
+
+    @staticmethod
+    def _is_partial_outage(status: str) -> bool:
+        lowered = status.lower()
+        return "partial" in lowered
+
+    @staticmethod
+    def _is_maintenance(status: str) -> bool:
+        lowered = status.lower()
+        return "maintenance" in lowered
