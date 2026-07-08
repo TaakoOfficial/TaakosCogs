@@ -489,10 +489,6 @@ class CfxStatus(commands.Cog):
         )
 
         details = []
-        if payload.updated_at:
-            details.append(
-                f"Provider update: {self._format_updated_at(payload.updated_at)}"
-            )
         if poll_interval_minutes is not None:
             details.append(f"Refresh: every {poll_interval_minutes} minutes")
         details.append(f"Source: {payload.source_name}")
@@ -766,16 +762,6 @@ class CfxStatus(commands.Cog):
     @staticmethod
     def _format_status_text(status: str) -> str:
         return status.replace("_", " ").strip().title()
-
-    @staticmethod
-    def _format_updated_at(updated_at: str) -> str:
-        """Return a readable provider update timestamp."""
-        try:
-            parsed = datetime.fromisoformat(updated_at.replace("Z", "+00:00"))
-        except ValueError:
-            return updated_at
-        timestamp = int(parsed.timestamp())
-        return f"<t:{timestamp}:R>"
 
     @staticmethod
     def _utc_timestamp() -> int:
