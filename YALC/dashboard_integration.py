@@ -282,8 +282,12 @@ class DashboardIntegration:
     ) -> typing.Any:
         """Return a submitted form value from dict-like or MultiDict-like data."""
         if hasattr(form_data, "get"):
-            return form_data.get(key, default)
-        return default
+            value = form_data.get(key, default)
+        else:
+            return default
+        if isinstance(value, (list, tuple)):
+            return value[0] if value else default
+        return value
 
     def _manual_csrf_hidden(self, kwargs: dict) -> str:
         """Build a CSRF field for the fallback form when Dashboard's Form helper is unavailable."""
@@ -604,14 +608,17 @@ class DashboardIntegration:
                             }});
                         }});
 
-                        // Add form submission feedback
+                        // Add form submission feedback without disabling native submission.
                         const submitButton = document.querySelector('input[type="submit"]');
                         if (submitButton) {{
-                            submitButton.addEventListener('click', function() {{
-                                this.value = '⏳ Saving...';
-                                this.disabled = true;
-                                this.style.opacity = '0.7';
-                            }});
+                            const form = submitButton.closest('form');
+                            if (form) {{
+                                form.addEventListener('submit', function() {{
+                                    submitButton.value = 'Saving...';
+                                    submitButton.style.opacity = '0.7';
+                                    submitButton.style.pointerEvents = 'none';
+                                }});
+                            }}
                         }}
                     }});
                 </script>
@@ -773,14 +780,17 @@ class DashboardIntegration:
                         }});
                     }});
 
-                    // Add form submission feedback
+                    // Add form submission feedback without disabling native submission.
                     const submitButton = document.querySelector('input[type="submit"]');
                     if (submitButton) {{
-                        submitButton.addEventListener('click', function() {{
-                            this.value = '⏳ Saving...';
-                            this.disabled = true;
-                            this.style.opacity = '0.7';
-                        }});
+                        const form = submitButton.closest('form');
+                        if (form) {{
+                            form.addEventListener('submit', function() {{
+                                submitButton.value = 'Saving...';
+                                submitButton.style.opacity = '0.7';
+                                submitButton.style.pointerEvents = 'none';
+                            }});
+                        }}
                     }}
                 }});
             </script>
