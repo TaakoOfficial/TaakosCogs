@@ -248,6 +248,27 @@ class DashboardIntegration:
                 }
             )
 
+        elif action == "add_modal_question":
+            selected_profile = await self._dashboard_add_modal_question(guild, form_data)
+            messages.append(
+                {
+                    "message": f"Modal question added to `{selected_profile}`.",
+                    "category": "success",
+                }
+            )
+
+        elif action == "remove_modal_question":
+            selected_profile, removed_label = await self._dashboard_remove_modal_question(
+                guild,
+                form_data,
+            )
+            messages.append(
+                {
+                    "message": f"Removed `{removed_label}` from `{selected_profile}`.",
+                    "category": "success",
+                }
+            )
+
         elif action == "default_reason_modal":
             selected_profile = self._clean_name(self._dash_value(form_data, "selected_profile", "main"))
             profile = await self._ensure_profile(guild, selected_profile)
@@ -546,6 +567,78 @@ class DashboardIntegration:
         profile["creating_modal"] = self._sanitize_modal_fields(fields)
         await self._set_profile(guild, profile_name, profile)
         return profile_name
+
+    async def _dashboard_add_modal_question(
+        self,
+        guild: discord.Guild,
+        form_data: typing.Any,
+    ) -> str:
+        profile_name = self._clean_name(self._dash_value(form_data, "selected_profile", "main"))
+        profile = await self._ensure_profile(guild, profile_name)
+        fields = list(profile.get("creating_modal") or [])
+        if len(fields) >= 5:
+            raise commands.BadArgument("A Discord modal can only have 5 questions.")
+
+        label = self._clean_modal_text(self._dash_value(form_data, "add_modal_label"), 45)
+        if not label:
+            raise commands.BadArgument("New modal questions need a label.")
+
+        question_type = self._modal_type_name(self._dash_value(form_data, "add_modal_type")) or "text"
+        choices = self._clean_modal_choices(self._dash_value(form_data, "add_modal_choices"))
+        if question_type == "choice" and len(choices) < 2:
+            raise commands.BadArgument("Choice questions need at least two choices.")
+
+        style_name = self._dash_value(form_data, "add_modal_style")
+        style = (
+            discord.TextStyle.short.value
+            if style_name == "short"
+            else discord.TextStyle.paragraph.value
+        )
+        fields.append(
+            {
+                "label": label,
+                "type": question_type,
+                "style": style,
+                "required": self._dash_bool(form_data, "add_modal_required"),
+                "default": self._clean_modal_text(
+                    self._dash_value(form_data, "add_modal_default"),
+                    4000,
+                ),
+                "placeholder": self._clean_modal_text(
+                    self._dash_value(form_data, "add_modal_placeholder"),
+                    100,
+                ),
+                "min_length": None,
+                "max_length": None,
+                "choices": choices,
+            }
+        )
+        profile["creating_modal"] = self._sanitize_modal_fields(fields)
+        await self._set_profile(guild, profile_name, profile)
+        return profile_name
+
+    async def _dashboard_remove_modal_question(
+        self,
+        guild: discord.Guild,
+        form_data: typing.Any,
+    ) -> typing.Tuple[str, str]:
+        profile_name = self._clean_name(self._dash_value(form_data, "selected_profile", "main"))
+        profile = await self._ensure_profile(guild, profile_name)
+        fields = list(profile.get("creating_modal") or [])
+        if not fields:
+            raise commands.BadArgument(f"`{profile_name}` has no modal questions.")
+
+        index = self._dash_int(
+            form_data,
+            "remove_modal_index",
+            minimum=1,
+            maximum=len(fields),
+        )
+        removed = fields.pop(index - 1)
+        removed_label = self._clean_modal_text(removed.get("label"), 45) or f"Question {index}"
+        profile["creating_modal"] = self._sanitize_modal_fields(fields)
+        await self._set_profile(guild, profile_name, profile)
+        return profile_name, removed_label
 
     async def _dashboard_post_panel(
         self,
@@ -1049,6 +1142,28 @@ class DashboardIntegration:
                 </div>
                 """
             )
+        remove_options = "".join(
+            f'<option value="{index}">{index}. {self._h(field.get("label") or "Question")}</option>'
+            for index, field in enumerate(fields, start=1)
+        )
+        remove_form = (
+            f"""
+            <form method="POST">
+                {csrf}
+                <input type="hidden" name="action" value="remove_modal_question">
+                <input type="hidden" name="selected_profile" value="{self._h(profile_name)}">
+                <div class="th-row">
+                    <div class="th-field">
+                        <label>Remove Question</label>
+                        <select name="remove_modal_index">{remove_options}</select>
+                    </div>
+                </div>
+                <button class="th-btn danger" type="submit">Remove Question</button>
+            </form>
+            """
+            if fields
+            else '<p class="th-muted">No modal questions are currently configured.</p>'
+        )
         return f"""
         <div id="modal" class="th-card">
             <h3>Modal Questions</h3>
@@ -1059,6 +1174,26 @@ class DashboardIntegration:
                 {''.join(rows)}
                 <button class="th-btn" type="submit">Save Modal</button>
             </form>
+            <div class="th-grid">
+                <form method="POST">
+                    {csrf}
+                    <input type="hidden" name="action" value="add_modal_question">
+                    <input type="hidden" name="selected_profile" value="{self._h(profile_name)}">
+                    <div class="th-row">
+                        {self._input("add_modal_label", "New Question Label", "")}
+                        <div class="th-field"><label>Type</label><select name="add_modal_type">{self._option("text", "Text", "text")}{self._option("choice", "Choice", "text")}{self._option("boolean", "Boolean", "text")}</select></div>
+                        <div class="th-field"><label>Text Style</label><select name="add_modal_style">{self._option("paragraph", "Paragraph", "paragraph")}{self._option("short", "Short", "paragraph")}</select></div>
+                        <label class="th-check"><input type="checkbox" name="add_modal_required" value="1" checked> Required</label>
+                    </div>
+                    <div class="th-row">
+                        {self._input("add_modal_placeholder", "Placeholder", "")}
+                        {self._input("add_modal_default", "Default", "")}
+                    </div>
+                    {self._input("add_modal_choices", "Choices for Choice Type", "")}
+                    <button class="th-btn secondary" type="submit">Add Question</button>
+                </form>
+                {remove_form}
+            </div>
             <form class="th-inline" method="POST">{csrf}<input type="hidden" name="action" value="default_reason_modal"><input type="hidden" name="selected_profile" value="{self._h(profile_name)}"><button class="th-btn secondary" type="submit">Use Default Reason Modal</button></form>
             <form class="th-inline" method="POST">{csrf}<input type="hidden" name="action" value="clear_modal"><input type="hidden" name="selected_profile" value="{self._h(profile_name)}"><button class="th-btn danger" type="submit">Clear Modal</button></form>
         </div>
