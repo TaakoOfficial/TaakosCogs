@@ -1,5 +1,5 @@
 {
-    "name": "Welcome",
+    "name": "welcome",
     "description": "A Red DiscordBot cog for customizable welcome messages with placeholders, JSON embeds, cached images, avatar overlays, and Red-Web-Dashboard integration.",
     "author": [
         "Taako"

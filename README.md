@@ -35,7 +35,7 @@ To update installed cogs:
 | [Toolz](./Toolz)                       | Role and user utilities  | Role/user info, role audits, role comparison, CSV exports, bot/no-role audits, role-triggered messages with `{user}` placeholders.          |
 | [YALC](./YALC)                         | Server logging           | Message/member/channel/role logging, event filters, retention settings, ignore lists, Tupperbox/PluralKit-aware filtering.                  |
 | [Applications](./Applications)         | Staff applications       | Configurable forms, application panels, DM questionnaires, review buttons, role actions, CSV exports, polls, and dashboard setup.            |
-| [Welcome](./Welcome)                   | Join messages            | Configurable welcome messages, placeholders, JSON embeds, cached welcome images, avatar overlays, and dashboard setup.                       |
+| [welcome](./welcome)                   | Join messages            | Configurable welcome messages, placeholders, JSON embeds, cached welcome images, avatar overlays, and dashboard setup.                       |
 | [Captcha](./Captcha)                   | Member verification      | Persistent verification buttons, per-click random modal codes, existing-message attachment, configurable success roles, and dashboard setup. |
 | [InviteTracker](./InviteTracker)       | Invite tracking          | Invite-use detection, join sources, fake joins, leaver counts, leaderboards, log embeds, CSV exports, and dashboard controls.               |
 | [SuggestionBox](./SuggestionBox)       | Community feedback       | Suggestions with persistent voting buttons, discussion threads, review states, comments, review logs, CSV exports, and dashboard controls.  |
@@ -64,7 +64,7 @@ To update installed cogs:
 Install these if you want better moderation visibility, invite attribution, feedback workflows, community reputation, support tickets, and role operations:
 
 ```text
-[p]cog install taakoscogs Toolz YALC Applications Welcome Captcha InviteTracker SuggestionBox RepBoard ReviewHub TicketHub tempvoice Giveaway
+[p]cog install taakoscogs Toolz YALC Applications welcome Captcha InviteTracker SuggestionBox RepBoard ReviewHub TicketHub tempvoice Giveaway
 ```
 
 - `toolz` gives staff role/user lookup, audit, export, and role-triggered message tools.
@@ -197,7 +197,7 @@ Start with each cog's README:
 - [Toolz README](./Toolz/README.md)
 - [YALC README](./YALC/README.md)
 - [Applications README](./Applications/README.md)
-- [Welcome README](./Welcome/README.md)
+- [welcome README](./welcome/README.md)
 - [Captcha README](./Captcha/README.md)
 - [InviteTracker README](./InviteTracker/README.md)
 - [SuggestionBox README](./SuggestionBox/README.md)
