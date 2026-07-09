@@ -19,6 +19,7 @@ Timed reaction-based giveaways for Red-DiscordBot.
 - Automatic ending after the timer expires, including after bot restarts.
 - Manual end, cancel, reroll, and active giveaway list commands.
 - Prefix commands and `/giveaway` slash commands.
+- Red-Web-Dashboard page for starting, attaching, ending, cancelling, rerolling, refreshing, and inspecting giveaways.
 
 ## Commands
 
@@ -33,6 +34,19 @@ Timed reaction-based giveaways for Red-DiscordBot.
 | `[p]giveaway list`                                                          | List active giveaways in the server.     |
 
 Durations support values like `30m`, `2h`, `3d`, or `1w2d`.
+
+## Dashboard
+
+Giveaway includes a Red-Web-Dashboard third-party page when the Dashboard cog is loaded.
+
+Dashboard users with Manage Server, Red admin, or bot owner access can:
+
+- Start giveaways in any text channel the bot can use.
+- Attach giveaways to existing messages by ID or message link.
+- View tracked giveaway records, statuses, entry counts, end times, and jump links.
+- End or cancel active giveaways.
+- Reroll ended giveaways.
+- Refresh giveaway status embeds from stored records.
 
 ## Requirements
 

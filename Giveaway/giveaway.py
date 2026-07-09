@@ -15,6 +15,8 @@ from redbot.core import Config, app_commands, commands
 from redbot.core.bot import Red
 from redbot.core.utils.chat_formatting import humanize_timedelta, pagify
 
+from .dashboard_integration import DashboardIntegration
+
 log = logging.getLogger("red.taakoscogs.giveaway")
 
 
@@ -303,7 +305,7 @@ class GiveawaySlashGroup(app_commands.Group):
             await interaction.followup.send(page, ephemeral=True)
 
 
-class Giveaway(commands.Cog):
+class Giveaway(DashboardIntegration, commands.Cog):
     """Run timed reaction-based giveaways."""
 
     REACTION_EMOJI = "\N{PARTY POPPER}"

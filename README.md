@@ -44,7 +44,7 @@ To update installed cogs:
 | [TicketHub](./TicketHub)               | Support tickets          | Ticket panels, private channels, claim/close controls, AAA3A Tickets profile imports, HTML transcripts, and owner transcript DMs.           |
 | [SlashLink](./SlashLink)               | Prefix/slash compatibility | Red-managed application-command gateways for loaded prefix-only cogs, with permission-aware autocomplete and normal `[p]slash` controls. |
 | [tempvoice](./tempvoice)               | Voice channel automation | Join-to-create temporary voice channels, embedded owner controls, rename/lock/limit/transfer buttons, claiming, and cleanup.                |
-| [Giveaway](./Giveaway)                 | Community events         | Timed giveaways, reaction entry, rerolls, cancellation, attached giveaways, prefix and slash command support.                               |
+| [Giveaway](./Giveaway)                 | Community events         | Timed giveaways, reaction entry, rerolls, cancellation, attached giveaways, prefix/slash commands, and dashboard controls.                  |
 | [Uppercase](./Uppercase)               | Channel setup            | Create and rename text channels with uppercase-style names using `/create-channel` and `/rename-channel`.                                  |
 | [EmojiPorter](./EmojiPorter)           | Server migration         | Copy emojis and stickers between servers, list emoji/sticker inventory, skip duplicates automatically.                                      |
 | [ZodiacColorRoles](./ZodiacColorRoles) | Role setup               | Bulk-create zodiac, color, pronoun, and ping preference roles with hybrid command support.                                                  |

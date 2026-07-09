@@ -4,10 +4,10 @@
     "author": [
         "Taako"
     ],
-    "version": "1.0.0",
-    "description": "A giveaway cog for Red-DiscordBot with timed giveaways, auto-ending, rerolls, and cancellation tools.",
-    "install_msg": "giveaway loaded. Use `[p]giveaway start <duration> <winner_count> <prize>` to create your first giveaway.",
-    "short": "Timed reaction-based giveaways with auto-ending and rerolls.",
+    "version": "1.1.0",
+    "description": "A giveaway cog for Red-DiscordBot with timed giveaways, auto-ending, rerolls, cancellation tools, and Red-Web-Dashboard integration.",
+    "install_msg": "giveaway loaded. Use `[p]giveaway start <duration> <winner_count> <prize>` to create your first giveaway, or Red-Web-Dashboard to manage giveaways visually.",
+    "short": "Timed reaction-based giveaways with auto-ending, rerolls, and dashboard support.",
     "tags": [
         "giveaway",
         "raffle",
