@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.0
+
+- Added Red-Web-Dashboard integration for settings, invite cache refresh, stat reset, leaderboards, and recent join-source review.
+
 ## 1.1.0
 
 - Added native `/invitetracker` and `/invites` subcommands.

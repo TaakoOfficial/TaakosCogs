@@ -60,6 +60,14 @@ Post control panels in a text channel instead of the temporary voice channel cha
 | `[p]tempvoice claim` | Claim your current temporary channel if the owner is gone. |
 | `[p]tempvoice cleanup` | Delete empty temporary channels and remove stale records. |
 
+## Dashboard
+
+tempvoice includes a Red-Web-Dashboard page for server managers. The dashboard
+can enable or disable join-to-create, set the trigger voice channel, category,
+control-panel channel, defaults, cleanup delay, and channel name template. It
+also lists active temporary channels, can resend a control panel, and can clean
+up empty or stale temporary channel records.
+
 ## Requirements
 
 - Red-DiscordBot 3.5.0 or newer.

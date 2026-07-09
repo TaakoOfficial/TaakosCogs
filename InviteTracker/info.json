@@ -4,8 +4,8 @@
     "author": [
         "Taako"
     ],
-    "version": "1.1.0",
-    "description": "A Red DiscordBot cog that tracks invite usage, join sources, fake joins, leavers, invite leaderboards, and CSV exports.",
+    "version": "1.2.0",
+    "description": "A Red DiscordBot cog that tracks invite usage, join sources, fake joins, leavers, invite leaderboards, CSV exports, and dashboard management.",
     "install_msg": "invitetracker loaded. Use `[p]invitetracker setup [#channel]` to start tracking joins.",
     "short": "Invite tracking, join sources, fake joins, leavers, and leaderboards.",
     "tags": [

@@ -14,6 +14,8 @@ from redbot.core import Config, commands
 from redbot.core.bot import Red
 from redbot.core.utils.chat_formatting import box, pagify
 
+from .dashboard_integration import DashboardIntegration
+
 log = logging.getLogger("red.taakoscogs.invitetracker")
 
 
@@ -22,7 +24,7 @@ MemberRecord = Dict[str, Any]
 StatsRecord = Dict[str, int]
 
 
-class InviteTracker(commands.Cog):
+class InviteTracker(DashboardIntegration, commands.Cog):
     """Track Discord invite usage, joins, leaves, fake joins, and leaderboards."""
 
     DEFAULT_COLOR = 0x5865F2

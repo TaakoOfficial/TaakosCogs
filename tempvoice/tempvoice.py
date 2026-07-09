@@ -14,6 +14,8 @@ from discord import app_commands
 from redbot.core import Config, commands
 from redbot.core.bot import Red
 
+from .dashboard_integration import DashboardIntegration
+
 log = logging.getLogger("red.taakoscogs.tempvoice")
 
 
@@ -228,7 +230,7 @@ class TempVoiceControlView(discord.ui.View):
         await self.cog.handle_control_button(interaction, "claim")
 
 
-class TempVoice(commands.Cog):
+class TempVoice(DashboardIntegration, commands.Cog):
     """Create temporary voice channels with owner control panels."""
 
     CONFIG_IDENTIFIER = 2026052001

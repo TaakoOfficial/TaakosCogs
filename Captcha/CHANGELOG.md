@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.3.0
+
+- Added Red-Web-Dashboard integration for posting, attaching, removing, and reviewing captcha panels.
+
 ## 1.2.0
 
 - Added native `/captcha` commands, including slash-safe role options for posting and attaching panels.

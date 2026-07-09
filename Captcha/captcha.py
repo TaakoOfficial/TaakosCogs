@@ -11,6 +11,8 @@ from redbot.core import Config, commands
 from redbot.core.bot import Red
 from redbot.core.utils.chat_formatting import box, pagify
 
+from .dashboard_integration import DashboardIntegration
+
 log = logging.getLogger("red.taakoscogs.captcha")
 
 PanelRecord = Dict[str, Any]
@@ -103,7 +105,7 @@ class CaptchaPanelView(discord.ui.View):
         await self.cog.start_challenge(interaction, self.message_id)
 
 
-class Captcha(commands.Cog):
+class Captcha(DashboardIntegration, commands.Cog):
     """Give members a configured role after a randomized modal challenge."""
 
     CONFIG_IDENTIFIER = 2026061901

@@ -43,6 +43,13 @@ Invite tracking, join-source lookup, fake join detection, leaver counts, leaderb
 | `[p]invites joinedby <member> [limit]`         | List currently tracked members invited by a user.                               |
 | `[p]invites export`                            | Export tracked member invite records as CSV.                                    |
 
+## Dashboard
+
+InviteTracker includes a Red-Web-Dashboard page for server managers. The
+dashboard can enable or disable tracking, set the log channel, configure fake
+join and bot tracking options, refresh the invite cache, reset stats with
+confirmation, and review top inviters plus recent tracked member sources.
+
 ## Example Setup
 
 ```text

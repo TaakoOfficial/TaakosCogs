@@ -61,6 +61,13 @@ Message content and embeds are preserved; Captcha adds only its persistent butto
 | `[p]captcha remove <message>` | Remove a configured verification button. |
 | `[p]captcha list` | List configured captcha panels and roles. |
 
+## Dashboard
+
+Captcha includes a Red-Web-Dashboard page for server managers. The dashboard can
+post the predefined verification panel, attach the button to an existing
+bot-authored message, remove configured panels, and review the current panel
+message/channel/role mappings.
+
 ## Security
 
 - Codes use cryptographically secure randomness and exclude ambiguous characters.
