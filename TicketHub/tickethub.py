@@ -16,6 +16,8 @@ from redbot.core import Config, commands
 from redbot.core.bot import Red
 from redbot.core.utils.chat_formatting import box, pagify
 
+from .dashboard_integration import DashboardIntegration
+
 try:
     import chat_exporter
 except ImportError:
@@ -1033,7 +1035,7 @@ class TicketQuestionnaireView(discord.ui.View):
             )
 
 
-class TicketHub(commands.Cog):
+class TicketHub(DashboardIntegration, commands.Cog):
     """Ticket panels, ticket lifecycle controls, imports, and HTML transcripts."""
 
     CONFIG_IDENTIFIER = 2026051401

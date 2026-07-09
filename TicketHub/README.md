@@ -48,6 +48,12 @@ standard `[p]ticket` and `[p]ticketset` prefix commands.
 - Imports profile settings from AAA3A's `Tickets` cog with dry-run preview before applying.
 - Provides native commands under `/ticket` and `/ticketset`.
 
+## Dashboard
+
+TicketHub registers a Red-Web-Dashboard third-party page when the AAA3A `Dashboard` cog is loaded. The page appears under the guild dashboard's Third Parties tab for users with Manage Server, Red admin, or bot owner access.
+
+The dashboard can manage TicketHub's global enabled state, profiles, categories, channels, roles, lifecycle behavior, control emojis, modal questions, single panels, multi-panels, imported AAA3A panel mappings, ticket creation, ticket recovery, transcripts, and ticket lifecycle actions.
+
 ## How Transcripts Work
 
 When a transcript is generated, TicketHub reads the ticket channel or thread history and creates:

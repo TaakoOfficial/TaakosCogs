@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.16.0
+
+- Added Red-Web-Dashboard third-party integration for TicketHub.
+- Added dashboard controls for global settings, profile management, channels, categories, roles, lifecycle behavior, control emojis, and modal questions.
+- Added dashboard workflows for posting, attaching, clearing, and managing single-profile and multi-profile panels.
+- Added dashboard views and actions for tracked tickets, ticket creation, ticket recovery, transcripts, and AAA3A panel import records.
+
 ## 1.15.0
 
 - Moved setup, role, automation, import, and export commands to the standalone `[p]ticketset` and `/ticketset` command tree.
