@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.2.0
+
+- Added Red-Web-Dashboard third-party integration for SuggestionBox.
+- Added dashboard controls for settings, manual suggestion submission, review statuses, staff comments, thread creation, deletion, message refresh, and record reset.
+
 ## 1.1.0
 
 - Added native `/suggest`, `/suggestionbox`, and `/suggestions` commands.

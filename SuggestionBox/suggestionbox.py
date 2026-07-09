@@ -14,6 +14,8 @@ from redbot.core import Config, commands
 from redbot.core.bot import Red
 from redbot.core.utils.chat_formatting import box, pagify
 
+from .dashboard_integration import DashboardIntegration
+
 log = logging.getLogger("red.taakoscogs.suggestionbox")
 
 
@@ -54,7 +56,7 @@ class SuggestionVoteView(discord.ui.View):
         await self.cog.handle_vote(interaction, "down")
 
 
-class SuggestionBox(commands.Cog):
+class SuggestionBox(DashboardIntegration, commands.Cog):
     """Collect, vote on, review, and export community suggestions."""
 
     CONFIG_IDENTIFIER = 2026051303

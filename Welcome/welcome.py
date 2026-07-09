@@ -14,6 +14,8 @@ import discord
 from redbot.core import Config, commands
 from redbot.core.utils.chat_formatting import box, pagify
 
+from .dashboard_integration import DashboardIntegration
+
 try:
     from PIL import Image, ImageDraw, ImageOps, UnidentifiedImageError
 except ImportError:
@@ -23,7 +25,7 @@ except ImportError:
 log = logging.getLogger("red.taakoscogs.welcome")
 
 
-class Welcome(commands.Cog):
+class Welcome(DashboardIntegration, commands.Cog):
     """Custom welcome messages with placeholders, JSON embeds, and cached images."""
 
     IMAGE_SIZE_LIMIT = 8 * 1024 * 1024

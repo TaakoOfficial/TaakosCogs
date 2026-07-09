@@ -20,6 +20,7 @@ Custom welcome messages for Red-DiscordBot servers.
 - Optional cached welcome image used inside the embed or as an attachment.
 - Optional member avatar overlay for cached welcome images.
 - Preview command for testing before enabling.
+- Red-Web-Dashboard page for visual setup, image caching, embed JSON, avatar overlay, and previews.
 
 ## Commands
 
@@ -44,6 +45,19 @@ Custom welcome messages for Red-DiscordBot servers.
 Avatar overlay coordinates are percentages of the cached image. For a banner like the
 example with a circle on the right, start with `[p]welcome avataroverlay true 82 52 17`
 and adjust from there.
+
+## Dashboard
+
+Welcome includes a Red-Web-Dashboard third-party page when the Dashboard cog is loaded.
+
+Dashboard users with Manage Server, Red admin, or bot owner access can:
+
+- Enable or disable welcome messages and choose the welcome channel.
+- Edit the text template and embed JSON with placeholder validation.
+- Download, cache, and clear the welcome image.
+- Configure image mode and avatar overlay placement.
+- Send a welcome preview to a selected channel.
+- Review available member and guild placeholders.
 
 ## Requirements
 

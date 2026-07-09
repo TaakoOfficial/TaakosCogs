@@ -21,6 +21,7 @@ Community suggestions with persistent voting buttons, staff review states, comme
 - Supports anonymous suggestion display.
 - Lets staff mark suggestions as considering, approved, denied, implemented, closed, or reopened.
 - Supports staff comments, review-log embeds, suggestion lookup, lists, stats, and CSV export.
+- Includes a Red-Web-Dashboard page for settings, review actions, comments, threads, and maintenance.
 
 ## How It Works
 
@@ -96,6 +97,18 @@ Staff can review them:
 [p]suggestions approve 1 Good fit for next month.
 [p]suggestions implement 1 Added to the event calendar.
 ```
+
+## Dashboard
+
+SuggestionBox includes a Red-Web-Dashboard third-party page when the Dashboard cog is loaded.
+
+Dashboard users with Manage Server, Red admin, or bot owner access can:
+
+- Configure enable state, channels, anonymous mode, voting rules, threads, archive duration, embed color, and next suggestion ID.
+- Submit suggestions manually.
+- View recent suggestions and vote totals.
+- Change suggestion status, add staff comments, create discussion threads, and delete suggestions.
+- Refresh tracked suggestion messages or reset stored suggestion records.
 
 ## Requirements
 
