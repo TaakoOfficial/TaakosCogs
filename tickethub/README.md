@@ -1,4 +1,4 @@
-# TicketHub
+# tickethub
 
 Ticket panels, configurable modal forms, ticket lifecycle controls, AAA3A Tickets profile imports, and self-contained HTML transcripts for Red-DiscordBot.
 
@@ -8,8 +8,8 @@ Ticket panels, configurable modal forms, ticket lifecycle controls, AAA3A Ticket
 
 ```text
 [p]repo add taakoscogs https://github.com/TaakoOfficial/TaakosCogs
-[p]cog install taakoscogs TicketHub
-[p]load TicketHub
+[p]cog install taakoscogs tickethub
+[p]load tickethub
 ```
 
 Enable and publish TicketHub's native application commands with Red's built-in slash manager:
@@ -28,7 +28,7 @@ panels, forms, roles, automation, imports, and exports. Prefix users can use
 If AAA3A's `Tickets` cog is still loaded, it already owns `[p]ticket` and
 `[p]ticketset`. In that side-by-side migration state, TicketHub loads with
 `[p]tickethub` and `[p]tickethubset` so you can run the import before unloading
-AAA3A. After AAA3A is unloaded, reload TicketHub if you want it to claim the
+AAA3A. After AAA3A is unloaded, reload tickethub if you want it to claim the
 standard `[p]ticket` and `[p]ticketset` prefix commands.
 
 ## Highlights

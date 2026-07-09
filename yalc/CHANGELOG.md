@@ -1,5 +1,11 @@
 # 📝 YALC Changelog
 
+## [v3.2.1] - 2026-07-09
+
+- Renamed the repository package folder from `YALC` to `yalc` to match Red cog naming standards.
+- New installs should use `[p]cog install taakoscogs yalc` and `[p]load yalc`.
+- Existing guild logging settings are preserved because the cog's Config identifier did not change.
+
 ## [v3.2.0] - 2026-06-21
 
 - Added native `/yalc` subcommands for the complete classic command hierarchy.

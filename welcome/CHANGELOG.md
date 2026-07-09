@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.3.1
+
+- Renamed the repository package folder from `Welcome` to `welcome` to match Red cog naming standards.
+- New installs should use `[p]cog install taakoscogs welcome` and `[p]load welcome`.
+- Existing welcome settings, templates, cached-image settings, and setup data are preserved because the cog's Config identifier did not change.
+
 ## 1.3.0
 
 - Added Red-Web-Dashboard third-party integration for Welcome.

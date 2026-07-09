@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.16.1
+
+- Renamed the repository package folder from `TicketHub` to `tickethub` to match Red cog naming standards.
+- New installs should use `[p]cog install taakoscogs tickethub` and `[p]load tickethub`.
+- Existing ticket profiles, panels, ticket records, and setup data are preserved because the cog's Config identifier did not change.
+
 ## 1.16.0
 
 - Added Red-Web-Dashboard third-party integration for TicketHub.

@@ -1,4 +1,4 @@
-# Applications
+# applications
 
 Configurable application forms for Red-DiscordBot servers.
 
@@ -8,8 +8,8 @@ Configurable application forms for Red-DiscordBot servers.
 
 ```text
 [p]repo add taakoscogs https://github.com/TaakoOfficial/TaakosCogs
-[p]cog install taakoscogs Applications
-[p]load Applications
+[p]cog install taakoscogs applications
+[p]load applications
 ```
 
 ## Highlights

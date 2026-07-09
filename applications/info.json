@@ -1,6 +1,6 @@
 {
     "$schema": "https://raw.githubusercontent.com/Cog-Creators/Red-DiscordBot/V3/develop/schema/red_cog.schema.json",
-    "name": "Applications",
+    "name": "applications",
     "author": [
         "Taako"
     ],

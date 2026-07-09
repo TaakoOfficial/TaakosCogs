@@ -1,4 +1,4 @@
-# YALC
+# yalc
 
 Yet Another Logging Cog: configurable server logging for Red-DiscordBot.
 
@@ -8,8 +8,8 @@ Yet Another Logging Cog: configurable server logging for Red-DiscordBot.
 
 ```text
 [p]repo add taakoscogs https://github.com/TaakoOfficial/TaakosCogs
-[p]cog install taakoscogs YALC
-[p]load YALC
+[p]cog install taakoscogs yalc
+[p]load yalc
 ```
 
 ## Highlights

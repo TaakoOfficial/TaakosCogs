@@ -33,15 +33,15 @@ To update installed cogs:
 | Cog                                    | Best For                 | Highlights                                                                                                                                  |
 | -------------------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
 | [Toolz](./Toolz)                       | Role and user utilities  | Role/user info, role audits, role comparison, CSV exports, bot/no-role audits, role-triggered messages with `{user}` placeholders.          |
-| [YALC](./YALC)                         | Server logging           | Message/member/channel/role logging, event filters, retention settings, ignore lists, Tupperbox/PluralKit-aware filtering.                  |
-| [Applications](./Applications)         | Staff applications       | Configurable forms, application panels, DM questionnaires, review buttons, role actions, CSV exports, polls, and dashboard setup.            |
+| [yalc](./yalc)                         | Server logging           | Message/member/channel/role logging, event filters, retention settings, ignore lists, Tupperbox/PluralKit-aware filtering.                  |
+| [applications](./applications)         | Staff applications       | Configurable forms, application panels, DM questionnaires, review buttons, role actions, CSV exports, polls, and dashboard setup.            |
 | [welcome](./welcome)                   | Join messages            | Configurable welcome messages, placeholders, JSON embeds, cached welcome images, avatar overlays, and dashboard setup.                       |
 | [Captcha](./Captcha)                   | Member verification      | Persistent verification buttons, per-click random modal codes, existing-message attachment, configurable success roles, and dashboard setup. |
 | [InviteTracker](./InviteTracker)       | Invite tracking          | Invite-use detection, join sources, fake joins, leaver counts, leaderboards, log embeds, CSV exports, and dashboard controls.               |
 | [SuggestionBox](./SuggestionBox)       | Community feedback       | Suggestions with persistent voting buttons, discussion threads, review states, comments, review logs, CSV exports, and dashboard controls.  |
 | [RepBoard](./RepBoard)                 | Community reputation     | Member kudos, public rep board posts, cooldowns, daily limits, profiles, leaderboards, moderation removal, and CSV exports.                 |
 | [ReviewHub](./ReviewHub)               | Reviews and vouches      | reviewhub-style reviews, vouches, review requests, stats, leaderboards, reports, useful votes, templates, and CSV exports.                  |
-| [TicketHub](./TicketHub)               | Support tickets          | Ticket panels, private channels, claim/close controls, AAA3A Tickets profile imports, HTML transcripts, and owner transcript DMs.           |
+| [tickethub](./tickethub)               | Support tickets          | Ticket panels, private channels, claim/close controls, AAA3A Tickets profile imports, HTML transcripts, and owner transcript DMs.           |
 | [SlashLink](./SlashLink)               | Prefix/slash compatibility | Red-managed application-command gateways for loaded prefix-only cogs, with permission-aware autocomplete and normal `[p]slash` controls. |
 | [tempvoice](./tempvoice)               | Voice channel automation | Join-to-create temporary voice channels, embedded owner controls, rename/lock/limit/transfer buttons, claiming, cleanup, and dashboard setup. |
 | [Giveaway](./Giveaway)                 | Community events         | Timed giveaways, reaction entry, rerolls, cancellation, attached giveaways, prefix/slash commands, and dashboard controls.                  |
@@ -64,7 +64,7 @@ To update installed cogs:
 Install these if you want better moderation visibility, invite attribution, feedback workflows, community reputation, support tickets, and role operations:
 
 ```text
-[p]cog install taakoscogs Toolz YALC Applications welcome Captcha InviteTracker SuggestionBox RepBoard ReviewHub TicketHub tempvoice Giveaway
+[p]cog install taakoscogs Toolz yalc applications welcome Captcha InviteTracker SuggestionBox RepBoard ReviewHub tickethub tempvoice Giveaway
 ```
 
 - `toolz` gives staff role/user lookup, audit, export, and role-triggered message tools.
@@ -195,15 +195,15 @@ No cog is intended to share stored data with external services unless the featur
 Start with each cog's README:
 
 - [Toolz README](./Toolz/README.md)
-- [YALC README](./YALC/README.md)
-- [Applications README](./Applications/README.md)
+- [yalc README](./yalc/README.md)
+- [applications README](./applications/README.md)
 - [welcome README](./welcome/README.md)
 - [Captcha README](./Captcha/README.md)
 - [InviteTracker README](./InviteTracker/README.md)
 - [SuggestionBox README](./SuggestionBox/README.md)
 - [RepBoard README](./RepBoard/README.md)
 - [ReviewHub README](./ReviewHub/README.md)
-- [TicketHub README](./TicketHub/README.md)
+- [tickethub README](./tickethub/README.md)
 - [SlashLink README](./SlashLink/README.md)
 - [Giveaway README](./Giveaway/README.md)
 - [Uppercase README](./Uppercase/README.md)
