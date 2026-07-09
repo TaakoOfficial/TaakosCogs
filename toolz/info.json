@@ -1,0 +1,23 @@
+{
+    "name": "toolz",
+    "description": "A Red DiscordBot cog with helpful role and user lookup, search, list, audit, export, and role-triggered message tools.",
+    "author": [
+        "Taako"
+    ],
+    "install_msg": "toolz cog loaded. Commands are hybrid, so use them as [p]roleinfo or /roleinfo. Try [p]memberinfo, [p]roleinfo, [p]rolecompare, [p]roleaudit, [p]rolehierarchy, and [p]rolemessage.",
+    "requirements": [],
+    "tags": [
+        "roles",
+        "users",
+        "utility",
+        "moderation",
+        "server management",
+        "automation"
+    ],
+    "min_bot_version": "3.5.0",
+    "hidden": false,
+    "disabled": false,
+    "type": "COG",
+    "short": "Role and user utility tools for larger servers.",
+    "version": "0.4.5"
+}

@@ -1,0 +1,31 @@
+{
+    "$schema": "https://raw.githubusercontent.com/Cog-Creators/Red-DiscordBot/V3/develop/schema/red_cog.schema.json",
+    "name": "reviewhub",
+    "author": [
+        "Taako"
+    ],
+    "version": "1.1.1",
+    "description": "A ReviewHub-style Red DiscordBot cog for reviews, optional targeted reviews, vouches, review requests, stats, leaderboards, reports, useful votes, and configurable review embeds.",
+    "install_msg": "reviewhub loaded. Use `[p]reviewhub setup #reviews #review-reports`, then `/review`, `/vouch`, `/rateme`, `/stats`, `/leaderboard`, and `/config`.",
+    "short": "ReviewHub-style reviews, vouches, requests, stats, and configurable buttons.",
+    "tags": [
+        "reviews",
+        "vouches",
+        "feedback",
+        "leaderboard",
+        "community",
+        "utility",
+        "moderation"
+    ],
+    "requirements": [],
+    "min_bot_version": "3.5.0",
+    "min_python_version": [
+        3,
+        9,
+        0
+    ],
+    "hidden": false,
+    "disabled": false,
+    "type": "COG",
+    "end_user_data_statement": "This cog stores per-guild review settings, review request records, review/vouch records, Discord user IDs for reviewers, reviewed users, reporters, useful votes, moderators, review text, ratings, message/channel IDs, timestamps, and deletion metadata. CSV exports are generated on demand and sent directly to Discord."
+}

@@ -1,0 +1,28 @@
+{
+    "$schema": "https://raw.githubusercontent.com/Cog-Creators/Red-DiscordBot/V3/develop/schema/red_cog.schema.json",
+    "name": "slashlink",
+    "author": [
+        "Taako"
+    ],
+    "version": "1.0.1",
+    "description": "Creates Red-managed application-command gateways for loaded cogs that only provide prefix commands.",
+    "install_msg": "slashlink loaded. Use `[p]slash list`, `[p]slash enablecog <CogName>`, and `[p]slash sync` to manage generated commands through Red's built-in slash manager.",
+    "short": "Expose prefix-only cogs through Red's built-in slash manager.",
+    "tags": [
+        "slash",
+        "commands",
+        "compatibility",
+        "utility"
+    ],
+    "requirements": [],
+    "min_bot_version": "3.5.0",
+    "min_python_version": [
+        3,
+        9,
+        0
+    ],
+    "hidden": false,
+    "disabled": false,
+    "type": "COG",
+    "end_user_data_statement": "This cog does not persistently store user data. Generated proxy commands exist only in memory while the relevant cogs are loaded."
+}

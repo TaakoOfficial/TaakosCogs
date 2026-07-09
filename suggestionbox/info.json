@@ -1,0 +1,30 @@
+{
+    "$schema": "https://raw.githubusercontent.com/Cog-Creators/Red-DiscordBot/V3/develop/schema/red_cog.schema.json",
+    "name": "suggestionbox",
+    "author": [
+        "Taako"
+    ],
+    "version": "1.2.1",
+    "description": "A Red DiscordBot cog for community suggestions with persistent arrow voting buttons, optional discussion threads, staff review states, comments, review logs, CSV exports, and Red-Web-Dashboard integration.",
+    "install_msg": "suggestionbox loaded. Use `[p]suggestionbox setup [#suggestions] [#review-log]` to start collecting suggestions, or Red-Web-Dashboard to manage it visually.",
+    "short": "Community suggestions with voting, threads, review states, comments, exports, and dashboard support.",
+    "tags": [
+        "suggestions",
+        "feedback",
+        "votes",
+        "community",
+        "moderation",
+        "utility"
+    ],
+    "requirements": [],
+    "min_bot_version": "3.5.0",
+    "min_python_version": [
+        3,
+        9,
+        0
+    ],
+    "hidden": false,
+    "disabled": false,
+    "type": "COG",
+    "end_user_data_statement": "This cog stores per-guild suggestion configuration, suggestion text, Discord user IDs for authors, voters, and staff reviewers, message IDs, channel IDs, thread IDs, vote lists, statuses, staff notes, review reasons, and timestamps. CSV exports are generated on demand and sent directly to Discord."
+}

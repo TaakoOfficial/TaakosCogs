@@ -18,8 +18,8 @@ Run these commands in Discord with your Red bot prefix:
 Example:
 
 ```text
-[p]cog install taakoscogs Toolz
-[p]load Toolz
+[p]cog install taakoscogs toolz
+[p]load toolz
 ```
 
 To update installed cogs:
@@ -32,30 +32,30 @@ To update installed cogs:
 
 | Cog                                    | Best For                 | Highlights                                                                                                                                  |
 | -------------------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| [Toolz](./Toolz)                       | Role and user utilities  | Role/user info, role audits, role comparison, CSV exports, bot/no-role audits, role-triggered messages with `{user}` placeholders.          |
+| [toolz](./toolz)                       | Role and user utilities  | Role/user info, role audits, role comparison, CSV exports, bot/no-role audits, role-triggered messages with `{user}` placeholders.          |
 | [yalc](./yalc)                         | Server logging           | Message/member/channel/role logging, event filters, retention settings, ignore lists, Tupperbox/PluralKit-aware filtering.                  |
 | [applications](./applications)         | Staff applications       | Configurable forms, application panels, DM questionnaires, review buttons, role actions, CSV exports, polls, and dashboard setup.            |
 | [welcome](./welcome)                   | Join messages            | Configurable welcome messages, placeholders, JSON embeds, cached welcome images, avatar overlays, and dashboard setup.                       |
-| [Captcha](./Captcha)                   | Member verification      | Persistent verification buttons, per-click random modal codes, existing-message attachment, configurable success roles, and dashboard setup. |
-| [InviteTracker](./InviteTracker)       | Invite tracking          | Invite-use detection, join sources, fake joins, leaver counts, leaderboards, log embeds, CSV exports, and dashboard controls.               |
-| [SuggestionBox](./SuggestionBox)       | Community feedback       | Suggestions with persistent voting buttons, discussion threads, review states, comments, review logs, CSV exports, and dashboard controls.  |
-| [RepBoard](./RepBoard)                 | Community reputation     | Member kudos, public rep board posts, cooldowns, daily limits, profiles, leaderboards, moderation removal, and CSV exports.                 |
-| [ReviewHub](./ReviewHub)               | Reviews and vouches      | reviewhub-style reviews, vouches, review requests, stats, leaderboards, reports, useful votes, templates, and CSV exports.                  |
+| [captcha](./captcha)                   | Member verification      | Persistent verification buttons, per-click random modal codes, existing-message attachment, configurable success roles, and dashboard setup. |
+| [invitetracker](./invitetracker)       | Invite tracking          | Invite-use detection, join sources, fake joins, leaver counts, leaderboards, log embeds, CSV exports, and dashboard controls.               |
+| [suggestionbox](./suggestionbox)       | Community feedback       | Suggestions with persistent voting buttons, discussion threads, review states, comments, review logs, CSV exports, and dashboard controls.  |
+| [repboard](./repboard)                 | Community reputation     | Member kudos, public rep board posts, cooldowns, daily limits, profiles, leaderboards, moderation removal, and CSV exports.                 |
+| [reviewhub](./reviewhub)               | Reviews and vouches      | reviewhub-style reviews, vouches, review requests, stats, leaderboards, reports, useful votes, templates, and CSV exports.                  |
 | [tickethub](./tickethub)               | Support tickets          | Ticket panels, private channels, claim/close controls, AAA3A Tickets profile imports, HTML transcripts, and owner transcript DMs.           |
-| [SlashLink](./SlashLink)               | Prefix/slash compatibility | Red-managed application-command gateways for loaded prefix-only cogs, with permission-aware autocomplete and normal `[p]slash` controls. |
+| [slashlink](./slashlink)               | Prefix/slash compatibility | Red-managed application-command gateways for loaded prefix-only cogs, with permission-aware autocomplete and normal `[p]slash` controls. |
 | [tempvoice](./tempvoice)               | Voice channel automation | Join-to-create temporary voice channels, embedded owner controls, rename/lock/limit/transfer buttons, claiming, cleanup, and dashboard setup. |
-| [Giveaway](./Giveaway)                 | Community events         | Timed giveaways, reaction entry, rerolls, cancellation, attached giveaways, prefix/slash commands, and dashboard controls.                  |
-| [Uppercase](./Uppercase)               | Channel setup            | Create and rename text channels with uppercase-style names using `/create-channel` and `/rename-channel`.                                  |
-| [EmojiPorter](./EmojiPorter)           | Server migration         | Copy emojis and stickers between servers, list emoji/sticker inventory, skip duplicates automatically.                                      |
-| [ZodiacColorRoles](./ZodiacColorRoles) | Role setup               | Bulk-create zodiac, color, pronoun, and ping preference roles with hybrid command support.                                                  |
-| [FiveMStatus](./FiveMStatus)           | FiveM communities        | Live server status panel with player counts, Join Server button, restart countdowns, uptime tracking, images, and link buttons.             |
+| [giveaway](./giveaway)                 | Community events         | Timed giveaways, reaction entry, rerolls, cancellation, attached giveaways, prefix/slash commands, and dashboard controls.                  |
+| [uppercase](./uppercase)               | Channel setup            | Create and rename text channels with uppercase-style names using `/create-channel` and `/rename-channel`.                                  |
+| [emojiporter](./emojiporter)           | Server migration         | Copy emojis and stickers between servers, list emoji/sticker inventory, skip duplicates automatically.                                      |
+| [zodiaccolorroles](./zodiaccolorroles) | Role setup               | Bulk-create zodiac, color, pronoun, and ping preference roles with hybrid command support.                                                  |
+| [fivemstatus](./fivemstatus)           | FiveM communities        | Live server status panel with player counts, Join Server button, restart countdowns, uptime tracking, images, and link buttons.             |
 | [cfxstatus](./cfxstatus)               | Cfx.re service checks    | Auto-updating panel that checks the official Cfx.re Statuspage API, with Rockstar's service-status page as a fallback.                     |
-| [RandomWeather](./RandomWeather)       | RP atmosphere            | Seasonal weather simulation, extreme weather events, automatic updates, role notifications, timezone-aware generation.                      |
-| [RPCalander](./RPCalander)             | RP timekeeping           | Daily RP calendar posts, custom timelines, moon phases, blood moon events, separate moon channels.                                          |
-| [Fable](./Fable)                       | RP worldbuilding         | Character profiles, relationships, locations, timelines, visualizations, lore tracking, export tools.                                       |
-| [Paranoia](./Paranoia)                 | Social games             | Discord version of paranoia with secret DM questions, custom questions, status tracking, and Tupperbox support.                             |
-| [Flipper](./Flipper)                   | Simple fun               | Lightweight coin flip command with embeds.                                                                                                  |
-| [WHMCS](./WHMCS)                       | Hosting/business support | WHMCS clients, billing, support tickets, role permissions, API configuration, and Discord ticket channels.                                  |
+| [randomweather](./randomweather)       | RP atmosphere            | Seasonal weather simulation, extreme weather events, automatic updates, role notifications, timezone-aware generation.                      |
+| [rpcalander](./rpcalander)             | RP timekeeping           | Daily RP calendar posts, custom timelines, moon phases, blood moon events, separate moon channels.                                          |
+| [fable](./fable)                       | RP worldbuilding         | Character profiles, relationships, locations, timelines, visualizations, lore tracking, export tools.                                       |
+| [paranoia](./paranoia)                 | Social games             | Discord version of paranoia with secret DM questions, custom questions, status tracking, and Tupperbox support.                             |
+| [flipper](./flipper)                   | Simple fun               | Lightweight coin flip command with embeds.                                                                                                  |
+| [whmcs](./whmcs)                       | Hosting/business support | WHMCS clients, billing, support tickets, role permissions, API configuration, and Discord ticket channels.                                  |
 
 ## Recommended Sets
 
@@ -64,7 +64,7 @@ To update installed cogs:
 Install these if you want better moderation visibility, invite attribution, feedback workflows, community reputation, support tickets, and role operations:
 
 ```text
-[p]cog install taakoscogs Toolz yalc applications welcome Captcha InviteTracker SuggestionBox RepBoard ReviewHub tickethub tempvoice Giveaway
+[p]cog install taakoscogs toolz yalc applications welcome captcha invitetracker suggestionbox repboard reviewhub tickethub tempvoice giveaway
 ```
 
 - `toolz` gives staff role/user lookup, audit, export, and role-triggered message tools.
@@ -85,7 +85,7 @@ Install these if you want better moderation visibility, invite attribution, feed
 Install these for immersive RP communities:
 
 ```text
-[p]cog install taakoscogs FiveMStatus cfxstatus Fable RandomWeather RPCalander Paranoia
+[p]cog install taakoscogs fivemstatus cfxstatus fable randomweather rpcalander paranoia
 ```
 
 - `fivemstatus` posts a live FiveM status panel with player counts, connect command, restarts, and buttons.
@@ -100,7 +100,7 @@ Install these for immersive RP communities:
 Install these when building or moving a server:
 
 ```text
-[p]cog install taakoscogs EmojiPorter ZodiacColorRoles Toolz Uppercase tempvoice
+[p]cog install taakoscogs emojiporter zodiaccolorroles toolz uppercase tempvoice
 ```
 
 - `emojiporter` copies emojis and stickers from another server the bot can access.
@@ -114,7 +114,7 @@ Install these when building or moving a server:
 Install this if your Discord supports a WHMCS-powered hosting or billing operation:
 
 ```text
-[p]cog install taakoscogs WHMCS
+[p]cog install taakoscogs whmcs
 ```
 
 `whmcs` connects Discord staff workflows to clients, invoices, support tickets, and optional per-ticket Discord channels.
@@ -194,29 +194,29 @@ No cog is intended to share stored data with external services unless the featur
 
 Start with each cog's README:
 
-- [Toolz README](./Toolz/README.md)
+- [toolz README](./toolz/README.md)
 - [yalc README](./yalc/README.md)
 - [applications README](./applications/README.md)
 - [welcome README](./welcome/README.md)
-- [Captcha README](./Captcha/README.md)
-- [InviteTracker README](./InviteTracker/README.md)
-- [SuggestionBox README](./SuggestionBox/README.md)
-- [RepBoard README](./RepBoard/README.md)
-- [ReviewHub README](./ReviewHub/README.md)
+- [captcha README](./captcha/README.md)
+- [invitetracker README](./invitetracker/README.md)
+- [suggestionbox README](./suggestionbox/README.md)
+- [repboard README](./repboard/README.md)
+- [reviewhub README](./reviewhub/README.md)
 - [tickethub README](./tickethub/README.md)
-- [SlashLink README](./SlashLink/README.md)
-- [Giveaway README](./Giveaway/README.md)
-- [Uppercase README](./Uppercase/README.md)
-- [EmojiPorter README](./EmojiPorter/README.md)
-- [ZodiacColorRoles README](./ZodiacColorRoles/README.md)
-- [FiveMStatus README](./FiveMStatus/README.md)
+- [slashlink README](./slashlink/README.md)
+- [giveaway README](./giveaway/README.md)
+- [uppercase README](./uppercase/README.md)
+- [emojiporter README](./emojiporter/README.md)
+- [zodiaccolorroles README](./zodiaccolorroles/README.md)
+- [fivemstatus README](./fivemstatus/README.md)
 - [cfxstatus README](./cfxstatus/README.md)
-- [RandomWeather README](./RandomWeather/README.md)
-- [RPCalander README](./RPCalander/README.md)
-- [Fable README](./Fable/README.md)
-- [Paranoia README](./Paranoia/README.md)
-- [Flipper README](./Flipper/README.md)
-- [WHMCS README](./WHMCS/README.md)
+- [randomweather README](./randomweather/README.md)
+- [rpcalander README](./rpcalander/README.md)
+- [fable README](./fable/README.md)
+- [paranoia README](./paranoia/README.md)
+- [flipper README](./flipper/README.md)
+- [whmcs README](./whmcs/README.md)
 
 For command help inside Discord, use:
 

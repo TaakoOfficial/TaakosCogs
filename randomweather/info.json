@@ -1,0 +1,29 @@
+{
+    "$schema": "https://raw.githubusercontent.com/Cog-Creators/Red-DiscordBot/V3/develop/schema/red_cog.schema.json",
+    "name": "randomweather",
+    "author": [
+        "Taako"
+    ],
+    "version": "2.3.1",
+    "description": "Comprehensive weather simulation system with realistic seasonal patterns, extreme weather events, and beautiful embeds. Perfect for roleplay servers and atmospheric immersion.",
+    "install_msg": "Thank you for installing randomweather! Use `[p]rweather` to get started. Configure your timezone with `[p]rweather settimezone` for accurate seasonal weather. Weather icons by Flaticon.",
+    "short": "Advanced weather simulation with seasonal accuracy and extreme events.",
+    "tags": [
+        "weather",
+        "simulation",
+        "seasonal",
+        "roleplay",
+        "extreme",
+        "atmospheric",
+        "immersion",
+        "timezone"
+    ],
+    "min_bot_version": "3.5.0",
+    "requirements": [
+        "pytz"
+    ],
+    "end_user_data_statement": "This cog does not persistently store or share any end user data.",
+    "hidden": false,
+    "disabled": false,
+    "type": "COG"
+}
