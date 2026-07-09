@@ -34,7 +34,7 @@ To update installed cogs:
 | -------------------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
 | [Toolz](./Toolz)                       | Role and user utilities  | Role/user info, role audits, role comparison, CSV exports, bot/no-role audits, role-triggered messages with `{user}` placeholders.          |
 | [YALC](./YALC)                         | Server logging           | Message/member/channel/role logging, event filters, retention settings, ignore lists, Tupperbox/PluralKit-aware filtering.                  |
-| [Applications](./Applications)         | Staff applications       | Configurable forms, application panels, DM questionnaires, review buttons, role actions, CSV exports, and polls.                            |
+| [Applications](./Applications)         | Staff applications       | Configurable forms, application panels, DM questionnaires, review buttons, role actions, CSV exports, polls, and dashboard setup.            |
 | [Welcome](./Welcome)                   | Join messages            | Configurable welcome messages, placeholders, JSON embeds, cached welcome images, and avatar overlays.                                        |
 | [Captcha](./Captcha)                   | Member verification      | Persistent verification buttons, per-click random modal codes, existing-message attachment, and configurable success roles.                 |
 | [InviteTracker](./InviteTracker)       | Invite tracking          | Invite-use detection, join sources, fake joins, leaver counts, leaderboards, log embeds, and CSV exports.                                   |

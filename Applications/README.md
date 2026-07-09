@@ -23,6 +23,7 @@ Configurable application forms for Red-DiscordBot servers.
 - Give or remove roles when users apply, submit, get accepted, or get denied.
 - Restrict applications by whitelist and blacklist roles.
 - Configure manager roles, cooldowns, duplicate-pending behavior, threads, and notifications.
+- Manage forms, questions, panels, responses, and polls from Red-Web-Dashboard.
 - Export responses to CSV or back up all application data to JSON.
 - Create simple button polls with `[p]apppoll`.
 
@@ -190,6 +191,19 @@ Example:
 ```text
 [p]apppoll create #staff Should we open helper apps? | Yes, No, Wait
 ```
+
+## Dashboard
+
+Applications includes a Red-Web-Dashboard third-party page when the Dashboard cog is loaded.
+
+Dashboard users with Manage Server, Red admin, or bot owner access can:
+
+- Create, select, edit, and delete application forms.
+- Configure application status, response channels, form mode, colors, cooldowns, panel buttons, threads, notifications, messages, voting, and role lists.
+- Add and remove application questions, including choice questions with `other`.
+- Post and clear application panels.
+- View stored responses and accept or deny pending responses.
+- Create and close application polls.
 
 ## Placeholders
 

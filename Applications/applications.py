@@ -18,6 +18,8 @@ from redbot.core import Config, app_commands, commands
 from redbot.core.bot import Red
 from redbot.core.utils.chat_formatting import box, pagify
 
+from .dashboard_integration import DashboardIntegration
+
 log = logging.getLogger("red.taakoscogs.applications")
 
 
@@ -627,7 +629,7 @@ class PollView(discord.ui.View):
         return callback
 
 
-class Applications(commands.Cog):
+class Applications(DashboardIntegration, commands.Cog):
     """Configurable application forms with panels, reviews, role actions, exports, and polls."""
 
     DEFAULT_COLOR = 0x5865F2
