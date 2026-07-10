@@ -45,7 +45,7 @@ class DashboardIntegration:
         user: discord.User,
         guild: discord.Guild,
         **kwargs,
-    ) -> typing.Dict[str, typing.Any]:
+    ) -> dict[str, typing.Any]:
         """Render and process the SuggestionBox dashboard page."""
         member, can_manage = await self._dashboard_member_can_manage(user, guild)
         if not can_manage:
@@ -76,7 +76,7 @@ class DashboardIntegration:
                     {
                         "message": f"SuggestionBox dashboard action failed: {error}",
                         "category": "error",
-                    }
+                    },
                 )
             else:
                 notifications.extend(messages)
@@ -95,7 +95,7 @@ class DashboardIntegration:
         self,
         user: discord.User,
         guild: discord.Guild,
-    ) -> typing.Tuple[typing.Optional[discord.Member], bool]:
+    ) -> tuple[discord.Member | None, bool]:
         member = guild.get_member(user.id)
         is_owner = user.id in getattr(self.bot, "owner_ids", set())
         is_admin = member is not None and await self.bot.is_admin(member)
@@ -106,7 +106,7 @@ class DashboardIntegration:
         )
         return member, can_manage
 
-    def _dashboard_form_data(self, kwargs: typing.Dict[str, typing.Any]) -> typing.Any:
+    def _dashboard_form_data(self, kwargs: dict[str, typing.Any]) -> typing.Any:
         data = kwargs.get("data") or {}
         if isinstance(data, dict) and ("form" in data or "json" in data):
             return data.get("form") or data.get("json") or {}
@@ -116,7 +116,11 @@ class DashboardIntegration:
         form_data = self._dashboard_form_data(kwargs)
         selected = self._dash_value(form_data, "active_tab").lower()
         valid = set(action_tabs.values()) | {default}
-        return selected if selected in valid else action_tabs.get(self._dash_value(form_data, "action").lower(), default)
+        return (
+            selected
+            if selected in valid
+            else action_tabs.get(self._dash_value(form_data, "action").lower(), default)
+        )
 
     def _dashboard_tab_button(self, name: str, label: str, active: str) -> str:
         selected = name == active
@@ -165,11 +169,11 @@ class DashboardIntegration:
         form_data: typing.Any,
         key: str,
         *,
-        default: typing.Optional[int] = None,
-        minimum: typing.Optional[int] = None,
-        maximum: typing.Optional[int] = None,
+        default: int | None = None,
+        minimum: int | None = None,
+        maximum: int | None = None,
         optional: bool = False,
-    ) -> typing.Optional[int]:
+    ) -> int | None:
         value = self._dash_value(form_data, key).strip()
         if optional and value == "":
             return None
@@ -186,7 +190,7 @@ class DashboardIntegration:
             number = min(maximum, number)
         return number
 
-    def _dash_optional_id(self, form_data: typing.Any, key: str) -> typing.Optional[int]:
+    def _dash_optional_id(self, form_data: typing.Any, key: str) -> int | None:
         value = self._dash_value(form_data, key).strip()
         if not value:
             return None
@@ -195,7 +199,7 @@ class DashboardIntegration:
         except (TypeError, ValueError) as exc:
             raise commands.BadArgument(f"`{key}` must be a Discord ID.") from exc
 
-    def _dash_csrf(self, kwargs: typing.Dict[str, typing.Any]) -> str:
+    def _dash_csrf(self, kwargs: dict[str, typing.Any]) -> str:
         csrf_token = kwargs.get("csrf_token")
         if not isinstance(csrf_token, (tuple, list)) or len(csrf_token) != 2:
             return ""
@@ -208,23 +212,29 @@ class DashboardIntegration:
         self,
         guild: discord.Guild,
         user: discord.User,
-        member: typing.Optional[discord.Member],
+        member: discord.Member | None,
         action: str,
         form_data: typing.Any,
-    ) -> typing.List[typing.Dict[str, str]]:
-        messages: typing.List[typing.Dict[str, str]] = []
+    ) -> list[dict[str, str]]:
+        messages: list[dict[str, str]] = []
 
         if action == "save_settings":
             await self._dashboard_save_settings(guild, form_data)
-            messages.append({"message": "SuggestionBox settings saved.", "category": "success"})
+            messages.append(
+                {"message": "SuggestionBox settings saved.", "category": "success"},
+            )
 
         elif action == "submit_suggestion":
-            record, message = await self._dashboard_submit_suggestion(guild, user, form_data)
+            record, message = await self._dashboard_submit_suggestion(
+                guild,
+                user,
+                form_data,
+            )
             messages.append(
                 {
                     "message": f"Suggestion #{record['id']} submitted: {message.jump_url}",
                     "category": "success",
-                }
+                },
             )
 
         elif action == "set_status":
@@ -238,7 +248,7 @@ class DashboardIntegration:
                 {
                     "message": f"Suggestion #{suggestion_id} marked as {self._status_label(status)}.",
                     "category": "success",
-                }
+                },
             )
 
         elif action == "add_comment":
@@ -247,25 +257,32 @@ class DashboardIntegration:
                 {
                     "message": f"Added a staff note to suggestion #{suggestion_id}.",
                     "category": "success",
-                }
+                },
             )
 
         elif action == "create_thread":
-            suggestion_id, thread = await self._dashboard_create_thread(guild, form_data)
+            suggestion_id, thread = await self._dashboard_create_thread(
+                guild,
+                form_data,
+            )
             messages.append(
                 {
                     "message": f"Created a discussion thread for suggestion #{suggestion_id}: {thread.mention}",
                     "category": "success",
-                }
+                },
             )
 
         elif action == "delete_suggestion":
-            suggestion_id = await self._dashboard_delete_suggestion(guild, user, form_data)
+            suggestion_id = await self._dashboard_delete_suggestion(
+                guild,
+                user,
+                form_data,
+            )
             messages.append(
                 {
                     "message": f"Suggestion #{suggestion_id} deleted.",
                     "category": "success",
-                }
+                },
             )
 
         elif action == "refresh_messages":
@@ -274,7 +291,7 @@ class DashboardIntegration:
                 {
                     "message": f"Refreshed {count} tracked suggestion message(s).",
                     "category": "success",
-                }
+                },
             )
 
         elif action == "reset_records":
@@ -283,7 +300,7 @@ class DashboardIntegration:
                 {
                     "message": "SuggestionBox records have been reset.",
                     "category": "success",
-                }
+                },
             )
 
         elif action:
@@ -296,15 +313,27 @@ class DashboardIntegration:
         guild: discord.Guild,
         form_data: typing.Any,
     ) -> None:
-        suggestion_channel_id = self._dash_optional_id(form_data, "suggestion_channel_id")
-        suggestion_channel = guild.get_channel(suggestion_channel_id) if suggestion_channel_id else None
-        if suggestion_channel_id and not isinstance(suggestion_channel, discord.TextChannel):
+        suggestion_channel_id = self._dash_optional_id(
+            form_data,
+            "suggestion_channel_id",
+        )
+        suggestion_channel = (
+            guild.get_channel(suggestion_channel_id) if suggestion_channel_id else None
+        )
+        if suggestion_channel_id and not isinstance(
+            suggestion_channel,
+            discord.TextChannel,
+        ):
             raise commands.BadArgument("Suggestion channel must be a text channel.")
         if self._dash_bool(form_data, "enabled") and suggestion_channel is None:
-            raise commands.BadArgument("Choose a suggestion channel before enabling SuggestionBox.")
+            raise commands.BadArgument(
+                "Choose a suggestion channel before enabling SuggestionBox.",
+            )
 
         review_channel_id = self._dash_optional_id(form_data, "review_channel_id")
-        review_channel = guild.get_channel(review_channel_id) if review_channel_id else None
+        review_channel = (
+            guild.get_channel(review_channel_id) if review_channel_id else None
+        )
         if review_channel_id and not isinstance(review_channel, discord.TextChannel):
             raise commands.BadArgument("Review channel must be a text channel.")
 
@@ -314,19 +343,33 @@ class DashboardIntegration:
             default=1440,
         )
         if archive_minutes not in {60, 1440, 4320, 10080}:
-            raise commands.BadArgument("Thread archive duration must be 60, 1440, 4320, or 10080.")
+            raise commands.BadArgument(
+                "Thread archive duration must be 60, 1440, 4320, or 10080.",
+            )
 
-        color_value = self._dashboard_parse_color(self._dash_value(form_data, "embed_color"))
+        color_value = self._dashboard_parse_color(
+            self._dash_value(form_data, "embed_color"),
+        )
         next_id = self._dash_int(form_data, "next_id", default=1, minimum=1)
 
         guild_conf = self.config.guild(guild)
         await guild_conf.enabled.set(self._dash_bool(form_data, "enabled"))
-        await guild_conf.suggestion_channel_id.set(suggestion_channel.id if suggestion_channel else None)
-        await guild_conf.review_channel_id.set(review_channel.id if review_channel else None)
+        await guild_conf.suggestion_channel_id.set(
+            suggestion_channel.id if suggestion_channel else None,
+        )
+        await guild_conf.review_channel_id.set(
+            review_channel.id if review_channel else None,
+        )
         await guild_conf.anonymous.set(self._dash_bool(form_data, "anonymous"))
-        await guild_conf.allow_downvotes.set(self._dash_bool(form_data, "allow_downvotes"))
-        await guild_conf.allow_self_vote.set(self._dash_bool(form_data, "allow_self_vote"))
-        await guild_conf.create_threads.set(self._dash_bool(form_data, "create_threads"))
+        await guild_conf.allow_downvotes.set(
+            self._dash_bool(form_data, "allow_downvotes"),
+        )
+        await guild_conf.allow_self_vote.set(
+            self._dash_bool(form_data, "allow_self_vote"),
+        )
+        await guild_conf.create_threads.set(
+            self._dash_bool(form_data, "create_threads"),
+        )
         await guild_conf.thread_auto_archive_duration.set(archive_minutes)
         await guild_conf.embed_color.set(color_value)
         await guild_conf.next_id.set(next_id)
@@ -336,7 +379,7 @@ class DashboardIntegration:
         guild: discord.Guild,
         user: discord.User,
         form_data: typing.Any,
-    ) -> typing.Tuple[typing.Dict[str, typing.Any], discord.Message]:
+    ) -> tuple[dict[str, typing.Any], discord.Message]:
         text = self._dash_value(form_data, "suggestion_text").strip()
         if not text:
             raise commands.BadArgument("Suggestion text cannot be empty.")
@@ -350,13 +393,19 @@ class DashboardIntegration:
         self,
         guild: discord.Guild,
         user: discord.User,
-        member: typing.Optional[discord.Member],
+        member: discord.Member | None,
         form_data: typing.Any,
-    ) -> typing.Tuple[int, str]:
+    ) -> tuple[int, str]:
         suggestion_id = self._dash_int(form_data, "status_suggestion_id", minimum=1)
-        status = self._normalise_status(self._dash_value(form_data, "suggestion_status", "open"))
+        status = self._normalise_status(
+            self._dash_value(form_data, "suggestion_status", "open"),
+        )
         reason_text = self._dash_value(form_data, "status_reason").strip()
-        reason = self._clean_text(reason_text, self.MAX_REASON_LENGTH) if reason_text else None
+        reason = (
+            self._clean_text(reason_text, self.MAX_REASON_LENGTH)
+            if reason_text
+            else None
+        )
         actor = member or user
 
         async with self._guild_lock(guild.id):
@@ -364,7 +413,9 @@ class DashboardIntegration:
                 key = self._suggestion_key(suggestion_id)
                 record = suggestions.get(key)
                 if not record:
-                    raise commands.BadArgument(f"No suggestion with ID `{suggestion_id}` was found.")
+                    raise commands.BadArgument(
+                        f"No suggestion with ID `{suggestion_id}` was found.",
+                    )
                 record["status"] = status
                 record["updated_at"] = self._now_ts()
                 record["decision_by"] = user.id
@@ -374,8 +425,16 @@ class DashboardIntegration:
 
         settings = await self.config.guild(guild).all()
         await self._sync_suggestion_message(guild, record, settings)
-        await self._send_review_log(guild, record, self._status_label(status), actor, reason)
-        notice = f"Suggestion #{suggestion_id} was marked as {self._status_label(status)}."
+        await self._send_review_log(
+            guild,
+            record,
+            self._status_label(status),
+            actor,
+            reason,
+        )
+        notice = (
+            f"Suggestion #{suggestion_id} was marked as {self._status_label(status)}."
+        )
         if reason:
             notice += f"\nReason: {reason}"
         await self._send_thread_notice(guild, record, notice)
@@ -398,13 +457,15 @@ class DashboardIntegration:
                 key = self._suggestion_key(suggestion_id)
                 record = suggestions.get(key)
                 if not record:
-                    raise commands.BadArgument(f"No suggestion with ID `{suggestion_id}` was found.")
+                    raise commands.BadArgument(
+                        f"No suggestion with ID `{suggestion_id}` was found.",
+                    )
                 record.setdefault("staff_notes", []).append(
                     {
                         "staff_id": user.id,
                         "comment": comment,
                         "created_at": self._now_ts(),
-                    }
+                    },
                 )
                 record["updated_at"] = self._now_ts()
                 suggestions[key] = record
@@ -423,7 +484,7 @@ class DashboardIntegration:
         self,
         guild: discord.Guild,
         form_data: typing.Any,
-    ) -> typing.Tuple[int, discord.Thread]:
+    ) -> tuple[int, discord.Thread]:
         suggestion_id = self._dash_int(form_data, "thread_suggestion_id", minimum=1)
         async with self._guild_lock(guild.id):
             settings = await self.config.guild(guild).all()
@@ -431,9 +492,13 @@ class DashboardIntegration:
             key = self._suggestion_key(suggestion_id)
             record = suggestions.get(key)
             if not record:
-                raise commands.BadArgument(f"No suggestion with ID `{suggestion_id}` was found.")
+                raise commands.BadArgument(
+                    f"No suggestion with ID `{suggestion_id}` was found.",
+                )
             if record.get("thread_id"):
-                raise commands.BadArgument(f"Suggestion #{suggestion_id} already has a thread.")
+                raise commands.BadArgument(
+                    f"Suggestion #{suggestion_id} already has a thread.",
+                )
 
             message = await self._fetch_suggestion_message(guild, record)
             if message is None:
@@ -447,7 +512,9 @@ class DashboardIntegration:
                 raise_on_error=True,
             )
             if thread is None:
-                raise commands.CommandError("I could not create a thread for that suggestion.")
+                raise commands.CommandError(
+                    "I could not create a thread for that suggestion.",
+                )
 
             record["thread_id"] = thread.id
             record["updated_at"] = self._now_ts()
@@ -465,13 +532,19 @@ class DashboardIntegration:
     ) -> int:
         suggestion_id = self._dash_int(form_data, "delete_suggestion_id", minimum=1)
         reason_text = self._dash_value(form_data, "delete_reason").strip()
-        reason = self._clean_text(reason_text, self.MAX_REASON_LENGTH) if reason_text else None
+        reason = (
+            self._clean_text(reason_text, self.MAX_REASON_LENGTH)
+            if reason_text
+            else None
+        )
         async with self._guild_lock(guild.id):
             async with self.config.guild(guild).suggestions() as suggestions:
                 key = self._suggestion_key(suggestion_id)
                 record = suggestions.pop(key, None)
                 if not record:
-                    raise commands.BadArgument(f"No suggestion with ID `{suggestion_id}` was found.")
+                    raise commands.BadArgument(
+                        f"No suggestion with ID `{suggestion_id}` was found.",
+                    )
 
         message = await self._fetch_suggestion_message(guild, record)
         if message is not None:
@@ -489,22 +562,31 @@ class DashboardIntegration:
             count += 1
         return count
 
-    async def _dashboard_reset_records(self, guild: discord.Guild, form_data: typing.Any) -> None:
-        if self._dash_value(form_data, "reset_confirmation").strip().lower() != "confirm":
-            raise commands.BadArgument("Type `confirm` before resetting suggestion records.")
+    async def _dashboard_reset_records(
+        self,
+        guild: discord.Guild,
+        form_data: typing.Any,
+    ) -> None:
+        if (
+            self._dash_value(form_data, "reset_confirmation").strip().lower()
+            != "confirm"
+        ):
+            raise commands.BadArgument(
+                "Type `confirm` before resetting suggestion records.",
+            )
         await self.config.guild(guild).suggestions.set({})
         await self.config.guild(guild).next_id.set(1)
 
     async def _dashboard_source(
         self,
         guild: discord.Guild,
-        kwargs: typing.Dict[str, typing.Any],
+        kwargs: dict[str, typing.Any],
     ) -> str:
         settings = await self.config.guild(guild).all()
         suggestions = settings.get("suggestions") or {}
         csrf = self._dash_csrf(kwargs)
 
-        counts = {status: 0 for status in self.VALID_STATUSES}
+        counts = dict.fromkeys(self.VALID_STATUSES, 0)
         for record in suggestions.values():
             status = str(record.get("status") or "open")
             counts[status] = counts.get(status, 0) + 1
@@ -574,10 +656,10 @@ class DashboardIntegration:
                 {self._dashboard_tab_button("actions", "Actions", active_tab)}
                 {self._dashboard_tab_button("maintenance", "Maintenance", active_tab)}
             </div>
-            <section class="dash-panel{' active' if active_tab == 'suggestions' else ''}" data-tab-panel="suggestions">{self._dashboard_suggestions_section(guild, suggestions)}</section>
-            <section class="dash-panel{' active' if active_tab == 'settings' else ''}" data-tab-panel="settings">{self._dashboard_settings_section(guild, settings, csrf)}</section>
-            <section class="dash-panel{' active' if active_tab == 'actions' else ''}" data-tab-panel="actions">{self._dashboard_actions_section(suggestions, csrf)}</section>
-            <section class="dash-panel{' active' if active_tab == 'maintenance' else ''}" data-tab-panel="maintenance">{self._dashboard_maintenance_section(csrf)}</section>
+            <section class="dash-panel{" active" if active_tab == "suggestions" else ""}" data-tab-panel="suggestions">{self._dashboard_suggestions_section(guild, suggestions)}</section>
+            <section class="dash-panel{" active" if active_tab == "settings" else ""}" data-tab-panel="settings">{self._dashboard_settings_section(guild, settings, csrf)}</section>
+            <section class="dash-panel{" active" if active_tab == "actions" else ""}" data-tab-panel="actions">{self._dashboard_actions_section(suggestions, csrf)}</section>
+            <section class="dash-panel{" active" if active_tab == "maintenance" else ""}" data-tab-panel="maintenance">{self._dashboard_maintenance_section(csrf)}</section>
             {self._dashboard_tabs_script()}
         </div>
         """
@@ -585,7 +667,7 @@ class DashboardIntegration:
     def _dashboard_settings_section(
         self,
         guild: discord.Guild,
-        settings: typing.Dict[str, typing.Any],
+        settings: dict[str, typing.Any],
         csrf: str,
     ) -> str:
         return f"""
@@ -623,7 +705,7 @@ class DashboardIntegration:
     def _dashboard_suggestions_section(
         self,
         guild: discord.Guild,
-        suggestions: typing.Dict[str, typing.Any],
+        suggestions: dict[str, typing.Any],
     ) -> str:
         rows = []
         records = sorted(
@@ -643,7 +725,7 @@ class DashboardIntegration:
                 f"<td>{len(record.get('upvotes', []))}</td>"
                 f"<td>{len(record.get('downvotes', []))}</td>"
                 f"<td>{self._h(self._short_text(record.get('text'), 140))}</td>"
-                "</tr>"
+                "</tr>",
             )
         table = "".join(rows) or (
             '<tr><td colspan="7" class="sb-muted">No suggestions have been stored.</td></tr>'
@@ -660,7 +742,7 @@ class DashboardIntegration:
 
     def _dashboard_actions_section(
         self,
-        suggestions: typing.Dict[str, typing.Any],
+        suggestions: dict[str, typing.Any],
         csrf: str,
     ) -> str:
         options = self._suggestion_options(suggestions)
@@ -733,7 +815,7 @@ class DashboardIntegration:
         </div>
         """
 
-    def _suggestion_options(self, suggestions: typing.Dict[str, typing.Any]) -> str:
+    def _suggestion_options(self, suggestions: dict[str, typing.Any]) -> str:
         if not suggestions:
             return '<option value="">No suggestions stored</option>'
         rows = []
@@ -743,7 +825,9 @@ class DashboardIntegration:
             reverse=True,
         )[:100]:
             label = f"#{record.get('id')} - {self._short_text(record.get('text'), 80)}"
-            rows.append(f'<option value="{self._h(record.get("id"))}">{self._h(label)}</option>')
+            rows.append(
+                f'<option value="{self._h(record.get("id"))}">{self._h(label)}</option>',
+            )
         return "".join(rows)
 
     def _channel_select(
@@ -758,7 +842,7 @@ class DashboardIntegration:
         options = ['<option value="">None</option>'] if include_none else []
         for channel in sorted(guild.text_channels, key=lambda item: item.name.lower()):
             options.append(
-                f'<option value="{channel.id}" {self._selected(channel.id, selected)}>#{self._h(channel.name)}</option>'
+                f'<option value="{channel.id}" {self._selected(channel.id, selected)}>#{self._h(channel.name)}</option>',
             )
         return (
             f'<div class="sb-field"><label>{self._h(label)}</label>'
@@ -772,7 +856,9 @@ class DashboardIntegration:
         try:
             return discord.Color.from_str(value).value
         except ValueError as exc:
-            raise commands.BadArgument("Use a valid Discord color, such as `#5865F2`.") from exc
+            raise commands.BadArgument(
+                "Use a valid Discord color, such as `#5865F2`.",
+            ) from exc
 
     def _color_hex(self, value: typing.Any) -> str:
         try:
@@ -788,8 +874,8 @@ class DashboardIntegration:
         value: typing.Any,
         input_type: str = "text",
         *,
-        min_value: typing.Optional[int] = None,
-        max_value: typing.Optional[int] = None,
+        min_value: int | None = None,
+        max_value: int | None = None,
     ) -> str:
         attrs = []
         if min_value is not None:
@@ -802,7 +888,14 @@ class DashboardIntegration:
             f'value="{self._h(value)}" {" ".join(attrs)}></div>'
         )
 
-    def _textarea(self, name: str, label: str, value: typing.Any, *, rows: int = 4) -> str:
+    def _textarea(
+        self,
+        name: str,
+        label: str,
+        value: typing.Any,
+        *,
+        rows: int = 4,
+    ) -> str:
         return (
             f'<div class="sb-field"><label>{self._h(label)}</label>'
             f'<textarea name="{self._h(name)}" rows="{rows}">{self._h(value)}</textarea></div>'

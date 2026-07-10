@@ -19,6 +19,7 @@
         "development"
     ],
     "min_bot_version": "3.5.0",
+    "min_python_version": [3, 9, 0],
     "requirements": [],
     "end_user_data_statement": "This cog stores character profiles, relationships, locations, and timeline data as configured by users. No data is shared externally without explicit user action (e.g., Google Docs export).",
     "hidden": false,

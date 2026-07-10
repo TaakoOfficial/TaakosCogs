@@ -45,7 +45,7 @@ class DashboardIntegration:
         user: discord.User,
         guild: discord.Guild,
         **kwargs,
-    ) -> typing.Dict[str, typing.Any]:
+    ) -> dict[str, typing.Any]:
         """Render and process the TempVoice dashboard page."""
         _member, can_manage = await self._dashboard_member_can_manage(user, guild)
         if not can_manage:
@@ -61,7 +61,12 @@ class DashboardIntegration:
         if kwargs.get("method", "GET") == "POST":
             action = self._dash_value(form_data, "action")
             try:
-                messages = await self._dashboard_handle_action(guild, user, action, form_data)
+                messages = await self._dashboard_handle_action(
+                    guild,
+                    user,
+                    action,
+                    form_data,
+                )
             except commands.CommandError as error:
                 notifications.append({"message": str(error), "category": "error"})
             except Exception as error:
@@ -70,7 +75,7 @@ class DashboardIntegration:
                     {
                         "message": f"TempVoice dashboard action failed: {error}",
                         "category": "error",
-                    }
+                    },
                 )
             else:
                 notifications.extend(messages)
@@ -89,7 +94,7 @@ class DashboardIntegration:
         self,
         user: discord.User,
         guild: discord.Guild,
-    ) -> typing.Tuple[typing.Optional[discord.Member], bool]:
+    ) -> tuple[discord.Member | None, bool]:
         member = guild.get_member(user.id)
         is_owner = user.id in getattr(self.bot, "owner_ids", set())
         is_admin = member is not None and await self.bot.is_admin(member)
@@ -100,7 +105,7 @@ class DashboardIntegration:
         )
         return member, can_manage
 
-    def _dashboard_form_data(self, kwargs: typing.Dict[str, typing.Any]) -> typing.Any:
+    def _dashboard_form_data(self, kwargs: dict[str, typing.Any]) -> typing.Any:
         data = kwargs.get("data") or {}
         if isinstance(data, dict) and ("form" in data or "json" in data):
             return data.get("form") or data.get("json") or {}
@@ -110,7 +115,11 @@ class DashboardIntegration:
         form_data = self._dashboard_form_data(kwargs)
         selected = self._dash_value(form_data, "active_tab").lower()
         valid = set(action_tabs.values()) | {default}
-        return selected if selected in valid else action_tabs.get(self._dash_value(form_data, "action").lower(), default)
+        return (
+            selected
+            if selected in valid
+            else action_tabs.get(self._dash_value(form_data, "action").lower(), default)
+        )
 
     def _dashboard_tab_button(self, name: str, label: str, active: str) -> str:
         selected = name == active
@@ -159,11 +168,11 @@ class DashboardIntegration:
         form_data: typing.Any,
         key: str,
         *,
-        default: typing.Optional[int] = None,
-        minimum: typing.Optional[int] = None,
-        maximum: typing.Optional[int] = None,
+        default: int | None = None,
+        minimum: int | None = None,
+        maximum: int | None = None,
         optional: bool = False,
-    ) -> typing.Optional[int]:
+    ) -> int | None:
         value = self._dash_value(form_data, key).strip()
         if optional and value == "":
             return None
@@ -180,7 +189,7 @@ class DashboardIntegration:
             number = min(maximum, number)
         return number
 
-    def _dash_optional_id(self, form_data: typing.Any, key: str) -> typing.Optional[int]:
+    def _dash_optional_id(self, form_data: typing.Any, key: str) -> int | None:
         value = self._dash_value(form_data, key).strip()
         if not value:
             return None
@@ -195,7 +204,7 @@ class DashboardIntegration:
             raise commands.BadArgument(f"`{key}` is required.")
         return value
 
-    def _dash_csrf(self, kwargs: typing.Dict[str, typing.Any]) -> str:
+    def _dash_csrf(self, kwargs: dict[str, typing.Any]) -> str:
         csrf_token = kwargs.get("csrf_token")
         if not isinstance(csrf_token, (tuple, list)) or len(csrf_token) != 2:
             return ""
@@ -210,7 +219,7 @@ class DashboardIntegration:
         user: discord.User,
         action: str,
         form_data: typing.Any,
-    ) -> typing.List[typing.Dict[str, str]]:
+    ) -> list[dict[str, str]]:
         if action == "save_settings":
             await self._dashboard_save_settings(guild, form_data)
             return [{"message": "TempVoice settings saved.", "category": "success"}]
@@ -224,7 +233,7 @@ class DashboardIntegration:
                         f"{stale} stale record(s)."
                     ),
                     "category": "success",
-                }
+                },
             ]
 
         if action == "resend_panel":
@@ -233,7 +242,7 @@ class DashboardIntegration:
                 {
                     "message": f"Control panel sent in #{message.channel.name}.",
                     "category": "success",
-                }
+                },
             ]
 
         if action == "delete_temp":
@@ -242,7 +251,7 @@ class DashboardIntegration:
                 {
                     "message": f"Temporary channel `{channel_id}` deleted or cleaned up.",
                     "category": "success",
-                }
+                },
             ]
 
         if action:
@@ -273,33 +282,41 @@ class DashboardIntegration:
             maximum=self.MAX_DELETE_DELAY,
         )
         template = self._clean_channel_name(
-            self._dash_value(form_data, "channel_name_template", self.DEFAULT_TEMPLATE)
+            self._dash_value(form_data, "channel_name_template", self.DEFAULT_TEMPLATE),
         )
         clone_permissions = self._dash_bool(form_data, "clone_trigger_permissions")
 
         if enabled and join_channel_id is None:
-            raise commands.BadArgument("Set a join-to-create voice channel before enabling.")
+            raise commands.BadArgument(
+                "Set a join-to-create voice channel before enabling.",
+            )
         if join_channel_id is not None and not isinstance(
             guild.get_channel(join_channel_id),
             discord.VoiceChannel,
         ):
-            raise commands.BadArgument("The join-to-create channel must be a voice channel.")
+            raise commands.BadArgument(
+                "The join-to-create channel must be a voice channel.",
+            )
         if category_id is not None and not isinstance(
             guild.get_channel(category_id),
             discord.CategoryChannel,
         ):
-            raise commands.BadArgument("The temporary channel category must be a category.")
+            raise commands.BadArgument(
+                "The temporary channel category must be a category.",
+            )
         if panel_channel_id is not None:
             panel_channel = guild.get_channel(panel_channel_id)
             if not isinstance(panel_channel, discord.TextChannel):
-                raise commands.BadArgument("The control panel channel must be a text channel.")
+                raise commands.BadArgument(
+                    "The control panel channel must be a text channel.",
+                )
             me = guild.me
             if me is None:
                 raise commands.CommandError("I could not check my channel permissions.")
             permissions = panel_channel.permissions_for(me)
             if not permissions.send_messages or not permissions.embed_links:
                 raise commands.CommandError(
-                    f"I need Send Messages and Embed Links in #{panel_channel.name}."
+                    f"I need Send Messages and Embed Links in #{panel_channel.name}.",
                 )
 
         guild_conf = self.config.guild(guild)
@@ -316,7 +333,7 @@ class DashboardIntegration:
         self,
         guild: discord.Guild,
         user: discord.User,
-    ) -> typing.Tuple[int, int]:
+    ) -> tuple[int, int]:
         records = await self.config.guild(guild).temp_channels()
         stale_ids = []
         empty_ids = []
@@ -361,7 +378,9 @@ class DashboardIntegration:
         settings = await self.config.guild(guild).all()
         message = await self._send_control_panel(guild, channel, record, settings)
         if message is None:
-            raise commands.CommandError("I could not send a control panel for that channel.")
+            raise commands.CommandError(
+                "I could not send a control panel for that channel.",
+            )
         await self._update_record(
             guild,
             channel.id,
@@ -389,7 +408,9 @@ class DashboardIntegration:
             await self._remove_temp_record(guild, channel_id)
             return channel_id
         if self._human_members(channel):
-            raise commands.BadArgument("Only empty temporary channels can be deleted here.")
+            raise commands.BadArgument(
+                "Only empty temporary channels can be deleted here.",
+            )
 
         await self._delete_temp_channel(
             guild,
@@ -401,15 +422,24 @@ class DashboardIntegration:
     async def _dashboard_source(
         self,
         guild: discord.Guild,
-        kwargs: typing.Dict[str, typing.Any],
+        kwargs: dict[str, typing.Any],
     ) -> str:
         settings = await self.config.guild(guild).all()
         records = settings.get("temp_channels") or {}
         csrf = self._dash_csrf(kwargs)
-        active_rows, active_count, stale_count = self._active_channel_rows(guild, records, csrf)
+        active_rows, active_count, stale_count = self._active_channel_rows(
+            guild,
+            records,
+            csrf,
+        )
         active_tab = self._dashboard_active_tab(
             kwargs,
-            {"save_settings": "settings", "cleanup_empty": "maintenance", "resend_panel": "channels", "delete_temp": "channels"},
+            {
+                "save_settings": "settings",
+                "cleanup_empty": "maintenance",
+                "resend_panel": "channels",
+                "delete_temp": "channels",
+            },
             "channels",
         )
 
@@ -452,17 +482,17 @@ class DashboardIntegration:
 </style>
 <div class="tv-dash" data-dashboard-tabs="1">
   <div class="tv-stats">
-    <div class="tv-stat"><strong>{self._h('Enabled' if settings.get('enabled') else 'Disabled')}</strong><span>Status</span></div>
+    <div class="tv-stat"><strong>{self._h("Enabled" if settings.get("enabled") else "Disabled")}</strong><span>Status</span></div>
     <div class="tv-stat"><strong>{active_count}</strong><span>active records</span></div>
     <div class="tv-stat"><strong>{stale_count}</strong><span>stale records</span></div>
-    <div class="tv-stat"><strong>{self._h(settings.get('auto_delete_delay') or 0)}s</strong><span>empty cleanup delay</span></div>
+    <div class="tv-stat"><strong>{self._h(settings.get("auto_delete_delay") or 0)}s</strong><span>empty cleanup delay</span></div>
   </div>
   <div class="dash-tabs" role="tablist" aria-label="TempVoice sections">
     {self._dashboard_tab_button("channels", "Active Channels", active_tab)}
     {self._dashboard_tab_button("settings", "Settings", active_tab)}
     {self._dashboard_tab_button("maintenance", "Maintenance", active_tab)}
   </div>
-  <section class="dash-panel{' active' if active_tab == 'settings' else ''}" data-tab-panel="settings"><div class="tv-grid">
+  <section class="dash-panel{" active" if active_tab == "settings" else ""}" data-tab-panel="settings"><div class="tv-grid">
     <form class="tv-card" method="post">
       {csrf}
       <input type="hidden" name="action" value="save_settings">
@@ -478,7 +508,7 @@ class DashboardIntegration:
       <div class="tv-actions"><button type="submit">Save settings</button></div>
     </form>
   </div></section>
-  <section class="dash-panel{' active' if active_tab == 'maintenance' else ''}" data-tab-panel="maintenance"><div class="tv-grid">
+  <section class="dash-panel{" active" if active_tab == "maintenance" else ""}" data-tab-panel="maintenance"><div class="tv-grid">
     <form class="tv-card" method="post">
       {csrf}
       <input type="hidden" name="action" value="cleanup_empty">
@@ -487,7 +517,7 @@ class DashboardIntegration:
       <div class="tv-actions"><button class="danger" type="submit">Clean up empty channels</button></div>
     </form>
   </div></section>
-  <section class="dash-panel{' active' if active_tab == 'channels' else ''}" data-tab-panel="channels"><div class="tv-card" id="active-channels">
+  <section class="dash-panel{" active" if active_tab == "channels" else ""}" data-tab-panel="channels"><div class="tv-card" id="active-channels">
     <h2>Active Temporary Channels</h2>
     {active_rows}
   </div></section>
@@ -498,9 +528,9 @@ class DashboardIntegration:
     def _active_channel_rows(
         self,
         guild: discord.Guild,
-        records: typing.Dict[str, typing.Any],
+        records: dict[str, typing.Any],
         csrf: str,
-    ) -> typing.Tuple[str, int, int]:
+    ) -> tuple[str, int, int]:
         if not records:
             return '<p class="tv-muted">No temporary channels are active.</p>', 0, 0
 
@@ -529,7 +559,7 @@ class DashboardIntegration:
             user_limit = self._limit_text(record.get("user_limit"))
             rows.append(
                 "<tr>"
-                f"<td>{self._h(channel_name)}<br><span class=\"tv-muted\">{channel_id}</span></td>"
+                f'<td>{self._h(channel_name)}<br><span class="tv-muted">{channel_id}</span></td>'
                 f"<td>{self._h(owner)}</td>"
                 f"<td>{self._h(members)}</td>"
                 f"<td>{self._h(locked)}<br>{self._h(user_limit)}</td>"
@@ -549,31 +579,29 @@ class DashboardIntegration:
                 '<button class="danger" type="submit">Delete empty</button>'
                 "</form>"
                 "</td>"
-                "</tr>"
+                "</tr>",
             )
         table = (
             '<table class="tv-table"><thead><tr><th>Channel</th><th>Owner</th>'
             "<th>Members</th><th>Status</th><th>Created</th><th>Actions</th></tr>"
-            "</thead><tbody>"
-            + "".join(rows)
-            + "</tbody></table>"
+            "</thead><tbody>" + "".join(rows) + "</tbody></table>"
         )
         return table, active, stale
 
-    def _voice_options(self, guild: discord.Guild) -> typing.List[typing.Tuple[int, str]]:
+    def _voice_options(self, guild: discord.Guild) -> list[tuple[int, str]]:
         return [(channel.id, channel.name) for channel in guild.voice_channels]
 
-    def _category_options(self, guild: discord.Guild) -> typing.List[typing.Tuple[int, str]]:
+    def _category_options(self, guild: discord.Guild) -> list[tuple[int, str]]:
         return [(category.id, category.name) for category in guild.categories]
 
-    def _text_options(self, guild: discord.Guild) -> typing.List[typing.Tuple[int, str]]:
+    def _text_options(self, guild: discord.Guild) -> list[tuple[int, str]]:
         return [(channel.id, f"#{channel.name}") for channel in guild.text_channels]
 
     def _select(
         self,
         name: str,
         label: str,
-        options: typing.List[typing.Tuple[typing.Any, str]],
+        options: list[tuple[typing.Any, str]],
         selected: typing.Any = "",
         empty_label: str = "Select...",
     ) -> str:
@@ -581,7 +609,7 @@ class DashboardIntegration:
         for value, text in options:
             option_html.append(
                 f'<option value="{self._h(value)}" {self._selected(value, selected)}>'
-                f"{self._h(text)}</option>"
+                f"{self._h(text)}</option>",
             )
         return (
             f'<div class="tv-field"><label>{self._h(label)}</label>'
@@ -594,8 +622,8 @@ class DashboardIntegration:
         label: str,
         value: typing.Any,
         input_type: str = "text",
-        min_value: typing.Optional[int] = None,
-        max_value: typing.Optional[int] = None,
+        min_value: int | None = None,
+        max_value: int | None = None,
     ) -> str:
         attrs = []
         if min_value is not None:
@@ -633,7 +661,9 @@ class DashboardIntegration:
             timestamp = float(value)
         except (TypeError, ValueError):
             return "Unknown"
-        return datetime.fromtimestamp(timestamp, tz=timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+        return datetime.fromtimestamp(timestamp, tz=timezone.utc).strftime(
+            "%Y-%m-%d %H:%M UTC",
+        )
 
     def _h(self, value: typing.Any) -> str:
         return html.escape("" if value is None else str(value), quote=True)

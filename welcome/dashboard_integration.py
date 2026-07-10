@@ -45,7 +45,7 @@ class DashboardIntegration:
         user: discord.User,
         guild: discord.Guild,
         **kwargs,
-    ) -> typing.Dict[str, typing.Any]:
+    ) -> dict[str, typing.Any]:
         """Render and process the Welcome dashboard page."""
         member, can_manage = await self._dashboard_member_can_manage(user, guild)
         if not can_manage:
@@ -76,7 +76,7 @@ class DashboardIntegration:
                     {
                         "message": f"Welcome dashboard action failed: {error}",
                         "category": "error",
-                    }
+                    },
                 )
             else:
                 notifications.extend(messages)
@@ -95,7 +95,7 @@ class DashboardIntegration:
         self,
         user: discord.User,
         guild: discord.Guild,
-    ) -> typing.Tuple[typing.Optional[discord.Member], bool]:
+    ) -> tuple[discord.Member | None, bool]:
         member = guild.get_member(user.id)
         is_owner = user.id in getattr(self.bot, "owner_ids", set())
         is_admin = member is not None and await self.bot.is_admin(member)
@@ -106,7 +106,7 @@ class DashboardIntegration:
         )
         return member, can_manage
 
-    def _dashboard_form_data(self, kwargs: typing.Dict[str, typing.Any]) -> typing.Any:
+    def _dashboard_form_data(self, kwargs: dict[str, typing.Any]) -> typing.Any:
         data = kwargs.get("data") or {}
         if isinstance(data, dict) and ("form" in data or "json" in data):
             return data.get("form") or data.get("json") or {}
@@ -116,8 +116,13 @@ class DashboardIntegration:
         form_data = self._dashboard_form_data(kwargs)
         selected = self._dash_value(form_data, "active_tab").lower()
         valid = set(action_tabs.values()) | {default}
-        return selected if selected in valid else action_tabs.get(
-            self._dash_value(form_data, "action").lower(), default
+        return (
+            selected
+            if selected in valid
+            else action_tabs.get(
+                self._dash_value(form_data, "action").lower(),
+                default,
+            )
         )
 
     def _dashboard_tab_button(self, name: str, label: str, active: str) -> str:
@@ -223,7 +228,7 @@ class DashboardIntegration:
         except (TypeError, ValueError) as exc:
             raise commands.BadArgument(f"`{key}` must be a number.") from exc
 
-    def _dash_optional_id(self, form_data: typing.Any, key: str) -> typing.Optional[int]:
+    def _dash_optional_id(self, form_data: typing.Any, key: str) -> int | None:
         value = self._dash_value(form_data, key).strip()
         if not value:
             return None
@@ -232,7 +237,7 @@ class DashboardIntegration:
         except (TypeError, ValueError) as exc:
             raise commands.BadArgument(f"`{key}` must be a Discord ID.") from exc
 
-    def _dash_csrf(self, kwargs: typing.Dict[str, typing.Any]) -> str:
+    def _dash_csrf(self, kwargs: dict[str, typing.Any]) -> str:
         csrf_token = kwargs.get("csrf_token")
         if not isinstance(csrf_token, (tuple, list)) or len(csrf_token) != 2:
             return ""
@@ -245,15 +250,17 @@ class DashboardIntegration:
         self,
         guild: discord.Guild,
         user: discord.User,
-        member: typing.Optional[discord.Member],
+        member: discord.Member | None,
         action: str,
         form_data: typing.Any,
-    ) -> typing.List[typing.Dict[str, str]]:
-        messages: typing.List[typing.Dict[str, str]] = []
+    ) -> list[dict[str, str]]:
+        messages: list[dict[str, str]] = []
 
         if action == "save_settings":
             await self._dashboard_save_settings(guild, member or user, form_data)
-            messages.append({"message": "Welcome settings saved.", "category": "success"})
+            messages.append(
+                {"message": "Welcome settings saved.", "category": "success"},
+            )
 
         elif action == "download_image":
             image_data = await self._dashboard_download_image(guild, form_data)
@@ -261,20 +268,28 @@ class DashboardIntegration:
                 {
                     "message": f"Welcome image cached as `{image_data.get('filename')}`.",
                     "category": "success",
-                }
+                },
             )
 
         elif action == "clear_image":
             await self.config.guild(guild).image.set(self._empty_image_data())
-            messages.append({"message": "Cached welcome image cleared.", "category": "success"})
+            messages.append(
+                {"message": "Cached welcome image cleared.", "category": "success"},
+            )
 
         elif action == "clear_embed":
             await self.config.guild(guild).embed_json.set("")
-            messages.append({"message": "Welcome embed JSON cleared.", "category": "success"})
+            messages.append(
+                {"message": "Welcome embed JSON cleared.", "category": "success"},
+            )
 
         elif action == "reset_overlay":
-            await self.config.guild(guild).avatar_overlay.set(self._default_avatar_overlay())
-            messages.append({"message": "Avatar overlay reset to defaults.", "category": "success"})
+            await self.config.guild(guild).avatar_overlay.set(
+                self._default_avatar_overlay(),
+            )
+            messages.append(
+                {"message": "Avatar overlay reset to defaults.", "category": "success"},
+            )
 
         elif action == "test_welcome":
             channel, preview_member = await self._dashboard_test_welcome(
@@ -286,7 +301,7 @@ class DashboardIntegration:
                 {
                     "message": f"Welcome preview sent to #{channel.name} for {preview_member}.",
                     "category": "success",
-                }
+                },
             )
 
         elif action:
@@ -306,7 +321,9 @@ class DashboardIntegration:
             raise commands.BadArgument("Welcome channel must be a text channel.")
         enabled = self._dash_bool(form_data, "enabled")
         if enabled and channel is None:
-            raise commands.BadArgument("Choose a welcome channel before enabling welcomes.")
+            raise commands.BadArgument(
+                "Choose a welcome channel before enabling welcomes.",
+            )
 
         message_template = self._dash_value(form_data, "message_template")
         self._validate_placeholders(message_template)
@@ -316,7 +333,7 @@ class DashboardIntegration:
             raise commands.BadArgument("Image mode must be `embed` or `attachment`.")
 
         current_overlay = self._normalize_avatar_overlay(
-            await self.config.guild(guild).avatar_overlay()
+            await self.config.guild(guild).avatar_overlay(),
         )
         avatar_overlay = {
             "enabled": self._dash_bool(form_data, "avatar_overlay_enabled"),
@@ -362,7 +379,7 @@ class DashboardIntegration:
                 self._build_embed(embed_data, preview_member, None, image_mode)
             except Exception as exc:
                 raise commands.BadArgument(
-                    f"That JSON could not be converted into a Discord embed: {exc}"
+                    f"That JSON could not be converted into a Discord embed: {exc}",
                 ) from exc
             stored_embed = json.dumps(embed_data)
 
@@ -379,7 +396,7 @@ class DashboardIntegration:
         self,
         guild: discord.Guild,
         form_data: typing.Any,
-    ) -> typing.Dict[str, str]:
+    ) -> dict[str, str]:
         url = self._dash_value(form_data, "image_url").strip()
         if not url:
             raise commands.BadArgument("Provide an image URL.")
@@ -392,17 +409,26 @@ class DashboardIntegration:
         guild: discord.Guild,
         preview_user: discord.abc.User,
         form_data: typing.Any,
-    ) -> typing.Tuple[discord.TextChannel, discord.Member]:
+    ) -> tuple[discord.TextChannel, discord.Member]:
         settings = await self._get_guild_settings(guild)
-        channel_id = self._dash_optional_id(form_data, "test_channel_id") or settings.get("channel_id")
+        channel_id = self._dash_optional_id(
+            form_data,
+            "test_channel_id",
+        ) or settings.get("channel_id")
         channel = guild.get_channel(channel_id) if channel_id else None
         if not isinstance(channel, discord.TextChannel):
             raise commands.BadArgument("Choose a text channel for the welcome preview.")
 
         member_id = self._dash_optional_id(form_data, "test_member_id")
-        member = guild.get_member(member_id) if member_id else self._dashboard_preview_member(guild, preview_user)
+        member = (
+            guild.get_member(member_id)
+            if member_id
+            else self._dashboard_preview_member(guild, preview_user)
+        )
         if not isinstance(member, discord.Member):
-            raise commands.BadArgument("Choose a server member for the welcome preview.")
+            raise commands.BadArgument(
+                "Choose a server member for the welcome preview.",
+            )
 
         await self._send_welcome_message(channel, member, settings)
         return channel, member
@@ -410,12 +436,14 @@ class DashboardIntegration:
     async def _dashboard_source(
         self,
         guild: discord.Guild,
-        kwargs: typing.Dict[str, typing.Any],
+        kwargs: dict[str, typing.Any],
     ) -> str:
         settings = await self._get_guild_settings(guild)
         csrf = self._dash_csrf(kwargs)
         image_data = settings.get("image") or self._empty_image_data()
-        avatar_overlay = settings.get("avatar_overlay") or self._default_avatar_overlay()
+        avatar_overlay = (
+            settings.get("avatar_overlay") or self._default_avatar_overlay()
+        )
         channel = guild.get_channel(settings.get("channel_id"))
         embed_json_text = (
             json.dumps(settings.get("embed_json"), indent=2)
@@ -469,10 +497,10 @@ class DashboardIntegration:
             <div class="wel-card">
                 <h2>Welcome Dashboard</h2>
                 <div class="wel-grid">
-                    <div><div class="wel-muted">Enabled</div><div class="wel-stat">{'Yes' if settings.get("enabled") else 'No'}</div></div>
-                    <div><div class="wel-muted">Channel</div><div class="wel-stat">{self._h('#' + channel.name if channel else 'Not Set')}</div></div>
-                    <div><div class="wel-muted">Embed JSON</div><div class="wel-stat">{'Yes' if settings.get("embed_json") else 'No'}</div></div>
-                    <div><div class="wel-muted">Cached Image</div><div class="wel-stat">{'Yes' if image_data.get("data_base64") else 'No'}</div></div>
+                    <div><div class="wel-muted">Enabled</div><div class="wel-stat">{"Yes" if settings.get("enabled") else "No"}</div></div>
+                    <div><div class="wel-muted">Channel</div><div class="wel-stat">{self._h("#" + channel.name if channel else "Not Set")}</div></div>
+                    <div><div class="wel-muted">Embed JSON</div><div class="wel-stat">{"Yes" if settings.get("embed_json") else "No"}</div></div>
+                    <div><div class="wel-muted">Cached Image</div><div class="wel-stat">{"Yes" if image_data.get("data_base64") else "No"}</div></div>
                 </div>
             </div>
             <div class="dash-tabs" role="tablist" aria-label="Welcome sections">
@@ -481,10 +509,10 @@ class DashboardIntegration:
                 {self._dashboard_tab_button("preview", "Preview", active_tab)}
                 {self._dashboard_tab_button("reference", "Placeholders", active_tab)}
             </div>
-            <section class="dash-panel{' active' if active_tab == 'settings' else ''}" data-tab-panel="settings">{self._dashboard_settings_section(guild, settings, avatar_overlay, embed_json_text, csrf)}</section>
-            <section class="dash-panel{' active' if active_tab == 'image' else ''}" data-tab-panel="image">{self._dashboard_image_section(image_data, csrf)}</section>
-            <section class="dash-panel{' active' if active_tab == 'preview' else ''}" data-tab-panel="preview">{self._dashboard_test_section(guild, settings, csrf)}</section>
-            <section class="dash-panel{' active' if active_tab == 'reference' else ''}" data-tab-panel="reference">{self._dashboard_placeholders_section()}</section>
+            <section class="dash-panel{" active" if active_tab == "settings" else ""}" data-tab-panel="settings">{self._dashboard_settings_section(guild, settings, avatar_overlay, embed_json_text, csrf)}</section>
+            <section class="dash-panel{" active" if active_tab == "image" else ""}" data-tab-panel="image">{self._dashboard_image_section(image_data, csrf)}</section>
+            <section class="dash-panel{" active" if active_tab == "preview" else ""}" data-tab-panel="preview">{self._dashboard_test_section(guild, settings, csrf)}</section>
+            <section class="dash-panel{" active" if active_tab == "reference" else ""}" data-tab-panel="reference">{self._dashboard_placeholders_section()}</section>
             {self._dashboard_tabs_script()}
         </div>
         """
@@ -492,8 +520,8 @@ class DashboardIntegration:
     def _dashboard_settings_section(
         self,
         guild: discord.Guild,
-        settings: typing.Dict[str, typing.Any],
-        avatar_overlay: typing.Dict[str, typing.Any],
+        settings: dict[str, typing.Any],
+        avatar_overlay: dict[str, typing.Any],
         embed_json_text: str,
         csrf: str,
     ) -> str:
@@ -541,7 +569,7 @@ class DashboardIntegration:
 
     def _dashboard_image_section(
         self,
-        image_data: typing.Dict[str, typing.Any],
+        image_data: dict[str, typing.Any],
         csrf: str,
     ) -> str:
         return f"""
@@ -569,7 +597,7 @@ class DashboardIntegration:
     def _dashboard_test_section(
         self,
         guild: discord.Guild,
-        settings: typing.Dict[str, typing.Any],
+        settings: dict[str, typing.Any],
         csrf: str,
     ) -> str:
         return f"""
@@ -612,7 +640,7 @@ class DashboardIntegration:
         </div>
         """
 
-    def _dashboard_parse_embed_json(self, raw_json: str) -> typing.Dict[str, typing.Any]:
+    def _dashboard_parse_embed_json(self, raw_json: str) -> dict[str, typing.Any]:
         payload = raw_json.strip()
         if payload.startswith("```") and payload.endswith("```"):
             payload = "\n".join(payload.splitlines()[1:-1]).strip()
@@ -620,7 +648,7 @@ class DashboardIntegration:
             parsed = json.loads(payload)
         except json.JSONDecodeError as exc:
             raise commands.BadArgument(
-                f"Invalid JSON near line {exc.lineno}, column {exc.colno}: {exc.msg}"
+                f"Invalid JSON near line {exc.lineno}, column {exc.colno}: {exc.msg}",
             ) from exc
         if not isinstance(parsed, dict):
             raise commands.BadArgument("Embed JSON must be a single JSON object.")
@@ -644,7 +672,9 @@ class DashboardIntegration:
             return member
         if guild.me is not None:
             return guild.me
-        raise commands.CommandError("I could not resolve a server member for the preview.")
+        raise commands.CommandError(
+            "I could not resolve a server member for the preview.",
+        )
 
     def _channel_select(
         self,
@@ -656,7 +686,7 @@ class DashboardIntegration:
         options = ['<option value="">None</option>']
         for channel in sorted(guild.text_channels, key=lambda item: item.name.lower()):
             options.append(
-                f'<option value="{channel.id}" {self._selected(channel.id, selected)}>#{self._h(channel.name)}</option>'
+                f'<option value="{channel.id}" {self._selected(channel.id, selected)}>#{self._h(channel.name)}</option>',
             )
         return (
             f'<div class="wel-field"><label>{self._h(label)}</label>'
@@ -670,9 +700,9 @@ class DashboardIntegration:
         value: typing.Any,
         input_type: str = "text",
         *,
-        min_value: typing.Optional[typing.Union[int, float]] = None,
-        max_value: typing.Optional[typing.Union[int, float]] = None,
-        step: typing.Optional[str] = None,
+        min_value: int | float | None = None,
+        max_value: int | float | None = None,
+        step: str | None = None,
     ) -> str:
         attrs = []
         if min_value is not None:
@@ -687,7 +717,14 @@ class DashboardIntegration:
             f'value="{self._h(value)}" {" ".join(attrs)}></div>'
         )
 
-    def _textarea(self, name: str, label: str, value: typing.Any, *, rows: int = 4) -> str:
+    def _textarea(
+        self,
+        name: str,
+        label: str,
+        value: typing.Any,
+        *,
+        rows: int = 4,
+    ) -> str:
         return (
             f'<div class="wel-field"><label>{self._h(label)}</label>'
             f'<textarea name="{self._h(name)}" rows="{rows}">{self._h(value)}</textarea></div>'

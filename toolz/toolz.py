@@ -1,13 +1,19 @@
 """Toolz Cog - Role and user utility commands for Red DiscordBot."""
 
+from __future__ import annotations
+
 import asyncio
+import contextlib
 import csv
 import io
 import random
-from typing import List, Optional, Sequence, Tuple
+from typing import TYPE_CHECKING
 
 import discord
 from redbot.core import Config, commands
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 __red_end_user_data_statement__ = (
     "This cog stores per-guild role message settings, including role IDs, channel IDs, "
@@ -28,7 +34,7 @@ class Toolz(commands.Cog):
 
     CONFIG_IDENTIFIER = 8273649150
 
-    IMPORTANT_PERMISSIONS: Tuple[Tuple[str, str], ...] = (
+    IMPORTANT_PERMISSIONS: tuple[tuple[str, str], ...] = (
         ("administrator", "Administrator"),
         ("manage_guild", "Manage Server"),
         ("manage_roles", "Manage Roles"),
@@ -63,10 +69,8 @@ class Toolz(commands.Cog):
         if defer is None:
             return
 
-        try:
+        with contextlib.suppress(discord.HTTPException, RuntimeError):
             await defer()
-        except (discord.HTTPException, RuntimeError):
-            pass
 
     async def _prepare_member_cache(self, ctx: commands.Context) -> bool:
         """Try to load members so role counts are useful on large guilds."""
@@ -106,9 +110,9 @@ class Toolz(commands.Cog):
         return f"`{value}`"
 
     @staticmethod
-    def _line_chunks(lines: Sequence[str], max_chars: int = 1000) -> List[str]:
-        chunks: List[str] = []
-        current: List[str] = []
+    def _line_chunks(lines: Sequence[str], max_chars: int = 1000) -> list[str]:
+        chunks: list[str] = []
+        current: list[str] = []
         current_length = 0
 
         for line in lines:
@@ -198,7 +202,7 @@ class Toolz(commands.Cog):
     def _guild_total_members(guild: discord.Guild) -> int:
         return guild.member_count or len(guild.members)
 
-    def _role_members(self, role: discord.Role) -> List[discord.Member]:
+    def _role_members(self, role: discord.Role) -> list[discord.Member]:
         if role.is_default():
             return list(role.guild.members)
         return list(role.members)
@@ -209,7 +213,7 @@ class Toolz(commands.Cog):
         return len(role.members)
 
     @staticmethod
-    def _member_roles(member: discord.Member) -> List[discord.Role]:
+    def _member_roles(member: discord.Member) -> list[discord.Role]:
         return sorted(
             [role for role in member.roles if not role.is_default()],
             key=lambda role: role.position,
@@ -244,7 +248,7 @@ class Toolz(commands.Cog):
                 f"Mentionable: {self._yes_no(role.mentionable)}",
                 f"Managed: {self._yes_no(role.managed)}",
                 f"Default role: {self._yes_no(role.is_default())}",
-            )
+            ),
         )
 
     def _hierarchy_text(self, role: discord.Role) -> str:
@@ -253,7 +257,7 @@ class Toolz(commands.Cog):
             (
                 f"Position: {role.position} of {role_count - 1}",
                 f"Assignable by bot: {self._yes_no(self._assignable_by_bot(role))}",
-            )
+            ),
         )
 
     def _member_preview_text(self, role: discord.Role, limit: int = 8) -> str:
@@ -262,10 +266,7 @@ class Toolz(commands.Cog):
             return "No cached members have this role."
 
         members = sorted(members, key=lambda member: member.display_name.casefold())
-        lines = [
-            f"{member.display_name} (`{member.id}`)"
-            for member in members[:limit]
-        ]
+        lines = [f"{member.display_name} (`{member.id}`)" for member in members[:limit]]
 
         remaining = len(members) - len(lines)
         if remaining > 0:
@@ -273,7 +274,12 @@ class Toolz(commands.Cog):
 
         return "\n".join(lines)
 
-    async def _send_embed(self, ctx: commands.Context, embed: discord.Embed, **kwargs) -> None:
+    async def _send_embed(
+        self,
+        ctx: commands.Context,
+        embed: discord.Embed,
+        **kwargs,
+    ) -> None:
         await ctx.send(
             embed=embed,
             allowed_mentions=discord.AllowedMentions.none(),
@@ -414,7 +420,7 @@ class Toolz(commands.Cog):
     async def _send_role_message_settings(
         self,
         ctx: commands.Context,
-        role: Optional[discord.Role] = None,
+        role: discord.Role | None = None,
     ) -> None:
         role_messages = await self.config.guild(ctx.guild).role_messages()
         embed = discord.Embed(
@@ -425,7 +431,9 @@ class Toolz(commands.Cog):
         if role is not None:
             entry = role_messages.get(self._role_message_key(role))
             if not entry:
-                embed.description = f"No role messages are configured for {self._role_reference(role)}."
+                embed.description = (
+                    f"No role messages are configured for {self._role_reference(role)}."
+                )
                 await self._send_embed(ctx, embed)
                 return
 
@@ -439,8 +447,16 @@ class Toolz(commands.Cog):
                 value=self._yes_no(entry.get("enabled", True)),
                 inline=True,
             )
-            embed.add_field(name="Mode", value=self._role_message_mode(entry), inline=True)
-            embed.add_field(name="Role ID", value=self._inline_code(role.id), inline=False)
+            embed.add_field(
+                name="Mode",
+                value=self._role_message_mode(entry),
+                inline=True,
+            )
+            embed.add_field(
+                name="Role ID",
+                value=self._inline_code(role.id),
+                inline=False,
+            )
 
             if messages:
                 lines = [
@@ -466,7 +482,9 @@ class Toolz(commands.Cog):
             for role_id, entry in role_messages.items()
         ]
         for index, chunk in enumerate(self._line_chunks(lines), start=1):
-            field_name = "Configured Roles" if index == 1 else "Configured Roles continued"
+            field_name = (
+                "Configured Roles" if index == 1 else "Configured Roles continued"
+            )
             embed.add_field(name=field_name, value=chunk, inline=False)
 
         await self._send_embed(ctx, embed)
@@ -497,8 +515,7 @@ class Toolz(commands.Cog):
             return "No roles."
 
         lines = [
-            f"{self._role_reference(role)} (`{role.id}`)"
-            for role in roles[:limit]
+            f"{self._role_reference(role)} (`{role.id}`)" for role in roles[:limit]
         ]
         remaining = len(roles) - len(lines)
         if remaining > 0:
@@ -539,7 +556,7 @@ class Toolz(commands.Cog):
         self,
         members: Sequence[discord.Member],
         limit: int,
-    ) -> List[str]:
+    ) -> list[str]:
         lines = [
             f"`{index:>2}.` {member.mention} - `{member.id}`"
             for index, member in enumerate(members[:limit], start=1)
@@ -607,13 +624,25 @@ class Toolz(commands.Cog):
         cache_ready = await self._get_cache_status(ctx)
 
         embed = self._base_role_embed(role, f"Role Info: {self._safe_role_name(role)}")
-        embed.add_field(name="Members", value=self._member_count_text(role), inline=True)
+        embed.add_field(
+            name="Members",
+            value=self._member_count_text(role),
+            inline=True,
+        )
 
         color_text = f"#{role.color.value:06X}" if role.color.value else "Default"
         embed.add_field(name="Color", value=color_text, inline=True)
-        embed.add_field(name="Created", value=self._format_timestamp(role.created_at), inline=True)
+        embed.add_field(
+            name="Created",
+            value=self._format_timestamp(role.created_at),
+            inline=True,
+        )
         embed.add_field(name="Hierarchy", value=self._hierarchy_text(role), inline=True)
-        embed.add_field(name="Display", value=self._display_flags_text(role), inline=True)
+        embed.add_field(
+            name="Display",
+            value=self._display_flags_text(role),
+            inline=True,
+        )
         embed.add_field(
             name="Important Permissions",
             value=self._important_permissions_text(role),
@@ -633,7 +662,7 @@ class Toolz(commands.Cog):
     async def memberinfo(
         self,
         ctx: commands.Context,
-        member: Optional[discord.Member] = None,
+        member: discord.Member | None = None,
     ):
         """Show detailed information about a server member."""
         member = member or ctx.author
@@ -645,9 +674,7 @@ class Toolz(commands.Cog):
 
         account_created = self._format_timestamp(member.created_at)
         joined_server = (
-            self._format_timestamp(member.joined_at)
-            if member.joined_at
-            else "Unknown"
+            self._format_timestamp(member.joined_at) if member.joined_at else "Unknown"
         )
         embed.add_field(name="Account Created", value=account_created, inline=True)
         embed.add_field(name="Joined Server", value=joined_server, inline=True)
@@ -691,7 +718,7 @@ class Toolz(commands.Cog):
     async def userroles(
         self,
         ctx: commands.Context,
-        member: Optional[discord.Member] = None,
+        member: discord.Member | None = None,
         limit: int = 25,
     ):
         """List roles assigned to a server member."""
@@ -775,12 +802,15 @@ class Toolz(commands.Cog):
     async def rolemessage_list(
         self,
         ctx: commands.Context,
-        role: Optional[discord.Role] = None,
+        role: discord.Role | None = None,
     ):
         """List configured role messages."""
         await self._send_role_message_settings(ctx, role)
 
-    @rolemessage.command(name="channel", description="Set where a role's messages post.")
+    @rolemessage.command(
+        name="channel",
+        description="Set where a role's messages post.",
+    )
     @commands.guild_only()
     @commands.admin_or_permissions(manage_roles=True)
     async def rolemessage_channel(
@@ -841,13 +871,20 @@ class Toolz(commands.Cog):
             messages.append(message)
             has_channel = bool(entry.get("channel_id"))
 
-        channel_note = "" if has_channel else " Set a channel with `rolemessage channel` before it can post."
+        channel_note = (
+            ""
+            if has_channel
+            else " Set a channel with `rolemessage channel` before it can post."
+        )
         await ctx.send(
             f"Added message {len(messages)} for {self._role_reference(role)}.{channel_note}",
             allowed_mentions=discord.AllowedMentions.none(),
         )
 
-    @rolemessage.command(name="remove", description="Remove one message template from a role.")
+    @rolemessage.command(
+        name="remove",
+        description="Remove one message template from a role.",
+    )
     @commands.guild_only()
     @commands.admin_or_permissions(manage_roles=True)
     async def rolemessage_remove(
@@ -875,7 +912,10 @@ class Toolz(commands.Cog):
             allowed_mentions=discord.AllowedMentions.none(),
         )
 
-    @rolemessage.command(name="clear", description="Remove all role message settings for a role.")
+    @rolemessage.command(
+        name="clear",
+        description="Remove all role message settings for a role.",
+    )
     @commands.guild_only()
     @commands.admin_or_permissions(manage_roles=True)
     async def rolemessage_clear(
@@ -895,14 +935,17 @@ class Toolz(commands.Cog):
         else:
             await ctx.send("That role had no role messages configured.")
 
-    @rolemessage.command(name="toggle", description="Enable or disable role messages for a role.")
+    @rolemessage.command(
+        name="toggle",
+        description="Enable or disable role messages for a role.",
+    )
     @commands.guild_only()
     @commands.admin_or_permissions(manage_roles=True)
     async def rolemessage_toggle(
         self,
         ctx: commands.Context,
         role: discord.Role,
-        enabled: Optional[bool] = None,
+        enabled: bool | None = None,
     ):
         """Enable or disable role messages for a role."""
         async with self.config.guild(ctx.guild).role_messages() as role_messages:
@@ -910,7 +953,9 @@ class Toolz(commands.Cog):
                 self._role_message_key(role),
                 self._default_role_message_settings(),
             )
-            entry["enabled"] = not entry.get("enabled", True) if enabled is None else enabled
+            entry["enabled"] = (
+                not entry.get("enabled", True) if enabled is None else enabled
+            )
             enabled_text = self._yes_no(entry["enabled"])
 
         await ctx.send(
@@ -918,7 +963,10 @@ class Toolz(commands.Cog):
             allowed_mentions=discord.AllowedMentions.none(),
         )
 
-    @rolemessage.command(name="mode", description="Set whether role messages post all or one random message.")
+    @rolemessage.command(
+        name="mode",
+        description="Set whether role messages post all or one random message.",
+    )
     @commands.guild_only()
     @commands.admin_or_permissions(manage_roles=True)
     async def rolemessage_mode(
@@ -945,14 +993,17 @@ class Toolz(commands.Cog):
             allowed_mentions=discord.AllowedMentions.none(),
         )
 
-    @rolemessage.command(name="test", description="Preview the configured messages for a role.")
+    @rolemessage.command(
+        name="test",
+        description="Preview the configured messages for a role.",
+    )
     @commands.guild_only()
     @commands.admin_or_permissions(manage_roles=True)
     async def rolemessage_test(
         self,
         ctx: commands.Context,
         role: discord.Role,
-        member: Optional[discord.Member] = None,
+        member: discord.Member | None = None,
     ):
         """Preview the configured messages for a role."""
         member = member or ctx.author
@@ -977,7 +1028,10 @@ class Toolz(commands.Cog):
                 allowed_mentions=allowed_mentions,
             )
 
-    @rolemessage.command(name="placeholders", description="Show role message placeholders.")
+    @rolemessage.command(
+        name="placeholders",
+        description="Show role message placeholders.",
+    )
     @commands.guild_only()
     @commands.admin_or_permissions(manage_roles=True)
     @commands.bot_has_permissions(embed_links=True)
@@ -1074,7 +1128,9 @@ class Toolz(commands.Cog):
         valid_modes = {"elevated", "empty", "managed", "mentionable"}
         mode = mode.casefold()
         if mode not in valid_modes:
-            await ctx.send("Mode must be one of: elevated, empty, managed, mentionable.")
+            await ctx.send(
+                "Mode must be one of: elevated, empty, managed, mentionable.",
+            )
             return
 
         cache_ready = await self._get_cache_status(ctx)
@@ -1097,9 +1153,7 @@ class Toolz(commands.Cog):
             ]
         else:
             matched_roles = [
-                role
-                for role in roles
-                if not role.is_default() and role.mentionable
+                role for role in roles if not role.is_default() and role.mentionable
             ]
 
         matched_roles = sorted(
@@ -1125,7 +1179,7 @@ class Toolz(commands.Cog):
                 if mode == "elevated":
                     details = self._important_permissions_text(role)
                 lines.append(
-                    f"`{index:>2}.` {self._role_reference(role)} - {details} - `{role.id}`"
+                    f"`{index:>2}.` {self._role_reference(role)} - {details} - `{role.id}`",
                 )
 
             remaining = len(matched_roles) - len(lines)
@@ -1136,7 +1190,11 @@ class Toolz(commands.Cog):
                 field_name = "Roles" if index == 1 else "Roles continued"
                 embed.add_field(name=field_name, value=chunk, inline=False)
         else:
-            embed.add_field(name="Roles", value=f"No `{mode}` roles found.", inline=False)
+            embed.add_field(
+                name="Roles",
+                value=f"No `{mode}` roles found.",
+                inline=False,
+            )
 
         embed.set_footer(text=self._cache_footer(cache_ready))
         await self._send_embed(ctx, embed)
@@ -1199,8 +1257,16 @@ class Toolz(commands.Cog):
             ),
             inline=False,
         )
-        embed.add_field(name="First Role ID", value=self._inline_code(role_one.id), inline=True)
-        embed.add_field(name="Second Role ID", value=self._inline_code(role_two.id), inline=True)
+        embed.add_field(
+            name="First Role ID",
+            value=self._inline_code(role_one.id),
+            inline=True,
+        )
+        embed.add_field(
+            name="Second Role ID",
+            value=self._inline_code(role_two.id),
+            inline=True,
+        )
 
         sections = (
             ("In Both", both_members),
@@ -1226,7 +1292,7 @@ class Toolz(commands.Cog):
     async def userpermissions(
         self,
         ctx: commands.Context,
-        member: Optional[discord.Member] = None,
+        member: discord.Member | None = None,
     ):
         """Show a member's important server permissions and source roles."""
         member = member or ctx.author
@@ -1249,7 +1315,9 @@ class Toolz(commands.Cog):
 
         if lines:
             for index, chunk in enumerate(self._line_chunks(lines), start=1):
-                field_name = "Important Permissions" if index == 1 else "Permissions continued"
+                field_name = (
+                    "Important Permissions" if index == 1 else "Permissions continued"
+                )
                 embed.add_field(name=field_name, value=chunk, inline=False)
         else:
             embed.add_field(
@@ -1301,7 +1369,11 @@ class Toolz(commands.Cog):
                 field_name = "Members" if index == 1 else "Members continued"
                 embed.add_field(name=field_name, value=chunk, inline=False)
         else:
-            embed.add_field(name="Members", value="No matching members found.", inline=False)
+            embed.add_field(
+                name="Members",
+                value="No matching members found.",
+                inline=False,
+            )
 
         embed.set_footer(text=self._cache_footer(cache_ready))
         await self._send_embed(ctx, embed)
@@ -1348,7 +1420,7 @@ class Toolz(commands.Cog):
                     else "None"
                 )
                 lines.append(
-                    f"`{index:>2}.` {member.mention} - {top_role} - {status} - `{member.id}`"
+                    f"`{index:>2}.` {member.mention} - {top_role} - {status} - `{member.id}`",
                 )
 
             remaining = len(members) - len(lines)
@@ -1414,7 +1486,11 @@ class Toolz(commands.Cog):
                 field_name = "Roles" if index == 1 else "Roles continued"
                 embed.add_field(name=field_name, value=chunk, inline=False)
         else:
-            embed.add_field(name="Roles", value="No matching roles found.", inline=False)
+            embed.add_field(
+                name="Roles",
+                value="No matching roles found.",
+                inline=False,
+            )
 
         embed.set_footer(text=self._cache_footer(cache_ready))
         await self._send_embed(ctx, embed)
@@ -1459,14 +1535,18 @@ class Toolz(commands.Cog):
         for index, role in enumerate(matches[:20], start=1):
             lines.append(
                 f"`{index:>2}.` {self._role_reference(role)} - "
-                f"{self._count(self._role_member_count(role))} members - `{role.id}`"
+                f"{self._count(self._role_member_count(role))} members - `{role.id}`",
             )
 
         if len(matches) > 20:
             lines.append(f"...and {self._count(len(matches) - 20)} more matches")
 
         for index, chunk in enumerate(self._line_chunks(lines), start=1):
-            field_name = f"Matches ({self._count(len(matches))})" if index == 1 else "Matches continued"
+            field_name = (
+                f"Matches ({self._count(len(matches))})"
+                if index == 1
+                else "Matches continued"
+            )
             embed.add_field(name=field_name, value=chunk, inline=False)
 
         embed.set_footer(text=self._cache_footer(cache_ready))
@@ -1512,7 +1592,7 @@ class Toolz(commands.Cog):
         for index, role in enumerate(shown_roles, start=1):
             lines.append(
                 f"`{index:>2}.` {self._role_reference(role)} - "
-                f"{self._count(self._role_member_count(role))} members - `{role.id}`"
+                f"{self._count(self._role_member_count(role))} members - `{role.id}`",
             )
 
         embed = discord.Embed(
@@ -1528,7 +1608,11 @@ class Toolz(commands.Cog):
                 field_name = "Roles" if index == 1 else "Roles continued"
                 embed.add_field(name=field_name, value=chunk, inline=False)
         else:
-            embed.add_field(name="Roles", value="This server has no roles to list.", inline=False)
+            embed.add_field(
+                name="Roles",
+                value="This server has no roles to list.",
+                inline=False,
+            )
 
         embed.set_footer(text=self._cache_footer(cache_ready))
 
@@ -1561,7 +1645,11 @@ class Toolz(commands.Cog):
         )
 
         if not members:
-            embed.add_field(name="Members", value="No cached members have this role.", inline=False)
+            embed.add_field(
+                name="Members",
+                value="No cached members have this role.",
+                inline=False,
+            )
         else:
             lines = [
                 f"`{index:>3}.` {member.display_name} (`{member.id}`)"
@@ -1610,7 +1698,10 @@ class Toolz(commands.Cog):
         filename = self._export_filename(role)
         file = discord.File(data, filename=filename)
 
-        embed = self._base_role_embed(role, f"Role Export: {self._safe_role_name(role)}")
+        embed = self._base_role_embed(
+            role,
+            f"Role Export: {self._safe_role_name(role)}",
+        )
         embed.description = (
             f"Exported {self._count(len(members))} cached members for "
             f"{self._role_reference(role)}."

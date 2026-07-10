@@ -6,7 +6,7 @@ import asyncio
 import logging
 import re
 from datetime import datetime, time, timedelta, timezone
-from typing import Any, Dict, Optional
+from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -14,14 +14,16 @@ import aiohttp
 import discord
 from discord.ext import tasks
 from redbot.core import Config, commands
-from redbot.core.bot import Red
 from redbot.core.utils.chat_formatting import box, pagify
+
+if TYPE_CHECKING:
+    from redbot.core.bot import Red
 
 log = logging.getLogger("red.taakoscogs.fivemstatus")
 
 
-ServerData = Dict[str, Any]
-GuildSettings = Dict[str, Any]
+ServerData = dict[str, Any]
+GuildSettings = dict[str, Any]
 
 
 class FiveMStatus(commands.Cog):
@@ -34,7 +36,11 @@ class FiveMStatus(commands.Cog):
 
     def __init__(self, bot: Red) -> None:
         self.bot = bot
-        self.config = Config.get_conf(self, identifier=2026051301, force_registration=True)
+        self.config = Config.get_conf(
+            self,
+            identifier=2026051301,
+            force_registration=True,
+        )
         self.config.register_guild(
             enabled=False,
             server_address=None,
@@ -53,7 +59,7 @@ class FiveMStatus(commands.Cog):
             online_since=None,
             last_seen_online=False,
         )
-        self._session: Optional[aiohttp.ClientSession] = None
+        self._session: aiohttp.ClientSession | None = None
         self._task = self.status_loop.start()
 
     async def cog_unload(self) -> None:
@@ -65,7 +71,7 @@ class FiveMStatus(commands.Cog):
 
     async def red_delete_data_for_user(self, *, requester: str, user_id: int) -> None:
         """This cog does not store Discord user IDs."""
-        return None
+        return
 
     @tasks.loop(minutes=1)
     async def status_loop(self) -> None:
@@ -87,7 +93,11 @@ class FiveMStatus(commands.Cog):
         """Wait until the bot is ready before polling FiveM servers."""
         await self.bot.wait_until_ready()
 
-    @commands.hybrid_group(name="fivemstatus", aliases=["fivem"], invoke_without_command=True)
+    @commands.hybrid_group(
+        name="fivemstatus",
+        aliases=["fivem"],
+        invoke_without_command=True,
+    )
     @commands.guild_only()
     async def fivemstatus(self, ctx: commands.Context) -> None:
         """Configure and post a live FiveM server status panel."""
@@ -99,7 +109,7 @@ class FiveMStatus(commands.Cog):
         self,
         ctx: commands.Context,
         server: str,
-        channel: Optional[discord.TextChannel] = None,
+        channel: discord.TextChannel | None = None,
     ) -> None:
         """Set the FiveM server endpoint and post the status panel.
 
@@ -123,7 +133,9 @@ class FiveMStatus(commands.Cog):
             await ctx.send(str(error))
             return
 
-        await ctx.send(f"FiveM status is posting in {channel.mention}: {message.jump_url}")
+        await ctx.send(
+            f"FiveM status is posting in {channel.mention}: {message.jump_url}",
+        )
 
     @fivemstatus.command(name="server")
     @commands.admin_or_permissions(manage_guild=True)
@@ -141,7 +153,7 @@ class FiveMStatus(commands.Cog):
     async def fivemstatus_channel(
         self,
         ctx: commands.Context,
-        channel: Optional[discord.TextChannel] = None,
+        channel: discord.TextChannel | None = None,
     ) -> None:
         """Set the channel used for the status panel."""
         assert ctx.guild is not None
@@ -184,29 +196,47 @@ class FiveMStatus(commands.Cog):
         """Enable or disable automatic status refreshes."""
         assert ctx.guild is not None
         await self.config.guild(ctx.guild).enabled.set(enabled)
-        await ctx.send(f"FiveM status refreshes are now {'enabled' if enabled else 'disabled'}.")
+        await ctx.send(
+            f"FiveM status refreshes are now {'enabled' if enabled else 'disabled'}.",
+        )
 
     @fivemstatus.command(name="name")
     @commands.admin_or_permissions(manage_guild=True)
-    async def fivemstatus_name(self, ctx: commands.Context, *, name: Optional[str] = None) -> None:
+    async def fivemstatus_name(
+        self,
+        ctx: commands.Context,
+        *,
+        name: str | None = None,
+    ) -> None:
         """Set or clear the display name shown in the status embed."""
         assert ctx.guild is not None
-        await self.config.guild(ctx.guild).display_name.set(self._clean_optional_text(name, 120))
+        await self.config.guild(ctx.guild).display_name.set(
+            self._clean_optional_text(name, 120),
+        )
         await ctx.tick()
 
     @fivemstatus.command(name="message")
     @commands.admin_or_permissions(manage_guild=True)
     async def fivemstatus_message(
-        self, ctx: commands.Context, *, message: Optional[str] = None
+        self,
+        ctx: commands.Context,
+        *,
+        message: str | None = None,
     ) -> None:
         """Set or clear the short message shown below the server name."""
         assert ctx.guild is not None
-        await self.config.guild(ctx.guild).status_message.set(self._clean_optional_text(message, 300))
+        await self.config.guild(ctx.guild).status_message.set(
+            self._clean_optional_text(message, 300),
+        )
         await ctx.tick()
 
     @fivemstatus.command(name="logo")
     @commands.admin_or_permissions(manage_guild=True)
-    async def fivemstatus_logo(self, ctx: commands.Context, url: Optional[str] = None) -> None:
+    async def fivemstatus_logo(
+        self,
+        ctx: commands.Context,
+        url: str | None = None,
+    ) -> None:
         """Set or clear the thumbnail logo URL."""
         assert ctx.guild is not None
         await self.config.guild(ctx.guild).logo_url.set(self._clean_optional_url(url))
@@ -214,7 +244,11 @@ class FiveMStatus(commands.Cog):
 
     @fivemstatus.command(name="image")
     @commands.admin_or_permissions(manage_guild=True)
-    async def fivemstatus_image(self, ctx: commands.Context, url: Optional[str] = None) -> None:
+    async def fivemstatus_image(
+        self,
+        ctx: commands.Context,
+        url: str | None = None,
+    ) -> None:
         """Set or clear the large image URL."""
         assert ctx.guild is not None
         await self.config.guild(ctx.guild).image_url.set(self._clean_optional_url(url))
@@ -222,18 +256,30 @@ class FiveMStatus(commands.Cog):
 
     @fivemstatus.command(name="color")
     @commands.admin_or_permissions(manage_guild=True)
-    async def fivemstatus_color(self, ctx: commands.Context, color: Optional[discord.Color]) -> None:
+    async def fivemstatus_color(
+        self,
+        ctx: commands.Context,
+        color: discord.Color | None,
+    ) -> None:
         """Set the embed color, or omit the color to restore the default."""
         assert ctx.guild is not None
-        await self.config.guild(ctx.guild).embed_color.set(color.value if color else self.DEFAULT_COLOR)
+        await self.config.guild(ctx.guild).embed_color.set(
+            color.value if color else self.DEFAULT_COLOR,
+        )
         await ctx.tick()
 
     @fivemstatus.command(name="connecturl")
     @commands.admin_or_permissions(manage_guild=True)
-    async def fivemstatus_connect_url(self, ctx: commands.Context, url: Optional[str] = None) -> None:
+    async def fivemstatus_connect_url(
+        self,
+        ctx: commands.Context,
+        url: str | None = None,
+    ) -> None:
         """Set or clear the Join Server button URL."""
         assert ctx.guild is not None
-        await self.config.guild(ctx.guild).connect_url.set(self._clean_optional_url(url))
+        await self.config.guild(ctx.guild).connect_url.set(
+            self._clean_optional_url(url),
+        )
         await ctx.tick()
 
     @fivemstatus.command(name="joincode", aliases=["cfxjoin", "cfxcode"])
@@ -242,7 +288,7 @@ class FiveMStatus(commands.Cog):
         self,
         ctx: commands.Context,
         *,
-        code: Optional[str] = None,
+        code: str | None = None,
     ) -> None:
         """Set or clear the CFX join code used by the Join Server button."""
         assert ctx.guild is not None
@@ -256,20 +302,30 @@ class FiveMStatus(commands.Cog):
 
     @fivemstatus.command(name="discordurl")
     @commands.admin_or_permissions(manage_guild=True)
-    async def fivemstatus_discord_url(self, ctx: commands.Context, url: Optional[str] = None) -> None:
+    async def fivemstatus_discord_url(
+        self,
+        ctx: commands.Context,
+        url: str | None = None,
+    ) -> None:
         """Set or clear the Discord/community button URL."""
         assert ctx.guild is not None
-        await self.config.guild(ctx.guild).discord_url.set(self._clean_optional_url(url))
+        await self.config.guild(ctx.guild).discord_url.set(
+            self._clean_optional_url(url),
+        )
         await ctx.tick()
 
     @fivemstatus.command(name="hostingurl")
     @commands.admin_or_permissions(manage_guild=True)
     async def fivemstatus_hosting_url(
-        self, ctx: commands.Context, url: Optional[str] = None
+        self,
+        ctx: commands.Context,
+        url: str | None = None,
     ) -> None:
         """Set or clear the hosting/sponsor button URL."""
         assert ctx.guild is not None
-        await self.config.guild(ctx.guild).hosting_url.set(self._clean_optional_url(url))
+        await self.config.guild(ctx.guild).hosting_url.set(
+            self._clean_optional_url(url),
+        )
         await ctx.tick()
 
     @fivemstatus.group(name="restart", invoke_without_command=True)
@@ -280,7 +336,11 @@ class FiveMStatus(commands.Cog):
 
     @fivemstatus_restart.command(name="add")
     @commands.admin_or_permissions(manage_guild=True)
-    async def fivemstatus_restart_add(self, ctx: commands.Context, restart_time: str) -> None:
+    async def fivemstatus_restart_add(
+        self,
+        ctx: commands.Context,
+        restart_time: str,
+    ) -> None:
         """Add a daily restart time in 24-hour HH:MM format."""
         assert ctx.guild is not None
         parsed = self._parse_restart_time(restart_time)
@@ -292,7 +352,11 @@ class FiveMStatus(commands.Cog):
 
     @fivemstatus_restart.command(name="remove")
     @commands.admin_or_permissions(manage_guild=True)
-    async def fivemstatus_restart_remove(self, ctx: commands.Context, restart_time: str) -> None:
+    async def fivemstatus_restart_remove(
+        self,
+        ctx: commands.Context,
+        restart_time: str,
+    ) -> None:
         """Remove a configured daily restart time."""
         assert ctx.guild is not None
         parsed = self._parse_restart_time(restart_time)
@@ -313,7 +377,11 @@ class FiveMStatus(commands.Cog):
 
     @fivemstatus.command(name="timezone")
     @commands.admin_or_permissions(manage_guild=True)
-    async def fivemstatus_timezone(self, ctx: commands.Context, timezone_name: str) -> None:
+    async def fivemstatus_timezone(
+        self,
+        ctx: commands.Context,
+        timezone_name: str,
+    ) -> None:
         """Set the timezone used for restart countdowns."""
         assert ctx.guild is not None
         try:
@@ -336,7 +404,9 @@ class FiveMStatus(commands.Cog):
 
         data = await self._fetch_server_data(server_address)
         if not data["online"]:
-            await ctx.send(f"The FiveM server appears to be offline: {data.get('error') or 'no response'}")
+            await ctx.send(
+                f"The FiveM server appears to be offline: {data.get('error') or 'no response'}",
+            )
             return
 
         players = data.get("players") or []
@@ -353,7 +423,9 @@ class FiveMStatus(commands.Cog):
             lines.append(f"{player_id}: {name}{ping_text}")
 
         header = f"{len(players)} player(s) online"
-        pages = [f"{header}\n\n{page}" for page in pagify("\n".join(lines), page_length=1800)]
+        pages = [
+            f"{header}\n\n{page}" for page in pagify("\n".join(lines), page_length=1800)
+        ]
         for page in pages:
             await ctx.send(box(page))
 
@@ -363,7 +435,7 @@ class FiveMStatus(commands.Cog):
         await self._send_settings(ctx)
 
     @staticmethod
-    def _clean_optional_text(value: Optional[str], limit: int) -> Optional[str]:
+    def _clean_optional_text(value: str | None, limit: int) -> str | None:
         if value is None:
             return None
         cleaned = value.strip()
@@ -372,7 +444,7 @@ class FiveMStatus(commands.Cog):
         return cleaned[:limit] or None
 
     @staticmethod
-    def _clean_optional_url(value: Optional[str]) -> Optional[str]:
+    def _clean_optional_url(value: str | None) -> str | None:
         if value is None:
             return None
         cleaned = value.strip()
@@ -380,11 +452,13 @@ class FiveMStatus(commands.Cog):
             return None
         parsed = urlparse(cleaned)
         if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-            raise commands.BadArgument("Provide a full `http://` or `https://` URL, or `clear`.")
+            raise commands.BadArgument(
+                "Provide a full `http://` or `https://` URL, or `clear`.",
+            )
         return cleaned
 
     @classmethod
-    def _clean_optional_cfx_join_code(cls, value: Optional[str]) -> Optional[str]:
+    def _clean_optional_cfx_join_code(cls, value: str | None) -> str | None:
         if value is None:
             return None
         cleaned = value.strip().lower()
@@ -403,7 +477,7 @@ class FiveMStatus(commands.Cog):
 
         if not cls.CFX_JOIN_CODE_RE.fullmatch(cleaned):
             raise commands.BadArgument(
-                "Provide a CFX join code like `gmblex`, a `https://cfx.re/join/...` URL, or `clear`."
+                "Provide a CFX join code like `gmblex`, a `https://cfx.re/join/...` URL, or `clear`.",
             )
         return cleaned
 
@@ -415,7 +489,9 @@ class FiveMStatus(commands.Cog):
     def _normalize_server_address(cls, value: str) -> str:
         server = value.strip()
         if not server:
-            raise commands.BadArgument("Provide a FiveM IP:port, hostname:port, cfx.re/join URL, or join code.")
+            raise commands.BadArgument(
+                "Provide a FiveM IP:port, hostname:port, cfx.re/join URL, or join code.",
+            )
 
         lowered = server.lower()
         if lowered.startswith("fivem://connect/"):
@@ -426,14 +502,20 @@ class FiveMStatus(commands.Cog):
         if join_match:
             return f"cfx:{join_match.group(1)}"
 
-        if cls.CFX_JOIN_CODE_RE.fullmatch(lowered) and "." not in lowered and ":" not in lowered:
+        if (
+            cls.CFX_JOIN_CODE_RE.fullmatch(lowered)
+            and "." not in lowered
+            and ":" not in lowered
+        ):
             return f"cfx:{lowered}"
 
         if "://" in server:
             parsed = urlparse(server)
             host = parsed.hostname
             if not host:
-                raise commands.BadArgument("Could not read a host from that server URL.")
+                raise commands.BadArgument(
+                    "Could not read a host from that server URL.",
+                )
             if parsed.port:
                 return f"{host}:{parsed.port}"
             return f"{host}:30120"
@@ -460,7 +542,11 @@ class FiveMStatus(commands.Cog):
             "Accept": "application/json",
             "User-Agent": "TaakosCogs-fivemstatus/1.1",
         }
-        async with session.get(url, headers=headers, timeout=self.REQUEST_TIMEOUT) as response:
+        async with session.get(
+            url,
+            headers=headers,
+            timeout=self.REQUEST_TIMEOUT,
+        ) as response:
             if response.status >= 400:
                 raise aiohttp.ClientResponseError(
                     response.request_info,
@@ -488,9 +574,15 @@ class FiveMStatus(commands.Cog):
             data = payload.get("Data", payload) if isinstance(payload, dict) else {}
             players = data.get("players") or data.get("Players") or []
             vars_data = data.get("vars") or data.get("Vars") or {}
-            endpoints = data.get("connectEndPoints") or data.get("connectEndpoints") or []
+            endpoints = (
+                data.get("connectEndPoints") or data.get("connectEndpoints") or []
+            )
             connect_endpoint = endpoints[0] if endpoints else f"cfx.re/join/{join_code}"
-            hostname = data.get("hostname") or vars_data.get("sv_projectName") or "FiveM Server"
+            hostname = (
+                data.get("hostname")
+                or vars_data.get("sv_projectName")
+                or "FiveM Server"
+            )
             clients = self._to_int(data.get("clients"), len(players))
             max_clients = self._to_int(
                 data.get("svMaxclients")
@@ -518,9 +610,15 @@ class FiveMStatus(commands.Cog):
     async def _fetch_direct_data(self, server_address: str) -> ServerData:
         base_url = f"http://{server_address}"
         try:
-            dynamic_task = asyncio.create_task(self._session_get_json(f"{base_url}/dynamic.json"))
-            info_task = asyncio.create_task(self._session_get_json(f"{base_url}/info.json"))
-            players_task = asyncio.create_task(self._session_get_json(f"{base_url}/players.json"))
+            dynamic_task = asyncio.create_task(
+                self._session_get_json(f"{base_url}/dynamic.json"),
+            )
+            info_task = asyncio.create_task(
+                self._session_get_json(f"{base_url}/info.json"),
+            )
+            players_task = asyncio.create_task(
+                self._session_get_json(f"{base_url}/players.json"),
+            )
             dynamic, info, players = await asyncio.gather(
                 dynamic_task,
                 info_task,
@@ -534,7 +632,9 @@ class FiveMStatus(commands.Cog):
             dynamic_data = dynamic if isinstance(dynamic, dict) else {}
             info_data = info if isinstance(info, dict) else {}
             players_data = players if isinstance(players, list) else []
-            vars_data = info_data.get("vars") if isinstance(info_data.get("vars"), dict) else {}
+            vars_data = (
+                info_data.get("vars") if isinstance(info_data.get("vars"), dict) else {}
+            )
 
             hostname = (
                 dynamic_data.get("hostname")
@@ -579,7 +679,7 @@ class FiveMStatus(commands.Cog):
         }
 
     @staticmethod
-    def _to_int(value: Any, default: Optional[int]) -> Optional[int]:
+    def _to_int(value: Any, default: int | None) -> int | None:
         try:
             return int(value)
         except (TypeError, ValueError):
@@ -598,7 +698,7 @@ class FiveMStatus(commands.Cog):
         return text[: max(0, limit - 3)].rstrip() + "..."
 
     @staticmethod
-    def _format_duration(seconds: Optional[float]) -> str:
+    def _format_duration(seconds: float | None) -> str:
         if seconds is None:
             return "Not tracked"
         seconds = max(0, int(seconds))
@@ -646,7 +746,7 @@ class FiveMStatus(commands.Cog):
     async def _update_status_message(
         self,
         guild: discord.Guild,
-        settings: Optional[GuildSettings] = None,
+        settings: GuildSettings | None = None,
         *,
         force_post: bool = False,
     ) -> discord.Message:
@@ -654,16 +754,22 @@ class FiveMStatus(commands.Cog):
         server_address = settings.get("server_address")
         channel_id = settings.get("status_channel_id")
         if not server_address:
-            raise commands.UserFeedbackCheckFailure("No FiveM server is configured yet.")
+            raise commands.UserFeedbackCheckFailure(
+                "No FiveM server is configured yet.",
+            )
         if not channel_id:
-            raise commands.UserFeedbackCheckFailure("No FiveM status channel is configured yet.")
+            raise commands.UserFeedbackCheckFailure(
+                "No FiveM status channel is configured yet.",
+            )
 
         try:
             channel = guild.get_channel(int(channel_id))
         except (TypeError, ValueError):
             channel = None
         if not isinstance(channel, discord.TextChannel):
-            raise commands.UserFeedbackCheckFailure("The configured FiveM status channel was not found.")
+            raise commands.UserFeedbackCheckFailure(
+                "The configured FiveM status channel was not found.",
+            )
 
         data = await self._fetch_server_data(server_address)
         settings = await self._sync_uptime_state(guild, settings, data["online"])
@@ -675,7 +781,13 @@ class FiveMStatus(commands.Cog):
         if message_id and not force_post:
             try:
                 message = await channel.fetch_message(int(message_id))
-            except (discord.NotFound, discord.Forbidden, discord.HTTPException, ValueError, TypeError):
+            except (
+                discord.NotFound,
+                discord.Forbidden,
+                discord.HTTPException,
+                ValueError,
+                TypeError,
+            ):
                 message = None
 
         if message is None:
@@ -683,11 +795,11 @@ class FiveMStatus(commands.Cog):
                 message = await channel.send(embed=embed, view=view)
             except discord.Forbidden as error:
                 raise commands.UserFeedbackCheckFailure(
-                    "I cannot send the FiveM status panel in the configured channel."
+                    "I cannot send the FiveM status panel in the configured channel.",
                 ) from error
             except discord.HTTPException as error:
                 raise commands.UserFeedbackCheckFailure(
-                    f"Discord rejected the FiveM status panel: {error}"
+                    f"Discord rejected the FiveM status panel: {error}",
                 ) from error
             await self.config.guild(guild).status_message_id.set(message.id)
             return message
@@ -696,16 +808,19 @@ class FiveMStatus(commands.Cog):
             await message.edit(embed=embed, view=view)
         except discord.Forbidden as error:
             raise commands.UserFeedbackCheckFailure(
-                "I cannot edit the configured FiveM status panel."
+                "I cannot edit the configured FiveM status panel.",
             ) from error
         except discord.HTTPException as error:
             raise commands.UserFeedbackCheckFailure(
-                f"Discord rejected the FiveM status update: {error}"
+                f"Discord rejected the FiveM status update: {error}",
             ) from error
         return message
 
     async def _sync_uptime_state(
-        self, guild: discord.Guild, settings: GuildSettings, online: bool
+        self,
+        guild: discord.Guild,
+        settings: GuildSettings,
+        online: bool,
     ) -> GuildSettings:
         now_ts = int(datetime.now(timezone.utc).timestamp())
         config = self.config.guild(guild)
@@ -729,9 +844,16 @@ class FiveMStatus(commands.Cog):
         settings["last_seen_online"] = online
         return settings
 
-    def _build_status_embed(self, settings: GuildSettings, data: ServerData) -> discord.Embed:
+    def _build_status_embed(
+        self,
+        settings: GuildSettings,
+        data: ServerData,
+    ) -> discord.Embed:
         online = bool(data.get("online"))
-        configured_color = self._to_int(settings.get("embed_color"), self.DEFAULT_COLOR) or self.DEFAULT_COLOR
+        configured_color = (
+            self._to_int(settings.get("embed_color"), self.DEFAULT_COLOR)
+            or self.DEFAULT_COLOR
+        )
         color = configured_color if online else self.OFFLINE_COLOR
         title = settings.get("display_name") or data.get("hostname") or "FiveM Server"
         description = settings.get("status_message") or ""
@@ -756,8 +878,14 @@ class FiveMStatus(commands.Cog):
         status_text = "🟢 Online" if online else "🔴 Offline"
         max_clients = data.get("max_clients")
         max_text = str(max_clients) if max_clients is not None else "?"
-        players_text = f"{data.get('clients', 0)}/{max_text}" if online else f"0/{max_text}"
-        connect_endpoint = str(data.get("connect_endpoint") or settings.get("server_address") or "not configured")
+        players_text = (
+            f"{data.get('clients', 0)}/{max_text}" if online else f"0/{max_text}"
+        )
+        connect_endpoint = str(
+            data.get("connect_endpoint")
+            or settings.get("server_address")
+            or "not configured",
+        )
         connect_command = f"connect {connect_endpoint}"
 
         online_since = self._to_int(settings.get("online_since"), None)
@@ -768,13 +896,27 @@ class FiveMStatus(commands.Cog):
         embed.add_field(name="STATUS", value=f"`{status_text}`", inline=True)
         embed.add_field(name="PLAYERS", value=f"`{players_text}`", inline=True)
         embed.add_field(name="\u200b", value="\u200b", inline=True)
-        embed.add_field(name="F8 CONNECT COMMAND", value=box(connect_command), inline=False)
-        embed.add_field(name="NEXT RESTART", value=f"`{self._format_next_restart(settings)}`", inline=True)
-        embed.add_field(name="UPTIME", value=f"`{self._format_duration(uptime_seconds)}`", inline=True)
+        embed.add_field(
+            name="F8 CONNECT COMMAND",
+            value=box(connect_command),
+            inline=False,
+        )
+        embed.add_field(
+            name="NEXT RESTART",
+            value=f"`{self._format_next_restart(settings)}`",
+            inline=True,
+        )
+        embed.add_field(
+            name="UPTIME",
+            value=f"`{self._format_duration(uptime_seconds)}`",
+            inline=True,
+        )
         embed.add_field(name="\u200b", value="\u200b", inline=True)
 
         vars_data = data.get("vars") or {}
-        txadmin_version = vars_data.get("txAdmin-version") or vars_data.get("txadmin-version")
+        txadmin_version = vars_data.get("txAdmin-version") or vars_data.get(
+            "txadmin-version",
+        )
         footer_parts = []
         if txadmin_version:
             footer_parts.append(f"txAdmin {txadmin_version}")
@@ -783,7 +925,7 @@ class FiveMStatus(commands.Cog):
         return embed
 
     @staticmethod
-    def _best_banner_url(data: ServerData) -> Optional[str]:
+    def _best_banner_url(data: ServerData) -> str | None:
         vars_data = data.get("vars") or {}
         for key in ("banner_detail", "banner_connecting"):
             value = vars_data.get(key)
@@ -792,15 +934,21 @@ class FiveMStatus(commands.Cog):
         return None
 
     def _build_status_view(
-        self, settings: GuildSettings, data: ServerData
-    ) -> Optional[discord.ui.View]:
+        self,
+        settings: GuildSettings,
+        data: ServerData,
+    ) -> discord.ui.View | None:
         view = discord.ui.View(timeout=None)
 
         connect_url = settings.get("connect_url")
         if not connect_url:
             join_code = data.get("join_code")
             server_address = settings.get("server_address")
-            if not join_code and isinstance(server_address, str) and server_address.startswith("cfx:"):
+            if (
+                not join_code
+                and isinstance(server_address, str)
+                and server_address.startswith("cfx:")
+            ):
                 join_code = server_address[4:]
             if join_code:
                 connect_url = self._cfx_join_url(str(join_code))
@@ -820,7 +968,11 @@ class FiveMStatus(commands.Cog):
     async def _send_settings(self, ctx: commands.Context) -> None:
         assert ctx.guild is not None
         settings = await self.config.guild(ctx.guild).all()
-        channel = ctx.guild.get_channel(settings["status_channel_id"]) if settings.get("status_channel_id") else None
+        channel = (
+            ctx.guild.get_channel(settings["status_channel_id"])
+            if settings.get("status_channel_id")
+            else None
+        )
         restarts = ", ".join(settings.get("restart_times") or []) or "Not set"
         lines = [
             f"Enabled: {settings.get('enabled')}",

@@ -1,14 +1,18 @@
 """RandomWeather - A cog for generating random daily weather updates."""
-import sys
-import subprocess
+
 import logging
+import subprocess
+import sys
+
 from redbot.core.bot import Red
 from redbot.core.utils.chat_formatting import error
+
 
 def ensure_pytz_installed() -> bool:
     """Ensure pytz is installed on the system."""
     try:
         import pytz
+
         return True
     except ImportError:
         try:
@@ -16,16 +20,20 @@ def ensure_pytz_installed() -> bool:
             subprocess.check_call(
                 [python_exe, "-m", "pip", "install", "pytz"],
                 stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE
+                stderr=subprocess.PIPE,
             )
             import pytz
+
             return True
         except (subprocess.SubprocessError, ImportError) as e:
             logging.error(f"Failed to install pytz: {e}")
             return False
 
-from .randomweather import WeatherCog
+
 from redbot.core import commands
+
+from .randomweather import WeatherCog
+
 
 async def setup(bot: commands.Bot):
     cog = WeatherCog(bot)

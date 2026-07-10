@@ -1,8 +1,8 @@
 default_language_version:
-    python: python3.8
+    python: python3.9
 fail_fast: false
 ci:
-    skip: [readmegen, makerequirements]
+    skip: [readmegen, requirementsgen]
     autoupdate_schedule: quarterly
 exclude: '^.+\.pot?$'
 repos:
@@ -37,11 +37,10 @@ repos:
         require_serial: true
         verbose: true
 -   repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.1.0
+    rev: v4.6.0
     hooks:
     -   id: check-yaml
     -   id: end-of-file-fixer
-    -   id: trailing-whitespace
     -   id: check-builtin-literals
     -   id: check-ast
     -   id: check-docstring-first
@@ -61,17 +60,5 @@ repos:
     rev: v0.15.13
     hooks:
       - id: ruff-check
-        language_version: python3
-
--   repo: https://github.com/psf/black
-    rev: '22.3.0'
-    hooks:
-      - id: black
--   repo: https://github.com/Pierre-Sassoulas/black-disable-checker
-    rev: '1.0.1'
-    hooks:
-      - id: black-disable-checker
--   repo: https://github.com/pycqa/isort
-    rev: '5.10.1'
-    hooks:
-      - id: isort
+        args: [--fix]
+      - id: ruff-format

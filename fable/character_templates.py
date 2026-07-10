@@ -8,8 +8,8 @@ FANTASY_TEMPLATE = {
         "traits": ["Brave", "Curious", "Determined"],
         "languages": ["Common", "Elvish"],
         "inventory": ["Sword", "Spellbook", "Adventuring Pack"],
-        "goals": ["Master the arcane arts", "Explore the realm"]
-    }
+        "goals": ["Master the arcane arts", "Explore the realm"],
+    },
 }
 
 MODERN_TEMPLATE = {
@@ -19,8 +19,8 @@ MODERN_TEMPLATE = {
         "traits": ["Ambitious", "Creative", "Resourceful"],
         "languages": ["English", "Spanish"],
         "inventory": ["Smartphone", "Laptop", "Car Keys"],
-        "goals": ["Advance career", "Travel the world"]
-    }
+        "goals": ["Advance career", "Travel the world"],
+    },
 }
 
 SCIFI_TEMPLATE = {
@@ -31,8 +31,8 @@ SCIFI_TEMPLATE = {
         "traits": ["Technical", "Adaptable", "Innovative"],
         "languages": ["Galactic Standard", "Binary"],
         "inventory": ["Neural Implant", "Plasma Pistol", "Holo-device"],
-        "goals": ["Explore new worlds", "Advance technology"]
-    }
+        "goals": ["Explore new worlds", "Advance technology"],
+    },
 }
 
 SUPERNATURAL_TEMPLATE = {
@@ -43,9 +43,10 @@ SUPERNATURAL_TEMPLATE = {
         "age_appearance": "How old they appear",
         "traits": ["Mysterious", "Powerful", "Tormented"],
         "inventory": ["Magical Artifacts", "Ancient Relics"],
-        "goals": ["Control powers", "Find redemption"]
-    }
+        "goals": ["Control powers", "Find redemption"],
+    },
 }
+
 
 def get_template(genre: str) -> dict:
     """Get a character template for a specific genre."""
@@ -53,6 +54,6 @@ def get_template(genre: str) -> dict:
         "fantasy": FANTASY_TEMPLATE,
         "modern": MODERN_TEMPLATE,
         "scifi": SCIFI_TEMPLATE,
-        "supernatural": SUPERNATURAL_TEMPLATE
+        "supernatural": SUPERNATURAL_TEMPLATE,
     }
     return templates.get(genre.lower(), FANTASY_TEMPLATE)

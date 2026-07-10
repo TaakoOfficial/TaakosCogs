@@ -1,13 +1,15 @@
 """Welcome cog for Red-DiscordBot."""
 
+from __future__ import annotations
+
 import base64
+import contextlib
 import io
 import json
 import logging
 import os
 import re
-from datetime import datetime
-from typing import Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any
 
 import aiohttp
 import discord
@@ -15,6 +17,9 @@ from redbot.core import Config, commands
 from redbot.core.utils.chat_formatting import box, pagify
 
 from .dashboard_integration import DashboardIntegration
+
+if TYPE_CHECKING:
+    from datetime import datetime
 
 try:
     from PIL import Image, ImageDraw, ImageOps, UnidentifiedImageError
@@ -31,7 +36,7 @@ class Welcome(DashboardIntegration, commands.Cog):
     IMAGE_SIZE_LIMIT = 8 * 1024 * 1024
     PLACEHOLDER_PATTERN = re.compile(r"\{(member|guild)\.([a-zA-Z0-9_]+)\}")
 
-    MEMBER_PLACEHOLDERS: Dict[str, str] = {
+    MEMBER_PLACEHOLDERS: dict[str, str] = {
         "mention": "Mentions the joining member.",
         "name": "The member username.",
         "display_name": "The member display name in the server.",
@@ -50,7 +55,7 @@ class Welcome(DashboardIntegration, commands.Cog):
         "role_mentions": "All of the member's roles as mentions.",
     }
 
-    GUILD_PLACEHOLDERS: Dict[str, str] = {
+    GUILD_PLACEHOLDERS: dict[str, str] = {
         "name": "The server name.",
         "id": "The server ID.",
         "description": "The server description.",
@@ -79,7 +84,11 @@ class Welcome(DashboardIntegration, commands.Cog):
 
     def __init__(self, bot):
         self.bot = bot
-        self.config = Config.get_conf(self, identifier=2026032101, force_registration=True)
+        self.config = Config.get_conf(
+            self,
+            identifier=2026032101,
+            force_registration=True,
+        )
         self.config.register_guild(
             enabled=False,
             include_bots=False,
@@ -92,7 +101,7 @@ class Welcome(DashboardIntegration, commands.Cog):
         )
 
     @staticmethod
-    def _empty_image_data() -> Dict[str, Optional[str]]:
+    def _empty_image_data() -> dict[str, str | None]:
         return {
             "source_url": None,
             "filename": None,
@@ -101,7 +110,7 @@ class Welcome(DashboardIntegration, commands.Cog):
         }
 
     @staticmethod
-    def _default_avatar_overlay() -> Dict[str, Any]:
+    def _default_avatar_overlay() -> dict[str, Any]:
         return {
             "enabled": False,
             "x_percent": 82.0,
@@ -110,7 +119,7 @@ class Welcome(DashboardIntegration, commands.Cog):
         }
 
     @classmethod
-    def _normalize_avatar_overlay(cls, raw_value: Any) -> Dict[str, Any]:
+    def _normalize_avatar_overlay(cls, raw_value: Any) -> dict[str, Any]:
         overlay = cls._default_avatar_overlay()
         if isinstance(raw_value, dict):
             overlay.update(raw_value)
@@ -137,13 +146,16 @@ class Welcome(DashboardIntegration, commands.Cog):
                     "x_percent": 82.0,
                     "y_percent": 52.0,
                     "size_percent": 17.0,
-                }
+                },
             )
         return overlay
 
     @staticmethod
     def _validate_percentage(
-        label: str, value: float, minimum: float, maximum: float
+        label: str,
+        value: float,
+        minimum: float,
+        maximum: float,
     ) -> float:
         try:
             number = float(value)
@@ -152,22 +164,22 @@ class Welcome(DashboardIntegration, commands.Cog):
 
         if not minimum <= number <= maximum:
             raise commands.BadArgument(
-                f"{label} must be between {minimum:g} and {maximum:g}."
+                f"{label} must be between {minimum:g} and {maximum:g}.",
             )
         return number
 
     @staticmethod
-    def _format_datetime(value: Optional[datetime]) -> str:
+    def _format_datetime(value: datetime | None) -> str:
         if value is None:
             return ""
         return discord.utils.format_dt(value, "F")
 
     @staticmethod
-    def _asset_url(asset: Optional[discord.Asset]) -> str:
+    def _asset_url(asset: discord.Asset | None) -> str:
         return str(asset.url) if asset else ""
 
     @staticmethod
-    def _sanitize_filename(url: str, content_type: Optional[str]) -> str:
+    def _sanitize_filename(url: str, content_type: str | None) -> str:
         parsed_name = os.path.basename(url.split("?")[0].strip())
         if not parsed_name:
             parsed_name = "welcome-image"
@@ -195,7 +207,7 @@ class Welcome(DashboardIntegration, commands.Cog):
         }
 
     @classmethod
-    def _find_unknown_placeholders(cls, value: Any) -> List[str]:
+    def _find_unknown_placeholders(cls, value: Any) -> list[str]:
         unknown = set()
 
         def walk(item: Any) -> None:
@@ -214,9 +226,11 @@ class Welcome(DashboardIntegration, commands.Cog):
         walk(value)
         return sorted(unknown)
 
-    def _member_context(self, member: discord.Member) -> Dict[str, str]:
+    def _member_context(self, member: discord.Member) -> dict[str, str]:
         roles = [role for role in member.roles if role != member.guild.default_role]
-        top_role = member.top_role if member.top_role != member.guild.default_role else None
+        top_role = (
+            member.top_role if member.top_role != member.guild.default_role else None
+        )
         return {
             "mention": member.mention,
             "name": member.name,
@@ -236,7 +250,7 @@ class Welcome(DashboardIntegration, commands.Cog):
             "role_mentions": " ".join(role.mention for role in roles),
         }
 
-    def _guild_context(self, guild: discord.Guild) -> Dict[str, str]:
+    def _guild_context(self, guild: discord.Guild) -> dict[str, str]:
         owner = guild.owner
         return {
             "name": guild.name,
@@ -254,7 +268,9 @@ class Welcome(DashboardIntegration, commands.Cog):
             "splash_url": self._asset_url(guild.splash),
             "discovery_splash_url": self._asset_url(guild.discovery_splash),
             "rules_channel": guild.rules_channel.mention if guild.rules_channel else "",
-            "system_channel": guild.system_channel.mention if guild.system_channel else "",
+            "system_channel": guild.system_channel.mention
+            if guild.system_channel
+            else "",
             "text_channels": str(len(guild.text_channels)),
             "voice_channels": str(len(guild.voice_channels)),
             "categories": str(len(guild.categories)),
@@ -281,13 +297,16 @@ class Welcome(DashboardIntegration, commands.Cog):
         if isinstance(value, str):
             return self._render_string(value, member)
         if isinstance(value, dict):
-            return {key: self._render_data(sub_value, member) for key, sub_value in value.items()}
+            return {
+                key: self._render_data(sub_value, member)
+                for key, sub_value in value.items()
+            }
         if isinstance(value, list):
             return [self._render_data(sub_value, member) for sub_value in value]
         return value
 
     @staticmethod
-    def _normalise_embed_dict(embed_data: Dict[str, Any]) -> Dict[str, Any]:
+    def _normalise_embed_dict(embed_data: dict[str, Any]) -> dict[str, Any]:
         cleaned = dict(embed_data)
         color_value = cleaned.get("color")
         if isinstance(color_value, str):
@@ -296,12 +315,12 @@ class Welcome(DashboardIntegration, commands.Cog):
                 cleaned["color"] = int(normalized, 16)
             except ValueError as exc:
                 raise commands.BadArgument(
-                    "Embed color must be an integer or a hex string like `#5865F2`."
+                    "Embed color must be an integer or a hex string like `#5865F2`.",
                 ) from exc
         return cleaned
 
     @staticmethod
-    def _clean_embed_media_block(block: Any) -> Optional[Dict[str, Any]]:
+    def _clean_embed_media_block(block: Any) -> dict[str, Any] | None:
         if not isinstance(block, dict):
             return None
 
@@ -312,11 +331,11 @@ class Welcome(DashboardIntegration, commands.Cog):
         return {"url": url}
 
     @staticmethod
-    def _clean_embed_footer_block(block: Any) -> Optional[Dict[str, Any]]:
+    def _clean_embed_footer_block(block: Any) -> dict[str, Any] | None:
         if not isinstance(block, dict):
             return None
 
-        cleaned: Dict[str, Any] = {}
+        cleaned: dict[str, Any] = {}
         text = block.get("text")
         icon_url = block.get("icon_url")
         if text:
@@ -326,11 +345,11 @@ class Welcome(DashboardIntegration, commands.Cog):
         return cleaned or None
 
     @staticmethod
-    def _clean_embed_author_block(block: Any) -> Optional[Dict[str, Any]]:
+    def _clean_embed_author_block(block: Any) -> dict[str, Any] | None:
         if not isinstance(block, dict):
             return None
 
-        cleaned: Dict[str, Any] = {}
+        cleaned: dict[str, Any] = {}
         for key in ("name", "url", "icon_url"):
             value = block.get(key)
             if value:
@@ -338,11 +357,11 @@ class Welcome(DashboardIntegration, commands.Cog):
         return cleaned or None
 
     @staticmethod
-    def _clean_embed_fields(fields: Any) -> List[Dict[str, Any]]:
+    def _clean_embed_fields(fields: Any) -> list[dict[str, Any]]:
         if not isinstance(fields, list):
             return []
 
-        cleaned_fields: List[Dict[str, Any]] = []
+        cleaned_fields: list[dict[str, Any]] = []
         for field in fields:
             if not isinstance(field, dict):
                 continue
@@ -351,7 +370,7 @@ class Welcome(DashboardIntegration, commands.Cog):
             if name is None or value is None:
                 continue
 
-            cleaned_field: Dict[str, Any] = {
+            cleaned_field: dict[str, Any] = {
                 "name": name,
                 "value": value,
             }
@@ -361,13 +380,15 @@ class Welcome(DashboardIntegration, commands.Cog):
         return cleaned_fields
 
     @classmethod
-    def _extract_embed_object(cls, payload: Dict[str, Any]) -> Dict[str, Any]:
+    def _extract_embed_object(cls, payload: dict[str, Any]) -> dict[str, Any]:
         if "embeds" in payload:
             embeds = payload.get("embeds")
             if not isinstance(embeds, list) or not embeds:
                 raise commands.BadArgument("`embeds` must be a non-empty list.")
             if not isinstance(embeds[0], dict):
-                raise commands.BadArgument("The first entry in `embeds` must be an object.")
+                raise commands.BadArgument(
+                    "The first entry in `embeds` must be an object.",
+                )
             return embeds[0]
 
         embed = payload.get("embed")
@@ -377,8 +398,8 @@ class Welcome(DashboardIntegration, commands.Cog):
         return payload
 
     @classmethod
-    def _sanitize_embed_dict(cls, embed_data: Dict[str, Any]) -> Dict[str, Any]:
-        cleaned: Dict[str, Any] = {}
+    def _sanitize_embed_dict(cls, embed_data: dict[str, Any]) -> dict[str, Any]:
+        cleaned: dict[str, Any] = {}
 
         for key in ("title", "description", "url", "timestamp"):
             value = embed_data.get(key)
@@ -409,13 +430,17 @@ class Welcome(DashboardIntegration, commands.Cog):
             cleaned["fields"] = fields
 
         if not cleaned:
-            raise commands.BadArgument("No usable embed data was found in that JSON payload.")
+            raise commands.BadArgument(
+                "No usable embed data was found in that JSON payload.",
+            )
 
         return cleaned
 
     async def _read_json_input(
-        self, ctx: commands.Context, raw_json: Optional[str]
-    ) -> Tuple[Dict[str, Any], str]:
+        self,
+        ctx: commands.Context,
+        raw_json: str | None,
+    ) -> tuple[dict[str, Any], str]:
         payload = raw_json
         source = "command input"
 
@@ -425,7 +450,7 @@ class Welcome(DashboardIntegration, commands.Cog):
                 payload = (await attachment.read()).decode("utf-8")
             except UnicodeDecodeError as exc:
                 raise commands.BadArgument(
-                    "The attached file could not be decoded as UTF-8 JSON."
+                    "The attached file could not be decoded as UTF-8 JSON.",
                 ) from exc
             source = f"attachment `{attachment.filename}`"
 
@@ -440,7 +465,7 @@ class Welcome(DashboardIntegration, commands.Cog):
             parsed = json.loads(payload)
         except json.JSONDecodeError as exc:
             raise commands.BadArgument(
-                f"Invalid JSON near line {exc.lineno}, column {exc.colno}: {exc.msg}"
+                f"Invalid JSON near line {exc.lineno}, column {exc.colno}: {exc.msg}",
             ) from exc
 
         if not isinstance(parsed, dict):
@@ -450,23 +475,27 @@ class Welcome(DashboardIntegration, commands.Cog):
         cleaned_embed = self._sanitize_embed_dict(embed_object)
         return self._normalise_embed_dict(cleaned_embed), source
 
-    async def _download_image(self, url: str) -> Dict[str, str]:
+    async def _download_image(self, url: str) -> dict[str, str]:
         timeout = aiohttp.ClientTimeout(total=30)
         async with aiohttp.ClientSession(timeout=timeout) as session:
             async with session.get(url) as response:
                 if response.status != 200:
                     raise commands.CommandError(
-                        f"Failed to download the image. HTTP status: {response.status}"
+                        f"Failed to download the image. HTTP status: {response.status}",
                     )
 
-                content_type = response.headers.get("Content-Type", "").split(";")[0].lower()
+                content_type = (
+                    response.headers.get("Content-Type", "").split(";")[0].lower()
+                )
                 if not content_type.startswith("image/"):
-                    raise commands.BadArgument("The provided URL did not return an image.")
+                    raise commands.BadArgument(
+                        "The provided URL did not return an image.",
+                    )
 
                 data = await response.read()
                 if len(data) > self.IMAGE_SIZE_LIMIT:
                     raise commands.BadArgument(
-                        "The downloaded image is larger than 8 MB. Use a smaller image."
+                        "The downloaded image is larger than 8 MB. Use a smaller image.",
                     )
 
                 filename = self._sanitize_filename(url, content_type)
@@ -497,10 +526,8 @@ class Welcome(DashboardIntegration, commands.Cog):
 
         try:
             sized_asset = asset.with_size(normalized_size)
-            try:
+            with contextlib.suppress(AttributeError, ValueError):
                 sized_asset = sized_asset.with_static_format("png")
-            except (AttributeError, ValueError):
-                pass
             return str(sized_asset.url)
         except (AttributeError, TypeError, ValueError):
             pass
@@ -516,16 +543,22 @@ class Welcome(DashboardIntegration, commands.Cog):
             async with session.get(url) as response:
                 if response.status != 200:
                     raise commands.CommandError(
-                        f"Failed to download the member avatar. HTTP status: {response.status}"
+                        f"Failed to download the member avatar. HTTP status: {response.status}",
                     )
 
-                content_type = response.headers.get("Content-Type", "").split(";")[0].lower()
+                content_type = (
+                    response.headers.get("Content-Type", "").split(";")[0].lower()
+                )
                 if not content_type.startswith("image/"):
-                    raise commands.CommandError("The member avatar URL did not return an image.")
+                    raise commands.CommandError(
+                        "The member avatar URL did not return an image.",
+                    )
 
                 data = await response.read()
                 if len(data) > self.IMAGE_SIZE_LIMIT:
-                    raise commands.CommandError("The member avatar is larger than 8 MB.")
+                    raise commands.CommandError(
+                        "The member avatar is larger than 8 MB.",
+                    )
                 return data
 
     @staticmethod
@@ -541,8 +574,10 @@ class Welcome(DashboardIntegration, commands.Cog):
 
     @classmethod
     def _save_composited_image(
-        cls, image: Any, original_filename: str
-    ) -> Tuple[bytes, str]:
+        cls,
+        image: Any,
+        original_filename: str,
+    ) -> tuple[bytes, str]:
         png_buffer = io.BytesIO()
         image.save(png_buffer, format="PNG", optimize=True)
         png_data = png_buffer.getvalue()
@@ -562,10 +597,13 @@ class Welcome(DashboardIntegration, commands.Cog):
             )
             jpeg_data = jpeg_buffer.getvalue()
             if len(jpeg_data) <= cls.IMAGE_SIZE_LIMIT:
-                return jpeg_data, cls._avatar_overlay_filename(original_filename, ".jpg")
+                return jpeg_data, cls._avatar_overlay_filename(
+                    original_filename,
+                    ".jpg",
+                )
 
         raise commands.CommandError(
-            "The rendered welcome image is larger than 8 MB after adding the avatar."
+            "The rendered welcome image is larger than 8 MB after adding the avatar.",
         )
 
     def _compose_avatar_overlay(
@@ -573,30 +611,26 @@ class Welcome(DashboardIntegration, commands.Cog):
         image_data: bytes,
         avatar_data: bytes,
         filename: str,
-        avatar_overlay: Dict[str, Any],
-    ) -> Tuple[bytes, str]:
+        avatar_overlay: dict[str, Any],
+    ) -> tuple[bytes, str]:
         if Image is None or ImageDraw is None or ImageOps is None:
             raise commands.CommandError(
-                "Pillow is required to render welcome avatar overlays."
+                "Pillow is required to render welcome avatar overlays.",
             )
 
         try:
             with Image.open(io.BytesIO(image_data)) as base_image:
-                try:
+                with contextlib.suppress(EOFError):
                     base_image.seek(0)
-                except EOFError:
-                    pass
                 base = ImageOps.exif_transpose(base_image).convert("RGBA")
 
             with Image.open(io.BytesIO(avatar_data)) as avatar_image:
-                try:
+                with contextlib.suppress(EOFError):
                     avatar_image.seek(0)
-                except EOFError:
-                    pass
                 avatar = ImageOps.exif_transpose(avatar_image).convert("RGBA")
         except (UnidentifiedImageError, OSError) as exc:
             raise commands.CommandError(
-                "The welcome image or member avatar could not be processed."
+                "The welcome image or member avatar could not be processed.",
             ) from exc
 
         width, height = base.size
@@ -619,7 +653,7 @@ class Welcome(DashboardIntegration, commands.Cog):
 
         return self._save_composited_image(base, filename)
 
-    def _deserialize_embed_json(self, raw_value: Any) -> Optional[Dict[str, Any]]:
+    def _deserialize_embed_json(self, raw_value: Any) -> dict[str, Any] | None:
         if not raw_value:
             return None
 
@@ -642,7 +676,7 @@ class Welcome(DashboardIntegration, commands.Cog):
             log.warning("Stored welcome embed JSON could not be sanitized.")
             return None
 
-    async def _get_guild_settings(self, guild: discord.Guild) -> Dict[str, Any]:
+    async def _get_guild_settings(self, guild: discord.Guild) -> dict[str, Any]:
         guild_conf = self.config.guild(guild)
         image_data = await guild_conf.image()
         if not isinstance(image_data, dict):
@@ -650,7 +684,9 @@ class Welcome(DashboardIntegration, commands.Cog):
         else:
             image_data = {**self._empty_image_data(), **image_data}
 
-        avatar_overlay = self._normalize_avatar_overlay(await guild_conf.avatar_overlay())
+        avatar_overlay = self._normalize_avatar_overlay(
+            await guild_conf.avatar_overlay(),
+        )
 
         return {
             "enabled": await guild_conf.enabled(),
@@ -665,10 +701,10 @@ class Welcome(DashboardIntegration, commands.Cog):
 
     async def _build_image_file(
         self,
-        image_data: Dict[str, Optional[str]],
+        image_data: dict[str, str | None],
         member: discord.Member,
-        avatar_overlay: Dict[str, Any],
-    ) -> Optional[discord.File]:
+        avatar_overlay: dict[str, Any],
+    ) -> discord.File | None:
         encoded = image_data.get("data_base64")
         filename = image_data.get("filename")
         if not encoded or not filename:
@@ -695,11 +731,11 @@ class Welcome(DashboardIntegration, commands.Cog):
 
     def _build_embed(
         self,
-        embed_json: Optional[Dict[str, Any]],
+        embed_json: dict[str, Any] | None,
         member: discord.Member,
-        attachment_filename: Optional[str],
+        attachment_filename: str | None,
         image_mode: str,
-    ) -> Optional[discord.Embed]:
+    ) -> discord.Embed | None:
         if not embed_json:
             return None
 
@@ -713,13 +749,15 @@ class Welcome(DashboardIntegration, commands.Cog):
         self,
         channel: discord.TextChannel,
         member: discord.Member,
-        settings: Dict[str, Any],
+        settings: dict[str, Any],
     ) -> None:
         content_template = settings.get("message_template") or ""
         content = self._render_string(content_template, member).strip()
         image_data = settings.get("image") or self._empty_image_data()
         image_mode = settings.get("image_mode") or "embed"
-        avatar_overlay = settings.get("avatar_overlay") or self._default_avatar_overlay()
+        avatar_overlay = (
+            settings.get("avatar_overlay") or self._default_avatar_overlay()
+        )
         file = await self._build_image_file(image_data, member, avatar_overlay)
         attachment_filename = getattr(file, "filename", None)
         embed = self._build_embed(
@@ -731,14 +769,20 @@ class Welcome(DashboardIntegration, commands.Cog):
         me = channel.guild.me or channel.guild.get_member(self.bot.user.id)
         permissions = channel.permissions_for(me) if me else None
         should_attach_file = False
-        if file:
-            if image_mode == "attachment" or embed is None:
-                should_attach_file = True
-            elif embed.image.url and embed.image.url.startswith("attachment://"):
-                should_attach_file = True
+        if file and (
+            image_mode == "attachment"
+            or embed is None
+            or embed.image.url
+            and embed.image.url.startswith("attachment://")
+        ):
+            should_attach_file = True
 
-        kwargs: Dict[str, Any] = {
-            "allowed_mentions": discord.AllowedMentions(users=True, roles=True, everyone=False)
+        kwargs: dict[str, Any] = {
+            "allowed_mentions": discord.AllowedMentions(
+                users=True,
+                roles=True,
+                everyone=False,
+            ),
         }
         if content:
             kwargs["content"] = content
@@ -808,7 +852,9 @@ class Welcome(DashboardIntegration, commands.Cog):
 
     @welcome.command(name="channel")
     async def welcome_channel(
-        self, ctx: commands.Context, channel: Optional[discord.TextChannel] = None
+        self,
+        ctx: commands.Context,
+        channel: discord.TextChannel | None = None,
     ) -> None:
         """Set the channel for welcome messages. Leave blank to clear it."""
         if channel is None:
@@ -838,7 +884,10 @@ class Welcome(DashboardIntegration, commands.Cog):
 
     @welcome.command(name="embedjson")
     async def welcome_embed_json(
-        self, ctx: commands.Context, *, raw_json: Optional[str] = None
+        self,
+        ctx: commands.Context,
+        *,
+        raw_json: str | None = None,
     ) -> None:
         """Set a custom embed from JSON text or a JSON attachment."""
         embed_json, source = await self._read_json_input(ctx, raw_json)
@@ -847,14 +896,18 @@ class Welcome(DashboardIntegration, commands.Cog):
             unknown_text = ", ".join(f"`{{{name}}}`" for name in unknown)
             raise commands.BadArgument(f"Unknown placeholders: {unknown_text}")
 
-        preview_member = ctx.author if isinstance(ctx.author, discord.Member) else ctx.guild.me
+        preview_member = (
+            ctx.author if isinstance(ctx.author, discord.Member) else ctx.guild.me
+        )
         if preview_member is None:
             raise commands.CommandError("I could not build a preview for this embed.")
 
         try:
             self._build_embed(embed_json, preview_member, None, "embed")
         except Exception as exc:
-            raise commands.BadArgument(f"That JSON could not be converted into a Discord embed: {exc}")
+            raise commands.BadArgument(
+                f"That JSON could not be converted into a Discord embed: {exc}",
+            )
 
         await self.config.guild(ctx.guild).embed_json.set(json.dumps(embed_json))
         await ctx.send(f"Welcome embed JSON saved from {source}.")
@@ -873,7 +926,7 @@ class Welcome(DashboardIntegration, commands.Cog):
         await ctx.send(
             "The welcome image has been downloaded and cached. "
             "Use `welcome imagemode attachment` to post it above the embed, or "
-            "`welcome imagemode embed` to use it inside the embed."
+            "`welcome imagemode embed` to use it inside the embed.",
         )
 
     @welcome.command(name="clearimage")
@@ -892,35 +945,46 @@ class Welcome(DashboardIntegration, commands.Cog):
         await self.config.guild(ctx.guild).image_mode.set(normalized)
         if normalized == "attachment":
             await ctx.send(
-                "The cached image will now be posted as a separate attachment above the embed."
+                "The cached image will now be posted as a separate attachment above the embed.",
             )
             return
 
-        await ctx.send("The cached image will now be used as the embed image when possible.")
+        await ctx.send(
+            "The cached image will now be used as the embed image when possible.",
+        )
 
     @welcome.command(name="avataroverlay", aliases=["avatar", "pfp"])
     async def welcome_avatar_overlay(
         self,
         ctx: commands.Context,
         enabled: bool,
-        x_percent: Optional[float] = None,
-        y_percent: Optional[float] = None,
-        size_percent: Optional[float] = None,
+        x_percent: float | None = None,
+        y_percent: float | None = None,
+        size_percent: float | None = None,
     ) -> None:
         """Toggle member avatar rendering on the cached welcome image."""
         current = await self.config.guild(ctx.guild).avatar_overlay()
         avatar_overlay = self._normalize_avatar_overlay(current)
         if x_percent is not None:
             avatar_overlay["x_percent"] = self._validate_percentage(
-                "Center X percent", x_percent, 0.0, 100.0
+                "Center X percent",
+                x_percent,
+                0.0,
+                100.0,
             )
         if y_percent is not None:
             avatar_overlay["y_percent"] = self._validate_percentage(
-                "Center Y percent", y_percent, 0.0, 100.0
+                "Center Y percent",
+                y_percent,
+                0.0,
+                100.0,
             )
         if size_percent is not None:
             avatar_overlay["size_percent"] = self._validate_percentage(
-                "Diameter percent", size_percent, 1.0, 100.0
+                "Diameter percent",
+                size_percent,
+                1.0,
+                100.0,
             )
 
         avatar_overlay["enabled"] = enabled
@@ -935,7 +999,9 @@ class Welcome(DashboardIntegration, commands.Cog):
         )
 
         image_data = await self.config.guild(ctx.guild).image()
-        if enabled and not (isinstance(image_data, dict) and image_data.get("data_base64")):
+        if enabled and not (
+            isinstance(image_data, dict) and image_data.get("data_base64")
+        ):
             message += " Set a cached welcome image with `welcome image <url>` first."
 
         await ctx.send(message)
@@ -958,7 +1024,7 @@ class Welcome(DashboardIntegration, commands.Cog):
                 "",
                 "Guild placeholders:",
                 *guild_lines,
-            ]
+            ],
         )
         for page in pagify(content, page_length=1800):
             await ctx.send(box(page, lang="md"))
@@ -984,7 +1050,9 @@ class Welcome(DashboardIntegration, commands.Cog):
         channel_id = settings.get("channel_id")
         channel = ctx.guild.get_channel(channel_id) if channel_id else None
         image_data = settings.get("image") or {}
-        avatar_overlay = settings.get("avatar_overlay") or self._default_avatar_overlay()
+        avatar_overlay = (
+            settings.get("avatar_overlay") or self._default_avatar_overlay()
+        )
 
         embed = discord.Embed(title="Welcome Settings", color=discord.Color.blurple())
         embed.add_field(
@@ -1051,7 +1119,9 @@ class Welcome(DashboardIntegration, commands.Cog):
 
     @welcome.command(name="test")
     async def welcome_test(
-        self, ctx: commands.Context, member: Optional[discord.Member] = None
+        self,
+        ctx: commands.Context,
+        member: discord.Member | None = None,
     ) -> None:
         """Preview the welcome message in the current channel."""
         member = member or ctx.author

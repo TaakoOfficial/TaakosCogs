@@ -7,18 +7,20 @@ import csv
 import io
 import logging
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any
 
 import discord
 from redbot.core import Config, commands
-from redbot.core.bot import Red
 from redbot.core.utils.chat_formatting import box, pagify
+
+if TYPE_CHECKING:
+    from redbot.core.bot import Red
 
 log = logging.getLogger("red.taakoscogs.repboard")
 
 
-RepRecord = Dict[str, Any]
-StatsRecord = Dict[str, Any]
+RepRecord = dict[str, Any]
+StatsRecord = dict[str, Any]
 
 
 class RepBoard(commands.Cog):
@@ -53,7 +55,7 @@ class RepBoard(commands.Cog):
             records={},
             stats={},
         )
-        self._locks: Dict[int, asyncio.Lock] = {}
+        self._locks: dict[int, asyncio.Lock] = {}
 
     async def red_delete_data_for_user(self, *, requester: str, user_id: int) -> None:
         """Remove stored reputation references for a Discord user ID."""
@@ -82,10 +84,16 @@ class RepBoard(commands.Cog):
                 if touched:
                     if was_active and giver_id and str(giver_id) != user_key:
                         giver_stats = self._ensure_stats(stats, giver_id)
-                        giver_stats["given"] = max(0, int(giver_stats.get("given") or 0) - 1)
+                        giver_stats["given"] = max(
+                            0,
+                            int(giver_stats.get("given") or 0) - 1,
+                        )
                     if was_active and receiver_id and str(receiver_id) != user_key:
                         receiver_stats = self._ensure_stats(stats, receiver_id)
-                        receiver_stats["received"] = max(0, int(receiver_stats.get("received") or 0) - 1)
+                        receiver_stats["received"] = max(
+                            0,
+                            int(receiver_stats.get("received") or 0) - 1,
+                        )
                     record["reason"] = "[deleted by data request]"
                     record["active"] = False
                     record["removed_at"] = record.get("removed_at") or self._now_ts()
@@ -155,7 +163,7 @@ class RepBoard(commands.Cog):
         }
 
     @classmethod
-    def _ensure_stats(cls, stats: Dict[str, StatsRecord], user_id: Any) -> StatsRecord:
+    def _ensure_stats(cls, stats: dict[str, StatsRecord], user_id: Any) -> StatsRecord:
         key = str(user_id)
         record = stats.setdefault(key, cls._empty_stats())
         record.setdefault("received", 0)
@@ -166,7 +174,10 @@ class RepBoard(commands.Cog):
         return record
 
     @staticmethod
-    def _channel_from_id(guild: discord.Guild, channel_id: Any) -> Optional[discord.TextChannel]:
+    def _channel_from_id(
+        guild: discord.Guild,
+        channel_id: Any,
+    ) -> discord.TextChannel | None:
         if not channel_id:
             return None
         try:
@@ -178,16 +189,16 @@ class RepBoard(commands.Cog):
     async def _get_board_channel(
         self,
         guild: discord.Guild,
-        settings: Optional[Dict[str, Any]] = None,
-    ) -> Optional[discord.TextChannel]:
+        settings: dict[str, Any] | None = None,
+    ) -> discord.TextChannel | None:
         settings = settings or await self.config.guild(guild).all()
         return self._channel_from_id(guild, settings.get("board_channel_id"))
 
     async def _get_log_channel(
         self,
         guild: discord.Guild,
-        settings: Optional[Dict[str, Any]] = None,
-    ) -> Optional[discord.TextChannel]:
+        settings: dict[str, Any] | None = None,
+    ) -> discord.TextChannel | None:
         settings = settings or await self.config.guild(guild).all()
         return self._channel_from_id(guild, settings.get("log_channel_id"))
 
@@ -197,7 +208,7 @@ class RepBoard(commands.Cog):
         return bool(permissions.send_messages and permissions.embed_links)
 
     @classmethod
-    def _clean_reason(cls, reason: Optional[str], settings: Dict[str, Any]) -> str:
+    def _clean_reason(cls, reason: str | None, settings: dict[str, Any]) -> str:
         cleaned = " ".join((reason or "").strip().split())
         require_reason = bool(settings.get("require_reason"))
         min_length = int(settings.get("min_reason_length") or 0)
@@ -207,11 +218,17 @@ class RepBoard(commands.Cog):
         if not cleaned and require_reason:
             raise commands.BadArgument("A reason is required here.")
         if cleaned and len(cleaned) < min_length:
-            raise commands.BadArgument(f"Reason must be at least {min_length} characters.")
+            raise commands.BadArgument(
+                f"Reason must be at least {min_length} characters.",
+            )
         if min_length > 0 and not cleaned:
-            raise commands.BadArgument(f"Reason must be at least {min_length} characters.")
+            raise commands.BadArgument(
+                f"Reason must be at least {min_length} characters.",
+            )
         if len(cleaned) > max_length:
-            raise commands.BadArgument(f"Reason must be {max_length} characters or fewer.")
+            raise commands.BadArgument(
+                f"Reason must be {max_length} characters or fewer.",
+            )
         return cleaned
 
     @classmethod
@@ -233,12 +250,16 @@ class RepBoard(commands.Cog):
         return aliases[lowered]
 
     @staticmethod
-    def _active_records(records: Dict[str, RepRecord]) -> List[RepRecord]:
+    def _active_records(records: dict[str, RepRecord]) -> list[RepRecord]:
         return [record for record in records.values() if record.get("active", True)]
 
     @classmethod
-    def _rankings(cls, stats: Dict[str, StatsRecord], mode: str = "received") -> List[Tuple[int, int]]:
-        rows: List[Tuple[int, int]] = []
+    def _rankings(
+        cls,
+        stats: dict[str, StatsRecord],
+        mode: str = "received",
+    ) -> list[tuple[int, int]]:
+        rows: list[tuple[int, int]] = []
         for user_id, record in stats.items():
             try:
                 member_id = int(user_id)
@@ -251,8 +272,16 @@ class RepBoard(commands.Cog):
         return rows
 
     @classmethod
-    def _rank_for_member(cls, stats: Dict[str, StatsRecord], member_id: int, mode: str = "received") -> Optional[int]:
-        for index, (_value, ranked_id) in enumerate(cls._rankings(stats, mode), start=1):
+    def _rank_for_member(
+        cls,
+        stats: dict[str, StatsRecord],
+        member_id: int,
+        mode: str = "received",
+    ) -> int | None:
+        for index, (_value, ranked_id) in enumerate(
+            cls._rankings(stats, mode),
+            start=1,
+        ):
             if ranked_id == member_id:
                 return index
         return None
@@ -262,7 +291,7 @@ class RepBoard(commands.Cog):
         guild: discord.Guild,
         record: RepRecord,
         *,
-        receiver_total: Optional[int] = None,
+        receiver_total: int | None = None,
     ) -> discord.Embed:
         active = bool(record.get("active", True))
         rep_id = int(record.get("id") or 0)
@@ -277,16 +306,40 @@ class RepBoard(commands.Cog):
             embed.set_author(name=guild.name, icon_url=guild.icon.url)
         else:
             embed.set_author(name=guild.name)
-        embed.add_field(name="From", value=self._user_ref(record.get("giver_id")), inline=True)
-        embed.add_field(name="To", value=self._user_ref(record.get("receiver_id")), inline=True)
-        embed.add_field(name="Given", value=self._format_ts(record.get("created_at"), "R"), inline=True)
+        embed.add_field(
+            name="From",
+            value=self._user_ref(record.get("giver_id")),
+            inline=True,
+        )
+        embed.add_field(
+            name="To",
+            value=self._user_ref(record.get("receiver_id")),
+            inline=True,
+        )
+        embed.add_field(
+            name="Given",
+            value=self._format_ts(record.get("created_at"), "R"),
+            inline=True,
+        )
         if receiver_total is not None:
-            embed.add_field(name="Receiver Total", value=self._count(receiver_total), inline=True)
+            embed.add_field(
+                name="Receiver Total",
+                value=self._count(receiver_total),
+                inline=True,
+            )
         if not active:
             embed.add_field(name="Status", value="Removed", inline=True)
-            embed.add_field(name="Removed By", value=self._user_ref(record.get("removed_by")), inline=True)
+            embed.add_field(
+                name="Removed By",
+                value=self._user_ref(record.get("removed_by")),
+                inline=True,
+            )
             if record.get("remove_reason"):
-                embed.add_field(name="Removal Reason", value=str(record["remove_reason"])[:1024], inline=False)
+                embed.add_field(
+                    name="Removal Reason",
+                    value=str(record["remove_reason"])[:1024],
+                    inline=False,
+                )
         embed.set_footer(text=f"Rep ID: {rep_id}")
         return embed
 
@@ -294,8 +347,8 @@ class RepBoard(commands.Cog):
         self,
         guild: discord.Guild,
         member: discord.Member,
-        stats: Dict[str, StatsRecord],
-        records: Dict[str, RepRecord],
+        stats: dict[str, StatsRecord],
+        records: dict[str, RepRecord],
     ) -> discord.Embed:
         member_stats = self._ensure_stats(stats, member.id)
         received = int(member_stats.get("received") or 0)
@@ -316,26 +369,38 @@ class RepBoard(commands.Cog):
         embed.set_thumbnail(url=member.display_avatar.url)
         embed.add_field(name="Received", value=self._count(received), inline=True)
         embed.add_field(name="Given", value=self._count(given), inline=True)
-        embed.add_field(name="Rank", value=f"#{rank}" if rank else "Unranked", inline=True)
+        embed.add_field(
+            name="Rank",
+            value=f"#{rank}" if rank else "Unranked",
+            inline=True,
+        )
         if recent:
             lines = []
             for record in recent[:5]:
                 giver = self._user_ref(record.get("giver_id"))
                 reason = str(record.get("reason") or "No reason provided.")
                 lines.append(f"#{record.get('id')} from {giver}: {reason[:90]}")
-            embed.add_field(name="Recent Rep", value="\n".join(lines)[:1024], inline=False)
+            embed.add_field(
+                name="Recent Rep",
+                value="\n".join(lines)[:1024],
+                inline=False,
+            )
         else:
-            embed.add_field(name="Recent Rep", value="No reputation received yet.", inline=False)
+            embed.add_field(
+                name="Recent Rep",
+                value="No reputation received yet.",
+                inline=False,
+            )
         return embed
 
     async def _send_log(
         self,
         guild: discord.Guild,
-        settings: Dict[str, Any],
+        settings: dict[str, Any],
         title: str,
         description: str,
         *,
-        color: Optional[int] = None,
+        color: int | None = None,
     ) -> None:
         channel = await self._get_log_channel(guild, settings)
         if channel is None:
@@ -350,7 +415,10 @@ class RepBoard(commands.Cog):
             timestamp=self._now(),
         )
         try:
-            await channel.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
+            await channel.send(
+                embed=embed,
+                allowed_mentions=discord.AllowedMentions.none(),
+            )
         except discord.HTTPException:
             log.exception("Failed to send RepBoard log in guild %s", guild.id)
 
@@ -358,10 +426,10 @@ class RepBoard(commands.Cog):
         self,
         ctx: commands.Context,
         record: RepRecord,
-        settings: Dict[str, Any],
+        settings: dict[str, Any],
         *,
         receiver_total: int,
-    ) -> Optional[discord.Message]:
+    ) -> discord.Message | None:
         assert ctx.guild is not None
         me = ctx.guild.me
         if me is None:
@@ -369,9 +437,11 @@ class RepBoard(commands.Cog):
 
         embed = self._rep_embed(ctx.guild, record, receiver_total=receiver_total)
         board_channel = await self._get_board_channel(ctx.guild, settings)
-        fallback_channel = ctx.channel if isinstance(ctx.channel, discord.TextChannel) else None
+        fallback_channel = (
+            ctx.channel if isinstance(ctx.channel, discord.TextChannel) else None
+        )
 
-        channels: List[discord.TextChannel] = []
+        channels: list[discord.TextChannel] = []
         if board_channel is not None:
             channels.append(board_channel)
         if fallback_channel is not None and fallback_channel not in channels:
@@ -381,16 +451,22 @@ class RepBoard(commands.Cog):
             if not self._can_send_embed(channel, me):
                 continue
             try:
-                return await channel.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
+                return await channel.send(
+                    embed=embed,
+                    allowed_mentions=discord.AllowedMentions.none(),
+                )
             except discord.HTTPException:
-                log.exception("Failed to send RepBoard announcement in guild %s", ctx.guild.id)
+                log.exception(
+                    "Failed to send RepBoard announcement in guild %s",
+                    ctx.guild.id,
+                )
         return None
 
     async def _store_announcement_message(
         self,
         guild: discord.Guild,
         record: RepRecord,
-        message: Optional[discord.Message],
+        message: discord.Message | None,
     ) -> None:
         if message is None:
             return
@@ -424,21 +500,23 @@ class RepBoard(commands.Cog):
         guild: discord.Guild,
         giver: discord.Member,
         receiver: discord.Member,
-        reason: Optional[str],
-    ) -> Tuple[RepRecord, Dict[str, Any], int]:
+        reason: str | None,
+    ) -> tuple[RepRecord, dict[str, Any], int]:
         async with self._guild_lock(guild.id):
             guild_conf = self.config.guild(guild)
             settings = await guild_conf.all()
             if not settings.get("enabled"):
-                raise commands.CommandError("RepBoard is not enabled yet. Ask staff to run `[p]repboard setup`.")
+                raise commands.CommandError(
+                    "RepBoard is not enabled yet. Ask staff to run `[p]repboard setup`.",
+                )
             if receiver.bot and not settings.get("allow_bots"):
                 raise commands.CommandError("Reputation for bots is disabled here.")
             if giver.id == receiver.id and not settings.get("allow_self_rep"):
                 raise commands.CommandError("You cannot give reputation to yourself.")
 
             cleaned_reason = self._clean_reason(reason, settings)
-            stats: Dict[str, StatsRecord] = settings.get("stats") or {}
-            records: Dict[str, RepRecord] = settings.get("records") or {}
+            stats: dict[str, StatsRecord] = settings.get("stats") or {}
+            records: dict[str, RepRecord] = settings.get("records") or {}
             giver_stats = self._ensure_stats(stats, giver.id)
             receiver_stats = self._ensure_stats(stats, receiver.id)
 
@@ -450,7 +528,7 @@ class RepBoard(commands.Cog):
                 if elapsed < cooldown_seconds:
                     remaining = int(cooldown_seconds - elapsed)
                     raise commands.CommandError(
-                        f"Wait {remaining // 60}m {remaining % 60}s before giving reputation again."
+                        f"Wait {remaining // 60}m {remaining % 60}s before giving reputation again.",
                     )
 
             daily_limit = int(settings.get("daily_limit") or 0)
@@ -458,8 +536,13 @@ class RepBoard(commands.Cog):
             if giver_stats.get("daily_key") != today:
                 giver_stats["daily_key"] = today
                 giver_stats["daily_given"] = 0
-            if daily_limit > 0 and int(giver_stats.get("daily_given") or 0) >= daily_limit:
-                raise commands.CommandError(f"You have reached the daily reputation limit of {daily_limit}.")
+            if (
+                daily_limit > 0
+                and int(giver_stats.get("daily_given") or 0) >= daily_limit
+            ):
+                raise commands.CommandError(
+                    f"You have reached the daily reputation limit of {daily_limit}.",
+                )
 
             rep_id = int(settings.get("next_rep_id") or 1)
             record: RepRecord = {
@@ -497,18 +580,22 @@ class RepBoard(commands.Cog):
         guild: discord.Guild,
         rep_id: int,
         moderator: discord.Member,
-        reason: Optional[str],
-    ) -> Tuple[RepRecord, Dict[str, Any]]:
+        reason: str | None,
+    ) -> tuple[RepRecord, dict[str, Any]]:
         async with self._guild_lock(guild.id):
             guild_conf = self.config.guild(guild)
             settings = await guild_conf.all()
-            records: Dict[str, RepRecord] = settings.get("records") or {}
-            stats: Dict[str, StatsRecord] = settings.get("stats") or {}
+            records: dict[str, RepRecord] = settings.get("records") or {}
+            stats: dict[str, StatsRecord] = settings.get("stats") or {}
             record = records.get(self._record_key(rep_id))
             if not record:
-                raise commands.BadArgument(f"No reputation entry with ID `{rep_id}` was found.")
+                raise commands.BadArgument(
+                    f"No reputation entry with ID `{rep_id}` was found.",
+                )
             if not record.get("active", True):
-                raise commands.BadArgument(f"Reputation entry `{rep_id}` is already removed.")
+                raise commands.BadArgument(
+                    f"Reputation entry `{rep_id}` is already removed.",
+                )
 
             record["active"] = False
             record["removed_at"] = self._now_ts()
@@ -522,7 +609,10 @@ class RepBoard(commands.Cog):
                 giver_stats["given"] = max(0, int(giver_stats.get("given") or 0) - 1)
             if receiver_id:
                 receiver_stats = self._ensure_stats(stats, receiver_id)
-                receiver_stats["received"] = max(0, int(receiver_stats.get("received") or 0) - 1)
+                receiver_stats["received"] = max(
+                    0,
+                    int(receiver_stats.get("received") or 0) - 1,
+                )
 
             records[self._record_key(rep_id)] = record
             await guild_conf.records.set(records)
@@ -615,21 +705,26 @@ class RepBoard(commands.Cog):
         prompt: str,
         *,
         allow_none: bool = False,
-    ) -> Optional[discord.TextChannel]:
+    ) -> discord.TextChannel | None:
         while True:
             answer = await self._wait_for_setup_reply(ctx, prompt)
             lowered = answer.lower()
-            if lowered in {"here", "current"} and isinstance(ctx.channel, discord.TextChannel):
+            if lowered in {"here", "current"} and isinstance(
+                ctx.channel,
+                discord.TextChannel,
+            ):
                 return ctx.channel
             if allow_none and lowered in {"none", "no", "skip", "off"}:
                 return None
             try:
                 return await commands.TextChannelConverter().convert(ctx, answer)
             except commands.BadArgument:
-                await ctx.send("Reply with a text channel mention, channel ID, `here`, or `none` when allowed.")
+                await ctx.send(
+                    "Reply with a text channel mention, channel ID, `here`, or `none` when allowed.",
+                )
 
     @staticmethod
-    def _parse_bool_answer(answer: str, *, default: Optional[bool] = None) -> bool:
+    def _parse_bool_answer(answer: str, *, default: bool | None = None) -> bool:
         lowered = answer.strip().lower()
         if default is not None and lowered in {"", "skip", "default"}:
             return default
@@ -644,7 +739,7 @@ class RepBoard(commands.Cog):
         ctx: commands.Context,
         prompt: str,
         *,
-        default: Optional[bool] = None,
+        default: bool | None = None,
     ) -> bool:
         while True:
             answer = await self._wait_for_setup_reply(ctx, prompt)
@@ -660,7 +755,7 @@ class RepBoard(commands.Cog):
         *,
         minimum: int,
         maximum: int,
-        default: Optional[int] = None,
+        default: int | None = None,
     ) -> int:
         while True:
             answer = await self._wait_for_setup_reply(ctx, prompt)
@@ -670,7 +765,9 @@ class RepBoard(commands.Cog):
             try:
                 value = int(answer)
             except ValueError:
-                await ctx.send(f"Reply with a whole number between {minimum} and {maximum}.")
+                await ctx.send(
+                    f"Reply with a whole number between {minimum} and {maximum}.",
+                )
                 continue
             if value < minimum or value > maximum:
                 await ctx.send(f"Reply with a number between {minimum} and {maximum}.")
@@ -689,8 +786,8 @@ class RepBoard(commands.Cog):
     async def repboard_setup(
         self,
         ctx: commands.Context,
-        board_channel: Optional[discord.TextChannel] = None,
-        log_channel: Optional[discord.TextChannel] = None,
+        board_channel: discord.TextChannel | None = None,
+        log_channel: discord.TextChannel | None = None,
     ) -> None:
         """Quick setup for RepBoard."""
         assert ctx.guild is not None
@@ -706,7 +803,7 @@ class RepBoard(commands.Cog):
             await guild_conf.log_channel_id.set(log_channel.id)
         await ctx.send(
             f"RepBoard is enabled. Board: {board_channel.mention}. "
-            f"Logs: {log_channel.mention if log_channel else 'unchanged/not set'}."
+            f"Logs: {log_channel.mention if log_channel else 'unchanged/not set'}.",
         )
 
     @repboard.command(name="walkthrough", aliases=["wizard"])
@@ -714,7 +811,9 @@ class RepBoard(commands.Cog):
     async def repboard_walkthrough(self, ctx: commands.Context) -> None:
         """Walk through RepBoard setup."""
         assert ctx.guild is not None
-        await ctx.send("RepBoard setup walkthrough started. Reply `cancel` at any step to stop.")
+        await ctx.send(
+            "RepBoard setup walkthrough started. Reply `cancel` at any step to stop.",
+        )
         try:
             board_channel = await self._prompt_text_channel(
                 ctx,
@@ -751,7 +850,9 @@ class RepBoard(commands.Cog):
 
         guild_conf = self.config.guild(ctx.guild)
         await guild_conf.enabled.set(True)
-        await guild_conf.board_channel_id.set(board_channel.id if board_channel else None)
+        await guild_conf.board_channel_id.set(
+            board_channel.id if board_channel else None,
+        )
         await guild_conf.log_channel_id.set(log_channel.id if log_channel else None)
         await guild_conf.require_reason.set(require_reason)
         await guild_conf.cooldown_seconds.set(cooldown_minutes * 60)
@@ -761,12 +862,16 @@ class RepBoard(commands.Cog):
             "RepBoard setup complete.\n"
             f"Board: {board_channel.mention if board_channel else 'command channel fallback'}\n"
             f"Logs: {log_channel.mention if log_channel else 'none'}\n"
-            f"Members can now use `{ctx.clean_prefix}repboard give @member reason`."
+            f"Members can now use `{ctx.clean_prefix}repboard give @member reason`.",
         )
 
     @repboard.command(name="enable")
     @commands.admin_or_permissions(manage_guild=True)
-    async def repboard_enable(self, ctx: commands.Context, enabled: bool = True) -> None:
+    async def repboard_enable(
+        self,
+        ctx: commands.Context,
+        enabled: bool = True,
+    ) -> None:
         """Enable or disable reputation giving."""
         assert ctx.guild is not None
         await self.config.guild(ctx.guild).enabled.set(enabled)
@@ -777,24 +882,32 @@ class RepBoard(commands.Cog):
     async def repboard_board_channel(
         self,
         ctx: commands.Context,
-        channel: Optional[discord.TextChannel] = None,
+        channel: discord.TextChannel | None = None,
     ) -> None:
         """Set or clear the public rep board channel."""
         assert ctx.guild is not None
-        await self.config.guild(ctx.guild).board_channel_id.set(channel.id if channel else None)
-        await ctx.send(f"Rep board channel set to {channel.mention if channel else 'none'}.")
+        await self.config.guild(ctx.guild).board_channel_id.set(
+            channel.id if channel else None,
+        )
+        await ctx.send(
+            f"Rep board channel set to {channel.mention if channel else 'none'}.",
+        )
 
     @repboard.command(name="logchannel")
     @commands.admin_or_permissions(manage_guild=True)
     async def repboard_log_channel(
         self,
         ctx: commands.Context,
-        channel: Optional[discord.TextChannel] = None,
+        channel: discord.TextChannel | None = None,
     ) -> None:
         """Set or clear the staff log channel."""
         assert ctx.guild is not None
-        await self.config.guild(ctx.guild).log_channel_id.set(channel.id if channel else None)
-        await ctx.send(f"RepBoard log channel set to {channel.mention if channel else 'none'}.")
+        await self.config.guild(ctx.guild).log_channel_id.set(
+            channel.id if channel else None,
+        )
+        await ctx.send(
+            f"RepBoard log channel set to {channel.mention if channel else 'none'}.",
+        )
 
     @repboard.command(name="cooldown")
     @commands.admin_or_permissions(manage_guild=True)
@@ -812,11 +925,17 @@ class RepBoard(commands.Cog):
         assert ctx.guild is not None
         amount = max(0, min(amount, 100))
         await self.config.guild(ctx.guild).daily_limit.set(amount)
-        await ctx.send(f"Daily rep giving limit set to **{amount if amount else 'unlimited'}**.")
+        await ctx.send(
+            f"Daily rep giving limit set to **{amount if amount else 'unlimited'}**.",
+        )
 
     @repboard.command(name="requirereason")
     @commands.admin_or_permissions(manage_guild=True)
-    async def repboard_require_reason(self, ctx: commands.Context, enabled: bool) -> None:
+    async def repboard_require_reason(
+        self,
+        ctx: commands.Context,
+        enabled: bool,
+    ) -> None:
         """Require or allow empty reputation reasons."""
         assert ctx.guild is not None
         await self.config.guild(ctx.guild).require_reason.set(enabled)
@@ -854,7 +973,7 @@ class RepBoard(commands.Cog):
         ctx: commands.Context,
         member: discord.Member,
         *,
-        reason: Optional[str] = None,
+        reason: str | None = None,
     ) -> None:
         """Give reputation to a member."""
         assert ctx.guild is not None
@@ -862,12 +981,22 @@ class RepBoard(commands.Cog):
             await ctx.send("This command only works in a server.")
             return
         try:
-            record, settings, receiver_total = await self._give_rep(ctx.guild, ctx.author, member, reason)
+            record, settings, receiver_total = await self._give_rep(
+                ctx.guild,
+                ctx.author,
+                member,
+                reason,
+            )
         except commands.CommandError as error:
             await ctx.send(str(error))
             return
 
-        message = await self._send_rep_announcement(ctx, record, settings, receiver_total=receiver_total)
+        message = await self._send_rep_announcement(
+            ctx,
+            record,
+            settings,
+            receiver_total=receiver_total,
+        )
         await self._store_announcement_message(ctx.guild, record, message)
         await self._send_log(
             ctx.guild,
@@ -878,8 +1007,13 @@ class RepBoard(commands.Cog):
         )
 
         if message is None:
-            await ctx.send(f"Rep #{record['id']} recorded for {member.mention}, but I could not post an embed.")
-        elif isinstance(ctx.channel, discord.TextChannel) and message.channel.id != ctx.channel.id:
+            await ctx.send(
+                f"Rep #{record['id']} recorded for {member.mention}, but I could not post an embed.",
+            )
+        elif (
+            isinstance(ctx.channel, discord.TextChannel)
+            and message.channel.id != ctx.channel.id
+        ):
             await ctx.send(f"Rep #{record['id']} posted to {message.channel.mention}.")
 
     @repboard.command(name="profile")
@@ -887,7 +1021,7 @@ class RepBoard(commands.Cog):
     async def repboard_profile(
         self,
         ctx: commands.Context,
-        member: Optional[discord.Member] = None,
+        member: discord.Member | None = None,
     ) -> None:
         """Show a member's reputation profile."""
         assert ctx.guild is not None
@@ -929,7 +1063,9 @@ class RepBoard(commands.Cog):
         title = "Received Reputation" if mode == "received" else "Given Reputation"
         lines = []
         for index, (value, member_id) in enumerate(rows, start=1):
-            lines.append(f"{index}. {self._user_ref(member_id)} - **{self._count(value)}**")
+            lines.append(
+                f"{index}. {self._user_ref(member_id)} - **{self._count(value)}**",
+            )
         embed = discord.Embed(
             title=f"RepBoard Leaderboard - {title}",
             description="\n".join(lines),
@@ -943,7 +1079,7 @@ class RepBoard(commands.Cog):
     async def repboard_history(
         self,
         ctx: commands.Context,
-        member: Optional[discord.Member] = None,
+        member: discord.Member | None = None,
         limit: int = 10,
     ) -> None:
         """Show recent reputation received by a member."""
@@ -969,7 +1105,7 @@ class RepBoard(commands.Cog):
             reason = str(record.get("reason") or "No reason provided.")
             lines.append(
                 f"#{record.get('id')} | {self._format_ts(record.get('created_at'), 'R')} "
-                f"| from {self._user_ref(record.get('giver_id'))} | {reason}"
+                f"| from {self._user_ref(record.get('giver_id'))} | {reason}",
             )
         for page in pagify("\n".join(lines), page_length=1800):
             await ctx.send(box(page))
@@ -982,14 +1118,19 @@ class RepBoard(commands.Cog):
         ctx: commands.Context,
         rep_id: int,
         *,
-        reason: Optional[str] = None,
+        reason: str | None = None,
     ) -> None:
         """Remove a reputation entry from active counts."""
         assert ctx.guild is not None
         if not isinstance(ctx.author, discord.Member):
             return
         try:
-            record, settings = await self._remove_rep(ctx.guild, rep_id, ctx.author, reason)
+            record, settings = await self._remove_rep(
+                ctx.guild,
+                rep_id,
+                ctx.author,
+                reason,
+            )
         except commands.CommandError as error:
             await ctx.send(str(error))
             return
@@ -1026,9 +1167,12 @@ class RepBoard(commands.Cog):
                 "channel_id",
                 "message_id",
                 "message_jump_url",
-            ]
+            ],
         )
-        for record in sorted(records.values(), key=lambda item: int(item.get("id") or 0)):
+        for record in sorted(
+            records.values(),
+            key=lambda item: int(item.get("id") or 0),
+        ):
             writer.writerow(
                 [
                     record.get("id"),
@@ -1043,7 +1187,10 @@ class RepBoard(commands.Cog):
                     record.get("channel_id"),
                     record.get("message_id"),
                     record.get("message_jump_url"),
-                ]
+                ],
             )
-        file = discord.File(io.BytesIO(output.getvalue().encode("utf-8")), filename=f"repboard-{ctx.guild.id}.csv")
+        file = discord.File(
+            io.BytesIO(output.getvalue().encode("utf-8")),
+            filename=f"repboard-{ctx.guild.id}.csv",
+        )
         await ctx.send("RepBoard export:", file=file)

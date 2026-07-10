@@ -1,10 +1,14 @@
 """Flipper Cog - Provides a coin flip command."""
 
 import random
+
 import discord
 from redbot.core import commands
 
-__red_end_user_data_statement__ = "This cog does not persistently store any end user data."
+__red_end_user_data_statement__ = (
+    "This cog does not persistently store any end user data."
+)
+
 
 class Flipper(commands.Cog):
     """Coin flip utility."""
@@ -17,7 +21,7 @@ class Flipper(commands.Cog):
         embed = discord.Embed(
             title="🪙 Coin Flip",
             description=f"**Result:** :coin: {result}",
-            color=color
+            color=color,
         )
         embed.set_footer(text="Flipper • Coin Toss")
         await ctx.send(embed=embed)

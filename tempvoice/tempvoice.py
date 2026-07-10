@@ -7,27 +7,29 @@ import contextlib
 import logging
 import re
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any
 
 import discord
 from discord import app_commands
 from redbot.core import Config, commands
-from redbot.core.bot import Red
 
 from .dashboard_integration import DashboardIntegration
+
+if TYPE_CHECKING:
+    from redbot.core.bot import Red
 
 log = logging.getLogger("red.taakoscogs.tempvoice")
 
 
-TempVoiceRecord = Dict[str, Any]
-GuildSettings = Dict[str, Any]
+TempVoiceRecord = dict[str, Any]
+GuildSettings = dict[str, Any]
 MODAL_SELECTS_SUPPORTED = hasattr(discord.ui, "Label")
 
 
 class RenameChannelModal(discord.ui.Modal):
     """Modal used by owners to rename a temporary voice channel."""
 
-    def __init__(self, cog: "TempVoice", channel_id: int, current_name: str) -> None:
+    def __init__(self, cog: TempVoice, channel_id: int, current_name: str) -> None:
         super().__init__(title="Rename Voice Channel", timeout=300)
         self.cog = cog
         self.channel_id = channel_id
@@ -46,14 +48,18 @@ class RenameChannelModal(discord.ui.Modal):
             str(self.name_input.value),
         )
 
-    async def on_error(self, interaction: discord.Interaction, error: Exception) -> None:
+    async def on_error(
+        self,
+        interaction: discord.Interaction,
+        error: Exception,
+    ) -> None:
         await self.cog.handle_modal_error(interaction, error)
 
 
 class UserLimitModal(discord.ui.Modal):
     """Modal used by owners to set a temporary voice user limit."""
 
-    def __init__(self, cog: "TempVoice", channel_id: int, current_limit: int) -> None:
+    def __init__(self, cog: TempVoice, channel_id: int, current_limit: int) -> None:
         super().__init__(title="Set User Limit", timeout=300)
         self.cog = cog
         self.channel_id = channel_id
@@ -73,7 +79,11 @@ class UserLimitModal(discord.ui.Modal):
             str(self.limit_input.value),
         )
 
-    async def on_error(self, interaction: discord.Interaction, error: Exception) -> None:
+    async def on_error(
+        self,
+        interaction: discord.Interaction,
+        error: Exception,
+    ) -> None:
         await self.cog.handle_modal_error(interaction, error)
 
 
@@ -82,7 +92,7 @@ class MemberTargetModal(discord.ui.Modal):
 
     def __init__(
         self,
-        cog: "TempVoice",
+        cog: TempVoice,
         channel_id: int,
         action: str,
         title: str,
@@ -103,7 +113,7 @@ class MemberTargetModal(discord.ui.Modal):
                 discord.ui.Label(
                     text=label[:45],
                     component=self.member_input,
-                )
+                ),
             )
         else:
             self.member_input = discord.ui.TextInput(
@@ -127,14 +137,18 @@ class MemberTargetModal(discord.ui.Modal):
             raw_member,
         )
 
-    async def on_error(self, interaction: discord.Interaction, error: Exception) -> None:
+    async def on_error(
+        self,
+        interaction: discord.Interaction,
+        error: Exception,
+    ) -> None:
         await self.cog.handle_modal_error(interaction, error)
 
 
 class TempVoiceControlView(discord.ui.View):
     """Persistent control panel for temporary voice channels."""
 
-    def __init__(self, cog: "TempVoice") -> None:
+    def __init__(self, cog: TempVoice) -> None:
         super().__init__(timeout=None)
         self.cog = cog
 
@@ -260,9 +274,9 @@ class TempVoice(DashboardIntegration, commands.Cog):
             clone_trigger_permissions=True,
             temp_channels={},
         )
-        self._locks: Dict[int, asyncio.Lock] = {}
-        self._delete_tasks: Dict[int, asyncio.Task] = {}
-        self._startup_task: Optional[asyncio.Task] = None
+        self._locks: dict[int, asyncio.Lock] = {}
+        self._delete_tasks: dict[int, asyncio.Task] = {}
+        self._startup_task: asyncio.Task | None = None
         self._control_view = TempVoiceControlView(self)
 
     async def cog_load(self) -> None:
@@ -329,12 +343,19 @@ class TempVoice(DashboardIntegration, commands.Cog):
         return f"`{channel_id}` (missing)"
 
     @staticmethod
-    def _human_members(channel: discord.VoiceChannel) -> List[discord.Member]:
+    def _human_members(channel: discord.VoiceChannel) -> list[discord.Member]:
         return [member for member in channel.members if not member.bot]
 
     @staticmethod
-    def _member_in_channel(member: discord.Member, channel: discord.VoiceChannel) -> bool:
-        return bool(member.voice and member.voice.channel and member.voice.channel.id == channel.id)
+    def _member_in_channel(
+        member: discord.Member,
+        channel: discord.VoiceChannel,
+    ) -> bool:
+        return bool(
+            member.voice
+            and member.voice.channel
+            and member.voice.channel.id == channel.id,
+        )
 
     @classmethod
     def _clean_channel_name(cls, value: str) -> str:
@@ -384,9 +405,9 @@ class TempVoice(DashboardIntegration, commands.Cog):
         self,
         interaction: discord.Interaction,
         *,
-        channel_id: Optional[int] = None,
+        channel_id: int | None = None,
         require_owner: bool = True,
-    ) -> Optional[Tuple[TempVoiceRecord, discord.VoiceChannel, discord.Member]]:
+    ) -> tuple[TempVoiceRecord, discord.VoiceChannel, discord.Member] | None:
         if not interaction.guild or not isinstance(interaction.user, discord.Member):
             await self._send_interaction_message(
                 interaction,
@@ -422,7 +443,10 @@ class TempVoice(DashboardIntegration, commands.Cog):
         record: TempVoiceRecord,
         channel: discord.VoiceChannel,
     ) -> bool:
-        if member.guild_permissions.administrator or member.guild_permissions.manage_channels:
+        if (
+            member.guild_permissions.administrator
+            or member.guild_permissions.manage_channels
+        ):
             return True
         try:
             owner_id = int(record.get("owner_id") or 0)
@@ -431,7 +455,11 @@ class TempVoice(DashboardIntegration, commands.Cog):
         return member.id == owner_id and self._member_in_channel(member, channel)
 
     @staticmethod
-    def _owner_present(guild: discord.Guild, record: TempVoiceRecord, channel: discord.VoiceChannel) -> bool:
+    def _owner_present(
+        guild: discord.Guild,
+        record: TempVoiceRecord,
+        channel: discord.VoiceChannel,
+    ) -> bool:
         try:
             owner_id = int(record.get("owner_id") or 0)
         except (TypeError, ValueError):
@@ -443,14 +471,14 @@ class TempVoice(DashboardIntegration, commands.Cog):
         self,
         guild: discord.Guild,
         channel_id: int,
-    ) -> Optional[TempVoiceRecord]:
+    ) -> TempVoiceRecord | None:
         records = await self.config.guild(guild).temp_channels()
         return records.get(str(channel_id))
 
     async def _record_from_interaction(
         self,
         interaction: discord.Interaction,
-    ) -> Tuple[Optional[TempVoiceRecord], Optional[discord.abc.GuildChannel]]:
+    ) -> tuple[TempVoiceRecord | None, discord.abc.GuildChannel | None]:
         guild = interaction.guild
         if guild is None:
             return None, None
@@ -483,9 +511,13 @@ class TempVoice(DashboardIntegration, commands.Cog):
         try:
             return await guild.fetch_member(member_id)
         except discord.NotFound as exc:
-            raise commands.BadArgument("I could not find that member in this server.") from exc
+            raise commands.BadArgument(
+                "I could not find that member in this server.",
+            ) from exc
         except discord.HTTPException as exc:
-            raise commands.BadArgument("I could not look up that member right now.") from exc
+            raise commands.BadArgument(
+                "I could not look up that member right now.",
+            ) from exc
 
     async def _ensure_member_override(
         self,
@@ -499,7 +531,12 @@ class TempVoice(DashboardIntegration, commands.Cog):
         overwrite.connect = True
         await channel.set_permissions(member, overwrite=overwrite, reason=reason)
 
-    async def _update_record(self, guild: discord.Guild, channel_id: int, **updates: Any) -> TempVoiceRecord:
+    async def _update_record(
+        self,
+        guild: discord.Guild,
+        channel_id: int,
+        **updates: Any,
+    ) -> TempVoiceRecord:
         async with self.config.guild(guild).temp_channels() as records:
             record = records.setdefault(str(channel_id), {})
             record.update(updates)
@@ -521,11 +558,25 @@ class TempVoice(DashboardIntegration, commands.Cog):
             timestamp=datetime.now(timezone.utc),
         )
         embed.add_field(name="Owner", value=owner_text, inline=True)
-        embed.add_field(name="Status", value="Locked" if locked else "Unlocked", inline=True)
-        embed.add_field(name="User Limit", value=self._limit_text(record.get("user_limit")), inline=True)
-        embed.add_field(name="Created", value=self._format_ts(record.get("created_at")), inline=True)
+        embed.add_field(
+            name="Status",
+            value="Locked" if locked else "Unlocked",
+            inline=True,
+        )
+        embed.add_field(
+            name="User Limit",
+            value=self._limit_text(record.get("user_limit")),
+            inline=True,
+        )
+        embed.add_field(
+            name="Created",
+            value=self._format_ts(record.get("created_at")),
+            inline=True,
+        )
         embed.add_field(name="Channel ID", value=f"`{channel.id}`", inline=True)
-        embed.set_footer(text="Owner controls are available while the owner is in the voice channel.")
+        embed.set_footer(
+            text="Owner controls are available while the owner is in the voice channel.",
+        )
         return embed
 
     async def _send_control_panel(
@@ -534,7 +585,7 @@ class TempVoice(DashboardIntegration, commands.Cog):
         channel: discord.VoiceChannel,
         record: TempVoiceRecord,
         settings: GuildSettings,
-    ) -> Optional[discord.Message]:
+    ) -> discord.Message | None:
         target = channel
         panel_channel_id = settings.get("panel_channel_id")
         if panel_channel_id:
@@ -560,7 +611,10 @@ class TempVoice(DashboardIntegration, commands.Cog):
                 allowed_mentions=discord.AllowedMentions.none(),
             )
         except (discord.Forbidden, discord.HTTPException):
-            log.exception("Could not send TempVoice control panel in guild %s.", guild.id)
+            log.exception(
+                "Could not send TempVoice control panel in guild %s.",
+                guild.id,
+            )
             return None
 
     async def _update_control_panel(
@@ -569,7 +623,7 @@ class TempVoice(DashboardIntegration, commands.Cog):
         channel: discord.VoiceChannel,
         record: TempVoiceRecord,
         *,
-        interaction: Optional[discord.Interaction] = None,
+        interaction: discord.Interaction | None = None,
     ) -> None:
         embed = self._control_embed(guild, channel, record)
         if interaction and interaction.message:
@@ -590,12 +644,21 @@ class TempVoice(DashboardIntegration, commands.Cog):
         except (discord.Forbidden, discord.NotFound, discord.HTTPException):
             return
 
-    async def _remove_temp_record(self, guild: discord.Guild, channel_id: int) -> Optional[TempVoiceRecord]:
+    async def _remove_temp_record(
+        self,
+        guild: discord.Guild,
+        channel_id: int,
+    ) -> TempVoiceRecord | None:
         async with self.config.guild(guild).temp_channels() as records:
-            record = records.pop(str(channel_id), None)
-        return record
+            return records.pop(str(channel_id), None)
 
-    async def _delete_temp_channel(self, guild: discord.Guild, channel_id: int, *, reason: str) -> None:
+    async def _delete_temp_channel(
+        self,
+        guild: discord.Guild,
+        channel_id: int,
+        *,
+        reason: str,
+    ) -> None:
         await self._remove_temp_record(guild, channel_id)
         channel = guild.get_channel(channel_id)
         if isinstance(channel, discord.VoiceChannel):
@@ -604,7 +667,11 @@ class TempVoice(DashboardIntegration, commands.Cog):
             except discord.NotFound:
                 return
             except (discord.Forbidden, discord.HTTPException):
-                log.exception("Could not delete TempVoice channel %s in guild %s.", channel_id, guild.id)
+                log.exception(
+                    "Could not delete TempVoice channel %s in guild %s.",
+                    channel_id,
+                    guild.id,
+                )
 
     def _cancel_cleanup(self, channel_id: int) -> None:
         task = self._delete_tasks.pop(channel_id, None)
@@ -614,10 +681,15 @@ class TempVoice(DashboardIntegration, commands.Cog):
     def _schedule_cleanup(self, guild_id: int, channel_id: int, delay: int) -> None:
         self._cancel_cleanup(channel_id)
         self._delete_tasks[channel_id] = asyncio.create_task(
-            self._cleanup_after_delay(guild_id, channel_id, delay)
+            self._cleanup_after_delay(guild_id, channel_id, delay),
         )
 
-    async def _cleanup_after_delay(self, guild_id: int, channel_id: int, delay: int) -> None:
+    async def _cleanup_after_delay(
+        self,
+        guild_id: int,
+        channel_id: int,
+        delay: int,
+    ) -> None:
         try:
             await asyncio.sleep(max(0, min(delay, self.MAX_DELETE_DELAY)))
             guild = self.bot.get_guild(guild_id)
@@ -648,7 +720,7 @@ class TempVoice(DashboardIntegration, commands.Cog):
                 guild = self.bot.get_guild(guild_id)
                 if guild is None:
                     continue
-                stale_ids: List[str] = []
+                stale_ids: list[str] = []
                 for channel_id in settings.get("temp_channels", {}):
                     try:
                         channel = guild.get_channel(int(channel_id))
@@ -678,7 +750,7 @@ class TempVoice(DashboardIntegration, commands.Cog):
         self,
         guild: discord.Guild,
         owner_id: int,
-    ) -> Optional[discord.VoiceChannel]:
+    ) -> discord.VoiceChannel | None:
         records = await self.config.guild(guild).temp_channels()
         for channel_id, record in records.items():
             if int(record.get("owner_id") or 0) != owner_id:
@@ -708,9 +780,15 @@ class TempVoice(DashboardIntegration, commands.Cog):
             if existing is not None:
                 self._cancel_cleanup(existing.id)
                 try:
-                    await member.move_to(existing, reason="TempVoice owner returned to their channel.")
+                    await member.move_to(
+                        existing,
+                        reason="TempVoice owner returned to their channel.",
+                    )
                 except (discord.Forbidden, discord.HTTPException):
-                    log.exception("Could not move TempVoice owner %s to existing channel.", member.id)
+                    log.exception(
+                        "Could not move TempVoice owner %s to existing channel.",
+                        member.id,
+                    )
                 return
 
             category = None
@@ -729,8 +807,15 @@ class TempVoice(DashboardIntegration, commands.Cog):
             )
             user_limit = max(0, min(int(settings.get("default_user_limit") or 0), 99))
 
-            overwrites = dict(trigger.overwrites) if settings.get("clone_trigger_permissions", True) else {}
-            default_overwrite = overwrites.get(guild.default_role, discord.PermissionOverwrite())
+            overwrites = (
+                dict(trigger.overwrites)
+                if settings.get("clone_trigger_permissions", True)
+                else {}
+            )
+            default_overwrite = overwrites.get(
+                guild.default_role,
+                discord.PermissionOverwrite(),
+            )
             owner_overwrite = overwrites.get(member, discord.PermissionOverwrite())
             owner_overwrite.view_channel = True
             owner_overwrite.connect = True
@@ -753,7 +838,10 @@ class TempVoice(DashboardIntegration, commands.Cog):
                         reason=reason,
                     )
             except (discord.Forbidden, discord.HTTPException):
-                log.exception("Could not create TempVoice channel in guild %s.", guild.id)
+                log.exception(
+                    "Could not create TempVoice channel in guild %s.",
+                    guild.id,
+                )
                 return
 
             record: TempVoiceRecord = {
@@ -774,7 +862,11 @@ class TempVoice(DashboardIntegration, commands.Cog):
             try:
                 await member.move_to(channel, reason="TempVoice channel created.")
             except (discord.Forbidden, discord.HTTPException):
-                log.exception("Could not move member %s to TempVoice channel %s.", member.id, channel.id)
+                log.exception(
+                    "Could not move member %s to TempVoice channel %s.",
+                    member.id,
+                    channel.id,
+                )
                 await self._delete_temp_channel(
                     guild,
                     channel.id,
@@ -791,7 +883,10 @@ class TempVoice(DashboardIntegration, commands.Cog):
                     panel_message_id=message.id,
                 )
 
-    async def _maybe_cleanup_channel(self, channel: Optional[discord.abc.GuildChannel]) -> None:
+    async def _maybe_cleanup_channel(
+        self,
+        channel: discord.abc.GuildChannel | None,
+    ) -> None:
         if not isinstance(channel, discord.VoiceChannel):
             return
         record = await self._get_temp_record(channel.guild, channel.id)
@@ -816,13 +911,20 @@ class TempVoice(DashboardIntegration, commands.Cog):
         if isinstance(after.channel, discord.VoiceChannel):
             self._cancel_cleanup(after.channel.id)
             settings = await self.config.guild(member.guild).all()
-            if settings.get("enabled") and int(settings.get("join_channel_id") or 0) == after.channel.id:
+            if (
+                settings.get("enabled")
+                and int(settings.get("join_channel_id") or 0) == after.channel.id
+            ):
                 await self._create_temp_channel_for(member, after.channel)
 
         if before.channel is not None:
             await self._maybe_cleanup_channel(before.channel)
 
-    async def handle_control_button(self, interaction: discord.Interaction, action: str) -> None:
+    async def handle_control_button(
+        self,
+        interaction: discord.Interaction,
+        action: str,
+    ) -> None:
         """Route persistent control panel button interactions."""
         if action == "claim":
             await self._handle_claim(interaction)
@@ -834,11 +936,17 @@ class TempVoice(DashboardIntegration, commands.Cog):
         record, channel, member = guarded
 
         if action == "rename":
-            await interaction.response.send_modal(RenameChannelModal(self, channel.id, channel.name))
+            await interaction.response.send_modal(
+                RenameChannelModal(self, channel.id, channel.name),
+            )
             return
         if action == "limit":
             await interaction.response.send_modal(
-                UserLimitModal(self, channel.id, int(record.get("user_limit") or channel.user_limit or 0))
+                UserLimitModal(
+                    self,
+                    channel.id,
+                    int(record.get("user_limit") or channel.user_limit or 0),
+                ),
             )
             return
         if action == "transfer":
@@ -849,17 +957,29 @@ class TempVoice(DashboardIntegration, commands.Cog):
                     "transfer",
                     "Transfer Ownership",
                     "New owner",
-                )
+                ),
             )
             return
         if action == "permit":
             await interaction.response.send_modal(
-                MemberTargetModal(self, channel.id, "permit", "Permit User", "Member to permit")
+                MemberTargetModal(
+                    self,
+                    channel.id,
+                    "permit",
+                    "Permit User",
+                    "Member to permit",
+                ),
             )
             return
         if action == "remove":
             await interaction.response.send_modal(
-                MemberTargetModal(self, channel.id, "remove", "Remove User", "Member to remove")
+                MemberTargetModal(
+                    self,
+                    channel.id,
+                    "remove",
+                    "Remove User",
+                    "Member to remove",
+                ),
             )
             return
         if action == "lock":
@@ -893,14 +1013,25 @@ class TempVoice(DashboardIntegration, commands.Cog):
                     reason=f"TempVoice lock toggled by {actor} ({actor.id}).",
                 )
         except discord.Forbidden:
-            await interaction.followup.send("I do not have permission to edit that channel.", ephemeral=True)
+            await interaction.followup.send(
+                "I do not have permission to edit that channel.",
+                ephemeral=True,
+            )
             return
         except discord.HTTPException:
-            await interaction.followup.send("Discord rejected that channel update.", ephemeral=True)
+            await interaction.followup.send(
+                "Discord rejected that channel update.",
+                ephemeral=True,
+            )
             return
 
         updated = await self._update_record(channel.guild, channel.id, locked=locked)
-        await self._update_control_panel(channel.guild, channel, updated, interaction=interaction)
+        await self._update_control_panel(
+            channel.guild,
+            channel,
+            updated,
+            interaction=interaction,
+        )
         await interaction.followup.send(
             f"{channel.mention} is now {'locked' if locked else 'unlocked'}.",
             ephemeral=True,
@@ -919,7 +1050,8 @@ class TempVoice(DashboardIntegration, commands.Cog):
             )
             return
         if self._owner_present(channel.guild, record, channel) and not (
-            member.guild_permissions.administrator or member.guild_permissions.manage_channels
+            member.guild_permissions.administrator
+            or member.guild_permissions.manage_channels
         ):
             await self._send_interaction_message(
                 interaction,
@@ -935,12 +1067,27 @@ class TempVoice(DashboardIntegration, commands.Cog):
                 reason=f"TempVoice claimed by {member} ({member.id}).",
             )
         except (discord.Forbidden, discord.HTTPException):
-            await interaction.followup.send("I could not update that channel owner.", ephemeral=True)
+            await interaction.followup.send(
+                "I could not update that channel owner.",
+                ephemeral=True,
+            )
             return
 
-        updated = await self._update_record(channel.guild, channel.id, owner_id=member.id)
-        await self._update_control_panel(channel.guild, channel, updated, interaction=interaction)
-        await interaction.followup.send(f"You now own {channel.mention}.", ephemeral=True)
+        updated = await self._update_record(
+            channel.guild,
+            channel.id,
+            owner_id=member.id,
+        )
+        await self._update_control_panel(
+            channel.guild,
+            channel,
+            updated,
+            interaction=interaction,
+        )
+        await interaction.followup.send(
+            f"You now own {channel.mention}.",
+            ephemeral=True,
+        )
 
     async def handle_rename_submit(
         self,
@@ -960,14 +1107,25 @@ class TempVoice(DashboardIntegration, commands.Cog):
                 reason=f"TempVoice renamed by {member} ({member.id}).",
             )
         except discord.Forbidden:
-            await interaction.followup.send("I do not have permission to rename that channel.", ephemeral=True)
+            await interaction.followup.send(
+                "I do not have permission to rename that channel.",
+                ephemeral=True,
+            )
             return
         except discord.HTTPException:
-            await interaction.followup.send("Discord rejected that channel name.", ephemeral=True)
+            await interaction.followup.send(
+                "Discord rejected that channel name.",
+                ephemeral=True,
+            )
             return
 
         updated = await self._update_record(channel.guild, channel.id, name=name)
-        await self._update_control_panel(channel.guild, channel, updated, interaction=interaction)
+        await self._update_control_panel(
+            channel.guild,
+            channel,
+            updated,
+            interaction=interaction,
+        )
         await interaction.followup.send(
             f"Renamed the channel to **{discord.utils.escape_markdown(name)}**.",
             ephemeral=True,
@@ -986,10 +1144,16 @@ class TempVoice(DashboardIntegration, commands.Cog):
         try:
             limit = int(raw_limit.strip())
         except ValueError:
-            await self._send_interaction_message(interaction, "User limit must be a number from 0 to 99.")
+            await self._send_interaction_message(
+                interaction,
+                "User limit must be a number from 0 to 99.",
+            )
             return
         if limit < 0 or limit > 99:
-            await self._send_interaction_message(interaction, "User limit must be between 0 and 99.")
+            await self._send_interaction_message(
+                interaction,
+                "User limit must be between 0 and 99.",
+            )
             return
 
         await interaction.response.defer(ephemeral=True)
@@ -999,15 +1163,29 @@ class TempVoice(DashboardIntegration, commands.Cog):
                 reason=f"TempVoice user limit changed by {member} ({member.id}).",
             )
         except discord.Forbidden:
-            await interaction.followup.send("I do not have permission to edit that channel.", ephemeral=True)
+            await interaction.followup.send(
+                "I do not have permission to edit that channel.",
+                ephemeral=True,
+            )
             return
         except discord.HTTPException:
-            await interaction.followup.send("Discord rejected that user limit.", ephemeral=True)
+            await interaction.followup.send(
+                "Discord rejected that user limit.",
+                ephemeral=True,
+            )
             return
 
         updated = await self._update_record(channel.guild, channel.id, user_limit=limit)
-        await self._update_control_panel(channel.guild, channel, updated, interaction=interaction)
-        await interaction.followup.send(f"User limit set to {self._limit_text(limit)}.", ephemeral=True)
+        await self._update_control_panel(
+            channel.guild,
+            channel,
+            updated,
+            interaction=interaction,
+        )
+        await interaction.followup.send(
+            f"User limit set to {self._limit_text(limit)}.",
+            ephemeral=True,
+        )
 
     async def handle_member_submit(
         self,
@@ -1044,10 +1222,16 @@ class TempVoice(DashboardIntegration, commands.Cog):
         actor: discord.Member,
     ) -> None:
         if target.bot:
-            await self._send_interaction_message(interaction, "Ownership cannot be transferred to a bot.")
+            await self._send_interaction_message(
+                interaction,
+                "Ownership cannot be transferred to a bot.",
+            )
             return
         if not self._member_in_channel(target, channel):
-            await self._send_interaction_message(interaction, "The new owner must be in the voice channel.")
+            await self._send_interaction_message(
+                interaction,
+                "The new owner must be in the voice channel.",
+            )
             return
 
         await interaction.response.defer(ephemeral=True)
@@ -1058,12 +1242,27 @@ class TempVoice(DashboardIntegration, commands.Cog):
                 reason=f"TempVoice ownership transferred by {actor} ({actor.id}).",
             )
         except (discord.Forbidden, discord.HTTPException):
-            await interaction.followup.send("I could not update that channel owner.", ephemeral=True)
+            await interaction.followup.send(
+                "I could not update that channel owner.",
+                ephemeral=True,
+            )
             return
 
-        updated = await self._update_record(channel.guild, channel.id, owner_id=target.id)
-        await self._update_control_panel(channel.guild, channel, updated, interaction=interaction)
-        await interaction.followup.send(f"Ownership transferred to {target.mention}.", ephemeral=True)
+        updated = await self._update_record(
+            channel.guild,
+            channel.id,
+            owner_id=target.id,
+        )
+        await self._update_control_panel(
+            channel.guild,
+            channel,
+            updated,
+            interaction=interaction,
+        )
+        await interaction.followup.send(
+            f"Ownership transferred to {target.mention}.",
+            ephemeral=True,
+        )
 
     async def _permit_member(
         self,
@@ -1081,15 +1280,30 @@ class TempVoice(DashboardIntegration, commands.Cog):
                 reason=f"TempVoice access granted by {actor} ({actor.id}).",
             )
         except (discord.Forbidden, discord.HTTPException):
-            await interaction.followup.send("I could not permit that member.", ephemeral=True)
+            await interaction.followup.send(
+                "I could not permit that member.",
+                ephemeral=True,
+            )
             return
 
         permitted_ids = list(record.get("permitted_ids", []))
         if target.id not in permitted_ids:
             permitted_ids.append(target.id)
-        updated = await self._update_record(channel.guild, channel.id, permitted_ids=permitted_ids)
-        await self._update_control_panel(channel.guild, channel, updated, interaction=interaction)
-        await interaction.followup.send(f"{target.mention} can now join {channel.mention}.", ephemeral=True)
+        updated = await self._update_record(
+            channel.guild,
+            channel.id,
+            permitted_ids=permitted_ids,
+        )
+        await self._update_control_panel(
+            channel.guild,
+            channel,
+            updated,
+            interaction=interaction,
+        )
+        await interaction.followup.send(
+            f"{target.mention} can now join {channel.mention}.",
+            ephemeral=True,
+        )
 
     async def _remove_member(
         self,
@@ -1100,7 +1314,10 @@ class TempVoice(DashboardIntegration, commands.Cog):
         actor: discord.Member,
     ) -> None:
         if int(record.get("owner_id") or 0) == target.id:
-            await self._send_interaction_message(interaction, "Transfer ownership before removing the owner.")
+            await self._send_interaction_message(
+                interaction,
+                "Transfer ownership before removing the owner.",
+            )
             return
 
         await interaction.response.defer(ephemeral=True)
@@ -1111,34 +1328,72 @@ class TempVoice(DashboardIntegration, commands.Cog):
                 reason=f"TempVoice access removed by {actor} ({actor.id}).",
             )
             if self._member_in_channel(target, channel):
-                await target.move_to(None, reason=f"Removed from TempVoice by {actor} ({actor.id}).")
+                await target.move_to(
+                    None,
+                    reason=f"Removed from TempVoice by {actor} ({actor.id}).",
+                )
         except discord.Forbidden:
-            await interaction.followup.send("I do not have permission to remove that member.", ephemeral=True)
+            await interaction.followup.send(
+                "I do not have permission to remove that member.",
+                ephemeral=True,
+            )
             return
         except discord.HTTPException:
-            await interaction.followup.send("Discord rejected that member update.", ephemeral=True)
+            await interaction.followup.send(
+                "Discord rejected that member update.",
+                ephemeral=True,
+            )
             return
 
         permitted_ids = [
-            member_id for member_id in record.get("permitted_ids", []) if int(member_id) != target.id
+            member_id
+            for member_id in record.get("permitted_ids", [])
+            if int(member_id) != target.id
         ]
-        updated = await self._update_record(channel.guild, channel.id, permitted_ids=permitted_ids)
-        await self._update_control_panel(channel.guild, channel, updated, interaction=interaction)
-        await interaction.followup.send(f"{target.mention} was removed from {channel.mention}.", ephemeral=True)
+        updated = await self._update_record(
+            channel.guild,
+            channel.id,
+            permitted_ids=permitted_ids,
+        )
+        await self._update_control_panel(
+            channel.guild,
+            channel,
+            updated,
+            interaction=interaction,
+        )
+        await interaction.followup.send(
+            f"{target.mention} was removed from {channel.mention}.",
+            ephemeral=True,
+        )
 
-    async def handle_modal_error(self, interaction: discord.Interaction, error: Exception) -> None:
+    async def handle_modal_error(
+        self,
+        interaction: discord.Interaction,
+        error: Exception,
+    ) -> None:
         log.exception(
             "TempVoice modal failed.",
             exc_info=(type(error), error, error.__traceback__),
         )
-        await self._send_interaction_message(interaction, "I could not process that control panel action.")
+        await self._send_interaction_message(
+            interaction,
+            "I could not process that control panel action.",
+        )
 
-    def _settings_embed(self, guild: discord.Guild, settings: GuildSettings) -> discord.Embed:
+    def _settings_embed(
+        self,
+        guild: discord.Guild,
+        settings: GuildSettings,
+    ) -> discord.Embed:
         embed = discord.Embed(
             title="TempVoice Settings",
             color=self.SUCCESS_COLOR if settings.get("enabled") else self.ERROR_COLOR,
         )
-        embed.add_field(name="Enabled", value="Yes" if settings.get("enabled") else "No", inline=True)
+        embed.add_field(
+            name="Enabled",
+            value="Yes" if settings.get("enabled") else "No",
+            inline=True,
+        )
         embed.add_field(
             name="Join Channel",
             value=self._channel_ref(guild, settings.get("join_channel_id")),
@@ -1150,7 +1405,11 @@ class TempVoice(DashboardIntegration, commands.Cog):
             inline=True,
         )
         panel_channel_id = settings.get("panel_channel_id")
-        panel_value = self._channel_ref(guild, panel_channel_id) if panel_channel_id else "Voice channel chat"
+        panel_value = (
+            self._channel_ref(guild, panel_channel_id)
+            if panel_channel_id
+            else "Voice channel chat"
+        )
         embed.add_field(name="Control Panels", value=panel_value, inline=True)
         embed.add_field(
             name="Default User Limit",
@@ -1168,7 +1427,11 @@ class TempVoice(DashboardIntegration, commands.Cog):
             inline=False,
         )
         temp_channels = settings.get("temp_channels", {})
-        embed.add_field(name="Active Channels", value=str(len(temp_channels)), inline=True)
+        embed.add_field(
+            name="Active Channels",
+            value=str(len(temp_channels)),
+            inline=True,
+        )
         return embed
 
     @commands.hybrid_group(
@@ -1183,7 +1446,11 @@ class TempVoice(DashboardIntegration, commands.Cog):
         """Manage temporary voice channels."""
         await ctx.send_help(ctx.command)
 
-    @tempvoice.command(name="settings", aliases=["status"], description="Show TempVoice settings.")
+    @tempvoice.command(
+        name="settings",
+        aliases=["status"],
+        description="Show TempVoice settings.",
+    )
     @commands.guild_only()
     @commands.bot_has_permissions(embed_links=True)
     async def tempvoice_settings(self, ctx: commands.Context) -> None:
@@ -1192,10 +1459,17 @@ class TempVoice(DashboardIntegration, commands.Cog):
         settings = await self.config.guild(ctx.guild).all()
         await ctx.send(embed=self._settings_embed(ctx.guild, settings))
 
-    @tempvoice.command(name="setup", description="Configure the join-to-create voice channel.")
+    @tempvoice.command(
+        name="setup",
+        description="Configure the join-to-create voice channel.",
+    )
     @commands.guild_only()
     @commands.admin_or_permissions(manage_guild=True)
-    @commands.bot_has_permissions(manage_channels=True, move_members=True, embed_links=True)
+    @commands.bot_has_permissions(
+        manage_channels=True,
+        move_members=True,
+        embed_links=True,
+    )
     @app_commands.describe(
         join_channel="Existing voice channel users join to create temporary channels",
         category="Category where temporary voice channels should be created",
@@ -1203,8 +1477,8 @@ class TempVoice(DashboardIntegration, commands.Cog):
     async def tempvoice_setup(
         self,
         ctx: commands.Context,
-        join_channel: Optional[discord.VoiceChannel] = None,
-        category: Optional[discord.CategoryChannel] = None,
+        join_channel: discord.VoiceChannel | None = None,
+        category: discord.CategoryChannel | None = None,
     ) -> None:
         """Set up or create the join-to-create voice channel."""
         assert ctx.guild is not None
@@ -1227,10 +1501,12 @@ class TempVoice(DashboardIntegration, commands.Cog):
 
         await self.config.guild(ctx.guild).enabled.set(True)
         await self.config.guild(ctx.guild).join_channel_id.set(join_channel.id)
-        await self.config.guild(ctx.guild).category_id.set(category.id if category else None)
+        await self.config.guild(ctx.guild).category_id.set(
+            category.id if category else None,
+        )
 
         await ctx.send(
-            f"TempVoice is enabled. Users who join {join_channel.mention} will get a temporary voice channel."
+            f"TempVoice is enabled. Users who join {join_channel.mention} will get a temporary voice channel.",
         )
 
     @tempvoice.command(name="enable", description="Enable temporary voice creation.")
@@ -1241,7 +1517,9 @@ class TempVoice(DashboardIntegration, commands.Cog):
         assert ctx.guild is not None
         join_channel_id = await self.config.guild(ctx.guild).join_channel_id()
         if not join_channel_id:
-            await ctx.send("Set a join channel first with `[p]tempvoice setup` or `[p]tempvoice joinchannel`.")
+            await ctx.send(
+                "Set a join channel first with `[p]tempvoice setup` or `[p]tempvoice joinchannel`.",
+            )
             return
         await self.config.guild(ctx.guild).enabled.set(True)
         await ctx.send("TempVoice is enabled.")
@@ -1253,7 +1531,9 @@ class TempVoice(DashboardIntegration, commands.Cog):
         """Disable temporary voice creation without deleting active channels."""
         assert ctx.guild is not None
         await self.config.guild(ctx.guild).enabled.set(False)
-        await ctx.send("TempVoice is disabled. Existing temporary channels are not deleted.")
+        await ctx.send(
+            "TempVoice is disabled. Existing temporary channels are not deleted.",
+        )
 
     @tempvoice.command(
         name="joinchannel",
@@ -1262,28 +1542,43 @@ class TempVoice(DashboardIntegration, commands.Cog):
     )
     @commands.guild_only()
     @commands.admin_or_permissions(manage_guild=True)
-    async def tempvoice_joinchannel(self, ctx: commands.Context, channel: discord.VoiceChannel) -> None:
+    async def tempvoice_joinchannel(
+        self,
+        ctx: commands.Context,
+        channel: discord.VoiceChannel,
+    ) -> None:
         """Set the voice channel that creates temporary channels."""
         assert ctx.guild is not None
         await self.config.guild(ctx.guild).join_channel_id.set(channel.id)
         await self.config.guild(ctx.guild).enabled.set(True)
-        await ctx.send(f"Users who join {channel.mention} will get a temporary voice channel.")
+        await ctx.send(
+            f"Users who join {channel.mention} will get a temporary voice channel.",
+        )
 
-    @tempvoice.command(name="category", description="Set or clear the temp voice category.")
+    @tempvoice.command(
+        name="category",
+        description="Set or clear the temp voice category.",
+    )
     @commands.guild_only()
     @commands.admin_or_permissions(manage_guild=True)
     async def tempvoice_category(
         self,
         ctx: commands.Context,
-        category: Optional[discord.CategoryChannel] = None,
+        category: discord.CategoryChannel | None = None,
     ) -> None:
         """Set the category where temporary voice channels are created."""
         assert ctx.guild is not None
-        await self.config.guild(ctx.guild).category_id.set(category.id if category else None)
+        await self.config.guild(ctx.guild).category_id.set(
+            category.id if category else None,
+        )
         if category:
-            await ctx.send(f"Temporary voice channels will be created in **{category.name}**.")
+            await ctx.send(
+                f"Temporary voice channels will be created in **{category.name}**.",
+            )
         else:
-            await ctx.send("Temporary voice channels will use the join channel's category.")
+            await ctx.send(
+                "Temporary voice channels will use the join channel's category.",
+            )
 
     @tempvoice.command(
         name="panelchannel",
@@ -1295,7 +1590,7 @@ class TempVoice(DashboardIntegration, commands.Cog):
     async def tempvoice_panelchannel(
         self,
         ctx: commands.Context,
-        channel: Optional[discord.TextChannel] = None,
+        channel: discord.TextChannel | None = None,
     ) -> None:
         """Set where control panels are posted, or clear to use voice channel chat."""
         assert ctx.guild is not None
@@ -1306,14 +1601,18 @@ class TempVoice(DashboardIntegration, commands.Cog):
                 return
             permissions = channel.permissions_for(me)
             if not permissions.send_messages or not permissions.embed_links:
-                await ctx.send(f"I need Send Messages and Embed Links in {channel.mention}.")
+                await ctx.send(
+                    f"I need Send Messages and Embed Links in {channel.mention}.",
+                )
                 return
-        await self.config.guild(ctx.guild).panel_channel_id.set(channel.id if channel else None)
+        await self.config.guild(ctx.guild).panel_channel_id.set(
+            channel.id if channel else None,
+        )
         if channel:
             await ctx.send(f"Control panels will be posted in {channel.mention}.")
         else:
             await ctx.send(
-                "Control panels will be posted in the temporary voice channel chat when Discord allows it."
+                "Control panels will be posted in the temporary voice channel chat when Discord allows it.",
             )
 
     @tempvoice.command(
@@ -1327,12 +1626,17 @@ class TempVoice(DashboardIntegration, commands.Cog):
         """Set the default user limit for newly created temporary channels."""
         assert ctx.guild is not None
         if limit < 0 or limit > 99:
-            await ctx.send("Default user limit must be between 0 and 99. Use 0 for no limit.")
+            await ctx.send(
+                "Default user limit must be between 0 and 99. Use 0 for no limit.",
+            )
             return
         await self.config.guild(ctx.guild).default_user_limit.set(limit)
         await ctx.send(f"Default user limit set to {self._limit_text(limit)}.")
 
-    @tempvoice.command(name="template", description="Set the temporary channel name template.")
+    @tempvoice.command(
+        name="template",
+        description="Set the temporary channel name template.",
+    )
     @commands.guild_only()
     @commands.admin_or_permissions(manage_guild=True)
     async def tempvoice_template(self, ctx: commands.Context, *, template: str) -> None:
@@ -1342,20 +1646,27 @@ class TempVoice(DashboardIntegration, commands.Cog):
         await self.config.guild(ctx.guild).channel_name_template.set(template)
         await ctx.send(
             "Temporary voice channels will use this template: "
-            f"`{discord.utils.escape_markdown(template)}`"
+            f"`{discord.utils.escape_markdown(template)}`",
         )
 
-    @tempvoice.command(name="autodelete", description="Set the empty-channel delete delay.")
+    @tempvoice.command(
+        name="autodelete",
+        description="Set the empty-channel delete delay.",
+    )
     @commands.guild_only()
     @commands.admin_or_permissions(manage_guild=True)
     async def tempvoice_autodelete(self, ctx: commands.Context, seconds: int) -> None:
         """Set how long empty temporary channels wait before deletion."""
         assert ctx.guild is not None
         if seconds < 0 or seconds > self.MAX_DELETE_DELAY:
-            await ctx.send(f"Auto delete delay must be between 0 and {self.MAX_DELETE_DELAY} seconds.")
+            await ctx.send(
+                f"Auto delete delay must be between 0 and {self.MAX_DELETE_DELAY} seconds.",
+            )
             return
         await self.config.guild(ctx.guild).auto_delete_delay.set(seconds)
-        await ctx.send(f"Empty temporary channels will be deleted after {seconds} seconds.")
+        await ctx.send(
+            f"Empty temporary channels will be deleted after {seconds} seconds.",
+        )
 
     @tempvoice.command(name="list", description="List active temporary voice channels.")
     @commands.guild_only()
@@ -1382,18 +1693,26 @@ class TempVoice(DashboardIntegration, commands.Cog):
             owner = f"<@{owner_id}>" if owner_id else "Unclaimed"
             lines.append(
                 f"{channel.mention} - owner {owner}, {len(self._human_members(channel))} member(s), "
-                f"{'locked' if record.get('locked') else 'unlocked'}"
+                f"{'locked' if record.get('locked') else 'unlocked'}",
             )
 
-        embed = discord.Embed(title="Active TempVoice Channels", color=self.DEFAULT_COLOR)
+        embed = discord.Embed(
+            title="Active TempVoice Channels",
+            color=self.DEFAULT_COLOR,
+        )
         embed.description = "\n".join(lines[:20]) or "No active channels found."
         if len(lines) > 20:
             embed.set_footer(text=f"Showing 20 of {len(lines)} active channels.")
         elif stale:
-            embed.set_footer(text=f"{stale} stale record(s) can be removed with cleanup.")
+            embed.set_footer(
+                text=f"{stale} stale record(s) can be removed with cleanup.",
+            )
         await ctx.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
 
-    @tempvoice.command(name="claim", description="Claim your current temporary voice channel.")
+    @tempvoice.command(
+        name="claim",
+        description="Claim your current temporary voice channel.",
+    )
     @commands.guild_only()
     @commands.bot_has_permissions(manage_channels=True)
     async def tempvoice_claim(self, ctx: commands.Context) -> None:
@@ -1401,7 +1720,10 @@ class TempVoice(DashboardIntegration, commands.Cog):
         assert ctx.guild is not None
         if not isinstance(ctx.author, discord.Member):
             return
-        if not ctx.author.voice or not isinstance(ctx.author.voice.channel, discord.VoiceChannel):
+        if not ctx.author.voice or not isinstance(
+            ctx.author.voice.channel,
+            discord.VoiceChannel,
+        ):
             await ctx.send("Join a temporary voice channel before claiming it.")
             return
         channel = ctx.author.voice.channel
@@ -1410,7 +1732,8 @@ class TempVoice(DashboardIntegration, commands.Cog):
             await ctx.send("You are not in a TempVoice-managed channel.")
             return
         if self._owner_present(ctx.guild, record, channel) and not (
-            ctx.author.guild_permissions.administrator or ctx.author.guild_permissions.manage_channels
+            ctx.author.guild_permissions.administrator
+            or ctx.author.guild_permissions.manage_channels
         ):
             await ctx.send("The current owner is still in the channel.")
             return
@@ -1425,11 +1748,18 @@ class TempVoice(DashboardIntegration, commands.Cog):
             await ctx.send("I could not update that channel owner.")
             return
 
-        updated = await self._update_record(ctx.guild, channel.id, owner_id=ctx.author.id)
+        updated = await self._update_record(
+            ctx.guild,
+            channel.id,
+            owner_id=ctx.author.id,
+        )
         await self._update_control_panel(ctx.guild, channel, updated)
         await ctx.send(f"You now own {channel.mention}.")
 
-    @tempvoice.command(name="cleanup", description="Delete empty temp channels and stale records.")
+    @tempvoice.command(
+        name="cleanup",
+        description="Delete empty temp channels and stale records.",
+    )
     @commands.guild_only()
     @commands.admin_or_permissions(manage_channels=True)
     @commands.bot_has_permissions(manage_channels=True)
@@ -1437,8 +1767,8 @@ class TempVoice(DashboardIntegration, commands.Cog):
         """Delete empty temporary channels and remove stale records."""
         assert ctx.guild is not None
         records = await self.config.guild(ctx.guild).temp_channels()
-        stale_ids: List[str] = []
-        empty_ids: List[int] = []
+        stale_ids: list[str] = []
+        empty_ids: list[int] = []
 
         for channel_id in records:
             try:
@@ -1466,4 +1796,6 @@ class TempVoice(DashboardIntegration, commands.Cog):
                 for channel_id in stale_ids:
                     stored.pop(channel_id, None)
 
-        await ctx.send(f"Deleted {deleted} empty channel(s) and removed {len(stale_ids)} stale record(s).")
+        await ctx.send(
+            f"Deleted {deleted} empty channel(s) and removed {len(stale_ids)} stale record(s).",
+        )
