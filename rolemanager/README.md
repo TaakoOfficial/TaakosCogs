@@ -16,6 +16,7 @@ Combined role management tools for Red-DiscordBot.
 
 - Member self roles with separate self-add and self-remove settings.
 - Role policies: required roles, inclusive roles, exclusive roles, credit costs, and atomic assignment mode.
+- Role-change rules that react to roles added or removed manually, by another cog, or by RoleManager.
 - Reaction roles that can be attached to existing messages or generated as a panel.
 - Persistent button roles and select-menu roles.
 - Autoroles for all new members, humans only, or bots only.
@@ -23,7 +24,7 @@ Combined role management tools for Red-DiscordBot.
 - Temporary roles with explicit durations or a per-role default duration.
 - Bulk role add/remove tools for members, roles, channels, humans, bots, online members, or everyone.
 - Dry-run previews, cleanup commands, and RoleTools/RoleUtils import helpers.
-- Red-Web-Dashboard support for role flags, policies, autoroles, reaction roles, buttons, selects, and pending temp-role records.
+- Full Red-Web-Dashboard support for policies, role rules, role/member operations, autoroles, sticky and temporary roles, reaction roles, components, cleanup, and imports.
 
 ## Commands
 
@@ -37,6 +38,10 @@ Combined role management tools for Red-DiscordBot.
 | `[p]rolemanager required any <role> <true|false>` | Require any prerequisite role instead of all prerequisite roles. |
 | `[p]rolemanager include add <role> <roles...>` | Add roles automatically when the main role is assigned. |
 | `[p]rolemanager exclude add <role> <roles...>` | Remove conflicting roles when the main role is assigned. |
+| `[p]rolemanager rule set <name> <add|remove> <trigger_role> --add role,role --remove role,role` | Create or replace a rule that reacts to any matching role change. |
+| `[p]rolemanager rule toggle <name> [true|false]` | Enable, disable, or toggle a role-change rule. |
+| `[p]rolemanager rule delete <name>` | Delete a role-change rule. |
+| `[p]rolemanager rule list` | List configured role-change rules. |
 | `[p]rolemanager cost <amount> <role>` | Set a Red bank credit cost for a self-assigned role. |
 | `[p]rolemanager atomic [true|false|clear]` | Configure guild atomic role assignment. |
 | `[p]rolemanager role add <member> <role>` | Add a role to one member. |
@@ -83,13 +88,27 @@ Reaction panel example:
 [p]rolemanager reactrole create #roles Pick your pings | <:game:123456789012345678>;Gamer | <:news:123456789012345679>;Announcements
 ```
 
+Role-change rule example:
+
+```text
+[p]rolemanager rule set verified add @Verified --add Member --remove Unverified
+```
+
+Existing required, inclusive, and exclusive policies are also enforced when a role is changed manually or by another cog. Removing a role externally removes its configured inclusive roles. RoleManager skips automatic actions it cannot perform because of Discord role hierarchy or managed-role restrictions.
+
+## Dashboard
+
+The Red-Web-Dashboard page supports guild atomic settings, role creation and editing, a complete policy overview, mutual include/exclude links, role-change rule creation and editing, autoroles, single-member and bulk role operations with dry-run previews, member sticky roles, temporary-role grants, reaction panel creation and maintenance, persistent component creation/editing/cleanup, and RoleTools/RoleUtils imports.
+
+Live dashboard role operations require the confirmation checkbox. Imports also require explicit confirmation because compatible destination settings may be replaced.
+
 ## Requirements
 
 - Red-DiscordBot 3.5.0 or newer.
 - The bot needs `Manage Roles` and its top role must be above any managed role.
 - Reaction-role setup also needs `Add Reactions`, `Read Message History`, and access to the target channel.
-- Server Members intent is recommended for autoroles, sticky roles, and accurate bulk targeting.
+- Server Members intent is required for external role-change rules and recommended for autoroles, sticky roles, and accurate bulk targeting.
 
 ## Data
 
-This cog stores role IDs, channel/message IDs, emoji keys, role-policy settings, role costs, component definitions, temporary-role expiry timestamps, and Discord user IDs for sticky and temporary role assignment. It does not store message content except optional component panel text sent directly to Discord.
+This cog stores role IDs, channel/message IDs, emoji keys, role-policy and role-change-rule settings, role costs, component definitions, temporary-role expiry timestamps, and Discord user IDs for sticky and temporary role assignment. It does not store message content except optional component panel text sent directly to Discord.

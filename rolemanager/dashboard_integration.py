@@ -8,7 +8,7 @@ import typing
 from datetime import datetime, timezone
 
 import discord
-from redbot.core import commands
+from redbot.core import bank, commands
 
 log = logging.getLogger("red.taakoscogs.rolemanager.dashboard")
 
@@ -37,7 +37,7 @@ class DashboardIntegration:
 
     @dashboard_page(
         name=None,
-        description="Configure self roles, autoroles, sticky roles, temp roles, and reaction roles.",
+        description="Configure role policies, automatic rules, member operations, and role panels.",
         methods=("GET", "POST"),
     )
     async def dashboard_page(
@@ -206,6 +206,56 @@ class DashboardIntegration:
             )
             return role.id, messages
 
+        if action == "save_guild_settings":
+            atomic = await self._dashboard_save_guild_settings(guild, form_data)
+            messages.append(
+                {
+                    "message": f"Guild atomic assignment set to {atomic}.",
+                    "category": "success",
+                }
+            )
+            return selected_role_id, messages
+
+        if action == "create_role":
+            role = await self._dashboard_create_role(guild, member, form_data)
+            messages.append(
+                {"message": f"Created role {role.name}.", "category": "success"}
+            )
+            return role.id, messages
+
+        if action in {"make_inclusive_mutual", "make_exclusive_mutual"}:
+            role = self._dashboard_role_from_form(guild, form_data, "role_id")
+            self._dashboard_check_role_manageable(guild, role, member)
+            policy = "inclusive" if action == "make_inclusive_mutual" else "exclusive"
+            count = await self._dashboard_make_policy_mutual(
+                guild,
+                member,
+                role,
+                form_data,
+                policy,
+            )
+            messages.append(
+                {
+                    "message": f"Updated {count:,} mutual {policy} role link(s).",
+                    "category": "success",
+                }
+            )
+            return role.id, messages
+
+        if action == "save_role_rule":
+            name = await self._dashboard_save_role_rule(guild, member, form_data)
+            messages.append(
+                {"message": f"Role rule `{name}` saved.", "category": "success"}
+            )
+            return selected_role_id, messages
+
+        if action == "delete_role_rule":
+            name = await self._dashboard_delete_role_rule(guild, form_data)
+            messages.append(
+                {"message": f"Role rule `{name}` deleted.", "category": "success"}
+            )
+            return selected_role_id, messages
+
         if action == "save_autoroles":
             await self._dashboard_save_autoroles(guild, member, form_data)
             messages.append({"message": "Autorole settings saved.", "category": "success"})
@@ -216,6 +266,36 @@ class DashboardIntegration:
             messages.append(
                 {
                     "message": f"Reaction role bound on message {message.id}.",
+                    "category": "success",
+                }
+            )
+            return selected_role_id, messages
+
+        if action == "create_reaction_panel":
+            message = await self._dashboard_create_reaction_panel(guild, member, form_data)
+            messages.append(
+                {
+                    "message": f"Reaction-role panel created: {message.jump_url}",
+                    "category": "success",
+                }
+            )
+            return selected_role_id, messages
+
+        if action == "refresh_reaction_message":
+            count = await self._dashboard_refresh_reaction_message(guild, form_data)
+            messages.append(
+                {
+                    "message": f"Refreshed {count:,} reaction(s).",
+                    "category": "success",
+                }
+            )
+            return selected_role_id, messages
+
+        if action == "cleanup_reaction_roles":
+            count = await self._dashboard_cleanup_reaction_roles(guild)
+            messages.append(
+                {
+                    "message": f"Removed {count:,} stale reaction-role record(s).",
                     "category": "success",
                 }
             )
@@ -289,6 +369,51 @@ class DashboardIntegration:
             )
             return selected_role_id, messages
 
+        if action == "edit_component_message":
+            message = await self._dashboard_edit_component_message(guild, form_data)
+            messages.append(
+                {
+                    "message": f"Component message updated: {message.jump_url}",
+                    "category": "success",
+                }
+            )
+            return selected_role_id, messages
+
+        if action == "cleanup_component_messages":
+            removed = await self._dashboard_cleanup_component_messages(guild)
+            messages.append(
+                {
+                    "message": f"Removed {removed:,} stale component message reference(s).",
+                    "category": "success",
+                }
+            )
+            return selected_role_id, messages
+
+        if action == "sticky_member_action":
+            message = await self._dashboard_sticky_member_action(guild, member, form_data)
+            messages.append({"message": message, "category": "success"})
+            return selected_role_id, messages
+
+        if action == "give_temp_role":
+            message = await self._dashboard_give_temp_role(guild, member, form_data)
+            messages.append({"message": message, "category": "success"})
+            return selected_role_id, messages
+
+        if action == "role_operation":
+            message = await self._dashboard_role_operation(guild, member, form_data)
+            messages.append({"message": message, "category": "success"})
+            return selected_role_id, messages
+
+        if action == "import_settings":
+            source, count = await self._dashboard_import_settings(guild, form_data)
+            messages.append(
+                {
+                    "message": f"Imported {source} settings. Records touched: {count:,}.",
+                    "category": "success",
+                }
+            )
+            return selected_role_id, messages
+
         if action == "clear_temp_role":
             member_id, role_id = await self._dashboard_clear_temp_role(guild, form_data)
             messages.append(
@@ -332,11 +457,183 @@ class DashboardIntegration:
             raise commands.BadArgument(f"The bot's top role must be above `{role.name}`.")
         if (
             member is not None
+            and member.id not in getattr(self.bot, "owner_ids", set())
             and member.id != guild.owner_id
             and not member.guild_permissions.administrator
             and role >= member.top_role
         ):
             raise commands.BadArgument(f"Your top role must be above `{role.name}`.")
+
+    def _dashboard_check_trigger_role(
+        self,
+        guild: discord.Guild,
+        role: discord.Role,
+        member: typing.Optional[discord.Member],
+    ) -> None:
+        if role.is_default():
+            raise commands.BadArgument("The everyone role cannot be a rule trigger.")
+        if (
+            member is not None
+            and member.id not in getattr(self.bot, "owner_ids", set())
+            and member.id != guild.owner_id
+            and not member.guild_permissions.administrator
+            and role >= member.top_role
+        ):
+            raise commands.BadArgument("Your top role must be above the trigger role.")
+
+    @staticmethod
+    def _dashboard_color(value: str) -> discord.Color:
+        value = value.strip().lower()
+        if value.startswith("#"):
+            value = value[1:]
+        if value.startswith("0x"):
+            value = value[2:]
+        if not value:
+            return discord.Color.default()
+        if not all(character in "0123456789abcdef" for character in value) or len(value) > 6:
+            raise commands.BadArgument("Role color must be a hex value such as `5865F2`.")
+        return discord.Color(int(value, 16))
+
+    async def _dashboard_save_guild_settings(
+        self,
+        guild: discord.Guild,
+        form_data: typing.Any,
+    ) -> str:
+        atomic = self._dash_value(form_data, "atomic", "inherit").lower()
+        if atomic == "inherit":
+            await self.config.guild(guild).atomic.clear()
+            return "the global default"
+        if atomic not in {"true", "false"}:
+            raise commands.BadArgument("Atomic assignment must be inherit, true, or false.")
+        enabled = atomic == "true"
+        await self.config.guild(guild).atomic.set(enabled)
+        return str(enabled)
+
+    async def _dashboard_create_role(
+        self,
+        guild: discord.Guild,
+        member: typing.Optional[discord.Member],
+        form_data: typing.Any,
+    ) -> discord.Role:
+        if len(guild.roles) >= 250:
+            raise commands.BadArgument("This server is already at Discord's 250 role limit.")
+        me = guild.me
+        if me is None or not me.guild_permissions.manage_roles:
+            raise commands.BadArgument("The bot needs Manage Roles.")
+        name = self._dash_value(form_data, "new_role_name").strip()
+        if not name or len(name) > 100:
+            raise commands.BadArgument("Role name must contain between 1 and 100 characters.")
+        color = self._dashboard_color(self._dash_value(form_data, "new_role_color"))
+        return await guild.create_role(
+            name=name,
+            color=color,
+            hoist=self._dash_bool(form_data, "new_role_hoist"),
+            mentionable=self._dash_bool(form_data, "new_role_mentionable"),
+            reason=f"RoleManager dashboard role create by {member or 'bot owner'}.",
+        )
+
+    async def _dashboard_make_policy_mutual(
+        self,
+        guild: discord.Guild,
+        member: typing.Optional[discord.Member],
+        role: discord.Role,
+        form_data: typing.Any,
+        policy: str,
+    ) -> int:
+        if policy not in {"inclusive", "exclusive"}:
+            raise commands.BadArgument("Unknown mutual policy type.")
+        field = f"{policy}_roles"
+        conflict_field = "exclusive_roles" if policy == "inclusive" else "inclusive_roles"
+        config_key = "inclusive_with" if policy == "inclusive" else "exclusive_to"
+        conflict_key = "exclusive_to" if policy == "inclusive" else "inclusive_with"
+        role_ids = self._dashboard_valid_role_ids(guild, member, form_data, field)
+        role_ids = [role_id for role_id in role_ids if role_id != role.id]
+        if not role_ids:
+            raise commands.BadArgument(f"Select at least one {policy} role.")
+        current_conflicts = set(
+            self._dashboard_valid_role_ids(
+                guild,
+                member,
+                form_data,
+                conflict_field,
+            )
+        )
+        overlap = current_conflicts & set(role_ids)
+        if overlap:
+            raise commands.BadArgument(
+                f"A role cannot be both inclusive and exclusive: {self._dashboard_role_names(guild, overlap)}."
+            )
+        targets = []
+        for role_id in role_ids:
+            other = guild.get_role(role_id)
+            if other is None:
+                continue
+            other_conflicts = {
+                int(item) for item in await getattr(self.config.role(other), conflict_key)()
+            }
+            if role.id in other_conflicts:
+                raise commands.BadArgument(
+                    f"{other.name} already has {role.name} configured as a conflicting policy."
+                )
+            targets.append(other)
+
+        await getattr(self.config.role(role), config_key).set(role_ids)
+        changed = 0
+        for other in targets:
+            async with getattr(self.config.role(other), config_key)() as stored:
+                if role.id not in stored:
+                    stored.append(role.id)
+                    changed += 1
+        return changed
+
+    async def _dashboard_save_role_rule(
+        self,
+        guild: discord.Guild,
+        member: typing.Optional[discord.Member],
+        form_data: typing.Any,
+    ) -> str:
+        name = self._normalise_rule_name(self._dash_value(form_data, "rule_name"))
+        trigger_event = self._dash_value(form_data, "rule_event", "add").lower()
+        if trigger_event not in {"add", "remove"}:
+            raise commands.BadArgument("Rule event must be add or remove.")
+        trigger = self._dashboard_role_from_form(guild, form_data, "rule_trigger_role_id")
+        self._dashboard_check_trigger_role(guild, trigger, member)
+        add_ids = self._dashboard_valid_role_ids(
+            guild, member, form_data, "rule_add_roles"
+        )
+        remove_ids = self._dashboard_valid_role_ids(
+            guild, member, form_data, "rule_remove_roles"
+        )
+        if not add_ids and not remove_ids:
+            raise commands.BadArgument("A role rule needs at least one add or remove action.")
+        if trigger.id in add_ids or trigger.id in remove_ids:
+            raise commands.BadArgument("A role rule cannot modify its own trigger role.")
+        overlap = set(add_ids) & set(remove_ids)
+        if overlap:
+            raise commands.BadArgument(
+                "A rule cannot add and remove the same role: "
+                f"{self._dashboard_role_names(guild, overlap)}."
+            )
+        async with self.config.guild(guild).role_rules() as rules:
+            rules[name] = {
+                "trigger_role_id": trigger.id,
+                "trigger_event": trigger_event,
+                "add_role_ids": add_ids,
+                "remove_role_ids": remove_ids,
+                "enabled": self._dash_bool(form_data, "rule_enabled"),
+            }
+        return name
+
+    async def _dashboard_delete_role_rule(
+        self,
+        guild: discord.Guild,
+        form_data: typing.Any,
+    ) -> str:
+        name = self._normalise_rule_name(self._dash_value(form_data, "rule_name"))
+        async with self.config.guild(guild).role_rules() as rules:
+            if rules.pop(name, None) is None:
+                raise commands.BadArgument(f"Role rule `{name}` was not found.")
+        return name
 
     async def _dashboard_save_role_flags(
         self,
@@ -345,6 +642,57 @@ class DashboardIntegration:
         role: discord.Role,
         form_data: typing.Any,
     ) -> None:
+        role_name = self._dash_value(form_data, "role_name", role.name).strip()
+        if not role_name or len(role_name) > 100:
+            raise commands.BadArgument("Role name must contain between 1 and 100 characters.")
+        color = self._dashboard_color(self._dash_value(form_data, "role_color"))
+        duration = self._dash_value(form_data, "temp_duration").strip()
+        temp_duration = self._parse_duration(duration) if duration else None
+        cost_value = self._dash_value(form_data, "cost").strip()
+        try:
+            cost = int(cost_value or 0)
+        except ValueError as exc:
+            raise commands.BadArgument("Cost must be a whole number.") from exc
+        cost = max(0, cost)
+        current_cost = int(await self.config.role(role).cost() or 0)
+        is_owner = member is None or member.id in getattr(self.bot, "owner_ids", set())
+        if cost != current_cost and await bank.is_global() and not is_owner:
+            raise commands.BadArgument(
+                "Only bot owners can change role costs while the bank is global."
+            )
+        if cost:
+            max_balance = await bank.get_max_balance(guild)
+            if cost >= max_balance:
+                raise commands.BadArgument("Cost cannot be higher than the bank max balance.")
+        required_ids = self._dashboard_valid_role_ids(
+            guild,
+            member,
+            form_data,
+            "required_roles",
+            check_manageable=False,
+        )
+        inclusive_ids = self._dashboard_valid_role_ids(
+            guild, member, form_data, "inclusive_roles"
+        )
+        exclusive_ids = self._dashboard_valid_role_ids(
+            guild, member, form_data, "exclusive_roles"
+        )
+        if role.id in required_ids + inclusive_ids + exclusive_ids:
+            raise commands.BadArgument("A role cannot require, include, or exclude itself.")
+        overlap = set(inclusive_ids) & set(exclusive_ids)
+        if overlap:
+            raise commands.BadArgument(
+                "A role cannot be both inclusive and exclusive: "
+                f"{self._dashboard_role_names(guild, overlap)}."
+            )
+
+        await role.edit(
+            name=role_name,
+            color=color,
+            hoist=self._dash_bool(form_data, "role_hoist"),
+            mentionable=self._dash_bool(form_data, "role_mentionable"),
+            reason=f"RoleManager dashboard role edit by {member or 'bot owner'}.",
+        )
         await self.config.role(role).self_assignable.set(
             self._dash_bool(form_data, "self_assignable")
         )
@@ -352,34 +700,15 @@ class DashboardIntegration:
             self._dash_bool(form_data, "self_removable")
         )
         await self.config.role(role).sticky.set(self._dash_bool(form_data, "sticky"))
-
-        duration = self._dash_value(form_data, "temp_duration").strip()
-        if duration:
-            await self.config.role(role).temp_duration.set(self._parse_duration(duration))
-        else:
+        if temp_duration is None:
             await self.config.role(role).temp_duration.clear()
-        cost_value = self._dash_value(form_data, "cost").strip()
-        try:
-            cost = int(cost_value or 0)
-        except ValueError as exc:
-            raise commands.BadArgument("Cost must be a whole number.") from exc
-        await self.config.role(role).cost.set(max(0, cost))
+        else:
+            await self.config.role(role).temp_duration.set(temp_duration)
+        await self.config.role(role).cost.set(cost)
         await self.config.role(role).require_any.set(self._dash_bool(form_data, "require_any"))
-        await self.config.role(role).required.set(
-            self._dashboard_valid_role_ids(
-                guild,
-                member,
-                form_data,
-                "required_roles",
-                check_manageable=False,
-            )
-        )
-        await self.config.role(role).inclusive_with.set(
-            self._dashboard_valid_role_ids(guild, member, form_data, "inclusive_roles")
-        )
-        await self.config.role(role).exclusive_to.set(
-            self._dashboard_valid_role_ids(guild, member, form_data, "exclusive_roles")
-        )
+        await self.config.role(role).required.set(required_ids)
+        await self.config.role(role).inclusive_with.set(inclusive_ids)
+        await self.config.role(role).exclusive_to.set(exclusive_ids)
 
     async def _dashboard_save_autoroles(
         self,
@@ -394,6 +723,192 @@ class DashboardIntegration:
             "bots": self._dashboard_valid_role_ids(guild, member, form_data, "auto_bots"),
         }
         await self.config.guild(guild).auto_roles.set(settings)
+
+    async def _dashboard_sticky_member_action(
+        self,
+        guild: discord.Guild,
+        actor: typing.Optional[discord.Member],
+        form_data: typing.Any,
+    ) -> str:
+        operation = self._dash_value(form_data, "sticky_operation", "add").lower()
+        role = self._dashboard_role_from_form(guild, form_data, "sticky_role_id")
+        self._dashboard_check_role_manageable(guild, role, actor)
+        user_id = self._dash_required_id(form_data, "sticky_member_id")
+        if operation == "forget":
+            async with self.config.member_from_ids(guild.id, user_id).sticky_roles() as roles:
+                if role.id in roles:
+                    roles.remove(role.id)
+            return f"Forgot sticky role {role.name} for user ID {user_id}."
+
+        target = guild.get_member(user_id)
+        if target is None:
+            raise commands.BadArgument(
+                "That member is not in the server. Use Forget for departed member IDs."
+            )
+        if operation == "add":
+            async with self.config.member(target).sticky_roles() as roles:
+                if role.id not in roles:
+                    roles.append(role.id)
+            if role not in target.roles:
+                responses, added, _removed = await self._give_roles(
+                    target,
+                    [role],
+                    "RoleManager dashboard sticky role add.",
+                    check_required=False,
+                    check_exclusive=False,
+                    check_inclusive=False,
+                    check_cost=False,
+                )
+                if responses and role not in added:
+                    raise commands.BadArgument(self._response_text(responses))
+            return f"{role.name} is now forced sticky for {target}."
+        if operation == "remove":
+            async with self.config.member(target).sticky_roles() as roles:
+                if role.id in roles:
+                    roles.remove(role.id)
+            if role in target.roles:
+                responses, removed = await self._remove_roles(
+                    target,
+                    [role],
+                    "RoleManager dashboard sticky role remove.",
+                    check_inclusive=False,
+                )
+                if responses and role not in removed:
+                    raise commands.BadArgument(self._response_text(responses))
+            return f"{role.name} is no longer forced sticky for {target}."
+        raise commands.BadArgument("Sticky operation must be add, remove, or forget.")
+
+    async def _dashboard_give_temp_role(
+        self,
+        guild: discord.Guild,
+        actor: typing.Optional[discord.Member],
+        form_data: typing.Any,
+    ) -> str:
+        target_id = self._dash_required_id(form_data, "temp_member_id")
+        target = guild.get_member(target_id)
+        if target is None:
+            raise commands.BadArgument("Temporary-role member was not found in this server.")
+        role = self._dashboard_role_from_form(guild, form_data, "temp_role_id")
+        self._dashboard_check_role_manageable(guild, role, actor)
+        duration = self._parse_duration(self._dash_value(form_data, "temp_give_duration"))
+        responses, added, _removed = await self._give_roles(
+            target,
+            [role],
+            "RoleManager dashboard temporary role.",
+            check_cost=False,
+            duration_overrides={role.id: duration},
+        )
+        if responses and role not in added:
+            raise commands.BadArgument(self._response_text(responses))
+        return f"Added {role.name} to {target} for {self._format_duration(duration)}."
+
+    async def _dashboard_role_operation(
+        self,
+        guild: discord.Guild,
+        actor: typing.Optional[discord.Member],
+        form_data: typing.Any,
+    ) -> str:
+        operation = self._dash_value(form_data, "operation", "add").lower()
+        if operation not in {"add", "remove"}:
+            raise commands.BadArgument("Role operation must be add or remove.")
+        dry_run = self._dash_bool(form_data, "operation_dry_run")
+        if not dry_run and not self._dash_bool(form_data, "confirm_role_operation"):
+            raise commands.BadArgument("Confirm the role operation before applying it.")
+        role = self._dashboard_role_from_form(guild, form_data, "operation_role_id")
+        self._dashboard_check_role_manageable(guild, role, actor)
+        target_type = self._dash_value(form_data, "operation_target_type", "member").lower()
+        target_id = self._dash_optional_id(form_data, "operation_target_id")
+        await self._ensure_member_cache(guild)
+
+        members: typing.List[discord.Member]
+        if target_type == "member":
+            target = guild.get_member(target_id or 0)
+            if target is None:
+                raise commands.BadArgument("Target member was not found.")
+            members = [target]
+        elif target_type == "role":
+            target_role = guild.get_role(target_id or 0)
+            if target_role is None:
+                raise commands.BadArgument("Target role was not found.")
+            members = list(target_role.members)
+        elif target_type == "channel":
+            channel = guild.get_channel(target_id or 0)
+            if not isinstance(channel, discord.TextChannel):
+                raise commands.BadArgument("Target text channel was not found.")
+            members = list(channel.members)
+        elif target_type == "everyone":
+            members = list(guild.members)
+        elif target_type == "humans":
+            members = [target for target in guild.members if not target.bot]
+        elif target_type == "bots":
+            members = [target for target in guild.members if target.bot]
+        else:
+            raise commands.BadArgument(
+                "Target type must be member, role, channel, everyone, humans, or bots."
+            )
+        members = list(dict.fromkeys(members))
+        if not members:
+            raise commands.BadArgument("No members matched that target.")
+
+        eligible = 0
+        issues = 0
+        policy_added: typing.Set[discord.Role] = set()
+        policy_removed: typing.Set[discord.Role] = set()
+        for target in members:
+            if operation == "add":
+                responses, added, removed = await self._give_roles(
+                    target,
+                    [role],
+                    "RoleManager dashboard role operation.",
+                    check_cost=False,
+                    dry_run=dry_run,
+                )
+                if role in added:
+                    eligible += 1
+                policy_added.update(added)
+                policy_removed.update(removed)
+            else:
+                responses, removed = await self._remove_roles(
+                    target,
+                    [role],
+                    "RoleManager dashboard role operation.",
+                    dry_run=dry_run,
+                )
+                if role in removed:
+                    eligible += 1
+                policy_removed.update(removed)
+            if responses:
+                issues += 1
+        verb = "Would update" if dry_run else "Updated"
+        extras = []
+        if policy_added - {role}:
+            extras.append(
+                "also add " + self._dashboard_role_names(guild, [item.id for item in policy_added - {role}])
+            )
+        if policy_removed - {role}:
+            extras.append(
+                "also remove "
+                + self._dashboard_role_names(guild, [item.id for item in policy_removed - {role}])
+            )
+        extra_text = f" Policies may {' and '.join(extras)}." if extras else ""
+        return (
+            f"{verb} {eligible:,} of {len(members):,} matched member(s); "
+            f"{issues:,} had policy issues.{extra_text}"
+        )
+
+    async def _dashboard_import_settings(
+        self,
+        guild: discord.Guild,
+        form_data: typing.Any,
+    ) -> typing.Tuple[str, int]:
+        if not self._dash_bool(form_data, "confirm_import"):
+            raise commands.BadArgument("Confirm the import before replacing settings.")
+        source = self._dash_value(form_data, "import_source").lower()
+        if source == "roletools":
+            return "RoleTools", await self._import_roletools_settings(guild)
+        if source == "roleutils":
+            return "RoleUtils", await self._import_roleutils_settings(guild)
+        raise commands.BadArgument("Import source must be RoleTools or RoleUtils.")
 
     def _dashboard_valid_role_ids(
         self,
@@ -417,6 +932,123 @@ class DashboardIntegration:
                 self._dashboard_check_role_manageable(guild, role, member)
             role_ids.append(role.id)
         return list(dict.fromkeys(role_ids))
+
+    async def _dashboard_create_reaction_panel(
+        self,
+        guild: discord.Guild,
+        member: typing.Optional[discord.Member],
+        form_data: typing.Any,
+    ) -> discord.Message:
+        channel_id = self._dash_required_id(form_data, "panel_channel_id")
+        channel = guild.get_channel(channel_id)
+        if not isinstance(channel, discord.TextChannel):
+            raise commands.BadArgument("Reaction panel channel must be a text channel.")
+        title = self._dash_value(form_data, "panel_title").strip()[:256]
+        if not title:
+            raise commands.BadArgument("Reaction panel title is required.")
+        raw_bindings = self._dash_value(form_data, "panel_bindings").strip()
+        parts = [part.strip() for part in raw_bindings.replace("\n", "|").split("|") if part.strip()]
+        if not parts:
+            raise commands.BadArgument("Add at least one `emoji;role` binding.")
+        bindings: typing.List[typing.Tuple[str, discord.Role]] = []
+        for part in parts:
+            if ";" not in part:
+                raise commands.BadArgument(f"`{part}` is missing `;` between emoji and role.")
+            emoji, role_text = [piece.strip() for piece in part.split(";", 1)]
+            role = self._find_role(guild, role_text)
+            if not emoji or role is None:
+                raise commands.BadArgument(f"Could not resolve reaction binding `{part}`.")
+            self._dashboard_check_role_manageable(guild, role, member)
+            bindings.append((emoji, role))
+        if len(bindings) > 20:
+            raise commands.BadArgument("Reaction panels are limited to 20 bindings.")
+
+        embed = discord.Embed(
+            title=title,
+            description="\n".join(f"{emoji} - {role.mention}" for emoji, role in bindings),
+            color=guild.me.color if guild.me else discord.Color.blurple(),
+        )
+        message = await channel.send(
+            embed=embed,
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
+        record: typing.Dict[str, typing.Any] = {
+            "channel_id": channel.id,
+            "binds": {},
+        }
+        for emoji, role in bindings:
+            try:
+                await message.add_reaction(emoji)
+            except discord.HTTPException as exc:
+                try:
+                    await message.delete()
+                except discord.HTTPException:
+                    pass
+                raise commands.BadArgument(f"Discord rejected reaction `{emoji}`.") from exc
+            record["binds"][self._emoji_key(emoji)] = {
+                "role_id": role.id,
+                "remove_on_unreact": True,
+                "emoji": emoji,
+            }
+        async with self.config.guild(guild).react_roles() as react_roles:
+            react_roles[str(message.id)] = record
+        for role in {role for _emoji, role in bindings}:
+            await self.config.role(role).self_assignable.set(True)
+            await self.config.role(role).self_removable.set(True)
+        self._reaction_message_cache.add(message.id)
+        return message
+
+    async def _dashboard_refresh_reaction_message(
+        self,
+        guild: discord.Guild,
+        form_data: typing.Any,
+    ) -> int:
+        message_id = self._dash_required_id(form_data, "message_id")
+        react_roles = await self.config.guild(guild).react_roles()
+        data = react_roles.get(str(message_id))
+        if not data:
+            raise commands.BadArgument("That message has no configured reaction roles.")
+        channel = guild.get_channel(int(data.get("channel_id", 0)))
+        if not isinstance(channel, discord.TextChannel):
+            raise commands.BadArgument("The configured reaction-role channel is missing.")
+        try:
+            message = await channel.fetch_message(message_id)
+        except discord.HTTPException as exc:
+            raise commands.BadArgument("The reaction-role message could not be fetched.") from exc
+        refreshed = 0
+        for bind in data.get("binds", {}).values():
+            try:
+                await message.add_reaction(bind.get("emoji"))
+            except discord.HTTPException:
+                continue
+            refreshed += 1
+        return refreshed
+
+    async def _dashboard_cleanup_reaction_roles(self, guild: discord.Guild) -> int:
+        removed = 0
+        async with self.config.guild(guild).react_roles() as react_roles:
+            for message_id, data in list(react_roles.items()):
+                channel = guild.get_channel(int(data.get("channel_id", 0)))
+                if not isinstance(channel, discord.TextChannel):
+                    del react_roles[message_id]
+                    self._reaction_message_cache.discard(int(message_id))
+                    removed += 1
+                    continue
+                try:
+                    await channel.fetch_message(int(message_id))
+                except (discord.NotFound, discord.HTTPException):
+                    del react_roles[message_id]
+                    self._reaction_message_cache.discard(int(message_id))
+                    removed += 1
+                    continue
+                for emoji_key, bind in list(data.get("binds", {}).items()):
+                    if guild.get_role(int(bind.get("role_id", 0))) is None:
+                        del data["binds"][emoji_key]
+                        removed += 1
+                if not data.get("binds"):
+                    del react_roles[message_id]
+                    self._reaction_message_cache.discard(int(message_id))
+        return removed
 
     async def _dashboard_bind_reaction_role(
         self,
@@ -531,11 +1163,17 @@ class DashboardIntegration:
             ),
             "messages": [],
         }
+        old_role_id = None
         async with self.config.guild(guild).buttons() as buttons:
             old = buttons.get(name)
             if old:
                 data["messages"] = list(old.get("messages", []))
+                old_role_id = int(old.get("role_id", 0)) or None
             buttons[name] = data
+        if old_role_id is not None and old_role_id != role.id:
+            async with self.config.role_from_id(old_role_id).buttons() as role_buttons:
+                if name in role_buttons:
+                    role_buttons.remove(name)
         async with self.config.role(role).buttons() as role_buttons:
             if name not in role_buttons:
                 role_buttons.append(name)
@@ -577,8 +1215,16 @@ class DashboardIntegration:
             "label": self._dash_value(form_data, "option_label", f"@{role.name}")[:100],
             "description": self._dash_value(form_data, "option_description")[:100],
         }
+        old_role_id = None
         async with self.config.guild(guild).select_options() as options:
+            old = options.get(name)
+            if old:
+                old_role_id = int(old.get("role_id", 0)) or None
             options[name] = data
+        if old_role_id is not None and old_role_id != role.id:
+            async with self.config.role_from_id(old_role_id).select_options() as role_options:
+                if name in role_options:
+                    role_options.remove(name)
         async with self.config.role(role).select_options() as role_options:
             if name not in role_options:
                 role_options.append(name)
@@ -675,6 +1321,42 @@ class DashboardIntegration:
         await self._save_component_message(guild, message, button_names, select_names)
         return message
 
+    async def _dashboard_edit_component_message(
+        self,
+        guild: discord.Guild,
+        form_data: typing.Any,
+    ) -> discord.Message:
+        channel_id = self._dash_required_id(form_data, "edit_component_channel_id")
+        message_id = self._dash_required_id(form_data, "edit_component_message_id")
+        channel = guild.get_channel(channel_id)
+        if not isinstance(channel, discord.TextChannel):
+            raise commands.BadArgument("Component message channel must be a text channel.")
+        try:
+            message = await channel.fetch_message(message_id)
+        except discord.HTTPException as exc:
+            raise commands.BadArgument("I could not fetch that component message.") from exc
+        if guild.me is None or message.author.id != guild.me.id:
+            raise commands.BadArgument("I can only edit my own messages.")
+        button_names = self._parse_name_list(
+            self._dash_value(form_data, "edit_component_buttons")
+        )
+        select_names = self._parse_name_list(
+            self._dash_value(form_data, "edit_component_selects")
+        )
+        view = await self._view_for_component_names(guild, button_names, select_names)
+        content_value = self._dash_value(form_data, "edit_component_text")
+        kwargs: typing.Dict[str, typing.Any] = {"view": view}
+        if self._dash_bool(form_data, "edit_component_content"):
+            kwargs["content"] = content_value[:2000] or None
+        await message.edit(**kwargs)
+        await self._save_component_message(guild, message, button_names, select_names)
+        return message
+
+    async def _dashboard_cleanup_component_messages(self, guild: discord.Guild) -> int:
+        button_count = await self._cleanup_component_messages(guild, "buttons")
+        select_count = await self._cleanup_component_messages(guild, "select_menus")
+        return button_count + select_count
+
     async def _dashboard_source(
         self,
         guild: discord.Guild,
@@ -687,6 +1369,8 @@ class DashboardIntegration:
         buttons = await self.config.guild(guild).buttons()
         select_options = await self.config.guild(guild).select_options()
         select_menus = await self.config.guild(guild).select_menus()
+        role_rules = await self.config.guild(guild).role_rules()
+        atomic = await self.config.guild(guild).atomic()
         csrf = self._dash_csrf(kwargs)
 
         role_stats = await self._dashboard_role_stats(guild)
@@ -715,6 +1399,10 @@ class DashboardIntegration:
                 width: 100%; box-sizing: border-box; border: 1px solid #4b5563; border-radius: 6px;
                 background: #111827; color: #f9fafb; padding: 8px; min-height: 38px;
             }}
+            .rmdash-field textarea {{
+                width: 100%; box-sizing: border-box; border: 1px solid #4b5563; border-radius: 6px;
+                background: #111827; color: #f9fafb; padding: 8px; min-height: 86px; resize: vertical;
+            }}
             .rmdash-check {{ display: flex; align-items: center; gap: 8px; margin: 6px 0; color: #d1d5db; }}
             .rmdash-check input {{ width: auto; }}
             .rmdash-btn {{ background: #2563eb; color: white; border: 0; border-radius: 6px; padding: 9px 14px; cursor: pointer; font-weight: 700; }}
@@ -726,16 +1414,23 @@ class DashboardIntegration:
             .rmdash-table th, .rmdash-table td {{ border-bottom: 1px solid #374151; padding: 8px; text-align: left; vertical-align: top; }}
             .rmdash-table th {{ color: #d1d5db; }}
             .rmdash-inline {{ display: inline; }}
+            .rmdash-actions {{ display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }}
+            .rmdash-scroll {{ overflow-x: auto; }}
+            .rmdash-card details {{ margin-top: 8px; }}
         </style>
         <div class="rmdash-wrap">
             <div class="rmdash-card">
                 <h2>RoleManager Dashboard</h2>
                 <div class="rmdash-nav">
                     <a href="#role-settings">Role Settings</a>
+                    <a href="#role-rules">Role Rules</a>
                     <a href="#autoroles">Autoroles</a>
+                    <a href="#role-operations">Role Operations</a>
+                    <a href="#sticky-roles">Sticky Roles</a>
                     <a href="#reaction-roles">Reaction Roles</a>
                     <a href="#components">Buttons & Selects</a>
                     <a href="#temporary-roles">Temporary Roles</a>
+                    <a href="#imports">Imports</a>
                 </div>
                 <div class="rmdash-grid">
                     <div><div class="rmdash-muted">Self Roles</div><div class="rmdash-stat">{role_stats["self_roles"]}</div></div>
@@ -745,13 +1440,241 @@ class DashboardIntegration:
                     <div><div class="rmdash-muted">Buttons</div><div class="rmdash-stat">{len(buttons)}</div></div>
                     <div><div class="rmdash-muted">Select Menus</div><div class="rmdash-stat">{len(select_menus)}</div></div>
                     <div><div class="rmdash-muted">Pending Temp Roles</div><div class="rmdash-stat">{len(temp_roles)}</div></div>
+                    <div><div class="rmdash-muted">Role Rules</div><div class="rmdash-stat">{len(role_rules)}</div></div>
                 </div>
             </div>
+            {self._dashboard_guild_settings_section(guild, atomic, csrf)}
             {await self._dashboard_role_settings_section(guild, selected_role, csrf)}
+            {await self._dashboard_policy_overview_section(guild)}
+            {self._dashboard_role_rules_section(guild, role_rules, csrf)}
             {self._dashboard_autoroles_section(guild, auto_roles, csrf)}
+            {self._dashboard_role_operations_section(guild, csrf)}
+            {self._dashboard_sticky_section(guild, csrf)}
             {self._dashboard_reaction_roles_section(guild, react_roles, csrf)}
             {self._dashboard_components_section(guild, buttons, select_options, select_menus, csrf)}
             {self._dashboard_temporary_roles_section(guild, temp_roles, csrf)}
+            {self._dashboard_import_section(csrf)}
+        </div>
+        """
+
+    def _dashboard_guild_settings_section(
+        self,
+        guild: discord.Guild,
+        atomic: typing.Optional[bool],
+        csrf: str,
+    ) -> str:
+        selected_atomic = "inherit" if atomic is None else str(bool(atomic)).lower()
+        atomic_select = self._select(
+            "atomic",
+            "Atomic Assignment",
+            [
+                ("inherit", "Use global default"),
+                ("true", "Enabled"),
+                ("false", "Disabled"),
+            ],
+            selected_atomic,
+        )
+        return f"""
+        <div id="guild-settings" class="rmdash-card">
+            <h3>Guild Settings & Role Creation</h3>
+            <div class="rmdash-grid">
+                <form method="POST">
+                    {csrf}
+                    <input type="hidden" name="action" value="save_guild_settings">
+                    {atomic_select}
+                    <button class="rmdash-btn" type="submit">Save Guild Settings</button>
+                </form>
+                <form method="POST">
+                    {csrf}
+                    <input type="hidden" name="action" value="create_role">
+                    {self._input("new_role_name", "Role Name", "")}
+                    {self._input("new_role_color", "Role Color (hex)", "5865F2")}
+                    {self._checkbox("new_role_hoist", "Display role members separately", False)}
+                    {self._checkbox("new_role_mentionable", "Allow everyone to mention role", False)}
+                    <button class="rmdash-btn" type="submit">Create Role</button>
+                </form>
+            </div>
+        </div>
+        """
+
+    async def _dashboard_policy_overview_section(self, guild: discord.Guild) -> str:
+        rows = []
+        for role in sorted(guild.roles, key=lambda item: item.position, reverse=True):
+            if role.is_default():
+                continue
+            config = await self.config.role(role).all()
+            if not any(
+                [
+                    config.get("self_assignable"),
+                    config.get("self_removable"),
+                    config.get("sticky"),
+                    config.get("temp_duration"),
+                    config.get("required"),
+                    config.get("inclusive_with"),
+                    config.get("exclusive_to"),
+                    config.get("cost"),
+                ]
+            ):
+                continue
+            flags = []
+            if config.get("self_assignable"):
+                flags.append("self-add")
+            if config.get("self_removable"):
+                flags.append("self-remove")
+            if config.get("sticky"):
+                flags.append("sticky")
+            if config.get("temp_duration"):
+                flags.append("temp")
+            rows.append(
+                "<tr>"
+                f"<td>{self._h(role.name)}</td>"
+                f"<td>{self._h(', '.join(flags) or 'policy only')}</td>"
+                f"<td>{int(config.get('cost') or 0):,}</td>"
+                f"<td>{self._h(self._dashboard_role_names(guild, config.get('required') or []))}</td>"
+                f"<td>{self._h(self._dashboard_role_names(guild, config.get('inclusive_with') or []))}</td>"
+                f"<td>{self._h(self._dashboard_role_names(guild, config.get('exclusive_to') or []))}</td>"
+                "</tr>"
+            )
+        table = (
+            '<p class="rmdash-muted">No role policies configured.</p>'
+            if not rows
+            else '<div class="rmdash-scroll"><table class="rmdash-table"><thead><tr>'
+            '<th>Role</th><th>Flags</th><th>Cost</th><th>Required</th><th>Includes</th>'
+            f'<th>Excludes</th></tr></thead><tbody>{"".join(rows)}</tbody></table></div>'
+        )
+        return f"""
+        <div id="policy-overview" class="rmdash-card">
+            <h3>Configured Role Policies</h3>
+            {table}
+        </div>
+        """
+
+    def _dashboard_role_rules_section(
+        self,
+        guild: discord.Guild,
+        rules: typing.Dict[str, typing.Dict[str, typing.Any]],
+        csrf: str,
+    ) -> str:
+        rows = []
+        editors = []
+        for name, rule in sorted(rules.items()):
+            trigger = guild.get_role(int(rule.get("trigger_role_id", 0)))
+            trigger_name = trigger.name if trigger else "Missing role"
+            add_names = self._dashboard_role_names(guild, rule.get("add_role_ids", []))
+            remove_names = self._dashboard_role_names(guild, rule.get("remove_role_ids", []))
+            rows.append(
+                "<tr>"
+                f"<td>{self._h(name)}</td><td>{self._h(bool(rule.get('enabled', True)))}</td>"
+                f"<td>{self._h(rule.get('trigger_event', 'add'))} {self._h(trigger_name)}</td>"
+                f"<td>{self._h(add_names)}</td><td>{self._h(remove_names)}</td>"
+                "<td>"
+                '<form method="POST" class="rmdash-inline">'
+                f"{csrf}"
+                '<input type="hidden" name="action" value="delete_role_rule">'
+                f'<input type="hidden" name="rule_name" value="{self._h(name)}">'
+                '<button class="rmdash-btn danger" type="submit">Delete</button>'
+                "</form></td></tr>"
+            )
+            editors.append(
+                f"""
+                <details>
+                    <summary>Edit {self._h(name)}</summary>
+                    <form method="POST">
+                        {csrf}
+                        <input type="hidden" name="action" value="save_role_rule">
+                        <input type="hidden" name="rule_name" value="{self._h(name)}">
+                        <div class="rmdash-row">
+                            {self._select("rule_event", "Trigger Event", [("add", "Role added"), ("remove", "Role removed")], rule.get("trigger_event", "add"))}
+                            {self._role_select(guild, "rule_trigger_role_id", "Trigger Role", rule.get("trigger_role_id"))}
+                        </div>
+                        {self._checkbox("rule_enabled", "Rule enabled", rule.get("enabled", True))}
+                        <div class="rmdash-grid">
+                            {self._multi_role_select(guild, "rule_add_roles", "Roles To Add", rule.get("add_role_ids", []))}
+                            {self._multi_role_select(guild, "rule_remove_roles", "Roles To Remove", rule.get("remove_role_ids", []))}
+                        </div>
+                        <button class="rmdash-btn" type="submit">Save Rule</button>
+                    </form>
+                </details>
+                """
+            )
+        table = (
+            '<p class="rmdash-muted">No role-change rules configured.</p>'
+            if not rows
+            else '<div class="rmdash-scroll"><table class="rmdash-table"><thead><tr>'
+            '<th>Name</th><th>Enabled</th><th>Trigger</th><th>Add</th><th>Remove</th><th></th>'
+            f'</tr></thead><tbody>{"".join(rows)}</tbody></table></div>'
+        )
+        return f"""
+        <div id="role-rules" class="rmdash-card">
+            <h3>Role-Change Rules</h3>
+            <form method="POST">
+                {csrf}
+                <input type="hidden" name="action" value="save_role_rule">
+                <div class="rmdash-row">
+                    {self._input("rule_name", "Rule Name", "")}
+                    {self._select("rule_event", "Trigger Event", [("add", "Role added"), ("remove", "Role removed")], "add")}
+                    {self._role_select(guild, "rule_trigger_role_id", "Trigger Role", None)}
+                </div>
+                {self._checkbox("rule_enabled", "Rule enabled", True)}
+                <div class="rmdash-grid">
+                    {self._multi_role_select(guild, "rule_add_roles", "Roles To Add", [])}
+                    {self._multi_role_select(guild, "rule_remove_roles", "Roles To Remove", [])}
+                </div>
+                <button class="rmdash-btn" type="submit">Save Rule</button>
+            </form>
+            {table}
+            {"".join(editors)}
+        </div>
+        """
+
+    def _dashboard_role_operations_section(self, guild: discord.Guild, csrf: str) -> str:
+        return f"""
+        <div id="role-operations" class="rmdash-card">
+            <h3>Role Operations</h3>
+            <form method="POST">
+                {csrf}
+                <input type="hidden" name="action" value="role_operation">
+                <div class="rmdash-row">
+                    {self._select("operation", "Operation", [("add", "Add role"), ("remove", "Remove role")], "add")}
+                    {self._role_select(guild, "operation_role_id", "Role", None)}
+                    {self._select("operation_target_type", "Target Type", [("member", "Member ID"), ("role", "Members with role ID"), ("channel", "Members in channel ID"), ("everyone", "Everyone"), ("humans", "Humans"), ("bots", "Bots")], "member")}
+                    {self._input("operation_target_id", "Target ID (when required)", "")}
+                </div>
+                {self._checkbox("operation_dry_run", "Preview only", True)}
+                {self._checkbox("confirm_role_operation", "Confirm live role changes", False)}
+                <button class="rmdash-btn" type="submit">Run Role Operation</button>
+            </form>
+        </div>
+        """
+
+    def _dashboard_sticky_section(self, guild: discord.Guild, csrf: str) -> str:
+        return f"""
+        <div id="sticky-roles" class="rmdash-card">
+            <h3>Member Sticky Roles</h3>
+            <form method="POST">
+                {csrf}
+                <input type="hidden" name="action" value="sticky_member_action">
+                <div class="rmdash-row">
+                    {self._select("sticky_operation", "Operation", [("add", "Add and remember"), ("remove", "Remove and forget"), ("forget", "Forget departed user")], "add")}
+                    {self._input("sticky_member_id", "Member or User ID", "")}
+                    {self._role_select(guild, "sticky_role_id", "Sticky Role", None)}
+                </div>
+                <button class="rmdash-btn" type="submit">Apply Sticky Role Action</button>
+            </form>
+        </div>
+        """
+
+    def _dashboard_import_section(self, csrf: str) -> str:
+        return f"""
+        <div id="imports" class="rmdash-card">
+            <h3>Import Existing Cog Settings</h3>
+            <form method="POST">
+                {csrf}
+                <input type="hidden" name="action" value="import_settings">
+                {self._select("import_source", "Source Cog", [("roletools", "Trusty RoleTools"), ("roleutils", "Seina RoleUtils")], "roletools")}
+                {self._checkbox("confirm_import", "Confirm replacing compatible RoleManager settings", False)}
+                <button class="rmdash-btn danger" type="submit">Import Settings</button>
+            </form>
         </div>
         """
 
@@ -788,12 +1711,15 @@ class DashboardIntegration:
             settings = f"""
             <form method="POST">
                 {csrf}
-                <input type="hidden" name="action" value="save_role_flags">
                 <input type="hidden" name="role_id" value="{self._h(role_id)}">
                 <div class="rmdash-row">
+                    {self._input("role_name", "Role Name", selected_role.name)}
+                    {self._input("role_color", "Role Color (hex)", f"{selected_role.color.value:06X}")}
                     {self._input("temp_duration", "Default Temp Duration", duration_text)}
                     {self._input("cost", "Credit Cost", config.get("cost") or 0)}
                 </div>
+                {self._checkbox("role_hoist", "Display role members separately", selected_role.hoist)}
+                {self._checkbox("role_mentionable", "Allow everyone to mention role", selected_role.mentionable)}
                 {self._checkbox("self_assignable", "Members can add this role with selfrole", self_assignable)}
                 {self._checkbox("self_removable", "Members can remove this role with selfrole", self_removable)}
                 {self._checkbox("sticky", "Restore this role when members rejoin", sticky)}
@@ -803,7 +1729,11 @@ class DashboardIntegration:
                     {self._multi_role_select(guild, "inclusive_roles", "Inclusive Roles", config.get("inclusive_with") or [])}
                     {self._multi_role_select(guild, "exclusive_roles", "Exclusive Roles", config.get("exclusive_to") or [])}
                 </div>
-                <button class="rmdash-btn" type="submit">Save Role Settings</button>
+                <div class="rmdash-actions">
+                    <button class="rmdash-btn" name="action" value="save_role_flags" type="submit">Save Role Settings</button>
+                    <button class="rmdash-btn secondary" name="action" value="make_inclusive_mutual" type="submit">Make Includes Mutual</button>
+                    <button class="rmdash-btn secondary" name="action" value="make_exclusive_mutual" type="submit">Make Excludes Mutual</button>
+                </div>
             </form>
             """
         return f"""
@@ -882,6 +1812,12 @@ class DashboardIntegration:
                 "<td>"
                 '<form method="POST" class="rmdash-inline">'
                 f"{csrf}"
+                '<input type="hidden" name="action" value="refresh_reaction_message">'
+                f'<input type="hidden" name="message_id" value="{self._h(message_id)}">'
+                '<button class="rmdash-btn secondary" type="submit">Refresh</button>'
+                "</form> "
+                '<form method="POST" class="rmdash-inline">'
+                f"{csrf}"
                 '<input type="hidden" name="action" value="clear_reaction_message">'
                 f'<input type="hidden" name="message_id" value="{self._h(message_id)}">'
                 '<button class="rmdash-btn danger" type="submit">Clear Message</button>'
@@ -892,24 +1828,37 @@ class DashboardIntegration:
         table = (
             '<p class="rmdash-muted">No reaction roles configured.</p>'
             if not rows
-            else '<table class="rmdash-table"><thead><tr><th>Message</th><th>Channel</th>'
+            else '<div class="rmdash-scroll"><table class="rmdash-table"><thead><tr><th>Message</th><th>Channel</th>'
             '<th>Emoji</th><th>Role</th><th>Remove On Unreact</th><th>Actions</th>'
-            f'</tr></thead><tbody>{"".join(rows)}</tbody></table>'
+            f'</tr></thead><tbody>{"".join(rows)}</tbody></table></div>'
         )
         return f"""
         <div id="reaction-roles" class="rmdash-card">
             <h3>Reaction Roles</h3>
-            <form method="POST">
-                {csrf}
-                <input type="hidden" name="action" value="bind_reaction_role">
-                <div class="rmdash-grid">
-                    {self._text_channel_select(guild, "rr_channel_id", "Message Channel", None)}
-                    {self._input("rr_message_id", "Message ID", "")}
+            <div class="rmdash-grid">
+                <form method="POST">
+                    {csrf}
+                    <input type="hidden" name="action" value="bind_reaction_role">
+                    {self._text_channel_select(guild, "rr_channel_id", "Existing Message Channel", None)}
+                    {self._input("rr_message_id", "Existing Message ID", "")}
                     {self._input("rr_emoji", "Emoji", "")}
                     {self._role_select(guild, "rr_role_id", "Role", None)}
-                </div>
-                {self._checkbox("rr_remove_on_unreact", "Remove role when reaction is removed", True)}
-                <button class="rmdash-btn" type="submit">Bind Reaction Role</button>
+                    {self._checkbox("rr_remove_on_unreact", "Remove role when reaction is removed", True)}
+                    <button class="rmdash-btn" type="submit">Bind Reaction Role</button>
+                </form>
+                <form method="POST">
+                    {csrf}
+                    <input type="hidden" name="action" value="create_reaction_panel">
+                    {self._text_channel_select(guild, "panel_channel_id", "New Panel Channel", None)}
+                    {self._input("panel_title", "Panel Title", "Pick your roles")}
+                    {self._textarea("panel_bindings", "Bindings (one emoji;role per line)", "")}
+                    <button class="rmdash-btn" type="submit">Create Reaction Panel</button>
+                </form>
+            </div>
+            <form method="POST" class="rmdash-actions">
+                {csrf}
+                <input type="hidden" name="action" value="cleanup_reaction_roles">
+                <button class="rmdash-btn secondary" type="submit">Clean Stale Reaction Records</button>
             </form>
             {table}
         </div>
@@ -952,6 +1901,16 @@ class DashboardIntegration:
         return f"""
         <div id="temporary-roles" class="rmdash-card">
             <h3>Temporary Roles</h3>
+            <form method="POST">
+                {csrf}
+                <input type="hidden" name="action" value="give_temp_role">
+                <div class="rmdash-row">
+                    {self._input("temp_member_id", "Member ID", "")}
+                    {self._role_select(guild, "temp_role_id", "Role", None)}
+                    {self._input("temp_give_duration", "Duration", "7d")}
+                </div>
+                <button class="rmdash-btn" type="submit">Give Temporary Role</button>
+            </form>
             {table}
         </div>
         """
@@ -965,6 +1924,7 @@ class DashboardIntegration:
         csrf: str,
     ) -> str:
         button_rows = []
+        button_editors = []
         for name, data in sorted(buttons.items()):
             role = guild.get_role(int(data.get("role_id", 0)))
             button_rows.append(
@@ -983,6 +1943,30 @@ class DashboardIntegration:
                 "</td>"
                 "</tr>"
             )
+            style_name = {
+                discord.ButtonStyle.primary.value: "primary",
+                discord.ButtonStyle.secondary.value: "secondary",
+                discord.ButtonStyle.success.value: "success",
+                discord.ButtonStyle.danger.value: "danger",
+            }.get(int(data.get("style") or discord.ButtonStyle.secondary.value), "secondary")
+            button_editors.append(
+                f"""
+                <details><summary>Edit button {self._h(name)}</summary>
+                    <form method="POST">
+                        {csrf}
+                        <input type="hidden" name="action" value="create_button">
+                        <input type="hidden" name="button_name" value="{self._h(name)}">
+                        <div class="rmdash-row">
+                            {self._role_select(guild, "button_role_id", "Button Role", data.get("role_id"))}
+                            {self._input("button_label", "Label", data.get("label") or "")}
+                            {self._input("button_emoji", "Emoji", data.get("emoji") or "")}
+                            {self._select("button_style", "Style", [("primary", "Primary"), ("secondary", "Secondary"), ("success", "Success"), ("danger", "Danger")], style_name)}
+                        </div>
+                        <button class="rmdash-btn" type="submit">Save Button</button>
+                    </form>
+                </details>
+                """
+            )
         buttons_table = (
             '<p class="rmdash-muted">No buttons configured.</p>'
             if not button_rows
@@ -991,6 +1975,7 @@ class DashboardIntegration:
         )
 
         option_rows = []
+        option_editors = []
         for name, data in sorted(select_options.items()):
             role = guild.get_role(int(data.get("role_id", 0)))
             option_rows.append(
@@ -1008,6 +1993,24 @@ class DashboardIntegration:
                 "</td>"
                 "</tr>"
             )
+            option_editors.append(
+                f"""
+                <details><summary>Edit option {self._h(name)}</summary>
+                    <form method="POST">
+                        {csrf}
+                        <input type="hidden" name="action" value="create_select_option">
+                        <input type="hidden" name="option_name" value="{self._h(name)}">
+                        <div class="rmdash-row">
+                            {self._role_select(guild, "option_role_id", "Option Role", data.get("role_id"))}
+                            {self._input("option_emoji", "Emoji", data.get("emoji") or "")}
+                            {self._input("option_label", "Label", data.get("label") or "")}
+                            {self._input("option_description", "Description", data.get("description") or "")}
+                        </div>
+                        <button class="rmdash-btn" type="submit">Save Option</button>
+                    </form>
+                </details>
+                """
+            )
         options_table = (
             '<p class="rmdash-muted">No select options configured.</p>'
             if not option_rows
@@ -1016,6 +2019,7 @@ class DashboardIntegration:
         )
 
         menu_rows = []
+        menu_editors = []
         for name, data in sorted(select_menus.items()):
             menu_rows.append(
                 "<tr>"
@@ -1031,6 +2035,24 @@ class DashboardIntegration:
                 "</form>"
                 "</td>"
                 "</tr>"
+            )
+            menu_editors.append(
+                f"""
+                <details><summary>Edit menu {self._h(name)}</summary>
+                    <form method="POST">
+                        {csrf}
+                        <input type="hidden" name="action" value="create_select_menu">
+                        <input type="hidden" name="menu_name" value="{self._h(name)}">
+                        <div class="rmdash-row">
+                            {self._input("menu_options", "Option Names, comma separated", ", ".join(data.get("options", [])))}
+                            {self._input("menu_min", "Min Values", data.get("min_values", 0))}
+                            {self._input("menu_max", "Max Values", data.get("max_values", 1))}
+                            {self._input("menu_placeholder", "Placeholder", data.get("placeholder") or "Pick roles")}
+                        </div>
+                        <button class="rmdash-btn" type="submit">Save Menu</button>
+                    </form>
+                </details>
+                """
             )
         menus_table = (
             '<p class="rmdash-muted">No select menus configured.</p>'
@@ -1050,7 +2072,7 @@ class DashboardIntegration:
                     {self._role_select(guild, "button_role_id", "Button Role", None)}
                     {self._input("button_label", "Label", "")}
                     {self._input("button_emoji", "Emoji", "")}
-                    {self._input("button_style", "Style", "secondary")}
+                    {self._select("button_style", "Style", [("primary", "Primary"), ("secondary", "Secondary"), ("success", "Success"), ("danger", "Danger")], "secondary")}
                     <button class="rmdash-btn" type="submit">Save Button</button>
                 </form>
                 <form method="POST">
@@ -1082,13 +2104,32 @@ class DashboardIntegration:
                     {self._input("component_text", "Message Text", "")}
                     <button class="rmdash-btn" type="submit">Send Component Message</button>
                 </form>
+                <form method="POST">
+                    {csrf}
+                    <input type="hidden" name="action" value="edit_component_message">
+                    {self._text_channel_select(guild, "edit_component_channel_id", "Existing Message Channel", None)}
+                    {self._input("edit_component_message_id", "Existing Message ID", "")}
+                    {self._input("edit_component_buttons", "Button Names, comma separated", "")}
+                    {self._input("edit_component_selects", "Select Names, comma separated", "")}
+                    {self._checkbox("edit_component_content", "Replace message text", False)}
+                    {self._textarea("edit_component_text", "Replacement Text", "")}
+                    <button class="rmdash-btn" type="submit">Edit Component Message</button>
+                </form>
             </div>
+            <form method="POST" class="rmdash-actions">
+                {csrf}
+                <input type="hidden" name="action" value="cleanup_component_messages">
+                <button class="rmdash-btn secondary" type="submit">Clean Stale Message References</button>
+            </form>
             <h3>Saved Buttons</h3>
             {buttons_table}
+            {"".join(button_editors)}
             <h3>Saved Select Options</h3>
             {options_table}
+            {"".join(option_editors)}
             <h3>Saved Select Menus</h3>
             {menus_table}
+            {"".join(menu_editors)}
         </div>
         """
 
@@ -1102,6 +2143,18 @@ class DashboardIntegration:
             (role.id, role.name)
             for role in sorted(roles, key=lambda item: item.position, reverse=True)
         ]
+
+    def _dashboard_role_names(
+        self,
+        guild: discord.Guild,
+        role_ids: typing.Iterable[int],
+    ) -> str:
+        names = [
+            role.name
+            for role_id in role_ids
+            if (role := guild.get_role(int(role_id))) is not None
+        ]
+        return ", ".join(names) if names else "None"
 
     def _text_options(self, guild: discord.Guild) -> typing.List[typing.Tuple[int, str]]:
         return [(channel.id, f"#{channel.name}") for channel in guild.text_channels]
@@ -1165,6 +2218,12 @@ class DashboardIntegration:
         return (
             f'<div class="rmdash-field"><label>{self._h(label)}</label>'
             f'<input type="text" name="{self._h(name)}" value="{self._h(value)}"></div>'
+        )
+
+    def _textarea(self, name: str, label: str, value: typing.Any) -> str:
+        return (
+            f'<div class="rmdash-field"><label>{self._h(label)}</label>'
+            f'<textarea name="{self._h(name)}">{self._h(value)}</textarea></div>'
         )
 
     def _checkbox(self, name: str, label: str, checked: typing.Any) -> str:

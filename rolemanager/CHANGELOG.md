@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.0
+
+- Added persistent role-change rules with add/remove triggers and chained add/remove actions.
+- Enforced required, inclusive, and exclusive policies when roles are changed manually or by another cog.
+- Added dashboard controls for atomic settings, mutual policies, policy overview, role rules, role creation/editing, dry-run and live role operations, member sticky roles, temporary-role grants, reaction panel maintenance, component message editing/cleanup, and imports.
+- Added prefilled editors for saved buttons, select options, and select menus.
+- Matched dashboard role-cost validation to command permissions and bank limits, and blocked conflicting inclusive/exclusive selections.
+
 ## 0.2.0
 
 - Added role policy rules: required roles, inclusive roles, exclusive roles, credit costs, and atomic assignment settings.

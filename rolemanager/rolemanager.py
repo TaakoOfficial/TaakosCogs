@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import re
+from collections import deque
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple, Union
@@ -31,7 +32,7 @@ class RoleChangeResponse:
 
 
 class RoleManager(DashboardIntegration, commands.Cog):
-    """Self roles, reaction roles, autoroles, sticky roles, temp roles, and bulk role tools."""
+    """Role rules, self roles, role panels, sticky/temp roles, and bulk role tools."""
 
     CONFIG_IDENTIFIER = 2026070901
     DURATION_RE = re.compile(
@@ -62,6 +63,7 @@ class RoleManager(DashboardIntegration, commands.Cog):
             select_options={},
             select_menus={},
             temporary_roles=[],
+            role_rules={},
         )
         self.config.register_global(atomic=True)
         self.config.register_role(
@@ -80,6 +82,7 @@ class RoleManager(DashboardIntegration, commands.Cog):
         self.config.register_member(sticky_roles=[])
         self._reaction_message_cache: Set[int] = set()
         self._component_views: Dict[int, Dict[str, RoleManagerView]] = {}
+        self._role_rule_processing: Set[Tuple[int, int]] = set()
         self._startup_task = asyncio.create_task(self._startup())
         self._temp_sweeper.start()
 
@@ -256,6 +259,44 @@ class RoleManager(DashboardIntegration, commands.Cog):
                 raise commands.BadArgument(f"I could not find role `{part.strip()}`.")
             roles.append(role)
         return list(dict.fromkeys(roles))
+
+    def _role_actions_from_spec(
+        self,
+        guild: discord.Guild,
+        spec: str,
+    ) -> Tuple[List[discord.Role], List[discord.Role]]:
+        """Parse ``--add`` and ``--remove`` role lists from a command argument."""
+        add_part = ""
+        remove_part = ""
+        lowered = spec.lower()
+        add_index = lowered.find("--add")
+        remove_index = lowered.find("--remove")
+        if add_index != -1:
+            end = remove_index if remove_index > add_index else len(spec)
+            add_part = spec[add_index + 5 : end].strip()
+        if remove_index != -1:
+            end = add_index if add_index > remove_index else len(spec)
+            remove_part = spec[remove_index + 8 : end].strip()
+        to_add = self._roles_from_argument(guild, add_part) if add_part else []
+        to_remove = self._roles_from_argument(guild, remove_part) if remove_part else []
+        if not to_add and not to_remove:
+            raise commands.BadArgument("Use `--add role,role` or `--remove role,role`.")
+        overlap = set(to_add) & set(to_remove)
+        if overlap:
+            raise commands.BadArgument(
+                "A rule cannot add and remove the same role: "
+                f"{self._format_role_names(overlap)}."
+            )
+        return to_add, to_remove
+
+    @staticmethod
+    def _normalise_rule_name(name: str) -> str:
+        normalised = name.strip().lower()
+        if not normalised or not re.fullmatch(r"[a-z0-9_-]{1,50}", normalised):
+            raise commands.BadArgument(
+                "Rule names may contain only letters, numbers, underscores, and hyphens."
+            )
+        return normalised
 
     async def _refresh_reaction_cache(self) -> None:
         cache: Set[int] = set()
@@ -1469,6 +1510,118 @@ class RoleManager(DashboardIntegration, commands.Cog):
                     stored.remove(excluded_role.id)
         await ctx.send(f"Updated exclusive roles for {role.mention}.")
 
+    @rolemanager.group(name="rule", aliases=["rules"])
+    @commands.admin_or_permissions(manage_roles=True)
+    @commands.bot_has_permissions(manage_roles=True)
+    async def role_rule_group(self, ctx: commands.Context) -> None:
+        """Configure rules that react to every member role change."""
+
+    @role_rule_group.command(name="set", aliases=["create", "add"])
+    async def role_rule_set(
+        self,
+        ctx: commands.Context,
+        name: str,
+        trigger_event: str,
+        trigger_role: discord.Role,
+        *,
+        actions: str,
+    ) -> None:
+        """Create or replace a role-change rule.
+
+        Example: `rule set verified add @Verified --add @Member --remove @Unverified`
+        """
+        name = self._normalise_rule_name(name)
+        trigger_event = trigger_event.lower()
+        if trigger_event not in {"add", "remove"}:
+            raise commands.BadArgument("Trigger event must be `add` or `remove`.")
+        if trigger_role.is_default():
+            raise commands.BadArgument("The everyone role cannot be a rule trigger.")
+        if (
+            isinstance(ctx.author, discord.Member)
+            and ctx.author.id != ctx.guild.owner_id
+            and trigger_role >= ctx.author.top_role
+        ):
+            raise commands.BadArgument("Your top role must be above the trigger role.")
+
+        to_add, to_remove = self._role_actions_from_spec(ctx.guild, actions)
+        for role in to_add + to_remove:
+            self._check_role_manageable(ctx, role)
+        if trigger_role in to_add or trigger_role in to_remove:
+            raise commands.BadArgument("A rule cannot modify its own trigger role.")
+
+        async with self.config.guild(ctx.guild).role_rules() as rules:
+            rules[name] = {
+                "trigger_role_id": trigger_role.id,
+                "trigger_event": trigger_event,
+                "add_role_ids": [role.id for role in to_add],
+                "remove_role_ids": [role.id for role in to_remove],
+                "enabled": True,
+            }
+        event_text = "added" if trigger_event == "add" else "removed"
+        await ctx.send(
+            f"Saved role rule `{name}`: when {trigger_role.mention} is {event_text}, "
+            f"add {self._format_role_names(to_add)} and remove "
+            f"{self._format_role_names(to_remove)}.",
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
+
+    @role_rule_group.command(name="toggle")
+    async def role_rule_toggle(
+        self,
+        ctx: commands.Context,
+        name: str,
+        enabled: Optional[bool] = None,
+    ) -> None:
+        """Enable, disable, or toggle a role-change rule."""
+        name = self._normalise_rule_name(name)
+        async with self.config.guild(ctx.guild).role_rules() as rules:
+            rule = rules.get(name)
+            if rule is None:
+                raise commands.BadArgument(f"Role rule `{name}` was not found.")
+            if enabled is None:
+                enabled = not bool(rule.get("enabled", True))
+            rule["enabled"] = bool(enabled)
+        await ctx.send(f"Role rule `{name}` is now {'enabled' if enabled else 'disabled'}.")
+
+    @role_rule_group.command(name="delete", aliases=["remove", "del"])
+    async def role_rule_delete(self, ctx: commands.Context, *, name: str) -> None:
+        """Delete a role-change rule."""
+        name = self._normalise_rule_name(name)
+        async with self.config.guild(ctx.guild).role_rules() as rules:
+            if rules.pop(name, None) is None:
+                raise commands.BadArgument(f"Role rule `{name}` was not found.")
+        await ctx.send(f"Deleted role rule `{name}`.")
+
+    @role_rule_group.command(name="list", aliases=["view"])
+    async def role_rule_list(self, ctx: commands.Context) -> None:
+        """List role-change rules."""
+        rules = await self.config.guild(ctx.guild).role_rules()
+        if not rules:
+            await ctx.send("No role-change rules are configured.")
+            return
+        lines = []
+        for name, rule in sorted(rules.items()):
+            trigger = ctx.guild.get_role(int(rule.get("trigger_role_id", 0)))
+            add_roles = [
+                role
+                for role_id in rule.get("add_role_ids", [])
+                if (role := ctx.guild.get_role(int(role_id))) is not None
+            ]
+            remove_roles = [
+                role
+                for role_id in rule.get("remove_role_ids", [])
+                if (role := ctx.guild.get_role(int(role_id))) is not None
+            ]
+            lines.append(
+                f"**{name}** ({'on' if rule.get('enabled', True) else 'off'}): "
+                f"{rule.get('trigger_event', 'add')} "
+                f"{trigger.mention if trigger else 'missing trigger'} -> "
+                f"add {self._format_role_names(add_roles)}; "
+                f"remove {self._format_role_names(remove_roles)}"
+            )
+        for page in pagify("\n".join(lines), page_length=1900):
+            await ctx.send(page, allowed_mentions=discord.AllowedMentions.none())
+
     @rolemanager.command(name="viewroles", aliases=["viewrole"])
     @commands.admin_or_permissions(manage_roles=True)
     async def viewroles(
@@ -1539,6 +1692,11 @@ class RoleManager(DashboardIntegration, commands.Cog):
     @import_group.command(name="roletools")
     async def import_roletools(self, ctx: commands.Context) -> None:
         """Import compatible settings from TrustyJAID RoleTools."""
+        imported = await self._import_roletools_settings(ctx.guild)
+        await ctx.send(f"Imported RoleTools-compatible settings. Records touched: {imported:,}.")
+
+    async def _import_roletools_settings(self, guild: discord.Guild) -> int:
+        """Import RoleTools settings for a guild and return records touched."""
         old = Config.get_conf(None, identifier=218773382617890828, cog_name="RoleTools")
         old.register_guild(
             reaction_roles={},
@@ -1563,9 +1721,9 @@ class RoleManager(DashboardIntegration, commands.Cog):
             cost=0,
             duration=None,
         )
-        guild_data = await old.guild(ctx.guild).all()
+        guild_data = await old.guild(guild).all()
         imported = 0
-        async with self.config.guild(ctx.guild).react_roles() as react_roles:
+        async with self.config.guild(guild).react_roles() as react_roles:
             for key, role_id in guild_data.get("reaction_roles", {}).items():
                 try:
                     channel_id, message_id, emoji_key = str(key).split("-", 2)
@@ -1581,14 +1739,14 @@ class RoleManager(DashboardIntegration, commands.Cog):
                     "emoji": emoji_key,
                 }
                 imported += 1
-        await self.config.guild(ctx.guild).buttons.set(guild_data.get("buttons", {}))
-        await self.config.guild(ctx.guild).select_options.set(
+        await self.config.guild(guild).buttons.set(guild_data.get("buttons", {}))
+        await self.config.guild(guild).select_options.set(
             guild_data.get("select_options", {})
         )
-        await self.config.guild(ctx.guild).select_menus.set(guild_data.get("select_menus", {}))
+        await self.config.guild(guild).select_menus.set(guild_data.get("select_menus", {}))
         auto_roles = [int(role_id) for role_id in guild_data.get("auto_roles", [])]
         if auto_roles:
-            await self.config.guild(ctx.guild).auto_roles.set(
+            await self.config.guild(guild).auto_roles.set(
                 {"enabled": True, "all": auto_roles, "humans": [], "bots": []}
             )
             imported += len(auto_roles)
@@ -1606,9 +1764,9 @@ class RoleManager(DashboardIntegration, commands.Cog):
                     }
                 )
         if temp_roles:
-            await self.config.guild(ctx.guild).temporary_roles.set(temp_roles)
+            await self.config.guild(guild).temporary_roles.set(temp_roles)
             imported += len(temp_roles)
-        for role in ctx.guild.roles:
+        for role in guild.roles:
             if role.is_default():
                 continue
             data = await old.role(role).all()
@@ -1623,11 +1781,16 @@ class RoleManager(DashboardIntegration, commands.Cog):
             await self.config.role(role).cost.set(int(data.get("cost") or 0))
         await self._refresh_reaction_cache()
         await self._load_component_views()
-        await ctx.send(f"Imported RoleTools-compatible settings. Records touched: {imported:,}.")
+        return imported
 
     @import_group.command(name="roleutils")
     async def import_roleutils(self, ctx: commands.Context) -> None:
         """Import compatible settings from Seina RoleUtils."""
+        imported = await self._import_roleutils_settings(ctx.guild)
+        await ctx.send(f"Imported RoleUtils-compatible settings. Records touched: {imported:,}.")
+
+    async def _import_roleutils_settings(self, guild: discord.Guild) -> int:
+        """Import RoleUtils settings for a guild and return records touched."""
         old = Config.get_conf(None, identifier=326235423452394523, cog_name="RoleUtils")
         old.register_guild(
             reactroles={"channels": [], "enabled": True},
@@ -1641,9 +1804,9 @@ class RoleManager(DashboardIntegration, commands.Cog):
         old.register_role(sticky=False)
         old.init_custom("GuildMessage", 2)
         old.register_custom("GuildMessage", reactroles={"react_to_roleid": {}})
-        guild_data = await old.guild(ctx.guild).all()
+        guild_data = await old.guild(guild).all()
         autoroles = guild_data.get("autoroles", {})
-        await self.config.guild(ctx.guild).auto_roles.set(
+        await self.config.guild(guild).auto_roles.set(
             {
                 "enabled": bool(autoroles.get("toggle")),
                 "all": [int(role_id) for role_id in autoroles.get("roles", [])],
@@ -1658,8 +1821,8 @@ class RoleManager(DashboardIntegration, commands.Cog):
             }
         )
         imported = len(autoroles.get("roles", []))
-        custom_data = await old.custom("GuildMessage", ctx.guild.id).all()
-        async with self.config.guild(ctx.guild).react_roles() as react_roles:
+        custom_data = await old.custom("GuildMessage", guild.id).all()
+        async with self.config.guild(guild).react_roles() as react_roles:
             for message_id, message_data in custom_data.items():
                 rr_data = message_data.get("reactroles", {})
                 binds = rr_data.get("react_to_roleid", {})
@@ -1678,7 +1841,7 @@ class RoleManager(DashboardIntegration, commands.Cog):
                         "emoji": str(emoji_key),
                     }
                     imported += 1
-        for role in ctx.guild.roles:
+        for role in guild.roles:
             if role.is_default():
                 continue
             data = await old.role(role).all()
@@ -1686,7 +1849,7 @@ class RoleManager(DashboardIntegration, commands.Cog):
                 await self.config.role(role).sticky.set(True)
                 imported += 1
         await self._refresh_reaction_cache()
-        await ctx.send(f"Imported RoleUtils-compatible settings. Records touched: {imported:,}.")
+        return imported
 
     @rolemanager.group(name="role")
     @commands.admin_or_permissions(manage_roles=True)
@@ -1966,21 +2129,7 @@ class RoleManager(DashboardIntegration, commands.Cog):
         if not members:
             await ctx.send_help(ctx.command)
             return
-        add_part = ""
-        remove_part = ""
-        lowered = spec.lower()
-        add_index = lowered.find("--add")
-        remove_index = lowered.find("--remove")
-        if add_index != -1:
-            end = remove_index if remove_index > add_index else len(spec)
-            add_part = spec[add_index + 5 : end].strip()
-        if remove_index != -1:
-            end = add_index if add_index > remove_index else len(spec)
-            remove_part = spec[remove_index + 8 : end].strip()
-        to_add = self._roles_from_argument(ctx.guild, add_part) if add_part else []
-        to_remove = self._roles_from_argument(ctx.guild, remove_part) if remove_part else []
-        if not to_add and not to_remove:
-            raise commands.BadArgument("Use `--add role,role` or `--remove role,role`.")
+        to_add, to_remove = self._role_actions_from_spec(ctx.guild, spec)
         for role in to_add + to_remove:
             self._check_role_manageable(ctx, role)
         completed = 0
@@ -2750,14 +2899,21 @@ class RoleManager(DashboardIntegration, commands.Cog):
             "style": self._button_style_value(style),
             "messages": [],
         }
+        old_role_id = None
         async with self.config.guild(ctx.guild).buttons() as buttons:
             old = buttons.get(clean_name)
             if old:
                 button_data["messages"] = list(old.get("messages", []))
+                old_role_id = int(old.get("role_id", 0)) or None
             buttons[clean_name] = button_data
+        if old_role_id is not None and old_role_id != role.id:
+            async with self.config.role_from_id(old_role_id).buttons() as role_buttons:
+                if clean_name in role_buttons:
+                    role_buttons.remove(clean_name)
         async with self.config.role(role).buttons() as role_buttons:
             if clean_name not in role_buttons:
                 role_buttons.append(clean_name)
+        await self._load_component_views()
         preview = RoleManagerView(self, timeout=120)
         button = RoleButton(
             name=clean_name,
@@ -2846,11 +3002,20 @@ class RoleManager(DashboardIntegration, commands.Cog):
             "label": label[:100],
             "description": description[:100],
         }
+        old_role_id = None
         async with self.config.guild(ctx.guild).select_options() as options:
+            old = options.get(clean_name)
+            if old:
+                old_role_id = int(old.get("role_id", 0)) or None
             options[clean_name] = option_data
+        if old_role_id is not None and old_role_id != role.id:
+            async with self.config.role_from_id(old_role_id).select_options() as role_options:
+                if clean_name in role_options:
+                    role_options.remove(clean_name)
         async with self.config.role(role).select_options() as role_options:
             if clean_name not in role_options:
                 role_options.append(clean_name)
+        await self._load_component_views()
         await ctx.send(f"Saved select option `{clean_name}` for {role.mention}.")
 
     @select_option_group.command(name="delete", aliases=["remove", "del"])
@@ -2921,6 +3086,7 @@ class RoleManager(DashboardIntegration, commands.Cog):
             if old:
                 menu_data["messages"] = list(old.get("messages", []))
             menus[clean_name] = menu_data
+        await self._load_component_views()
         preview_data = await self.config.guild(ctx.guild).all()
         preview_data["select_menus"] = {clean_name: {**menu_data, "messages": ["preview-0"]}}
         preview = self._build_component_view(ctx.guild, "preview-0", preview_data, timeout=120)
@@ -3090,6 +3256,140 @@ class RoleManager(DashboardIntegration, commands.Cog):
         await self._load_component_views()
         return removed
 
+    async def _apply_external_role_rules(
+        self,
+        member: discord.Member,
+        added_role_ids: Iterable[int],
+        removed_role_ids: Iterable[int],
+    ) -> None:
+        """Apply role policies and explicit rules to changes made outside this cog."""
+        key = (member.guild.id, member.id)
+        if key in self._role_rule_processing:
+            return
+        self._role_rule_processing.add(key)
+        try:
+            guild = member.guild
+            explicit_rules = await self.config.guild(guild).role_rules()
+            events = deque(
+                [("add", int(role_id)) for role_id in added_role_ids]
+                + [("remove", int(role_id)) for role_id in removed_role_ids]
+            )
+            if not events:
+                return
+
+            planned_role_ids = {role.id for role in member.roles}
+            to_add: Dict[int, discord.Role] = {}
+            to_remove: Dict[int, discord.Role] = {}
+            processed_events: Set[Tuple[str, int]] = set()
+
+            def schedule(action: str, role_id: int) -> None:
+                role = guild.get_role(int(role_id))
+                if role is None or not self._bot_can_apply_to_member(member, role):
+                    return
+                if action == "add":
+                    if role.id in planned_role_ids:
+                        return
+                    planned_role_ids.add(role.id)
+                    to_remove.pop(role.id, None)
+                    to_add[role.id] = role
+                else:
+                    if role.id not in planned_role_ids:
+                        return
+                    planned_role_ids.discard(role.id)
+                    to_add.pop(role.id, None)
+                    to_remove[role.id] = role
+                events.append((action, role.id))
+
+            while events and len(processed_events) < 250:
+                event, trigger_role_id = events.popleft()
+                event_key = (event, trigger_role_id)
+                if event_key in processed_events:
+                    continue
+                processed_events.add(event_key)
+                trigger_role = guild.get_role(trigger_role_id)
+                if trigger_role is None:
+                    continue
+
+                if event == "add":
+                    required = [
+                        int(role_id)
+                        for role_id in await self.config.role(trigger_role).required()
+                        if guild.get_role(int(role_id)) is not None
+                    ]
+                    require_any = bool(
+                        await self.config.role(trigger_role).require_any()
+                    )
+                    requirements_met = not required or (
+                        any(role_id in planned_role_ids for role_id in required)
+                        if require_any
+                        else all(role_id in planned_role_ids for role_id in required)
+                    )
+                    if not requirements_met:
+                        schedule("remove", trigger_role.id)
+                        continue
+                    for role_id in await self.config.role(trigger_role).inclusive_with():
+                        schedule("add", int(role_id))
+                    for role_id in await self.config.role(trigger_role).exclusive_to():
+                        schedule("remove", int(role_id))
+                else:
+                    for role_id in await self.config.role(trigger_role).inclusive_with():
+                        schedule("remove", int(role_id))
+
+                for rule in explicit_rules.values():
+                    if not rule.get("enabled", True):
+                        continue
+                    if int(rule.get("trigger_role_id", 0)) != trigger_role_id:
+                        continue
+                    if str(rule.get("trigger_event", "add")).lower() != event:
+                        continue
+                    for role_id in rule.get("add_role_ids", []):
+                        schedule("add", int(role_id))
+                    for role_id in rule.get("remove_role_ids", []):
+                        schedule("remove", int(role_id))
+
+            if events:
+                log.warning(
+                    "Stopped role-rule processing at the safety limit for guild %s member %s.",
+                    guild.id,
+                    member.id,
+                )
+
+            removed_roles = list(to_remove.values())
+            added_roles = list(to_add.values())
+            if removed_roles:
+                try:
+                    await member.remove_roles(
+                        *removed_roles,
+                        reason="RoleManager automatic role rule.",
+                    )
+                except discord.HTTPException:
+                    log.exception(
+                        "Failed automatic role-rule removals for guild %s member %s.",
+                        guild.id,
+                        member.id,
+                    )
+                    removed_roles = []
+            if added_roles:
+                try:
+                    await member.add_roles(
+                        *added_roles,
+                        reason="RoleManager automatic role rule.",
+                    )
+                except discord.HTTPException:
+                    log.exception(
+                        "Failed automatic role-rule additions for guild %s member %s.",
+                        guild.id,
+                        member.id,
+                    )
+                    added_roles = []
+
+            for role in removed_roles:
+                await self._clear_temp_role(member, role)
+            for role in added_roles:
+                await self._maybe_track_temp_role(member, role)
+        finally:
+            self._role_rule_processing.discard(key)
+
     @commands.Cog.listener()
     async def on_member_join(self, member: discord.Member) -> None:
         if await self.bot.cog_disabled_in_guild(self, member.guild):
@@ -3101,10 +3401,20 @@ class RoleManager(DashboardIntegration, commands.Cog):
 
     @commands.Cog.listener()
     async def on_member_update(self, before: discord.Member, after: discord.Member) -> None:
+        if await self.bot.cog_disabled_in_guild(self, after.guild):
+            return
         if getattr(before, "pending", False) and not getattr(after, "pending", False):
-            if await self.bot.cog_disabled_in_guild(self, after.guild):
-                return
             await self._apply_autoroles(after)
+        before_role_ids = {role.id for role in before.roles}
+        after_role_ids = {role.id for role in after.roles}
+        added_role_ids = after_role_ids - before_role_ids
+        removed_role_ids = before_role_ids - after_role_ids
+        if added_role_ids or removed_role_ids:
+            await self._apply_external_role_rules(
+                after,
+                added_role_ids,
+                removed_role_ids,
+            )
 
     @commands.Cog.listener()
     async def on_member_remove(self, member: discord.Member) -> None:
