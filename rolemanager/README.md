@@ -98,7 +98,7 @@ Existing required, inclusive, and exclusive policies are also enforced when a ro
 
 ## Dashboard
 
-The Red-Web-Dashboard page supports guild atomic settings, role creation and editing, a complete policy overview, mutual include/exclude links, role-change rule creation and editing, autoroles, single-member and bulk role operations with dry-run previews, member sticky roles, temporary-role grants, reaction panel creation and maintenance, persistent component creation/editing/cleanup, and RoleTools/RoleUtils imports.
+The Red-Web-Dashboard page is organized into responsive tabs for overview, role setup, member operations, role panels, and data/imports. It supports guild atomic settings, role creation and editing, a complete policy overview, mutual include/exclude links, role-change rule creation and editing, autoroles, single-member and bulk role operations with dry-run previews, member sticky roles, temporary-role grants, reaction panel creation and maintenance, persistent component creation/editing/cleanup, and RoleTools/RoleUtils imports.
 
 Live dashboard role operations require the confirmation checkbox. Imports also require explicit confirmation because compatible destination settings may be replaced.
 

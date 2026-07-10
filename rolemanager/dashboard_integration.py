@@ -157,6 +157,47 @@ class DashboardIntegration:
             return value not in {"0", "false", "off", "no", ""}
         return False
 
+    def _dashboard_active_tab(self, kwargs: typing.Dict[str, typing.Any]) -> str:
+        form_data = self._dashboard_form_data(kwargs)
+        selected = self._dash_value(form_data, "active_tab").lower()
+        valid_tabs = {"overview", "roles", "members", "panels", "data"}
+        if selected in valid_tabs:
+            return selected
+
+        action = self._dash_value(form_data, "action").lower()
+        action_tabs = {
+            "save_guild_settings": "overview",
+            "create_role": "overview",
+            "select_role": "roles",
+            "save_role_flags": "roles",
+            "make_inclusive_mutual": "roles",
+            "make_exclusive_mutual": "roles",
+            "save_role_rule": "roles",
+            "delete_role_rule": "roles",
+            "save_autoroles": "roles",
+            "role_operation": "members",
+            "sticky_member_action": "members",
+            "give_temp_role": "members",
+            "clear_temp_role": "members",
+            "bind_reaction_role": "panels",
+            "create_reaction_panel": "panels",
+            "refresh_reaction_message": "panels",
+            "cleanup_reaction_roles": "panels",
+            "delete_reaction_bind": "panels",
+            "clear_reaction_message": "panels",
+            "create_button": "panels",
+            "delete_button": "panels",
+            "create_select_option": "panels",
+            "delete_select_option": "panels",
+            "create_select_menu": "panels",
+            "delete_select_menu": "panels",
+            "send_component_message": "panels",
+            "edit_component_message": "panels",
+            "cleanup_component_messages": "panels",
+            "import_settings": "data",
+        }
+        return action_tabs.get(action, "overview")
+
     def _dash_optional_id(self, form_data: typing.Any, key: str) -> typing.Optional[int]:
         value = self._dash_value(form_data, key).strip()
         if not value:
@@ -1372,6 +1413,7 @@ class DashboardIntegration:
         role_rules = await self.config.guild(guild).role_rules()
         atomic = await self.config.guild(guild).atomic()
         csrf = self._dash_csrf(kwargs)
+        active_tab = self._dashboard_active_tab(kwargs)
 
         role_stats = await self._dashboard_role_stats(guild)
         selected_role = guild.get_role(selected_role_id or 0)
@@ -1408,8 +1450,20 @@ class DashboardIntegration:
             .rmdash-btn {{ background: #2563eb; color: white; border: 0; border-radius: 6px; padding: 9px 14px; cursor: pointer; font-weight: 700; }}
             .rmdash-btn.secondary {{ background: #4b5563; }}
             .rmdash-btn.danger {{ background: #dc2626; }}
-            .rmdash-nav {{ display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0 16px; }}
-            .rmdash-nav a {{ color: #bfdbfe; border: 1px solid #374151; border-radius: 6px; padding: 6px 10px; text-decoration: none; }}
+            .rmdash-tabs {{
+                display: flex; gap: 4px; overflow-x: auto; position: sticky; top: 0; z-index: 10;
+                margin: 0 0 16px; padding: 5px; background: #111827; border: 1px solid #374151;
+                border-radius: 8px; scrollbar-width: thin;
+            }}
+            .rmdash-tab {{
+                flex: 0 0 auto; border: 0; border-radius: 6px; padding: 9px 13px;
+                background: transparent; color: #9ca3af; cursor: pointer; font-weight: 700;
+                white-space: nowrap;
+            }}
+            .rmdash-tab:hover {{ background: #1f2937; color: #f9fafb; }}
+            .rmdash-tab.active {{ background: #2563eb; color: white; }}
+            .rmdash-tab-panel {{ display: none; }}
+            .rmdash-tab-panel.active {{ display: block; }}
             .rmdash-table {{ width: 100%; border-collapse: collapse; font-size: 0.92rem; }}
             .rmdash-table th, .rmdash-table td {{ border-bottom: 1px solid #374151; padding: 8px; text-align: left; vertical-align: top; }}
             .rmdash-table th {{ color: #d1d5db; }}
@@ -1418,20 +1472,9 @@ class DashboardIntegration:
             .rmdash-scroll {{ overflow-x: auto; }}
             .rmdash-card details {{ margin-top: 8px; }}
         </style>
-        <div class="rmdash-wrap">
+        <div class="rmdash-wrap" data-rmdash-tabs="1">
             <div class="rmdash-card">
                 <h2>RoleManager Dashboard</h2>
-                <div class="rmdash-nav">
-                    <a href="#role-settings">Role Settings</a>
-                    <a href="#role-rules">Role Rules</a>
-                    <a href="#autoroles">Autoroles</a>
-                    <a href="#role-operations">Role Operations</a>
-                    <a href="#sticky-roles">Sticky Roles</a>
-                    <a href="#reaction-roles">Reaction Roles</a>
-                    <a href="#components">Buttons & Selects</a>
-                    <a href="#temporary-roles">Temporary Roles</a>
-                    <a href="#imports">Imports</a>
-                </div>
                 <div class="rmdash-grid">
                     <div><div class="rmdash-muted">Self Roles</div><div class="rmdash-stat">{role_stats["self_roles"]}</div></div>
                     <div><div class="rmdash-muted">Sticky Roles</div><div class="rmdash-stat">{role_stats["sticky_roles"]}</div></div>
@@ -1443,18 +1486,144 @@ class DashboardIntegration:
                     <div><div class="rmdash-muted">Role Rules</div><div class="rmdash-stat">{len(role_rules)}</div></div>
                 </div>
             </div>
-            {self._dashboard_guild_settings_section(guild, atomic, csrf)}
-            {await self._dashboard_role_settings_section(guild, selected_role, csrf)}
-            {await self._dashboard_policy_overview_section(guild)}
-            {self._dashboard_role_rules_section(guild, role_rules, csrf)}
-            {self._dashboard_autoroles_section(guild, auto_roles, csrf)}
-            {self._dashboard_role_operations_section(guild, csrf)}
-            {self._dashboard_sticky_section(guild, csrf)}
-            {self._dashboard_reaction_roles_section(guild, react_roles, csrf)}
-            {self._dashboard_components_section(guild, buttons, select_options, select_menus, csrf)}
-            {self._dashboard_temporary_roles_section(guild, temp_roles, csrf)}
-            {self._dashboard_import_section(csrf)}
+            <div class="rmdash-tabs" role="tablist" aria-label="RoleManager sections">
+                {self._dashboard_tab_button("overview", "Overview", active_tab)}
+                {self._dashboard_tab_button("roles", "Role Setup", active_tab)}
+                {self._dashboard_tab_button("members", "Member Operations", active_tab)}
+                {self._dashboard_tab_button("panels", "Role Panels", active_tab)}
+                {self._dashboard_tab_button("data", "Data & Imports", active_tab)}
+            </div>
+            <section class="rmdash-tab-panel{self._dashboard_active_class("overview", active_tab)}" data-tab-panel="overview" id="rmdash-panel-overview" role="tabpanel">
+                {self._dashboard_guild_settings_section(guild, atomic, csrf)}
+                {await self._dashboard_policy_overview_section(guild)}
+            </section>
+            <section class="rmdash-tab-panel{self._dashboard_active_class("roles", active_tab)}" data-tab-panel="roles" id="rmdash-panel-roles" role="tabpanel">
+                {await self._dashboard_role_settings_section(guild, selected_role, csrf)}
+                {self._dashboard_role_rules_section(guild, role_rules, csrf)}
+                {self._dashboard_autoroles_section(guild, auto_roles, csrf)}
+            </section>
+            <section class="rmdash-tab-panel{self._dashboard_active_class("members", active_tab)}" data-tab-panel="members" id="rmdash-panel-members" role="tabpanel">
+                {self._dashboard_role_operations_section(guild, csrf)}
+                {self._dashboard_sticky_section(guild, csrf)}
+                {self._dashboard_temporary_roles_section(guild, temp_roles, csrf)}
+            </section>
+            <section class="rmdash-tab-panel{self._dashboard_active_class("panels", active_tab)}" data-tab-panel="panels" id="rmdash-panel-panels" role="tabpanel">
+                {self._dashboard_reaction_roles_section(guild, react_roles, csrf)}
+                {self._dashboard_components_section(guild, buttons, select_options, select_menus, csrf)}
+            </section>
+            <section class="rmdash-tab-panel{self._dashboard_active_class("data", active_tab)}" data-tab-panel="data" id="rmdash-panel-data" role="tabpanel">
+                {self._dashboard_import_section(csrf)}
+            </section>
+            {self._dashboard_tabs_script()}
         </div>
+        """
+
+    @staticmethod
+    def _dashboard_active_class(tab: str, active_tab: str) -> str:
+        return " active" if tab == active_tab else ""
+
+    def _dashboard_tab_button(self, tab: str, label: str, active_tab: str) -> str:
+        active = tab == active_tab
+        active_class = " active" if active else ""
+        return (
+            f'<button type="button" class="rmdash-tab{active_class}" role="tab" '
+            f'id="rmdash-tab-{self._h(tab)}" data-tab="{self._h(tab)}" '
+            f'aria-controls="rmdash-panel-{self._h(tab)}" '
+            f'aria-selected="{str(active).lower()}" tabindex="{0 if active else -1}">'
+            f"{self._h(label)}</button>"
+        )
+
+    @staticmethod
+    def _dashboard_tabs_script() -> str:
+        return """
+        <script>
+        (() => {
+            const script = document.currentScript;
+            const root = script ? script.closest(".rmdash-wrap") : null;
+            if (!root) return;
+
+            const tabs = Array.from(root.querySelectorAll("[data-tab]"));
+            const panels = Array.from(root.querySelectorAll("[data-tab-panel]"));
+            const validTabs = new Set(tabs.map((tab) => tab.dataset.tab));
+            const sectionTabs = {
+                "guild-settings": "overview",
+                "policy-overview": "overview",
+                "role-settings": "roles",
+                "role-rules": "roles",
+                "autoroles": "roles",
+                "role-operations": "members",
+                "sticky-roles": "members",
+                "temporary-roles": "members",
+                "reaction-roles": "panels",
+                "components": "panels",
+                "imports": "data",
+            };
+
+            const activate = (name, updateHash = false) => {
+                if (!validTabs.has(name)) return;
+                tabs.forEach((tab) => {
+                    const selected = tab.dataset.tab === name;
+                    tab.classList.toggle("active", selected);
+                    tab.setAttribute("aria-selected", selected ? "true" : "false");
+                    tab.tabIndex = selected ? 0 : -1;
+                });
+                panels.forEach((panel) => {
+                    const selected = panel.dataset.tabPanel === name;
+                    panel.classList.toggle("active", selected);
+                    panel.hidden = !selected;
+                });
+                if (updateHash && window.history && window.history.replaceState) {
+                    window.history.replaceState(null, "", `#rm-${name}`);
+                }
+            };
+
+            const tabFromHash = () => {
+                const hash = window.location.hash.slice(1);
+                if (hash.startsWith("rm-") && validTabs.has(hash.slice(3))) {
+                    return hash.slice(3);
+                }
+                return sectionTabs[hash] || null;
+            };
+
+            tabs.forEach((tab, index) => {
+                tab.addEventListener("click", () => activate(tab.dataset.tab, true));
+                tab.addEventListener("keydown", (event) => {
+                    let nextIndex = null;
+                    if (event.key === "ArrowRight") nextIndex = (index + 1) % tabs.length;
+                    if (event.key === "ArrowLeft") nextIndex = (index - 1 + tabs.length) % tabs.length;
+                    if (event.key === "Home") nextIndex = 0;
+                    if (event.key === "End") nextIndex = tabs.length - 1;
+                    if (nextIndex === null) return;
+                    event.preventDefault();
+                    tabs[nextIndex].focus();
+                    activate(tabs[nextIndex].dataset.tab, true);
+                });
+            });
+
+            root.querySelectorAll("form").forEach((form) => {
+                form.addEventListener("submit", () => {
+                    const active = root.querySelector("[data-tab].active");
+                    if (!active) return;
+                    let input = form.querySelector('input[name="active_tab"]');
+                    if (!input) {
+                        input = document.createElement("input");
+                        input.type = "hidden";
+                        input.name = "active_tab";
+                        form.appendChild(input);
+                    }
+                    input.value = active.dataset.tab;
+                });
+            });
+
+            const initial = tabFromHash();
+            const selected = root.querySelector("[data-tab].active");
+            activate(initial || (selected ? selected.dataset.tab : "overview"));
+            window.addEventListener("hashchange", () => {
+                const requested = tabFromHash();
+                if (requested) activate(requested);
+            });
+        })();
+        </script>
         """
 
     def _dashboard_guild_settings_section(
