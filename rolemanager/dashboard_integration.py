@@ -1493,25 +1493,25 @@ class DashboardIntegration:
                 {self._dashboard_tab_button("panels", "Role Panels", active_tab)}
                 {self._dashboard_tab_button("data", "Data & Imports", active_tab)}
             </div>
-            <section class="rmdash-tab-panel{self._dashboard_active_class("overview", active_tab)}" data-tab-panel="overview" id="rmdash-panel-overview" role="tabpanel">
+            <section class="rmdash-tab-panel{self._dashboard_active_class("overview", active_tab)}" data-tab-panel="overview" id="rmdash-panel-overview" role="tabpanel" aria-labelledby="rmdash-tab-overview">
                 {self._dashboard_guild_settings_section(guild, atomic, csrf)}
                 {await self._dashboard_policy_overview_section(guild)}
             </section>
-            <section class="rmdash-tab-panel{self._dashboard_active_class("roles", active_tab)}" data-tab-panel="roles" id="rmdash-panel-roles" role="tabpanel">
+            <section class="rmdash-tab-panel{self._dashboard_active_class("roles", active_tab)}" data-tab-panel="roles" id="rmdash-panel-roles" role="tabpanel" aria-labelledby="rmdash-tab-roles">
                 {await self._dashboard_role_settings_section(guild, selected_role, csrf)}
                 {self._dashboard_role_rules_section(guild, role_rules, csrf)}
                 {self._dashboard_autoroles_section(guild, auto_roles, csrf)}
             </section>
-            <section class="rmdash-tab-panel{self._dashboard_active_class("members", active_tab)}" data-tab-panel="members" id="rmdash-panel-members" role="tabpanel">
+            <section class="rmdash-tab-panel{self._dashboard_active_class("members", active_tab)}" data-tab-panel="members" id="rmdash-panel-members" role="tabpanel" aria-labelledby="rmdash-tab-members">
                 {self._dashboard_role_operations_section(guild, csrf)}
                 {self._dashboard_sticky_section(guild, csrf)}
                 {self._dashboard_temporary_roles_section(guild, temp_roles, csrf)}
             </section>
-            <section class="rmdash-tab-panel{self._dashboard_active_class("panels", active_tab)}" data-tab-panel="panels" id="rmdash-panel-panels" role="tabpanel">
+            <section class="rmdash-tab-panel{self._dashboard_active_class("panels", active_tab)}" data-tab-panel="panels" id="rmdash-panel-panels" role="tabpanel" aria-labelledby="rmdash-tab-panels">
                 {self._dashboard_reaction_roles_section(guild, react_roles, csrf)}
                 {self._dashboard_components_section(guild, buttons, select_options, select_menus, csrf)}
             </section>
-            <section class="rmdash-tab-panel{self._dashboard_active_class("data", active_tab)}" data-tab-panel="data" id="rmdash-panel-data" role="tabpanel">
+            <section class="rmdash-tab-panel{self._dashboard_active_class("data", active_tab)}" data-tab-panel="data" id="rmdash-panel-data" role="tabpanel" aria-labelledby="rmdash-tab-data">
                 {self._dashboard_import_section(csrf)}
             </section>
             {self._dashboard_tabs_script()}
