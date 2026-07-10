@@ -29,7 +29,7 @@ Combined role management tools for Red-DiscordBot.
 
 | Command | Description |
 | ------- | ----------- |
-| `[p]selfrole <role>` | Toggle a configured self role for yourself. |
+| `[p]rolemanager selfrole <role>` | Toggle a configured self role for yourself. |
 | `[p]rolemanager selfrole allow <role> [removable]` | Make a role self-assignable. |
 | `[p]rolemanager selfrole deny <role>` | Remove a role from self-role availability. |
 | `[p]rolemanager selfrole list` | List configured self roles. |

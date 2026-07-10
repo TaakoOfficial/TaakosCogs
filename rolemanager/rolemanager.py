@@ -1062,16 +1062,24 @@ class RoleManager(DashboardIntegration, commands.Cog):
         await self.bot.wait_until_red_ready()
 
     @commands.guild_only()
-    @commands.group(name="rolemanager", aliases=["rm", "roletools"], invoke_without_command=True)
+    @commands.group(name="rolemanager", aliases=["rm"], invoke_without_command=True)
     async def rolemanager(self, ctx: commands.Context) -> None:
         """Combined role management setup and staff tools."""
         await ctx.send_help(ctx.command)
 
-    @commands.guild_only()
+    @rolemanager.group(name="selfrole", aliases=["selfroles", "iam"], invoke_without_command=True)
     @commands.bot_has_permissions(manage_roles=True)
-    @commands.command(name="selfrole", aliases=["iam"])
-    async def selfrole_toggle(self, ctx: commands.Context, *, role: discord.Role) -> None:
-        """Add or remove one of your configured self roles."""
+    async def selfrole_settings(
+        self,
+        ctx: commands.Context,
+        *,
+        role: Optional[discord.Role] = None,
+    ) -> None:
+        """Add, remove, or configure member self roles."""
+        if role is None:
+            await ctx.send_help(ctx.command)
+            return
+
         self._check_role_manageable(ctx, role, check_author=False)
         member = ctx.author
         if not isinstance(member, discord.Member):
@@ -1118,12 +1126,8 @@ class RoleManager(DashboardIntegration, commands.Cog):
             allowed_mentions=discord.AllowedMentions.none(),
         )
 
-    @rolemanager.group(name="selfrole", aliases=["selfroles"])
-    @commands.admin_or_permissions(manage_roles=True)
-    async def selfrole_settings(self, ctx: commands.Context) -> None:
-        """Configure roles that members can assign to themselves."""
-
     @selfrole_settings.command(name="allow")
+    @commands.admin_or_permissions(manage_roles=True)
     @commands.bot_has_permissions(manage_roles=True)
     async def selfrole_allow(
         self,
@@ -1142,6 +1146,7 @@ class RoleManager(DashboardIntegration, commands.Cog):
         )
 
     @selfrole_settings.command(name="deny", aliases=["remove"])
+    @commands.admin_or_permissions(manage_roles=True)
     async def selfrole_deny(self, ctx: commands.Context, *, role: discord.Role) -> None:
         """Remove a role from self-role availability."""
         await self.config.role(role).self_assignable.set(False)
@@ -1152,6 +1157,7 @@ class RoleManager(DashboardIntegration, commands.Cog):
         )
 
     @selfrole_settings.command(name="list")
+    @commands.admin_or_permissions(manage_roles=True)
     async def selfrole_list(self, ctx: commands.Context) -> None:
         """List configured self roles."""
         lines: List[str] = []

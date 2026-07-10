@@ -6,7 +6,7 @@
     ],
     "version": "0.2.0",
     "description": "A combined role management cog inspired by RoleUtils and RoleTools, with self roles, policy rules, reaction roles, button roles, select-menu roles, autoroles, sticky roles, temporary roles, bulk role operations, migration helpers, and Red-Web-Dashboard support.",
-    "install_msg": "rolemanager loaded. Use `[p]rolemanager` or `[p]rm` for setup commands, `[p]selfrole <role>` for member self roles, and `[p]rolemanager button`, `[p]rolemanager select`, or `[p]rolemanager reactrole` for role panels.",
+    "install_msg": "rolemanager loaded. Use `[p]rolemanager` or `[p]rm` for setup commands, `[p]rm selfrole <role>` for member self roles, and `[p]rolemanager button`, `[p]rolemanager select`, or `[p]rolemanager reactrole` for role panels.",
     "short": "Complete role management with self roles, policies, reaction roles, buttons, selects, autoroles, sticky roles, temp roles, and bulk tools.",
     "tags": [
         "roles",
