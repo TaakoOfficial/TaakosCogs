@@ -1,34 +1,27 @@
 {
-    "$schema": "https://raw.githubusercontent.com/Cog-Creators/Red-DiscordBot/V3/develop/schema/red_cog.schema.json",
-    "name": "tickethub",
-    "author": [
-        "Taako"
-    ],
-    "version": "1.16.1",
-    "description": "A Red DiscordBot cog with polished ticket and log cards, AAA3A-compatible controls and panels, member management, lifecycle automation, profile panels, configurable forms, imports, recovery, and HTML transcripts.",
-    "install_msg": "tickethub loaded. Use `/ticket help` for ticket commands and `/ticketset walkthrough` for setup. Prefix users can use `[p]ticket` and `[p]ticketset`; during an AAA3A Tickets migration, use `[p]tickethub` and `[p]tickethubset` while AAA3A owns the standard names.",
-    "short": "Ticket panels, member controls, lifecycle automation, recovery, and transcripts.",
-    "tags": [
-        "tickets",
-        "support",
-        "transcripts",
-        "html",
-        "migration",
-        "utility",
-        "moderation",
-        "slash"
-    ],
-    "requirements": [
-        "chat-exporter>=3.1.0"
-    ],
-    "min_bot_version": "3.5.0",
-    "min_python_version": [
-        3,
-        9,
-        0
-    ],
-    "hidden": false,
-    "disabled": false,
-    "type": "COG",
-    "end_user_data_statement": "This cog stores per-guild ticket profiles and their next ticket numbers, panel message IDs and styles, imported AAA3A panel message IDs and option labels/descriptions/emojis, multi-panel option labels/descriptions/emojis, control emojis, lifecycle settings, channel/category/role IDs, global and profile-local ticket IDs, ticket records, ticket owner IDs, claimed/locked/unlocked/closed/reopened staff IDs, participant IDs, ticket reasons, selected panel option labels, modal form answers, pending close requester/reason/expiry data, close and reopen reasons, timestamps, and ticket lifecycle event metadata. HTML and text transcripts are generated on demand from Discord message history and sent directly to configured Discord destinations."
+  "$schema": "https://raw.githubusercontent.com/Cog-Creators/Red-DiscordBot/V3/develop/schema/red_cog.schema.json",
+  "name": "tickethub",
+  "author": ["Taako"],
+  "version": "1.16.1",
+  "description": "A Red DiscordBot cog with polished ticket and log cards, AAA3A-compatible controls and panels, member management, lifecycle automation, profile panels, configurable forms, imports, recovery, and HTML transcripts.",
+  "install_msg": "tickethub loaded. Use `/ticket help` for ticket commands and `/ticketset walkthrough` for setup. Prefix users can use `[p]ticket` and `[p]ticketset`; during an AAA3A Tickets migration, use `[p]tickethub` and `[p]tickethubset` while AAA3A owns the standard names.",
+  "short": "Ticket panels, member controls, lifecycle automation, recovery, and transcripts.",
+  "tags": [
+    "tickets",
+    "support",
+    "transcripts",
+    "html",
+    "migration",
+    "dashboard",
+    "utility",
+    "moderation",
+    "slash"
+  ],
+  "requirements": ["chat-exporter>=3.1.0"],
+  "min_bot_version": "3.5.0",
+  "min_python_version": [3, 9, 0],
+  "hidden": false,
+  "disabled": false,
+  "type": "COG",
+  "end_user_data_statement": "This cog stores per-guild ticket profiles and their next ticket numbers, panel message IDs and styles, imported AAA3A panel message IDs and option labels/descriptions/emojis, multi-panel option labels/descriptions/emojis, control emojis, lifecycle settings, channel/category/role IDs, global and profile-local ticket IDs, ticket records, ticket owner IDs, claimed/locked/unlocked/closed/reopened staff IDs, participant IDs, ticket reasons, selected panel option labels, modal form answers, pending close requester/reason/expiry data, close and reopen reasons, timestamps, and ticket lifecycle event metadata. HTML and text transcripts are generated on demand from Discord message history and sent directly to configured Discord destinations."
 }

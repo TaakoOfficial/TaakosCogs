@@ -1,30 +1,18 @@
 {
-    "$schema": "https://raw.githubusercontent.com/Cog-Creators/Red-DiscordBot/V3/develop/schema/red_cog.schema.json",
-    "author": [
-        "Taako"
-    ],
-    "name": "yalc",
-    "version": "3.2.1",
-    "install_msg": "Thanks for installing yalc (Yet Another Logging Cog)! Use `[p]help YALC` or `/yalc` to get started. For full documentation, visit the repo.",
-    "short": "Comprehensive server logging with style!",
-    "description": "📝 A powerful Discord server logging cog with customizable events, channels, and filters. Supports both classic and slash commands.",
-    "min_bot_version": "3.5.0",
-    "min_python_version": [
-        3,
-        9,
-        0
-    ],
-    "hidden": false,
-    "disabled": false,
-    "required_cogs": {},
-    "requirements": [],
-    "tags": [
-        "logging",
-        "moderation",
-        "utility",
-        "admin",
-        "audit"
-    ],
-    "type": "COG",
-    "end_user_data_statement": "This cog stores guild-specific settings like log channels and event configurations. No personal user data is stored permanently."
+  "$schema": "https://raw.githubusercontent.com/Cog-Creators/Red-DiscordBot/V3/develop/schema/red_cog.schema.json",
+  "author": ["Taako"],
+  "name": "yalc",
+  "version": "3.2.1",
+  "install_msg": "Thanks for installing yalc (Yet Another Logging Cog)! Use `[p]help YALC` or `/yalc` to get started. For full documentation, visit the repo.",
+  "short": "Comprehensive server logging with style!",
+  "description": "📝 A powerful Discord server logging cog with customizable events, channels, and filters. Supports both classic and slash commands.",
+  "min_bot_version": "3.5.0",
+  "min_python_version": [3, 9, 0],
+  "hidden": false,
+  "disabled": false,
+  "required_cogs": {},
+  "requirements": [],
+  "tags": ["logging", "moderation", "utility", "admin", "dashboard", "audit"],
+  "type": "COG",
+  "end_user_data_statement": "This cog stores guild-specific settings like log channels and event configurations. No personal user data is stored permanently."
 }

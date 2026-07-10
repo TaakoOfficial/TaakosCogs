@@ -6,7 +6,15 @@
   "description": "A Red DiscordBot cog that creates temporary voice channels from a join-to-create channel and posts embedded owner control panels with buttons for renaming, locking, user limits, ownership transfers, permitted users, removal, claiming, and dashboard management.",
   "install_msg": "tempvoice loaded. Use `[p]tempvoice setup` to create a Join to Create voice channel, or `[p]tempvoice setup <voice channel>` to use an existing one.",
   "short": "Temporary voice channels with embedded owner control panels.",
-  "tags": ["voice", "temporary", "channels", "buttons", "utility", "moderation"],
+  "tags": [
+    "voice",
+    "temporary",
+    "channels",
+    "buttons",
+    "dashboard",
+    "utility",
+    "moderation"
+  ],
   "requirements": [],
   "min_bot_version": "3.5.0",
   "min_python_version": [3, 9, 0],

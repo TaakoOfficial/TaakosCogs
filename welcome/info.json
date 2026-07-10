@@ -1,24 +1,14 @@
 {
-    "name": "welcome",
-    "description": "A Red DiscordBot cog for customizable welcome messages with placeholders, JSON embeds, cached images, avatar overlays, and Red-Web-Dashboard integration.",
-    "author": [
-        "Taako"
-    ],
-    "install_msg": "welcome cog loaded. Use [p]welcome to configure join messages for this server, or Red-Web-Dashboard to manage them visually.",
-    "requirements": [
-        "aiohttp",
-        "Pillow"
-    ],
-    "tags": [
-        "welcome",
-        "greetings",
-        "embeds",
-        "utility"
-    ],
-    "min_bot_version": "3.0.0",
-    "hidden": false,
-    "disabled": false,
-    "type": "COG",
-    "short": "Custom welcome messages with placeholders, embeds, cached images, avatar overlays, and dashboard support.",
-    "version": "1.3.1"
+  "name": "welcome",
+  "description": "A Red DiscordBot cog for customizable welcome messages with placeholders, JSON embeds, cached images, avatar overlays, and Red-Web-Dashboard integration.",
+  "author": ["Taako"],
+  "install_msg": "welcome cog loaded. Use [p]welcome to configure join messages for this server, or Red-Web-Dashboard to manage them visually.",
+  "requirements": ["aiohttp", "Pillow"],
+  "tags": ["welcome", "greetings", "embeds", "dashboard", "utility"],
+  "min_bot_version": "3.0.0",
+  "hidden": false,
+  "disabled": false,
+  "type": "COG",
+  "short": "Custom welcome messages with placeholders, embeds, cached images, avatar overlays, and dashboard support.",
+  "version": "1.3.1"
 }
