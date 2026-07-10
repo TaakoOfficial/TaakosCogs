@@ -33,6 +33,7 @@ To update installed cogs:
 | Cog                                    | Best For                 | Highlights                                                                                                                                  |
 | -------------------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
 | [toolz](./toolz)                       | Role and user utilities  | Role/user info, role audits, role comparison, CSV exports, bot/no-role audits, role-triggered messages with `{user}` placeholders.          |
+| [rolemanager](./rolemanager)           | Role management          | Self roles, role policies, reaction roles, button/select roles, autoroles, sticky roles, temporary roles, dry-runs, imports, and bulk tools. |
 | [yalc](./yalc)                         | Server logging           | Message/member/channel/role logging, event filters, retention settings, ignore lists, Tupperbox/PluralKit-aware filtering.                  |
 | [applications](./applications)         | Staff applications       | Configurable forms, application panels, DM questionnaires, review buttons, role actions, CSV exports, polls, and dashboard setup.            |
 | [welcome](./welcome)                   | Join messages            | Configurable welcome messages, placeholders, JSON embeds, cached welcome images, avatar overlays, and dashboard setup.                       |
@@ -64,10 +65,11 @@ To update installed cogs:
 Install these if you want better moderation visibility, invite attribution, feedback workflows, community reputation, support tickets, and role operations:
 
 ```text
-[p]cog install taakoscogs toolz yalc applications welcome captcha invitetracker suggestionbox repboard reviewhub tickethub tempvoice giveaway
+[p]cog install taakoscogs toolz rolemanager yalc applications welcome captcha invitetracker suggestionbox repboard reviewhub tickethub tempvoice giveaway
 ```
 
 - `toolz` gives staff role/user lookup, audit, export, and role-triggered message tools.
+- `rolemanager` handles self roles, role policies, reaction/button/select role panels, autoroles, sticky roles, temporary roles, dry-runs, imports, and bulk role updates.
 - `YALC` gives detailed server logging.
 - `applications` handles staff applications, review workflows, and approval roles.
 - `welcome` handles onboarding messages.
@@ -100,12 +102,13 @@ Install these for immersive RP communities:
 Install these when building or moving a server:
 
 ```text
-[p]cog install taakoscogs emojiporter zodiaccolorroles toolz uppercase tempvoice
+[p]cog install taakoscogs emojiporter zodiaccolorroles toolz rolemanager uppercase tempvoice
 ```
 
 - `emojiporter` copies emojis and stickers from another server the bot can access.
 - `zodiaccolorroles` creates common self-role sets quickly.
 - `toolz` helps audit role counts, hierarchy, empty roles, bots, and permissions.
+- `rolemanager` turns those roles into self roles, reaction/button/select roles, autoroles, sticky roles, temporary roles, or policy-linked role sets.
 - `uppercase` creates and renames text channels with uppercase-style names.
 - `tempvoice` sets up join-to-create voice channels for member-managed voice spaces.
 
@@ -166,6 +169,7 @@ Some features also need Discord privileged intents:
 
 - Invite join and leave tracking in `invitetracker` needs Server Members intent.
 - Role-triggered messages in `toolz` need Server Members intent.
+- Autoroles, sticky roles, and bulk member targeting in `rolemanager` need Server Members intent for best results.
 - Member logging and member update features in logging cogs may also need Server Members intent.
 - Role assignment features in `applications` need Manage Roles and a bot role above the target roles.
 - Captcha role assignment needs Manage Roles and a bot role above the verification role.
@@ -177,6 +181,7 @@ Each cog includes its own data statement in `info.json`. In short:
 
 - `flipper`, `randomweather`, `emojiporter`, `zodiaccolorroles`, `uppercase`, and `slashlink` do not persistently store end user data.
 - `toolz` stores per-guild role-message settings such as role IDs, channel IDs, and message templates.
+- `rolemanager` stores role configuration, role-policy settings, role costs, reaction/button/select message/channel IDs, emoji keys, temporary-role expiry timestamps, and Discord user IDs for sticky and temporary role assignment.
 - `captcha` stores panel message/channel IDs, role IDs, and button labels; verification challenges are transient in memory.
 - `YALC`, `applications`, `welcome`, `invitetracker`, `suggestionbox`, `repboard`, `reviewhub`, `tickethub`, `tempvoice`, `giveaway`, `fivemstatus`, `fable`, `paranoia`, `rpcalander`, and `whmcs` store the settings or records needed for their features.
 - `invitetracker` stores invite cache metadata, inviter stats, tracked member join-source records, Discord user IDs, invite codes, timestamps, fake-join flags, and unknown join counts.
@@ -195,6 +200,7 @@ No cog is intended to share stored data with external services unless the featur
 Start with each cog's README:
 
 - [toolz README](./toolz/README.md)
+- [rolemanager README](./rolemanager/README.md)
 - [yalc README](./yalc/README.md)
 - [applications README](./applications/README.md)
 - [welcome README](./welcome/README.md)
