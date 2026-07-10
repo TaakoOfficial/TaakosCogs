@@ -105,6 +105,41 @@ class DashboardIntegration:
             return data.get("form") or data.get("json") or {}
         return data
 
+    def _dashboard_active_tab(self, kwargs, action_tabs, default):
+        form_data = self._dashboard_form_data(kwargs)
+        selected = self._dash_value(form_data, "active_tab").lower()
+        valid = set(action_tabs.values()) | {default}
+        return selected if selected in valid else action_tabs.get(
+            self._dash_value(form_data, "action").lower(), default
+        )
+
+    def _dashboard_tab_button(self, name: str, label: str, active: str) -> str:
+        selected = name == active
+        return f'<button type="button" class="dash-tab{" active" if selected else ""}" data-tab="{self._h(name)}" role="tab" aria-selected="{str(selected).lower()}" tabindex="{0 if selected else -1}">{self._h(label)}</button>'
+
+    @staticmethod
+    def _dashboard_tabs_script() -> str:
+        return """
+<script>
+(() => {
+  const root = document.currentScript.closest("[data-dashboard-tabs]"); if (!root) return;
+  const tabs = Array.from(root.querySelectorAll("[data-tab]"));
+  const panels = Array.from(root.querySelectorAll("[data-tab-panel]"));
+  const names = new Set(tabs.map((tab) => tab.dataset.tab));
+  const activate = (name, hash = false) => {
+    if (!names.has(name)) return;
+    tabs.forEach((tab) => { const on = tab.dataset.tab === name; tab.classList.toggle("active", on); tab.setAttribute("aria-selected", on ? "true" : "false"); tab.tabIndex = on ? 0 : -1; });
+    panels.forEach((panel) => { const on = panel.dataset.tabPanel === name; panel.classList.toggle("active", on); panel.hidden = !on; });
+    if (hash) history.replaceState(null, "", `#tab-${name}`);
+  };
+  const fromHash = () => { const hash = location.hash.slice(1); if (hash.startsWith("tab-") && names.has(hash.slice(4))) return hash.slice(4); const section = document.getElementById(hash); const panel = section ? section.closest("[data-tab-panel]") : null; return panel ? panel.dataset.tabPanel : null; };
+  tabs.forEach((tab, index) => { tab.addEventListener("click", () => activate(tab.dataset.tab, true)); tab.addEventListener("keydown", (event) => { const move = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0; if (!move) return; event.preventDefault(); const next = tabs[(index + move + tabs.length) % tabs.length]; next.focus(); activate(next.dataset.tab, true); }); });
+  root.querySelectorAll("form").forEach((form) => form.addEventListener("submit", () => { let input = form.querySelector('input[name="active_tab"]'); if (!input) { input = document.createElement("input"); input.type = "hidden"; input.name = "active_tab"; form.appendChild(input); } input.value = root.querySelector("[data-tab].active").dataset.tab; }));
+  activate(fromHash() || root.querySelector("[data-tab].active").dataset.tab);
+})();
+</script>
+"""
+
     def _dash_value(
         self,
         form_data: typing.Any,
@@ -319,6 +354,11 @@ class DashboardIntegration:
         text_channel_options = self._text_channel_options(guild)
         role_options = self._role_options(guild)
         panel_rows = self._panel_rows(guild, panels, csrf)
+        active_tab = self._dashboard_active_tab(
+            kwargs,
+            {"post_panel": "create", "attach_panel": "create", "remove_panel": "panels"},
+            "create",
+        )
 
         return f"""
 <style>
@@ -353,13 +393,21 @@ class DashboardIntegration:
 .captcha-table th, .captcha-table td {{ border-bottom: 1px solid var(--line); padding: 8px; text-align: left; vertical-align: top; }}
 .captcha-table th {{ color: var(--muted); font-weight: 600; }}
 .captcha-link {{ color: #8ab4ff; }}
+.dash-tabs {{ display: flex; gap: 4px; overflow-x: auto; position: sticky; top: 0; z-index: 10; padding: 5px; background: #0c0f14; border: 1px solid var(--line); border-radius: 8px; }}
+.dash-tab {{ flex: 0 0 auto; border: 0; border-radius: 6px; padding: 9px 13px; background: transparent; color: var(--muted); cursor: pointer; font-weight: 700; white-space: nowrap; }}
+.dash-tab:hover {{ background: var(--panel); color: var(--text); }} .dash-tab.active {{ background: var(--accent); color: #102014; }}
+.dash-panel {{ display: none; }} .dash-panel.active {{ display: block; }}
 </style>
-<div class="captcha-dash">
+<div class="captcha-dash" data-dashboard-tabs="1">
   <div class="captcha-stats">
     <div class="captcha-stat"><strong>{len(panels)}</strong><span>configured panels</span></div>
     <div class="captcha-stat"><strong>{len(self._panel_views)}</strong><span>registered views</span></div>
   </div>
-  <div class="captcha-grid">
+  <div class="dash-tabs" role="tablist" aria-label="Captcha sections">
+    {self._dashboard_tab_button("create", "Create Panel", active_tab)}
+    {self._dashboard_tab_button("panels", "Configured Panels", active_tab)}
+  </div>
+  <section class="dash-panel{' active' if active_tab == 'create' else ''}" data-tab-panel="create"><div class="captcha-grid">
     <form class="captcha-card" method="post">
       {csrf}
       <input type="hidden" name="action" value="post_panel">
@@ -379,11 +427,12 @@ class DashboardIntegration:
       {self._input("attach_label", "Button label", "Verify")}
       <div class="captcha-actions"><button type="submit">Attach button</button></div>
     </form>
-  </div>
-  <div class="captcha-card">
+  </div></section>
+  <section class="dash-panel{' active' if active_tab == 'panels' else ''}" data-tab-panel="panels"><div class="captcha-card" id="configured-panels">
     <h2>Configured Panels</h2>
     {panel_rows}
-  </div>
+  </div></section>
+  {self._dashboard_tabs_script()}
 </div>
 """
 

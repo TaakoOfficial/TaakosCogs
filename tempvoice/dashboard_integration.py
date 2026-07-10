@@ -106,6 +106,32 @@ class DashboardIntegration:
             return data.get("form") or data.get("json") or {}
         return data
 
+    def _dashboard_active_tab(self, kwargs, action_tabs, default):
+        form_data = self._dashboard_form_data(kwargs)
+        selected = self._dash_value(form_data, "active_tab").lower()
+        valid = set(action_tabs.values()) | {default}
+        return selected if selected in valid else action_tabs.get(self._dash_value(form_data, "action").lower(), default)
+
+    def _dashboard_tab_button(self, name: str, label: str, active: str) -> str:
+        selected = name == active
+        return f'<button type="button" class="dash-tab{" active" if selected else ""}" data-tab="{self._h(name)}" role="tab" aria-selected="{str(selected).lower()}" tabindex="{0 if selected else -1}">{self._h(label)}</button>'
+
+    @staticmethod
+    def _dashboard_tabs_script() -> str:
+        return """
+<script>
+(() => {
+  const root = document.currentScript.closest("[data-dashboard-tabs]"); if (!root) return;
+  const tabs = Array.from(root.querySelectorAll("[data-tab]")); const panels = Array.from(root.querySelectorAll("[data-tab-panel]")); const names = new Set(tabs.map((tab) => tab.dataset.tab));
+  const activate = (name, hash = false) => { if (!names.has(name)) return; tabs.forEach((tab) => { const on = tab.dataset.tab === name; tab.classList.toggle("active", on); tab.setAttribute("aria-selected", on ? "true" : "false"); tab.tabIndex = on ? 0 : -1; }); panels.forEach((panel) => { const on = panel.dataset.tabPanel === name; panel.classList.toggle("active", on); panel.hidden = !on; }); if (hash) history.replaceState(null, "", `#tab-${name}`); };
+  const fromHash = () => { const hash = location.hash.slice(1); if (hash.startsWith("tab-") && names.has(hash.slice(4))) return hash.slice(4); const section = document.getElementById(hash); const panel = section ? section.closest("[data-tab-panel]") : null; return panel ? panel.dataset.tabPanel : null; };
+  tabs.forEach((tab, index) => { tab.addEventListener("click", () => activate(tab.dataset.tab, true)); tab.addEventListener("keydown", (event) => { const move = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0; if (!move) return; event.preventDefault(); const next = tabs[(index + move + tabs.length) % tabs.length]; next.focus(); activate(next.dataset.tab, true); }); });
+  root.querySelectorAll("form").forEach((form) => form.addEventListener("submit", () => { let input = form.querySelector('input[name="active_tab"]'); if (!input) { input = document.createElement("input"); input.type = "hidden"; input.name = "active_tab"; form.appendChild(input); } input.value = root.querySelector("[data-tab].active").dataset.tab; }));
+  activate(fromHash() || root.querySelector("[data-tab].active").dataset.tab);
+})();
+</script>
+"""
+
     def _dash_value(
         self,
         form_data: typing.Any,
@@ -381,6 +407,11 @@ class DashboardIntegration:
         records = settings.get("temp_channels") or {}
         csrf = self._dash_csrf(kwargs)
         active_rows, active_count, stale_count = self._active_channel_rows(guild, records, csrf)
+        active_tab = self._dashboard_active_tab(
+            kwargs,
+            {"save_settings": "settings", "cleanup_empty": "maintenance", "resend_panel": "channels", "delete_temp": "channels"},
+            "channels",
+        )
 
         return f"""
 <style>
@@ -414,15 +445,24 @@ class DashboardIntegration:
 .tv-table {{ width: 100%; border-collapse: collapse; font-size: 14px; }}
 .tv-table th, .tv-table td {{ border-bottom: 1px solid var(--line); padding: 8px; text-align: left; vertical-align: top; }}
 .tv-table th {{ color: var(--muted); font-weight: 600; }}
+.dash-tabs {{ display: flex; gap: 4px; overflow-x: auto; position: sticky; top: 0; z-index: 10; padding: 5px; background: #0c0f14; border: 1px solid var(--line); border-radius: 8px; }}
+.dash-tab {{ flex: 0 0 auto; border: 0; border-radius: 6px; padding: 9px 13px; background: transparent; color: var(--muted); cursor: pointer; font-weight: 700; white-space: nowrap; }}
+.dash-tab:hover {{ background: var(--panel); color: var(--text); }} .dash-tab.active {{ background: var(--accent); color: #07111f; }}
+.dash-panel {{ display: none; }} .dash-panel.active {{ display: block; }}
 </style>
-<div class="tv-dash">
+<div class="tv-dash" data-dashboard-tabs="1">
   <div class="tv-stats">
     <div class="tv-stat"><strong>{self._h('Enabled' if settings.get('enabled') else 'Disabled')}</strong><span>Status</span></div>
     <div class="tv-stat"><strong>{active_count}</strong><span>active records</span></div>
     <div class="tv-stat"><strong>{stale_count}</strong><span>stale records</span></div>
     <div class="tv-stat"><strong>{self._h(settings.get('auto_delete_delay') or 0)}s</strong><span>empty cleanup delay</span></div>
   </div>
-  <div class="tv-grid">
+  <div class="dash-tabs" role="tablist" aria-label="TempVoice sections">
+    {self._dashboard_tab_button("channels", "Active Channels", active_tab)}
+    {self._dashboard_tab_button("settings", "Settings", active_tab)}
+    {self._dashboard_tab_button("maintenance", "Maintenance", active_tab)}
+  </div>
+  <section class="dash-panel{' active' if active_tab == 'settings' else ''}" data-tab-panel="settings"><div class="tv-grid">
     <form class="tv-card" method="post">
       {csrf}
       <input type="hidden" name="action" value="save_settings">
@@ -437,6 +477,8 @@ class DashboardIntegration:
       {self._checkbox("clone_trigger_permissions", "Clone trigger channel permissions", settings.get("clone_trigger_permissions", True))}
       <div class="tv-actions"><button type="submit">Save settings</button></div>
     </form>
+  </div></section>
+  <section class="dash-panel{' active' if active_tab == 'maintenance' else ''}" data-tab-panel="maintenance"><div class="tv-grid">
     <form class="tv-card" method="post">
       {csrf}
       <input type="hidden" name="action" value="cleanup_empty">
@@ -444,11 +486,12 @@ class DashboardIntegration:
       <p class="tv-muted">Delete empty TempVoice channels and remove records for missing channels.</p>
       <div class="tv-actions"><button class="danger" type="submit">Clean up empty channels</button></div>
     </form>
-  </div>
-  <div class="tv-card">
+  </div></section>
+  <section class="dash-panel{' active' if active_tab == 'channels' else ''}" data-tab-panel="channels"><div class="tv-card" id="active-channels">
     <h2>Active Temporary Channels</h2>
     {active_rows}
-  </div>
+  </div></section>
+  {self._dashboard_tabs_script()}
 </div>
 """
 

@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Reorganized the dashboard into responsive Overview, Create, and Manage tabs that remain selected after form submissions.
+
 ## 1.1.1
 
 - Renamed the repository package folder from `Giveaway` to `giveaway` to match Red cog naming standards.

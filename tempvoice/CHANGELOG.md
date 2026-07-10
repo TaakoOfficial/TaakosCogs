@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Reorganized the dashboard into responsive Active Channels, Settings, and Maintenance tabs that remain selected after form submissions.
+
 ## 1.2.0
 
 - Added Red-Web-Dashboard integration for TempVoice settings, active channel review, control panel resend, and empty-channel cleanup.

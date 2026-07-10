@@ -1,5 +1,9 @@
 # 📝 YALC Changelog
 
+## Unreleased
+
+- Reorganized both dashboard renderers into responsive Filtering, Events, and Log Channels tabs that preserve the selected tab while editing settings.
+
 ## [v3.2.1] - 2026-07-09
 
 - Renamed the repository package folder from `YALC` to `yalc` to match Red cog naming standards.

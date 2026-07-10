@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Reorganized the dashboard into responsive Application Setup, Questions, Panels, Responses, and Polls tabs that remain selected after form submissions.
+
 ## 1.3.1
 
 - Renamed the repository package folder from `Applications` to `applications` to match Red cog naming standards.

@@ -495,7 +495,7 @@ class DashboardIntegration:
             }
 
             source = f"""
-            <div style="padding: 1em; max-width: 1200px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #1a1a1a; color: #e0e0e0; min-height: 100vh;">
+            <div data-yalc-tabs="1" style="padding: 1em; max-width: 1200px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #1a1a1a; color: #e0e0e0; min-height: 100vh;">
                 <div style="background: linear-gradient(135deg, #2c5aa0 0%, #4a148c 100%); color: white; padding: 2em; border-radius: 10px; margin-bottom: 2em; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);">
                     <h1 style="margin: 0; font-size: 2em; font-weight: 600;">⚙️ YALC Settings</h1>
                     <p style="margin: 0.5em 0 0 0; opacity: 0.9; font-size: 1.1em;">Configure comprehensive logging for <strong>{guild_name}</strong></p>
@@ -503,10 +503,12 @@ class DashboardIntegration:
                 </div>
 
                 {csrf_warning}
+                {self._yalc_tabs_header()}
 
                 <form method="POST" style="width: 100%;">
                     {csrf_hidden}
                     <!-- Filter Settings Section -->
+                    <section class="yalc-tab-panel active" data-yalc-panel="filters">
                     <div style="margin-bottom: 2em; padding: 1.5em; background: #2d2d2d; border-radius: 8px; border-left: 4px solid #4caf50;">
                         <h3 style="color: #4caf50; margin-top: 0; margin-bottom: 1em; font-size: 1.3em; font-weight: 600;">🔍 Filtering Options</h3>
                         <p style="color: #b0b0b0; margin-bottom: 1.5em; font-size: 0.95em;">Configure what types of messages and events to include or exclude from logging.</p>
@@ -567,12 +569,15 @@ class DashboardIntegration:
                             </label>
                         </div>
                     </div>
+                    </section>
                 
                     <!-- Additional event and channel sections -->
-                    <div style="margin-top: 2em;">
+                    <section class="yalc-tab-panel" data-yalc-panel="events" style="margin-top: 2em;">
                         {event_sections}
+                    </section>
+                    <section class="yalc-tab-panel" data-yalc-panel="channels" style="margin-top: 2em;">
                         {channel_sections}
-                    </div>
+                    </section>
 
                     <!-- Submit button -->
                     <div style="text-align: center; margin-top: 3em; padding-top: 2em; border-top: 2px solid #4a4a4a;">
@@ -622,6 +627,7 @@ class DashboardIntegration:
                         }}
                     }});
                 </script>
+                {self._yalc_tabs_script()}
             </div>
             """
             
@@ -642,6 +648,68 @@ class DashboardIntegration:
                 "error_title": "Dashboard Generation Error",
                 "error_message": f"Failed to generate dashboard: {str(e)}"
             }
+
+    @staticmethod
+    def _yalc_tabs_header() -> str:
+        return """
+        <style>
+            .yalc-tabs { display: flex; gap: 4px; overflow-x: auto; position: sticky; top: 0; z-index: 10; margin: 0 0 1.5em; padding: 5px; background: #202020; border: 1px solid #4a4a4a; border-radius: 8px; }
+            .yalc-tab { flex: 0 0 auto; border: 0; border-radius: 6px; padding: 10px 14px; background: transparent; color: #b0b0b0; cursor: pointer; font-weight: 700; white-space: nowrap; }
+            .yalc-tab:hover { background: #333; color: #fff; }
+            .yalc-tab.active { background: #4caf50; color: #102014; }
+            .yalc-tab-panel { display: none; }
+            .yalc-tab-panel.active { display: block; }
+        </style>
+        <div class="yalc-tabs" role="tablist" aria-label="YALC sections">
+            <button type="button" class="yalc-tab active" data-yalc-tab="filters" role="tab" aria-selected="true" tabindex="0">Filtering</button>
+            <button type="button" class="yalc-tab" data-yalc-tab="events" role="tab" aria-selected="false" tabindex="-1">Events</button>
+            <button type="button" class="yalc-tab" data-yalc-tab="channels" role="tab" aria-selected="false" tabindex="-1">Log Channels</button>
+        </div>
+        """
+
+    @staticmethod
+    def _yalc_tabs_script() -> str:
+        return """
+        <script>
+        (() => {
+            const root = document.currentScript.closest("[data-yalc-tabs]");
+            if (!root) return;
+            const tabs = Array.from(root.querySelectorAll("[data-yalc-tab]"));
+            const panels = Array.from(root.querySelectorAll("[data-yalc-panel]"));
+            const names = new Set(tabs.map((tab) => tab.dataset.yalcTab));
+            const storageKey = `yalc-dashboard-tab:${location.pathname}`;
+            const activate = (name, updateHash = false) => {
+                if (!names.has(name)) return;
+                tabs.forEach((tab) => {
+                    const selected = tab.dataset.yalcTab === name;
+                    tab.classList.toggle("active", selected);
+                    tab.setAttribute("aria-selected", selected ? "true" : "false");
+                    tab.tabIndex = selected ? 0 : -1;
+                });
+                panels.forEach((panel) => {
+                    const selected = panel.dataset.yalcPanel === name;
+                    panel.classList.toggle("active", selected);
+                    panel.hidden = !selected;
+                });
+                sessionStorage.setItem(storageKey, name);
+                if (updateHash) history.replaceState(null, "", `#tab-${name}`);
+            };
+            tabs.forEach((tab, index) => {
+                tab.addEventListener("click", () => activate(tab.dataset.yalcTab, true));
+                tab.addEventListener("keydown", (event) => {
+                    const move = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
+                    if (!move) return;
+                    event.preventDefault();
+                    const next = tabs[(index + move + tabs.length) % tabs.length];
+                    next.focus();
+                    activate(next.dataset.yalcTab, true);
+                });
+            });
+            const hash = location.hash.startsWith("#tab-") ? location.hash.slice(5) : "";
+            activate(names.has(hash) ? hash : sessionStorage.getItem(storageKey) || "filters");
+        })();
+        </script>
+        """
 
     async def _generate_wtforms_html(
         self,
@@ -668,17 +736,19 @@ class DashboardIntegration:
         }
         
         return f"""
-        <div style="padding: 1em; max-width: 1200px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #1a1a1a; color: #e0e0e0; min-height: 100vh;">
+        <div data-yalc-tabs="1" style="padding: 1em; max-width: 1200px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #1a1a1a; color: #e0e0e0; min-height: 100vh;">
             <div style="background: linear-gradient(135deg, #2c5aa0 0%, #4a148c 100%); color: white; padding: 2em; border-radius: 10px; margin-bottom: 2em; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);">
                 <h1 style="margin: 0; font-size: 2em; font-weight: 600;">⚙️ YALC Settings</h1>
                 <p style="margin: 0.5em 0 0 0; opacity: 0.9; font-size: 1.1em;">Configure comprehensive logging for <strong>{guild_name}</strong></p>
                 <p style="margin: 0.5em 0 0 0; opacity: 0.8; font-size: 0.9em;">Monitor 40+ event types across your Discord server</p>
             </div>
+            {self._yalc_tabs_header()}
 
             <!-- Manual form since WTForms template access is problematic -->
             <form method="POST" style="width: 100%;">
                 {csrf_hidden}
                 <!-- Filter Settings Section -->
+                <section class="yalc-tab-panel active" data-yalc-panel="filters">
                 <div style="margin-bottom: 2em; padding: 1.5em; background: #2d2d2d; border-radius: 8px; border-left: 4px solid #4caf50;">
                     <h3 style="color: #4caf50; margin-top: 0; margin-bottom: 1em; font-size: 1.3em; font-weight: 600;">🔍 Filtering Options</h3>
                     <p style="color: #b0b0b0; margin-bottom: 1.5em; font-size: 0.95em;">Configure what types of messages and events to include or exclude from logging.</p>
@@ -739,12 +809,15 @@ class DashboardIntegration:
                         </label>
                     </div>
                 </div>
+                </section>
             
                 <!-- Additional event and channel sections -->
-                <div style="margin-top: 2em;">
+                <section class="yalc-tab-panel" data-yalc-panel="events" style="margin-top: 2em;">
                     {event_sections}
+                </section>
+                <section class="yalc-tab-panel" data-yalc-panel="channels" style="margin-top: 2em;">
                     {channel_sections}
-                </div>
+                </section>
 
                 <!-- Submit button -->
                 <div style="text-align: center; margin-top: 3em; padding-top: 2em; border-top: 2px solid #4a4a4a;">
@@ -794,6 +867,7 @@ class DashboardIntegration:
                     }}
                 }});
             </script>
+            {self._yalc_tabs_script()}
         </div>
         """
 

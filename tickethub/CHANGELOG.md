@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Reorganized the dashboard into responsive Tickets, Profile Setup, Modal, Panels, and AAA3A Imports tabs that remain selected after form submissions.
+
 ## 1.16.1
 
 - Renamed the repository package folder from `TicketHub` to `tickethub` to match Red cog naming standards.

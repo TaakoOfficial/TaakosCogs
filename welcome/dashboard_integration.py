@@ -112,6 +112,80 @@ class DashboardIntegration:
             return data.get("form") or data.get("json") or {}
         return data
 
+    def _dashboard_active_tab(self, kwargs, action_tabs, default):
+        form_data = self._dashboard_form_data(kwargs)
+        selected = self._dash_value(form_data, "active_tab").lower()
+        valid = set(action_tabs.values()) | {default}
+        return selected if selected in valid else action_tabs.get(
+            self._dash_value(form_data, "action").lower(), default
+        )
+
+    def _dashboard_tab_button(self, name: str, label: str, active: str) -> str:
+        selected = name == active
+        return (
+            f'<button type="button" class="dash-tab{" active" if selected else ""}" '
+            f'data-tab="{self._h(name)}" role="tab" aria-selected="{str(selected).lower()}" '
+            f'tabindex="{0 if selected else -1}">{self._h(label)}</button>'
+        )
+
+    @staticmethod
+    def _dashboard_tabs_script() -> str:
+        return """
+        <script>
+        (() => {
+            const root = document.currentScript.closest("[data-dashboard-tabs]");
+            if (!root) return;
+            const tabs = Array.from(root.querySelectorAll("[data-tab]"));
+            const panels = Array.from(root.querySelectorAll("[data-tab-panel]"));
+            const names = new Set(tabs.map((tab) => tab.dataset.tab));
+            const activate = (name, updateHash = false) => {
+                if (!names.has(name)) return;
+                tabs.forEach((tab) => {
+                    const selected = tab.dataset.tab === name;
+                    tab.classList.toggle("active", selected);
+                    tab.setAttribute("aria-selected", selected ? "true" : "false");
+                    tab.tabIndex = selected ? 0 : -1;
+                });
+                panels.forEach((panel) => {
+                    const selected = panel.dataset.tabPanel === name;
+                    panel.classList.toggle("active", selected);
+                    panel.hidden = !selected;
+                });
+                if (updateHash) history.replaceState(null, "", `#tab-${name}`);
+            };
+            const fromHash = () => {
+                const hash = location.hash.slice(1);
+                if (hash.startsWith("tab-") && names.has(hash.slice(4))) return hash.slice(4);
+                const section = document.getElementById(hash);
+                const panel = section ? section.closest("[data-tab-panel]") : null;
+                return panel ? panel.dataset.tabPanel : null;
+            };
+            tabs.forEach((tab, index) => {
+                tab.addEventListener("click", () => activate(tab.dataset.tab, true));
+                tab.addEventListener("keydown", (event) => {
+                    const offset = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
+                    if (!offset) return;
+                    event.preventDefault();
+                    const next = tabs[(index + offset + tabs.length) % tabs.length];
+                    next.focus();
+                    activate(next.dataset.tab, true);
+                });
+            });
+            root.querySelectorAll("form").forEach((form) => form.addEventListener("submit", () => {
+                let input = form.querySelector('input[name="active_tab"]');
+                if (!input) {
+                    input = document.createElement("input");
+                    input.type = "hidden";
+                    input.name = "active_tab";
+                    form.appendChild(input);
+                }
+                input.value = root.querySelector("[data-tab].active").dataset.tab;
+            }));
+            activate(fromHash() || root.querySelector("[data-tab].active").dataset.tab);
+        })();
+        </script>
+        """
+
     def _dash_value(
         self,
         form_data: typing.Any,
@@ -348,6 +422,18 @@ class DashboardIntegration:
             if settings.get("embed_json")
             else ""
         )
+        active_tab = self._dashboard_active_tab(
+            kwargs,
+            {
+                "save_settings": "settings",
+                "clear_embed": "settings",
+                "reset_overlay": "settings",
+                "download_image": "image",
+                "clear_image": "image",
+                "test_welcome": "preview",
+            },
+            "settings",
+        )
 
         return f"""
         <style>
@@ -369,23 +455,19 @@ class DashboardIntegration:
             .wel-btn {{ background: #2563eb; color: white; border: 0; border-radius: 6px; padding: 9px 14px; cursor: pointer; font-weight: 700; }}
             .wel-btn.secondary {{ background: #4b5563; }}
             .wel-btn.danger {{ background: #dc2626; }}
-            .wel-nav {{ display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0 16px; }}
-            .wel-nav a {{ color: #bfdbfe; border: 1px solid #374151; border-radius: 6px; padding: 6px 10px; text-decoration: none; }}
+            .dash-tabs {{ display: flex; gap: 4px; overflow-x: auto; position: sticky; top: 0; z-index: 10; margin: 0 0 16px; padding: 5px; background: #111827; border: 1px solid #374151; border-radius: 8px; }}
+            .dash-tab {{ flex: 0 0 auto; border: 0; border-radius: 6px; padding: 9px 13px; background: transparent; color: #9ca3af; cursor: pointer; font-weight: 700; white-space: nowrap; }}
+            .dash-tab:hover {{ background: #1f2937; color: #f9fafb; }}
+            .dash-tab.active {{ background: #2563eb; color: white; }}
+            .dash-panel {{ display: none; }} .dash-panel.active {{ display: block; }}
             .wel-table {{ width: 100%; border-collapse: collapse; font-size: 0.92rem; }}
             .wel-table th, .wel-table td {{ border-bottom: 1px solid #374151; padding: 8px; text-align: left; vertical-align: top; }}
             .wel-table th {{ color: #d1d5db; }}
             .wel-inline {{ display: inline; }}
         </style>
-        <div class="wel-wrap">
+        <div class="wel-wrap" data-dashboard-tabs="1">
             <div class="wel-card">
                 <h2>Welcome Dashboard</h2>
-                <div class="wel-nav">
-                    <a href="#settings">Settings</a>
-                    <a href="#embed">Embed</a>
-                    <a href="#image">Image</a>
-                    <a href="#test">Preview</a>
-                    <a href="#placeholders">Placeholders</a>
-                </div>
                 <div class="wel-grid">
                     <div><div class="wel-muted">Enabled</div><div class="wel-stat">{'Yes' if settings.get("enabled") else 'No'}</div></div>
                     <div><div class="wel-muted">Channel</div><div class="wel-stat">{self._h('#' + channel.name if channel else 'Not Set')}</div></div>
@@ -393,10 +475,17 @@ class DashboardIntegration:
                     <div><div class="wel-muted">Cached Image</div><div class="wel-stat">{'Yes' if image_data.get("data_base64") else 'No'}</div></div>
                 </div>
             </div>
-            {self._dashboard_settings_section(guild, settings, avatar_overlay, embed_json_text, csrf)}
-            {self._dashboard_image_section(image_data, csrf)}
-            {self._dashboard_test_section(guild, settings, csrf)}
-            {self._dashboard_placeholders_section()}
+            <div class="dash-tabs" role="tablist" aria-label="Welcome sections">
+                {self._dashboard_tab_button("settings", "Settings", active_tab)}
+                {self._dashboard_tab_button("image", "Image", active_tab)}
+                {self._dashboard_tab_button("preview", "Preview", active_tab)}
+                {self._dashboard_tab_button("reference", "Placeholders", active_tab)}
+            </div>
+            <section class="dash-panel{' active' if active_tab == 'settings' else ''}" data-tab-panel="settings">{self._dashboard_settings_section(guild, settings, avatar_overlay, embed_json_text, csrf)}</section>
+            <section class="dash-panel{' active' if active_tab == 'image' else ''}" data-tab-panel="image">{self._dashboard_image_section(image_data, csrf)}</section>
+            <section class="dash-panel{' active' if active_tab == 'preview' else ''}" data-tab-panel="preview">{self._dashboard_test_section(guild, settings, csrf)}</section>
+            <section class="dash-panel{' active' if active_tab == 'reference' else ''}" data-tab-panel="reference">{self._dashboard_placeholders_section()}</section>
+            {self._dashboard_tabs_script()}
         </div>
         """
 

@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Reorganized the dashboard into responsive panel creation and configured-panel tabs that remain selected after form submissions.
+
 ## 1.3.1
 
 - Renamed the repository package folder from `Captcha` to `captcha` to match Red cog naming standards.

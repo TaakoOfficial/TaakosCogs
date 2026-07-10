@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Reorganized the dashboard into responsive Reports, Settings, and Maintenance tabs that remain selected after form submissions.
+
 ## 1.2.1
 
 - Renamed the repository package folder from `InviteTracker` to `invitetracker` to match Red cog naming standards.
