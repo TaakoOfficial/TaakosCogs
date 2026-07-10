@@ -1067,6 +1067,7 @@ class RoleManager(DashboardIntegration, commands.Cog):
         """Combined role management setup and staff tools."""
         await ctx.send_help(ctx.command)
 
+    @commands.guild_only()
     @rolemanager.group(name="selfrole", aliases=["selfroles", "iam"], invoke_without_command=True)
     @commands.bot_has_permissions(manage_roles=True)
     async def selfrole_settings(
