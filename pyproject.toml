@@ -5,5 +5,5 @@ target-version = "py39"
 extend-select = [
     "F", "W", "E", "I", "UP", "C4", "FA", "ISC", "ICN",
     "RET", "SIM", "TID", "TC", "PTH", "NPY", "A", "BLE",
-    "COM", "DTZ", "N",
+    "COM", "DTZ", "N", "ASYNC"
 ]
