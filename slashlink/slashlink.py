@@ -8,12 +8,16 @@ import difflib
 import logging
 import re
 from dataclasses import dataclass
-from typing import Dict, Iterable, List, Optional
+from typing import TYPE_CHECKING
 
 import discord
 from discord.ext.commands.view import StringView
 from redbot.core import app_commands, commands
-from redbot.core.bot import Red
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable
+
+    from redbot.core.bot import Red
 
 log = logging.getLogger("red.taakoscogs.slashlink")
 
@@ -31,7 +35,7 @@ class SlashLink(commands.Cog):
 
     def __init__(self, bot: Red) -> None:
         self.bot = bot
-        self._proxies: Dict[str, ProxyRecord] = {}
+        self._proxies: dict[str, ProxyRecord] = {}
         self._lock = asyncio.Lock()
 
     async def cog_load(self) -> None:
@@ -73,7 +77,10 @@ class SlashLink(commands.Cog):
 
         command_name = self._available_name(cog_name)
         if command_name is None:
-            log.warning("No available application-command name for prefix-only cog %s.", cog_name)
+            log.warning(
+                "No available application-command name for prefix-only cog %s.",
+                cog_name,
+            )
             return False
 
         callback = self._make_callback(cog_name, command_name)
@@ -123,7 +130,11 @@ class SlashLink(commands.Cog):
             )
             return False
         self.bot.tree.remove_command(record.command_name)
-        log.info("Removed application-command proxy /%s for %s.", record.command_name, cog_name)
+        log.info(
+            "Removed application-command proxy /%s for %s.",
+            record.command_name,
+            cog_name,
+        )
         return True
 
     def _has_application_commands(self, cog: commands.Cog) -> bool:
@@ -142,14 +153,14 @@ class SlashLink(commands.Cog):
         return False
 
     @staticmethod
-    def _prefix_commands(cog: commands.Cog) -> List[commands.Command]:
+    def _prefix_commands(cog: commands.Cog) -> list[commands.Command]:
         return [
             command
             for command in cog.walk_commands()
             if command.enabled and not getattr(command, "__commands_is_hybrid__", False)
         ]
 
-    def _available_name(self, cog_name: str) -> Optional[str]:
+    def _available_name(self, cog_name: str) -> str | None:
         base = self._valid_name(cog_name)
         if not base:
             return None
@@ -181,10 +192,17 @@ class SlashLink(commands.Cog):
         async def proxy_callback(
             interaction: discord.Interaction,
             command: str,
-            arguments: Optional[str] = None,
-            attachment: Optional[discord.Attachment] = None,
+            arguments: str | None = None,
+            attachment: discord.Attachment | None = None,
         ) -> None:
-            await self._invoke(interaction, cog_name, proxy_name, command, arguments, attachment)
+            await self._invoke(
+                interaction,
+                cog_name,
+                proxy_name,
+                command,
+                arguments,
+                attachment,
+            )
 
         return proxy_callback
 
@@ -192,7 +210,7 @@ class SlashLink(commands.Cog):
         async def command_autocomplete(
             interaction: discord.Interaction,
             current: str,
-        ) -> List[app_commands.Choice[str]]:
+        ) -> list[app_commands.Choice[str]]:
             cog = self.bot.get_cog(cog_name)
             if cog is None:
                 return []
@@ -204,7 +222,7 @@ class SlashLink(commands.Cog):
             except (TypeError, ValueError):
                 return []
 
-            visible: List[str] = []
+            visible: list[str] = []
             for command in self._prefix_commands(cog):
                 name = command.qualified_name
                 if len(name) > 100:
@@ -223,7 +241,7 @@ class SlashLink(commands.Cog):
         return command_autocomplete
 
     @staticmethod
-    def _rank_matches(names: Iterable[str], current: str) -> List[str]:
+    def _rank_matches(names: Iterable[str], current: str) -> list[str]:
         unique = sorted(set(names))
         needle = current.casefold().strip()
         if not needle:
@@ -248,8 +266,8 @@ class SlashLink(commands.Cog):
         cog_name: str,
         proxy_name: str,
         command_name: str,
-        arguments: Optional[str],
-        attachment: Optional[discord.Attachment],
+        arguments: str | None,
+        attachment: discord.Attachment | None,
     ) -> None:
         cog = self.bot.get_cog(cog_name)
         command = self.bot.get_command(command_name)
@@ -292,7 +310,10 @@ class SlashLink(commands.Cog):
             nonlocal auto_deferred
             await asyncio.sleep(2)
             if not interaction.response.is_done():
-                with contextlib.suppress(discord.InteractionResponded, discord.HTTPException):
+                with contextlib.suppress(
+                    discord.InteractionResponded,
+                    discord.HTTPException,
+                ):
                     await interaction.response.defer()
                     auto_deferred = True
 

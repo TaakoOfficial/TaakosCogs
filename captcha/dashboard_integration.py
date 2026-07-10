@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import html
 import logging
 import typing
@@ -44,7 +45,7 @@ class DashboardIntegration:
         user: discord.User,
         guild: discord.Guild,
         **kwargs,
-    ) -> typing.Dict[str, typing.Any]:
+    ) -> dict[str, typing.Any]:
         """Render and process the Captcha dashboard page."""
         _member, can_manage = await self._dashboard_member_can_manage(user, guild)
         if not can_manage:
@@ -69,7 +70,7 @@ class DashboardIntegration:
                     {
                         "message": f"Captcha dashboard action failed: {error}",
                         "category": "error",
-                    }
+                    },
                 )
             else:
                 notifications.extend(messages)
@@ -88,7 +89,7 @@ class DashboardIntegration:
         self,
         user: discord.User,
         guild: discord.Guild,
-    ) -> typing.Tuple[typing.Optional[discord.Member], bool]:
+    ) -> tuple[discord.Member | None, bool]:
         member = guild.get_member(user.id)
         is_owner = user.id in getattr(self.bot, "owner_ids", set())
         is_admin = member is not None and await self.bot.is_admin(member)
@@ -99,7 +100,7 @@ class DashboardIntegration:
         )
         return member, can_manage
 
-    def _dashboard_form_data(self, kwargs: typing.Dict[str, typing.Any]) -> typing.Any:
+    def _dashboard_form_data(self, kwargs: dict[str, typing.Any]) -> typing.Any:
         data = kwargs.get("data") or {}
         if isinstance(data, dict) and ("form" in data or "json" in data):
             return data.get("form") or data.get("json") or {}
@@ -109,8 +110,13 @@ class DashboardIntegration:
         form_data = self._dashboard_form_data(kwargs)
         selected = self._dash_value(form_data, "active_tab").lower()
         valid = set(action_tabs.values()) | {default}
-        return selected if selected in valid else action_tabs.get(
-            self._dash_value(form_data, "action").lower(), default
+        return (
+            selected
+            if selected in valid
+            else action_tabs.get(
+                self._dash_value(form_data, "action").lower(),
+                default,
+            )
         )
 
     def _dashboard_tab_button(self, name: str, label: str, active: str) -> str:
@@ -156,7 +162,7 @@ class DashboardIntegration:
             return default
         return str(value)
 
-    def _dash_values(self, form_data: typing.Any, key: str) -> typing.List[str]:
+    def _dash_values(self, form_data: typing.Any, key: str) -> list[str]:
         if hasattr(form_data, "getlist"):
             values = form_data.getlist(key)
         elif hasattr(form_data, "get"):
@@ -166,7 +172,7 @@ class DashboardIntegration:
             values = []
         return [str(value) for value in values if str(value).strip()]
 
-    def _dash_optional_id(self, form_data: typing.Any, key: str) -> typing.Optional[int]:
+    def _dash_optional_id(self, form_data: typing.Any, key: str) -> int | None:
         value = self._dash_value(form_data, key).strip()
         if not value:
             return None
@@ -181,7 +187,7 @@ class DashboardIntegration:
             raise commands.BadArgument(f"`{key}` is required.")
         return value
 
-    def _dash_csrf(self, kwargs: typing.Dict[str, typing.Any]) -> str:
+    def _dash_csrf(self, kwargs: dict[str, typing.Any]) -> str:
         csrf_token = kwargs.get("csrf_token")
         if not isinstance(csrf_token, (tuple, list)) or len(csrf_token) != 2:
             return ""
@@ -195,14 +201,14 @@ class DashboardIntegration:
         guild: discord.Guild,
         action: str,
         form_data: typing.Any,
-    ) -> typing.List[typing.Dict[str, str]]:
+    ) -> list[dict[str, str]]:
         if action == "post_panel":
             message = await self._dashboard_post_panel(guild, form_data)
             return [
                 {
                     "message": f"Captcha panel posted: {message.jump_url}",
                     "category": "success",
-                }
+                },
             ]
 
         if action == "attach_panel":
@@ -211,7 +217,7 @@ class DashboardIntegration:
                 {
                     "message": f"Captcha button attached: {message.jump_url}",
                     "category": "success",
-                }
+                },
             ]
 
         if action == "remove_panel":
@@ -220,7 +226,7 @@ class DashboardIntegration:
                 {
                     "message": f"Captcha panel `{message_id}` removed.",
                     "category": "success",
-                }
+                },
             ]
 
         if action:
@@ -243,7 +249,7 @@ class DashboardIntegration:
         permissions = channel.permissions_for(me)
         if not permissions.send_messages or not permissions.embed_links:
             raise commands.CommandError(
-                f"I need Send Messages and Embed Links in #{channel.name}."
+                f"I need Send Messages and Embed Links in #{channel.name}.",
             )
 
         roles = self._dashboard_roles(guild, form_data)
@@ -260,10 +266,8 @@ class DashboardIntegration:
             await self._install_panel(guild, message, roles, label)
         except (commands.CommandError, discord.HTTPException):
             if message is not None:
-                try:
+                with contextlib.suppress(discord.HTTPException):
                     await message.delete()
-                except discord.HTTPException:
-                    pass
             raise
         return message
 
@@ -276,27 +280,38 @@ class DashboardIntegration:
         message_id = self._dash_required_id(form_data, "attach_message_id")
         channel = guild.get_channel(channel_id)
         if not isinstance(channel, discord.TextChannel):
-            raise commands.BadArgument("Choose the text channel containing the message.")
+            raise commands.BadArgument(
+                "Choose the text channel containing the message.",
+            )
 
         try:
             message = await channel.fetch_message(message_id)
         except discord.NotFound as exc:
             raise commands.BadArgument("I could not find that message.") from exc
         except discord.Forbidden as exc:
-            raise commands.CommandError("I cannot read messages in that channel.") from exc
+            raise commands.CommandError(
+                "I cannot read messages in that channel.",
+            ) from exc
         except discord.HTTPException as exc:
             raise commands.CommandError("Discord did not return that message.") from exc
 
         me = guild.me
         if me is None or message.author.id != me.id:
-            raise commands.BadArgument("I can only attach buttons to messages sent by this bot.")
+            raise commands.BadArgument(
+                "I can only attach buttons to messages sent by this bot.",
+            )
 
         panels = await self.config.guild(guild).panels()
         if message.components and str(message.id) not in panels:
-            raise commands.BadArgument("That message already has components I do not manage.")
+            raise commands.BadArgument(
+                "That message already has components I do not manage.",
+            )
 
         roles = self._dashboard_roles(guild, form_data)
-        label = self._dash_value(form_data, "attach_label", "Verify").strip()[:80] or "Verify"
+        label = (
+            self._dash_value(form_data, "attach_label", "Verify").strip()[:80]
+            or "Verify"
+        )
         await self._install_panel(guild, message, roles, label)
         return message
 
@@ -309,7 +324,9 @@ class DashboardIntegration:
         panels = await self.config.guild(guild).panels()
         record = panels.get(str(message_id))
         if not isinstance(record, dict):
-            raise commands.BadArgument("That message is not a configured captcha panel.")
+            raise commands.BadArgument(
+                "That message is not a configured captcha panel.",
+            )
 
         channel = guild.get_channel(int(record.get("channel_id") or 0))
         if isinstance(channel, discord.TextChannel):
@@ -319,9 +336,13 @@ class DashboardIntegration:
             except discord.NotFound:
                 pass
             except discord.Forbidden as exc:
-                raise commands.CommandError("I cannot edit that panel message.") from exc
+                raise commands.CommandError(
+                    "I cannot edit that panel message.",
+                ) from exc
             except discord.HTTPException as exc:
-                raise commands.CommandError(f"I could not remove the button: {exc}") from exc
+                raise commands.CommandError(
+                    f"I could not remove the button: {exc}",
+                ) from exc
 
         await self._remove_panel_record(guild.id, message_id)
         return message_id
@@ -330,7 +351,7 @@ class DashboardIntegration:
         self,
         guild: discord.Guild,
         form_data: typing.Any,
-    ) -> typing.List[discord.Role]:
+    ) -> list[discord.Role]:
         role_ids = []
         for raw_role_id in self._dash_values(form_data, "role_ids"):
             try:
@@ -342,12 +363,12 @@ class DashboardIntegration:
         roles = [guild.get_role(role_id) for role_id in role_ids]
         if any(role is None for role in roles):
             raise commands.BadArgument("One or more selected roles no longer exist.")
-        return self._validate_roles(guild, typing.cast(typing.List[discord.Role], roles))
+        return self._validate_roles(guild, typing.cast("list[discord.Role]", roles))
 
     async def _dashboard_source(
         self,
         guild: discord.Guild,
-        kwargs: typing.Dict[str, typing.Any],
+        kwargs: dict[str, typing.Any],
     ) -> str:
         panels = await self.config.guild(guild).panels()
         csrf = self._dash_csrf(kwargs)
@@ -356,7 +377,11 @@ class DashboardIntegration:
         panel_rows = self._panel_rows(guild, panels, csrf)
         active_tab = self._dashboard_active_tab(
             kwargs,
-            {"post_panel": "create", "attach_panel": "create", "remove_panel": "panels"},
+            {
+                "post_panel": "create",
+                "attach_panel": "create",
+                "remove_panel": "panels",
+            },
             "create",
         )
 
@@ -407,7 +432,7 @@ class DashboardIntegration:
     {self._dashboard_tab_button("create", "Create Panel", active_tab)}
     {self._dashboard_tab_button("panels", "Configured Panels", active_tab)}
   </div>
-  <section class="dash-panel{' active' if active_tab == 'create' else ''}" data-tab-panel="create"><div class="captcha-grid">
+  <section class="dash-panel{" active" if active_tab == "create" else ""}" data-tab-panel="create"><div class="captcha-grid">
     <form class="captcha-card" method="post">
       {csrf}
       <input type="hidden" name="action" value="post_panel">
@@ -428,7 +453,7 @@ class DashboardIntegration:
       <div class="captcha-actions"><button type="submit">Attach button</button></div>
     </form>
   </div></section>
-  <section class="dash-panel{' active' if active_tab == 'panels' else ''}" data-tab-panel="panels"><div class="captcha-card" id="configured-panels">
+  <section class="dash-panel{" active" if active_tab == "panels" else ""}" data-tab-panel="panels"><div class="captcha-card" id="configured-panels">
     <h2>Configured Panels</h2>
     {panel_rows}
   </div></section>
@@ -439,7 +464,7 @@ class DashboardIntegration:
     def _panel_rows(
         self,
         guild: discord.Guild,
-        panels: typing.Dict[str, typing.Any],
+        panels: dict[str, typing.Any],
         csrf: str,
     ) -> str:
         if not panels:
@@ -460,7 +485,7 @@ class DashboardIntegration:
             jump_url = self._jump_url(guild.id, channel_id, message_id)
             rows.append(
                 "<tr>"
-                f"<td><a class=\"captcha-link\" href=\"{self._h(jump_url)}\">{self._h(message_id)}</a></td>"
+                f'<td><a class="captcha-link" href="{self._h(jump_url)}">{self._h(message_id)}</a></td>'
                 f"<td>{self._h('#' + channel.name if channel else 'Missing channel')}</td>"
                 f"<td>{self._h(', '.join(role_names) or 'No roles')}</td>"
                 f"<td>{self._h(label or 'Verify')}</td>"
@@ -472,7 +497,7 @@ class DashboardIntegration:
                 '<button class="warn" type="submit">Remove</button>'
                 "</form>"
                 "</td>"
-                "</tr>"
+                "</tr>",
             )
         return (
             '<table class="captcha-table"><thead><tr><th>Message</th><th>Channel</th>'
@@ -481,14 +506,12 @@ class DashboardIntegration:
             + "</tbody></table>"
         )
 
-    def _text_channel_options(self, guild: discord.Guild) -> typing.List[typing.Tuple[int, str]]:
+    def _text_channel_options(self, guild: discord.Guild) -> list[tuple[int, str]]:
         return [(channel.id, f"#{channel.name}") for channel in guild.text_channels]
 
-    def _role_options(self, guild: discord.Guild) -> typing.List[typing.Tuple[int, str]]:
+    def _role_options(self, guild: discord.Guild) -> list[tuple[int, str]]:
         roles = [
-            role
-            for role in guild.roles
-            if not role.is_default() and not role.managed
+            role for role in guild.roles if not role.is_default() and not role.managed
         ]
         roles.sort(key=lambda role: role.position, reverse=True)
         return [(role.id, role.name) for role in roles]
@@ -497,21 +520,21 @@ class DashboardIntegration:
         self,
         name: str,
         label: str,
-        options: typing.List[typing.Tuple[typing.Any, str]],
+        options: list[tuple[typing.Any, str]],
         selected: typing.Any = "",
     ) -> str:
         option_html = ['<option value="">Select...</option>']
         for value, text in options:
             option_html.append(
                 f'<option value="{self._h(value)}" {self._selected(value, selected)}>'
-                f"{self._h(text)}</option>"
+                f"{self._h(text)}</option>",
             )
         return (
             f'<div class="captcha-field"><label>{self._h(label)}</label>'
             f'<select name="{self._h(name)}">{"".join(option_html)}</select></div>'
         )
 
-    def _role_select(self, options: typing.List[typing.Tuple[typing.Any, str]]) -> str:
+    def _role_select(self, options: list[tuple[typing.Any, str]]) -> str:
         option_html = [
             f'<option value="{self._h(value)}">{self._h(text)}</option>'
             for value, text in options

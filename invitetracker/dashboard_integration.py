@@ -45,7 +45,7 @@ class DashboardIntegration:
         user: discord.User,
         guild: discord.Guild,
         **kwargs,
-    ) -> typing.Dict[str, typing.Any]:
+    ) -> dict[str, typing.Any]:
         """Render and process the InviteTracker dashboard page."""
         _member, can_manage = await self._dashboard_member_can_manage(user, guild)
         if not can_manage:
@@ -70,7 +70,7 @@ class DashboardIntegration:
                     {
                         "message": f"InviteTracker dashboard action failed: {error}",
                         "category": "error",
-                    }
+                    },
                 )
             else:
                 notifications.extend(messages)
@@ -89,7 +89,7 @@ class DashboardIntegration:
         self,
         user: discord.User,
         guild: discord.Guild,
-    ) -> typing.Tuple[typing.Optional[discord.Member], bool]:
+    ) -> tuple[discord.Member | None, bool]:
         member = guild.get_member(user.id)
         is_owner = user.id in getattr(self.bot, "owner_ids", set())
         is_admin = member is not None and await self.bot.is_admin(member)
@@ -100,7 +100,7 @@ class DashboardIntegration:
         )
         return member, can_manage
 
-    def _dashboard_form_data(self, kwargs: typing.Dict[str, typing.Any]) -> typing.Any:
+    def _dashboard_form_data(self, kwargs: dict[str, typing.Any]) -> typing.Any:
         data = kwargs.get("data") or {}
         if isinstance(data, dict) and ("form" in data or "json" in data):
             return data.get("form") or data.get("json") or {}
@@ -110,7 +110,11 @@ class DashboardIntegration:
         form_data = self._dashboard_form_data(kwargs)
         selected = self._dash_value(form_data, "active_tab").lower()
         valid = set(action_tabs.values()) | {default}
-        return selected if selected in valid else action_tabs.get(self._dash_value(form_data, "action").lower(), default)
+        return (
+            selected
+            if selected in valid
+            else action_tabs.get(self._dash_value(form_data, "action").lower(), default)
+        )
 
     def _dashboard_tab_button(self, name: str, label: str, active: str) -> str:
         selected = name == active
@@ -159,9 +163,9 @@ class DashboardIntegration:
         form_data: typing.Any,
         key: str,
         *,
-        default: typing.Optional[int] = None,
-        minimum: typing.Optional[int] = None,
-        maximum: typing.Optional[int] = None,
+        default: int | None = None,
+        minimum: int | None = None,
+        maximum: int | None = None,
     ) -> int:
         value = self._dash_value(form_data, key).strip()
         try:
@@ -177,7 +181,7 @@ class DashboardIntegration:
             number = min(maximum, number)
         return number
 
-    def _dash_optional_id(self, form_data: typing.Any, key: str) -> typing.Optional[int]:
+    def _dash_optional_id(self, form_data: typing.Any, key: str) -> int | None:
         value = self._dash_value(form_data, key).strip()
         if not value:
             return None
@@ -186,7 +190,7 @@ class DashboardIntegration:
         except (TypeError, ValueError) as exc:
             raise commands.BadArgument(f"`{key}` must be a Discord ID.") from exc
 
-    def _dash_csrf(self, kwargs: typing.Dict[str, typing.Any]) -> str:
+    def _dash_csrf(self, kwargs: dict[str, typing.Any]) -> str:
         csrf_token = kwargs.get("csrf_token")
         if not isinstance(csrf_token, (tuple, list)) or len(csrf_token) != 2:
             return ""
@@ -200,7 +204,7 @@ class DashboardIntegration:
         guild: discord.Guild,
         action: str,
         form_data: typing.Any,
-    ) -> typing.List[typing.Dict[str, str]]:
+    ) -> list[dict[str, str]]:
         if action == "save_settings":
             cache_size = await self._dashboard_save_settings(guild, form_data)
             message = "InviteTracker settings saved."
@@ -217,12 +221,11 @@ class DashboardIntegration:
                         f"{self._count(len(invite_cache))} invite(s)."
                     ),
                     "category": "success",
-                }
+                },
             ]
 
         if action == "reset_stats":
-            messages = await self._dashboard_reset_stats(guild, form_data)
-            return messages
+            return await self._dashboard_reset_stats(guild, form_data)
 
         if action:
             raise commands.BadArgument("Unknown InviteTracker dashboard action.")
@@ -232,7 +235,7 @@ class DashboardIntegration:
         self,
         guild: discord.Guild,
         form_data: typing.Any,
-    ) -> typing.Optional[int]:
+    ) -> int | None:
         enabled = self._dash_bool(form_data, "enabled")
         include_bots = self._dash_bool(form_data, "include_bots")
         log_channel_id = self._dash_optional_id(form_data, "log_channel_id")
@@ -247,14 +250,16 @@ class DashboardIntegration:
         if log_channel_id is not None:
             channel = guild.get_channel(log_channel_id)
             if not isinstance(channel, discord.TextChannel):
-                raise commands.BadArgument("The invite log channel must be a text channel.")
+                raise commands.BadArgument(
+                    "The invite log channel must be a text channel.",
+                )
             me = guild.me
             if me is None:
                 raise commands.CommandError("I could not check my channel permissions.")
             permissions = channel.permissions_for(me)
             if not permissions.send_messages or not permissions.embed_links:
                 raise commands.CommandError(
-                    f"I need Send Messages and Embed Links in #{channel.name}."
+                    f"I need Send Messages and Embed Links in #{channel.name}.",
                 )
 
         guild_conf = self.config.guild(guild)
@@ -273,10 +278,12 @@ class DashboardIntegration:
         self,
         guild: discord.Guild,
         form_data: typing.Any,
-    ) -> typing.List[typing.Dict[str, str]]:
+    ) -> list[dict[str, str]]:
         confirmation = self._dash_value(form_data, "reset_confirm").strip().lower()
         if confirmation != "confirm":
-            raise commands.BadArgument("Type `confirm` to reset all InviteTracker stats.")
+            raise commands.BadArgument(
+                "Type `confirm` to reset all InviteTracker stats.",
+            )
 
         await self.config.guild(guild).inviters.set({})
         await self.config.guild(guild).members.set({})
@@ -291,7 +298,7 @@ class DashboardIntegration:
                         f"not be refreshed: {error}"
                     ),
                     "category": "warning",
-                }
+                },
             ]
         return [
             {
@@ -300,13 +307,13 @@ class DashboardIntegration:
                     f"{self._count(len(invite_cache))} invite(s)."
                 ),
                 "category": "success",
-            }
+            },
         ]
 
     async def _dashboard_source(
         self,
         guild: discord.Guild,
-        kwargs: typing.Dict[str, typing.Any],
+        kwargs: dict[str, typing.Any],
     ) -> str:
         settings = await self.config.guild(guild).all()
         invite_cache = settings.get("invite_cache") or {}
@@ -317,12 +324,18 @@ class DashboardIntegration:
         total_joins = sum(int(stats.get("joins", 0)) for stats in inviters.values())
         total_leaves = sum(int(stats.get("leaves", 0)) for stats in inviters.values())
         total_fake = sum(int(stats.get("fake", 0)) for stats in inviters.values())
-        active_members = sum(1 for record in members.values() if not record.get("left_at"))
+        active_members = sum(
+            1 for record in members.values() if not record.get("left_at")
+        )
         leaderboard = self._leaderboard_rows(guild, inviters)
         recent_members = self._recent_member_rows(guild, members)
         active_tab = self._dashboard_active_tab(
             kwargs,
-            {"save_settings": "settings", "refresh_cache": "maintenance", "reset_stats": "maintenance"},
+            {
+                "save_settings": "settings",
+                "refresh_cache": "maintenance",
+                "reset_stats": "maintenance",
+            },
             "reports",
         )
 
@@ -365,7 +378,7 @@ class DashboardIntegration:
 </style>
 <div class="it-dash" data-dashboard-tabs="1">
   <div class="it-stats">
-    <div class="it-stat"><strong>{self._h('Enabled' if settings.get('enabled') else 'Disabled')}</strong><span>Status</span></div>
+    <div class="it-stat"><strong>{self._h("Enabled" if settings.get("enabled") else "Disabled")}</strong><span>Status</span></div>
     <div class="it-stat"><strong>{self._count(total_joins)}</strong><span>joins</span></div>
     <div class="it-stat"><strong>{self._count(total_leaves)}</strong><span>leaves</span></div>
     <div class="it-stat"><strong>{self._count(total_fake)}</strong><span>fake joins</span></div>
@@ -377,7 +390,7 @@ class DashboardIntegration:
     {self._dashboard_tab_button("settings", "Settings", active_tab)}
     {self._dashboard_tab_button("maintenance", "Maintenance", active_tab)}
   </div>
-  <section class="dash-panel{' active' if active_tab == 'settings' else ''}" data-tab-panel="settings"><div class="it-grid">
+  <section class="dash-panel{" active" if active_tab == "settings" else ""}" data-tab-panel="settings"><div class="it-grid">
     <form class="it-card" method="post">
       {csrf}
       <input type="hidden" name="action" value="save_settings">
@@ -389,7 +402,7 @@ class DashboardIntegration:
       <div class="it-actions"><button type="submit">Save settings</button></div>
     </form>
   </div></section>
-  <section class="dash-panel{' active' if active_tab == 'maintenance' else ''}" data-tab-panel="maintenance"><div class="it-grid">
+  <section class="dash-panel{" active" if active_tab == "maintenance" else ""}" data-tab-panel="maintenance"><div class="it-grid">
     <div class="it-card">
       <h2>Maintenance</h2>
       <form method="post" class="it-actions">
@@ -406,7 +419,7 @@ class DashboardIntegration:
       <p class="it-muted">Reset clears inviter totals, tracked member sources, and unknown join count.</p>
     </div>
   </div></section>
-  <section class="dash-panel{' active' if active_tab == 'reports' else ''}" data-tab-panel="reports"><div class="it-grid">
+  <section class="dash-panel{" active" if active_tab == "reports" else ""}" data-tab-panel="reports"><div class="it-grid">
     <div class="it-card">
       <h2>Top Inviters</h2>
       {leaderboard}
@@ -420,7 +433,11 @@ class DashboardIntegration:
 </div>
 """
 
-    def _leaderboard_rows(self, guild: discord.Guild, inviters: typing.Dict[str, typing.Any]) -> str:
+    def _leaderboard_rows(
+        self,
+        guild: discord.Guild,
+        inviters: dict[str, typing.Any],
+    ) -> str:
         if not inviters:
             return '<p class="it-muted">No invite stats have been tracked yet.</p>'
         ranked = sorted(
@@ -442,7 +459,7 @@ class DashboardIntegration:
                 f"<td>{self._count(int(stats.get('joins', 0)))}</td>"
                 f"<td>{self._count(int(stats.get('leaves', 0)))}</td>"
                 f"<td>{self._count(int(stats.get('fake', 0)))}</td>"
-                "</tr>"
+                "</tr>",
             )
         return (
             '<table class="it-table"><thead><tr><th>#</th><th>Inviter</th>'
@@ -451,9 +468,15 @@ class DashboardIntegration:
             + "</tbody></table>"
         )
 
-    def _recent_member_rows(self, guild: discord.Guild, members: typing.Dict[str, typing.Any]) -> str:
+    def _recent_member_rows(
+        self,
+        guild: discord.Guild,
+        members: dict[str, typing.Any],
+    ) -> str:
         if not members:
-            return '<p class="it-muted">No member join sources have been tracked yet.</p>'
+            return (
+                '<p class="it-muted">No member join sources have been tracked yet.</p>'
+            )
         records = sorted(
             members.values(),
             key=lambda record: float(record.get("joined_at") or 0),
@@ -473,7 +496,7 @@ class DashboardIntegration:
                 f"<td>{self._h(self._format_dashboard_time(record.get('joined_at')))}</td>"
                 f"<td>{self._h(left)}</td>"
                 f"<td>{self._h(fake)}</td>"
-                "</tr>"
+                "</tr>",
             )
         return (
             '<table class="it-table"><thead><tr><th>Member</th><th>Inviter</th>'
@@ -482,14 +505,14 @@ class DashboardIntegration:
             + "</tbody></table>"
         )
 
-    def _text_options(self, guild: discord.Guild) -> typing.List[typing.Tuple[int, str]]:
+    def _text_options(self, guild: discord.Guild) -> list[tuple[int, str]]:
         return [(channel.id, f"#{channel.name}") for channel in guild.text_channels]
 
     def _select(
         self,
         name: str,
         label: str,
-        options: typing.List[typing.Tuple[typing.Any, str]],
+        options: list[tuple[typing.Any, str]],
         selected: typing.Any = "",
         empty_label: str = "Select...",
     ) -> str:
@@ -497,7 +520,7 @@ class DashboardIntegration:
         for value, text in options:
             option_html.append(
                 f'<option value="{self._h(value)}" {self._selected(value, selected)}>'
-                f"{self._h(text)}</option>"
+                f"{self._h(text)}</option>",
             )
         return (
             f'<div class="it-field"><label>{self._h(label)}</label>'
@@ -510,8 +533,8 @@ class DashboardIntegration:
         label: str,
         value: typing.Any,
         input_type: str = "text",
-        min_value: typing.Optional[int] = None,
-        max_value: typing.Optional[int] = None,
+        min_value: int | None = None,
+        max_value: int | None = None,
     ) -> str:
         attrs = []
         if min_value is not None:
@@ -552,7 +575,9 @@ class DashboardIntegration:
             timestamp = float(value)
         except (TypeError, ValueError):
             return "Unknown"
-        return datetime.fromtimestamp(timestamp, tz=timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+        return datetime.fromtimestamp(timestamp, tz=timezone.utc).strftime(
+            "%Y-%m-%d %H:%M UTC",
+        )
 
     def _h(self, value: typing.Any) -> str:
         return html.escape("" if value is None else str(value), quote=True)

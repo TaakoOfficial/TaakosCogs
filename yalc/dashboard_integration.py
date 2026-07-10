@@ -1,15 +1,18 @@
+import html
+import typing
+
 import discord
 from redbot.core import commands
-import typing
-import logging
-import html
+
 
 # Dashboard integration decorator - compatible with Red-Web-Dashboard
 def dashboard_page(*args, **kwargs):
     """Dashboard page decorator that stores parameters for later registration."""
+
     def decorator(func: typing.Callable):
         func.__dashboard_decorator_params__ = (args, kwargs)
         return func
+
     return decorator
 
 
@@ -20,7 +23,7 @@ class DashboardIntegration:
         # This is a mixin class, so initialization is handled by the main cog
         # Don't call super().__init__() as this could interfere with multiple inheritance
         self.bot = bot
-        
+
         # Note: event_descriptions will be provided by the main YALC class
         # No fallback is needed since this is a mixin that requires the main cog
 
@@ -28,13 +31,13 @@ class DashboardIntegration:
         self,
         guild: discord.Guild,
         **kwargs,
-    ) -> typing.Dict[str, typing.Any]:
+    ) -> dict[str, typing.Any]:
         """Format settings for the dashboard."""
         try:
             config = await self.config.guild(guild).all()
-            
+
             # Format the settings data for display
-            settings = {
+            return {
                 # Basic filter settings
                 "include_thumbnails": config.get("include_thumbnails", True),
                 "ignore_bots": config.get("ignore_bots", False),
@@ -42,55 +45,62 @@ class DashboardIntegration:
                 "ignore_tupperbox": config.get("ignore_tupperbox", True),
                 "ignore_apps": config.get("ignore_apps", True),
                 "detect_proxy_deletes": config.get("detect_proxy_deletes", True),
-                
                 # Event toggles
                 "events": config.get("events", {}),
-                
                 # Channel configurations
                 "event_channels": config.get("event_channels", {}),
-                
                 # Ignore lists
                 "ignored_users": config.get("ignored_users", []),
                 "ignored_roles": config.get("ignored_roles", []),
                 "ignored_channels": config.get("ignored_channels", []),
                 "ignored_categories": config.get("ignored_categories", []),
-                
                 # Additional settings
                 "tupperbox_ids": config.get("tupperbox_ids", ["239232811662311425"]),
                 "message_prefix_filter": config.get("message_prefix_filter", []),
                 "webhook_name_filter": config.get("webhook_name_filter", []),
             }
-            
-            return settings
+
         except Exception:
             return {}
 
     async def update_settings(
         self,
         guild: discord.Guild,
-        new_settings: typing.Dict[str, typing.Any],
+        new_settings: dict[str, typing.Any],
         **kwargs,
     ) -> None:
         """Update settings from the dashboard."""
         try:
             # Update basic filter settings
             if "include_thumbnails" in new_settings:
-                await self.config.guild(guild).include_thumbnails.set(new_settings["include_thumbnails"])
+                await self.config.guild(guild).include_thumbnails.set(
+                    new_settings["include_thumbnails"],
+                )
             if "ignore_bots" in new_settings:
-                await self.config.guild(guild).ignore_bots.set(new_settings["ignore_bots"])
+                await self.config.guild(guild).ignore_bots.set(
+                    new_settings["ignore_bots"],
+                )
             if "ignore_webhooks" in new_settings:
-                await self.config.guild(guild).ignore_webhooks.set(new_settings["ignore_webhooks"])
+                await self.config.guild(guild).ignore_webhooks.set(
+                    new_settings["ignore_webhooks"],
+                )
             if "ignore_tupperbox" in new_settings:
-                await self.config.guild(guild).ignore_tupperbox.set(new_settings["ignore_tupperbox"])
+                await self.config.guild(guild).ignore_tupperbox.set(
+                    new_settings["ignore_tupperbox"],
+                )
             if "ignore_apps" in new_settings:
-                await self.config.guild(guild).ignore_apps.set(new_settings["ignore_apps"])
+                await self.config.guild(guild).ignore_apps.set(
+                    new_settings["ignore_apps"],
+                )
             if "detect_proxy_deletes" in new_settings:
-                await self.config.guild(guild).detect_proxy_deletes.set(new_settings["detect_proxy_deletes"])
-                
+                await self.config.guild(guild).detect_proxy_deletes.set(
+                    new_settings["detect_proxy_deletes"],
+                )
+
             # Update event toggles
             if "events" in new_settings:
                 await self.config.guild(guild).events.set(new_settings["events"])
-                
+
             # Update channel configurations
             if "event_channels" in new_settings:
                 # Convert string IDs to ints
@@ -101,30 +111,44 @@ class DashboardIntegration:
                     else:
                         cleaned_channels[event] = None
                 await self.config.guild(guild).event_channels.set(cleaned_channels)
-                
+
             # Update ignore lists
             if "ignored_users" in new_settings:
-                await self.config.guild(guild).ignored_users.set(new_settings["ignored_users"])
+                await self.config.guild(guild).ignored_users.set(
+                    new_settings["ignored_users"],
+                )
             if "ignored_roles" in new_settings:
-                await self.config.guild(guild).ignored_roles.set(new_settings["ignored_roles"])
+                await self.config.guild(guild).ignored_roles.set(
+                    new_settings["ignored_roles"],
+                )
             if "ignored_channels" in new_settings:
-                await self.config.guild(guild).ignored_channels.set(new_settings["ignored_channels"])
+                await self.config.guild(guild).ignored_channels.set(
+                    new_settings["ignored_channels"],
+                )
             if "ignored_categories" in new_settings:
-                await self.config.guild(guild).ignored_categories.set(new_settings["ignored_categories"])
-                
+                await self.config.guild(guild).ignored_categories.set(
+                    new_settings["ignored_categories"],
+                )
+
             # Update additional settings
             if "tupperbox_ids" in new_settings:
-                await self.config.guild(guild).tupperbox_ids.set(new_settings["tupperbox_ids"])
+                await self.config.guild(guild).tupperbox_ids.set(
+                    new_settings["tupperbox_ids"],
+                )
             if "message_prefix_filter" in new_settings:
-                await self.config.guild(guild).message_prefix_filter.set(new_settings["message_prefix_filter"])
+                await self.config.guild(guild).message_prefix_filter.set(
+                    new_settings["message_prefix_filter"],
+                )
             if "webhook_name_filter" in new_settings:
-                await self.config.guild(guild).webhook_name_filter.set(new_settings["webhook_name_filter"])
+                await self.config.guild(guild).webhook_name_filter.set(
+                    new_settings["webhook_name_filter"],
+                )
             if hasattr(self, "_invalidate_settings_cache"):
                 self._invalidate_settings_cache(guild)
-                
+
         except Exception as e:
             # Use bot logger if available, otherwise just pass
-            if hasattr(self, 'log') and self.log:
+            if hasattr(self, "log") and self.log:
                 self.log.error(f"Error updating YALC settings: {e}")
 
     @dashboard_page(
@@ -137,15 +161,15 @@ class DashboardIntegration:
         user: discord.User,
         guild: discord.Guild,
         **kwargs,
-    ) -> typing.Dict[str, typing.Any]:
+    ) -> dict[str, typing.Any]:
         """Main dashboard page for YALC."""
         try:
             # Check if we have access to the required attributes
-            if not hasattr(self, 'config') or not self.config:
+            if not hasattr(self, "config") or not self.config:
                 return {
                     "status": 1,
                     "error_title": "Configuration Error",
-                    "error_message": "Dashboard integration is not properly initialized. Please reload the cog."
+                    "error_message": "Dashboard integration is not properly initialized. Please reload the cog.",
                 }
 
             # Check permissions
@@ -158,42 +182,61 @@ class DashboardIntegration:
                 or (member is not None and member.guild_permissions.manage_guild)
             )
             if not can_manage:
-                return {"status": 1, "error_title": "Insufficient Permissions", "error_message": "You need `Manage Server` permission to view this page."}
+                return {
+                    "status": 1,
+                    "error_title": "Insufficient Permissions",
+                    "error_message": "You need `Manage Server` permission to view this page.",
+                }
 
             # Get current settings
             settings = await self.config.guild(guild).all()
 
             # Add comprehensive logging for debugging
-            if hasattr(self, 'log') and self.log:
-                self.log.info(f"YALC Dashboard accessed by {user.name} ({user.id}) for guild {guild.name} ({guild.id})")
+            if hasattr(self, "log") and self.log:
+                self.log.info(
+                    f"YALC Dashboard accessed by {user.name} ({user.id}) for guild {guild.name} ({guild.id})",
+                )
 
             # Handle form submission with proper CSRF validation
             method = kwargs.get("method", "GET")
-            
+
             # Enhanced diagnostic logging
-            if hasattr(self, 'log') and self.log:
-                self.log.debug(f"YALC Dashboard: method={method}, kwargs keys: {list(kwargs.keys())}")
-                if 'guild' in kwargs:
-                    self.log.warning(f"YALC Dashboard: 'guild' found in kwargs, this may cause duplicate parameter error")
-            
+            if hasattr(self, "log") and self.log:
+                self.log.debug(
+                    f"YALC Dashboard: method={method}, kwargs keys: {list(kwargs.keys())}",
+                )
+                if "guild" in kwargs:
+                    self.log.warning(
+                        "YALC Dashboard: 'guild' found in kwargs, this may cause duplicate parameter error",
+                    )
+
             if method == "POST":
-                return await self._handle_wtforms_submission(guild, user, settings, **kwargs)
-            
+                return await self._handle_wtforms_submission(
+                    guild,
+                    user,
+                    settings,
+                    **kwargs,
+                )
+
             # Remove 'guild' from kwargs to prevent duplicate parameter error
-            clean_kwargs = {k: v for k, v in kwargs.items() if k != 'guild'}
-            
+            clean_kwargs = {k: v for k, v in kwargs.items() if k != "guild"}
+
             # Generate the dashboard using WTForms approach
-            return await self._generate_wtforms_dashboard(guild, settings, **clean_kwargs)
-            
+            return await self._generate_wtforms_dashboard(
+                guild,
+                settings,
+                **clean_kwargs,
+            )
+
         except Exception as e:
             # Enhanced error logging
-            if hasattr(self, 'log') and self.log:
+            if hasattr(self, "log") and self.log:
                 self.log.error(f"Error in YALC dashboard page: {e}", exc_info=True)
-            
+
             return {
                 "status": 1,
                 "error_title": "Dashboard Error",
-                "error_message": f"An error occurred while loading the dashboard: {str(e)}"
+                "error_message": f"An error occurred while loading the dashboard: {str(e)}",
             }
 
     async def _handle_wtforms_submission(
@@ -201,8 +244,8 @@ class DashboardIntegration:
         guild: discord.Guild,
         user: discord.User,
         settings: dict,
-        **kwargs
-    ) -> typing.Dict[str, typing.Any]:
+        **kwargs,
+    ) -> dict[str, typing.Any]:
         """Handle POST form submissions with CSRF validation and proper error handling."""
         try:
             data = kwargs.get("data") or {}
@@ -212,66 +255,100 @@ class DashboardIntegration:
                 form_data = data
             else:
                 form_data = data
-            
+
             # Enhanced logging for debugging
-            if hasattr(self, 'log') and self.log:
-                self.log.info(f"YALC form submission from {user.name} ({user.id}) for guild {guild.name}")
-                self.log.debug(f"Form data keys: {list(form_data.keys()) if hasattr(form_data, 'keys') else []}")
-            
+            if hasattr(self, "log") and self.log:
+                self.log.info(
+                    f"YALC form submission from {user.name} ({user.id}) for guild {guild.name}",
+                )
+                self.log.debug(
+                    f"Form data keys: {list(form_data.keys()) if hasattr(form_data, 'keys') else []}",
+                )
+
             # Check for CSRF token (Red-Web-Dashboard should handle this automatically)
             if not form_data:
-                if hasattr(self, 'log') and self.log:
+                if hasattr(self, "log") and self.log:
                     self.log.warning(f"YALC: Empty form data received from {user.name}")
                 return {
                     "status": 1,
                     "error_title": "Form Error",
                     "error_message": "No form data received. This might be a CSRF token issue.",
-                    "notifications": [{"message": "❌ Form submission failed: No data received", "category": "error"}]
+                    "notifications": [
+                        {
+                            "message": "❌ Form submission failed: No data received",
+                            "category": "error",
+                        },
+                    ],
                 }
-            
+
             # Process the form submission
             try:
                 new_settings = await self._process_form_data(form_data, settings)
-                
+
                 # Enhanced logging of what we're saving
-                if hasattr(self, 'log') and self.log:
-                    self.log.info(f"YALC: Updating settings for {guild.name}: {new_settings}")
-                
+                if hasattr(self, "log") and self.log:
+                    self.log.info(
+                        f"YALC: Updating settings for {guild.name}: {new_settings}",
+                    )
+
                 # Update settings with error handling
                 await self.update_settings(guild, new_settings)
-                
+
                 # Log successful save
-                if hasattr(self, 'log') and self.log:
-                    self.log.info(f"YALC: Settings successfully updated for {guild.name}")
-                
+                if hasattr(self, "log") and self.log:
+                    self.log.info(
+                        f"YALC: Settings successfully updated for {guild.name}",
+                    )
+
                 return {
                     "status": 0,
-                    "notifications": [{"message": "✅ YALC settings updated successfully!", "category": "success"}],
+                    "notifications": [
+                        {
+                            "message": "✅ YALC settings updated successfully!",
+                            "category": "success",
+                        },
+                    ],
                     "redirect_url": kwargs.get("request_url", ""),
                 }
-                
+
             except Exception as settings_error:
                 # Log settings update error
-                if hasattr(self, 'log') and self.log:
-                    self.log.error(f"YALC: Error updating settings for {guild.name}: {settings_error}", exc_info=True)
-                
+                if hasattr(self, "log") and self.log:
+                    self.log.error(
+                        f"YALC: Error updating settings for {guild.name}: {settings_error}",
+                        exc_info=True,
+                    )
+
                 return {
                     "status": 1,
                     "error_title": "Settings Update Error",
                     "error_message": f"Failed to save settings: {str(settings_error)}",
-                    "notifications": [{"message": f"❌ Error saving settings: {str(settings_error)}", "category": "error"}]
+                    "notifications": [
+                        {
+                            "message": f"❌ Error saving settings: {str(settings_error)}",
+                            "category": "error",
+                        },
+                    ],
                 }
-            
+
         except Exception as e:
             # Log submission handling error
-            if hasattr(self, 'log') and self.log:
-                self.log.error(f"YALC: Error handling form submission: {e}", exc_info=True)
-            
+            if hasattr(self, "log") and self.log:
+                self.log.error(
+                    f"YALC: Error handling form submission: {e}",
+                    exc_info=True,
+                )
+
             return {
                 "status": 1,
                 "error_title": "Form Processing Error",
                 "error_message": f"Error processing form submission: {str(e)}",
-                "notifications": [{"message": f"❌ Form processing failed: {str(e)}", "category": "error"}]
+                "notifications": [
+                    {
+                        "message": f"❌ Form processing failed: {str(e)}",
+                        "category": "error",
+                    },
+                ],
             }
 
     def _get_form_value(
@@ -299,36 +376,39 @@ class DashboardIntegration:
             f'{html.escape(str(csrf_token[1]), quote=True)}">'
         )
 
-    async def _process_form_data(self, form_data: typing.Any, current_settings: dict) -> dict:
+    async def _process_form_data(
+        self,
+        form_data: typing.Any,
+        current_settings: dict,
+    ) -> dict:
         """Process form data into settings format with validation."""
         new_settings = {}
         event_descriptions = getattr(self, "event_descriptions", {})
-        
+
         # Process basic filter settings (checkboxes only appear if checked)
         checkbox_settings = [
-            "include_thumbnails", "ignore_bots", "ignore_webhooks",
-            "ignore_tupperbox", "ignore_apps", "detect_proxy_deletes"
+            "include_thumbnails",
+            "ignore_bots",
+            "ignore_webhooks",
+            "ignore_tupperbox",
+            "ignore_apps",
+            "detect_proxy_deletes",
         ]
-        
+
         for setting in checkbox_settings:
             # Check both prefixed and non-prefixed versions for compatibility
             new_settings[setting] = (
-                setting in form_data or
-                f"yalc_settings_{setting}" in form_data
+                setting in form_data or f"yalc_settings_{setting}" in form_data
             )
-        
+
         # Process event toggles
-        events = {
-            event: f"event_{event}" in form_data
-            for event in event_descriptions
-        }
+        events = {event: f"event_{event}" in form_data for event in event_descriptions}
         new_settings["events"] = events
-        
+
         # Process channel configurations
         existing_channels = current_settings.get("event_channels", {})
         event_channels = {
-            event: existing_channels.get(event)
-            for event in event_descriptions
+            event: existing_channels.get(event) for event in event_descriptions
         }
         for event in event_descriptions:
             value = self._get_form_value(form_data, f"event_channels[{event}]")
@@ -339,88 +419,102 @@ class DashboardIntegration:
             except (TypeError, ValueError):
                 event_channels[event] = None
         new_settings["event_channels"] = event_channels
-        
+
         return new_settings
 
     async def _generate_wtforms_dashboard(
         self,
         guild: discord.Guild,
         settings: dict,
-        **kwargs
-    ) -> typing.Dict[str, typing.Any]:
+        **kwargs,
+    ) -> dict[str, typing.Any]:
         """Generate dashboard using WTForms approach with proper CSRF handling."""
         try:
             # Enhanced diagnostic logging for form debugging
-            if hasattr(self, 'log') and self.log:
-                self.log.debug(f"YALC WTForms Debug: kwargs keys: {list(kwargs.keys())}")
-                self.log.debug(f"YALC WTForms Debug: Form type: {type(kwargs.get('Form'))}")
+            if hasattr(self, "log") and self.log:
+                self.log.debug(
+                    f"YALC WTForms Debug: kwargs keys: {list(kwargs.keys())}",
+                )
+                self.log.debug(
+                    f"YALC WTForms Debug: Form type: {type(kwargs.get('Form'))}",
+                )
                 self.log.debug(f"YALC WTForms Debug: Form value: {kwargs.get('Form')}")
-            
+
             # Check if WTForms is available in kwargs (passed by Red-Web-Dashboard)
             Form = kwargs.get("Form")
             if not Form:
                 # Fallback to manual form with warning about CSRF
-                if hasattr(self, 'log') and self.log:
-                    self.log.warning("YALC: WTForms not available, falling back to manual form")
-                return await self._generate_fallback_dashboard(guild, settings, **kwargs)
-            
+                if hasattr(self, "log") and self.log:
+                    self.log.warning(
+                        "YALC: WTForms not available, falling back to manual form",
+                    )
+                return await self._generate_fallback_dashboard(
+                    guild,
+                    settings,
+                    **kwargs,
+                )
+
             # Create WTForms class with CSRF protection
             import wtforms
-            
+
             class YALCSettingsForm(Form):
                 def __init__(self, *args, **kwargs):
                     super().__init__(prefix="yalc_settings_", *args, **kwargs)
-                
+
                 # Filter settings
                 include_thumbnails = wtforms.BooleanField(
                     "Include user thumbnails",
                     default=settings.get("include_thumbnails", True),
-                    description="Show user avatars in log embeds"
+                    description="Show user avatars in log embeds",
                 )
                 ignore_bots = wtforms.BooleanField(
                     "Ignore bot messages",
                     default=settings.get("ignore_bots", False),
-                    description="Skip logging events from bots"
+                    description="Skip logging events from bots",
                 )
                 ignore_webhooks = wtforms.BooleanField(
                     "Ignore webhook messages",
                     default=settings.get("ignore_webhooks", False),
-                    description="Skip logging webhook events"
+                    description="Skip logging webhook events",
                 )
                 ignore_tupperbox = wtforms.BooleanField(
                     "Ignore Tupperbox/proxy messages",
                     default=settings.get("ignore_tupperbox", True),
-                    description="Skip logging proxy bot messages"
+                    description="Skip logging proxy bot messages",
                 )
                 ignore_apps = wtforms.BooleanField(
                     "Ignore app messages",
                     default=settings.get("ignore_apps", True),
-                    description="Skip logging application events"
+                    description="Skip logging application events",
                 )
                 detect_proxy_deletes = wtforms.BooleanField(
                     "Detect proxy deletes",
                     default=settings.get("detect_proxy_deletes", True),
-                    description="Log when proxy messages are deleted"
+                    description="Log when proxy messages are deleted",
                 )
-                
+
                 submit = wtforms.SubmitField("💾 Save Configuration")
-            
+
             # Create form instance with enhanced debugging
             form = YALCSettingsForm()
-            
+
             # Enhanced form debugging
-            if hasattr(self, 'log') and self.log:
+            if hasattr(self, "log") and self.log:
                 self.log.debug(f"YALC: Created form instance: {type(form)}")
                 self.log.debug(f"YALC: Form instance details: {form}")
-                self.log.debug(f"YALC: Form has include_thumbnails field: {hasattr(form, 'yalc_settings_include_thumbnails')}")
-                if hasattr(form, 'yalc_settings_include_thumbnails'):
-                    self.log.debug(f"YALC: include_thumbnails field type: {type(form.yalc_settings_include_thumbnails)}")
-            
+                self.log.debug(
+                    f"YALC: Form has include_thumbnails field: {hasattr(form, 'yalc_settings_include_thumbnails')}",
+                )
+                if hasattr(form, "yalc_settings_include_thumbnails"):
+                    self.log.debug(
+                        f"YALC: include_thumbnails field type: {type(form.yalc_settings_include_thumbnails)}",
+                    )
+
             # Generate additional sections for events and channels
             event_sections = self._generate_event_sections(settings)
             channel_sections = self._generate_channel_sections(guild, settings)
             csrf_hidden = str(form.hidden_tag()) if hasattr(form, "hidden_tag") else ""
-            
+
             # Generate the HTML template
             html_template = await self._generate_wtforms_html(
                 guild,
@@ -429,12 +523,12 @@ class DashboardIntegration:
                 channel_sections,
                 csrf_hidden,
             )
-            
+
             # Enhanced logging for template and form
-            if hasattr(self, 'log') and self.log:
+            if hasattr(self, "log") and self.log:
                 self.log.debug(f"YALC: HTML template length: {len(html_template)}")
                 self.log.debug(f"YALC: About to return form type: {type(form)}")
-            
+
             # Return template without form object to avoid Jinja2 template errors
             # The template now uses manual HTML forms with proper field names
             result = {
@@ -444,18 +538,23 @@ class DashboardIntegration:
                     "expanded": True,
                 },
             }
-            
+
             # Final debug check
-            if hasattr(self, 'log') and self.log:
-                self.log.debug(f"YALC: Final result web_content keys: {list(result['web_content'].keys())}")
-                self.log.debug(f"YALC: Template-based approach - no form object passed")
-            
+            if hasattr(self, "log") and self.log:
+                self.log.debug(
+                    f"YALC: Final result web_content keys: {list(result['web_content'].keys())}",
+                )
+                self.log.debug("YALC: Template-based approach - no form object passed")
+
             return result
-            
+
         except Exception as e:
-            if hasattr(self, 'log') and self.log:
-                self.log.error(f"YALC: Error generating WTForms dashboard: {e}", exc_info=True)
-            
+            if hasattr(self, "log") and self.log:
+                self.log.error(
+                    f"YALC: Error generating WTForms dashboard: {e}",
+                    exc_info=True,
+                )
+
             # Fallback to basic dashboard
             return await self._generate_fallback_dashboard(guild, settings, **kwargs)
 
@@ -463,15 +562,15 @@ class DashboardIntegration:
         self,
         guild: discord.Guild,
         settings: dict,
-        **kwargs
-    ) -> typing.Dict[str, typing.Any]:
+        **kwargs,
+    ) -> dict[str, typing.Any]:
         """Generate fallback dashboard when WTForms is not available."""
         try:
             # Generate sections
             event_sections = self._generate_event_sections(settings)
             channel_sections = self._generate_channel_sections(guild, settings)
             csrf_hidden = self._manual_csrf_hidden(kwargs)
-            
+
             # Warning message about CSRF
             csrf_warning = """
                 <div style="margin-bottom: 2em; padding: 1.5em; background: #2d1f2d; border-radius: 8px; border-left: 4px solid #ff5722;">
@@ -482,16 +581,24 @@ class DashboardIntegration:
                     </p>
                 </div>
             """
-            
+
             # Create checkbox values
             guild_name = html.escape(guild.name)
             checkbox_values = {
-                "include_thumbnails": "checked" if settings.get("include_thumbnails", True) else "",
+                "include_thumbnails": "checked"
+                if settings.get("include_thumbnails", True)
+                else "",
                 "ignore_bots": "checked" if settings.get("ignore_bots", False) else "",
-                "ignore_webhooks": "checked" if settings.get("ignore_webhooks", False) else "",
-                "ignore_tupperbox": "checked" if settings.get("ignore_tupperbox", True) else "",
+                "ignore_webhooks": "checked"
+                if settings.get("ignore_webhooks", False)
+                else "",
+                "ignore_tupperbox": "checked"
+                if settings.get("ignore_tupperbox", True)
+                else "",
                 "ignore_apps": "checked" if settings.get("ignore_apps", True) else "",
-                "detect_proxy_deletes": "checked" if settings.get("detect_proxy_deletes", True) else "",
+                "detect_proxy_deletes": "checked"
+                if settings.get("detect_proxy_deletes", True)
+                else "",
             }
 
             source = f"""
@@ -570,7 +677,7 @@ class DashboardIntegration:
                         </div>
                     </div>
                     </section>
-                
+
                     <!-- Additional event and channel sections -->
                     <section class="yalc-tab-panel" data-yalc-panel="events" style="margin-top: 2em;">
                         {event_sections}
@@ -630,7 +737,7 @@ class DashboardIntegration:
                 {self._yalc_tabs_script()}
             </div>
             """
-            
+
             return {
                 "status": 0,
                 "web_content": {
@@ -638,15 +745,18 @@ class DashboardIntegration:
                     "expanded": True,
                 },
             }
-            
+
         except Exception as e:
-            if hasattr(self, 'log') and self.log:
-                self.log.error(f"YALC: Error generating fallback dashboard: {e}", exc_info=True)
-            
+            if hasattr(self, "log") and self.log:
+                self.log.error(
+                    f"YALC: Error generating fallback dashboard: {e}",
+                    exc_info=True,
+                )
+
             return {
                 "status": 1,
                 "error_title": "Dashboard Generation Error",
-                "error_message": f"Failed to generate dashboard: {str(e)}"
+                "error_message": f"Failed to generate dashboard: {str(e)}",
             }
 
     @staticmethod
@@ -720,21 +830,29 @@ class DashboardIntegration:
         csrf_hidden: str = "",
     ) -> str:
         """Generate HTML template for WTForms rendering.
-        
+
         This method now returns a simplified template that doesn't rely on form field access,
         since the Jinja2 error suggests the form object isn't being passed correctly to the template context.
         """
         guild_name = html.escape(guild.name)
         # Create checkbox values for direct HTML rendering
         checkbox_values = {
-            "include_thumbnails": "checked" if settings.get("include_thumbnails", True) else "",
+            "include_thumbnails": "checked"
+            if settings.get("include_thumbnails", True)
+            else "",
             "ignore_bots": "checked" if settings.get("ignore_bots", False) else "",
-            "ignore_webhooks": "checked" if settings.get("ignore_webhooks", False) else "",
-            "ignore_tupperbox": "checked" if settings.get("ignore_tupperbox", True) else "",
+            "ignore_webhooks": "checked"
+            if settings.get("ignore_webhooks", False)
+            else "",
+            "ignore_tupperbox": "checked"
+            if settings.get("ignore_tupperbox", True)
+            else "",
             "ignore_apps": "checked" if settings.get("ignore_apps", True) else "",
-            "detect_proxy_deletes": "checked" if settings.get("detect_proxy_deletes", True) else "",
+            "detect_proxy_deletes": "checked"
+            if settings.get("detect_proxy_deletes", True)
+            else "",
         }
-        
+
         return f"""
         <div data-yalc-tabs="1" style="padding: 1em; max-width: 1200px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #1a1a1a; color: #e0e0e0; min-height: 100vh;">
             <div style="background: linear-gradient(135deg, #2c5aa0 0%, #4a148c 100%); color: white; padding: 2em; border-radius: 10px; margin-bottom: 2em; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);">
@@ -810,7 +928,7 @@ class DashboardIntegration:
                     </div>
                 </div>
                 </section>
-            
+
                 <!-- Additional event and channel sections -->
                 <section class="yalc-tab-panel" data-yalc-panel="events" style="margin-top: 2em;">
                     {event_sections}
@@ -871,7 +989,7 @@ class DashboardIntegration:
         </div>
         """
 
-    def _get_event_categories(self) -> typing.Dict[str, typing.Dict[str, typing.Any]]:
+    def _get_event_categories(self) -> dict[str, dict[str, typing.Any]]:
         """Return dashboard groupings for YALC's configured event keys."""
         return {
             "Message Events": {
@@ -995,33 +1113,36 @@ class DashboardIntegration:
             },
         }
 
-
     def _generate_event_sections(self, settings: dict) -> str:
         """Generate HTML for event toggle sections with dark mode styling."""
         # Get event descriptions from the main cog
-        event_descriptions = getattr(self, 'event_descriptions', {})
-        
+        event_descriptions = getattr(self, "event_descriptions", {})
+
         categories = self._get_event_categories()
 
         sections = []
 
         for category_name, category_info in categories.items():
-            events = [event for event in category_info["events"] if event in event_descriptions]
+            events = [
+                event
+                for event in category_info["events"]
+                if event in event_descriptions
+            ]
             if not events:
                 continue
             color = category_info["color"]
             description = html.escape(category_info["description"])
             category_name_html = html.escape(category_name)
-            
+
             event_checkboxes = []
             enabled_count = 0
-            
+
             for event in events:
                 emoji, desc = event_descriptions[event]
                 is_checked = settings.get("events", {}).get(event, False)
                 if is_checked:
                     enabled_count += 1
-                
+
                 checked = "checked" if is_checked else ""
                 event_html = html.escape(event)
                 desc_html = html.escape(desc)
@@ -1043,7 +1164,7 @@ class DashboardIntegration:
                         {enabled_count}/{len(events)} enabled
                     </span>
                 """
-                
+
                 sections.append(f"""
                     <div style="margin-bottom: 2em; padding: 1.5em; background: #2d2d2d; border-radius: 8px; border-left: 4px solid {color};">
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1em;">
@@ -1062,45 +1183,54 @@ class DashboardIntegration:
     def _generate_channel_sections(self, guild: discord.Guild, settings: dict) -> str:
         """Generate HTML for channel configuration sections with dark mode styling."""
         # Get text channels for dropdown
-        text_channels = [c for c in guild.channels if isinstance(c, discord.TextChannel)]
+        text_channels = [
+            c for c in guild.channels if isinstance(c, discord.TextChannel)
+        ]
         text_channels.sort(key=lambda c: c.name.lower())  # Sort alphabetically
-        
+
         channel_options = '<option value="">📵 No logging</option>' + "".join(
-            f'<option value="{c.id}">#{html.escape(c.name)}</option>' for c in text_channels
+            f'<option value="{c.id}">#{html.escape(c.name)}</option>'
+            for c in text_channels
         )
 
-        event_descriptions = getattr(self, 'event_descriptions', {})
+        event_descriptions = getattr(self, "event_descriptions", {})
         categories = self._get_event_categories()
-        
+
         category_sections = []
         configured_count = 0
         total_events = len(event_descriptions)
-        
+
         for category_name, category_info in categories.items():
             category_events = [
-                event for event in category_info["events"] if event in event_descriptions
+                event
+                for event in category_info["events"]
+                if event in event_descriptions
             ]
             if not category_events:
                 continue
-                
+
             channel_config_html = ""
             for event in category_events:
                 emoji, desc = event_descriptions[event]
                 current_channel_id = settings.get("event_channels", {}).get(event)
                 if current_channel_id:
                     configured_count += 1
-                
+
                 options_with_selection = channel_options
                 if current_channel_id:
                     options_with_selection = options_with_selection.replace(
                         f'value="{current_channel_id}"',
-                        f'value="{current_channel_id}" selected'
+                        f'value="{current_channel_id}" selected',
                     )
 
                 is_enabled = settings.get("events", {}).get(event, False)
-                state_badge = "" if is_enabled else """
+                state_badge = (
+                    ""
+                    if is_enabled
+                    else """
                     <span style="display: inline-block; margin-left: 8px; padding: 0.15em 0.5em; border-radius: 10px; background: #555; color: #ddd; font-size: 0.75em;">disabled</span>
                 """
+                )
                 opacity = "1" if is_enabled else "0.72"
                 event_html = html.escape(event)
                 desc_html = html.escape(desc)
@@ -1118,7 +1248,7 @@ class DashboardIntegration:
                         </select>
                     </div>
                 """
-            
+
             if channel_config_html:
                 category_sections.append(f"""
                     <div style="margin-bottom: 1.5em;">
@@ -1129,8 +1259,16 @@ class DashboardIntegration:
                     </div>
                 """)
 
-        status_text = f"{configured_count}/{total_events} events have channels configured"
-        status_color = "#4caf50" if configured_count == total_events else "#ff9800" if configured_count > 0 else "#f44336"
+        status_text = (
+            f"{configured_count}/{total_events} events have channels configured"
+        )
+        status_color = (
+            "#4caf50"
+            if configured_count == total_events
+            else "#ff9800"
+            if configured_count > 0
+            else "#f44336"
+        )
 
         return f"""
             <div style="margin-bottom: 2em; padding: 1.5em; background: #2d2d2d; border-radius: 8px; border-left: 4px solid #00bcd4;">
@@ -1157,7 +1295,7 @@ class DashboardIntegration:
 
                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px;">
                     <label style="display: flex; align-items: center; padding: 0.8em; background: #3a3a3a; border-radius: 6px; border: 1px solid #4a4a4a; cursor: pointer; transition: all 0.2s ease;">
-                        <input type="checkbox" name="include_thumbnails" value="1" {'checked' if settings.get('include_thumbnails', True) else ''}
+                        <input type="checkbox" name="include_thumbnails" value="1" {"checked" if settings.get("include_thumbnails", True) else ""}
                                style="margin-right: 12px; transform: scale(1.3); accent-color: #4caf50;">
                         <div>
                             <div style="font-weight: 500; color: #e0e0e0;">🖼️ Include user thumbnails</div>
@@ -1166,7 +1304,7 @@ class DashboardIntegration:
                     </label>
 
                     <label style="display: flex; align-items: center; padding: 0.8em; background: #3a3a3a; border-radius: 6px; border: 1px solid #4a4a4a; cursor: pointer; transition: all 0.2s ease;">
-                        <input type="checkbox" name="ignore_bots" value="1" {'checked' if settings.get('ignore_bots', False) else ''}
+                        <input type="checkbox" name="ignore_bots" value="1" {"checked" if settings.get("ignore_bots", False) else ""}
                                style="margin-right: 12px; transform: scale(1.3); accent-color: #4caf50;">
                         <div>
                             <div style="font-weight: 500; color: #e0e0e0;">🤖 Ignore bot messages</div>
@@ -1175,7 +1313,7 @@ class DashboardIntegration:
                     </label>
 
                     <label style="display: flex; align-items: center; padding: 0.8em; background: #3a3a3a; border-radius: 6px; border: 1px solid #4a4a4a; cursor: pointer; transition: all 0.2s ease;">
-                        <input type="checkbox" name="ignore_webhooks" value="1" {'checked' if settings.get('ignore_webhooks', False) else ''}
+                        <input type="checkbox" name="ignore_webhooks" value="1" {"checked" if settings.get("ignore_webhooks", False) else ""}
                                style="margin-right: 12px; transform: scale(1.3); accent-color: #4caf50;">
                         <div>
                             <div style="font-weight: 500; color: #e0e0e0;">🪝 Ignore webhook messages</div>
@@ -1184,7 +1322,7 @@ class DashboardIntegration:
                     </label>
 
                     <label style="display: flex; align-items: center; padding: 0.8em; background: #3a3a3a; border-radius: 6px; border: 1px solid #4a4a4a; cursor: pointer; transition: all 0.2s ease;">
-                        <input type="checkbox" name="ignore_tupperbox" value="1" {'checked' if settings.get('ignore_tupperbox', True) else ''}
+                        <input type="checkbox" name="ignore_tupperbox" value="1" {"checked" if settings.get("ignore_tupperbox", True) else ""}
                                style="margin-right: 12px; transform: scale(1.3); accent-color: #4caf50;">
                         <div>
                             <div style="font-weight: 500; color: #e0e0e0;">👥 Ignore Tupperbox/proxy messages</div>
@@ -1193,7 +1331,7 @@ class DashboardIntegration:
                     </label>
 
                     <label style="display: flex; align-items: center; padding: 0.8em; background: #3a3a3a; border-radius: 6px; border: 1px solid #4a4a4a; cursor: pointer; transition: all 0.2s ease;">
-                        <input type="checkbox" name="ignore_apps" value="1" {'checked' if settings.get('ignore_apps', True) else ''}
+                        <input type="checkbox" name="ignore_apps" value="1" {"checked" if settings.get("ignore_apps", True) else ""}
                                style="margin-right: 12px; transform: scale(1.3); accent-color: #4caf50;">
                         <div>
                             <div style="font-weight: 500; color: #e0e0e0;">📱 Ignore app messages</div>
@@ -1202,7 +1340,7 @@ class DashboardIntegration:
                     </label>
 
                     <label style="display: flex; align-items: center; padding: 0.8em; background: #3a3a3a; border-radius: 6px; border: 1px solid #4a4a4a; cursor: pointer; transition: all 0.2s ease;">
-                        <input type="checkbox" name="detect_proxy_deletes" value="1" {'checked' if settings.get('detect_proxy_deletes', True) else ''}
+                        <input type="checkbox" name="detect_proxy_deletes" value="1" {"checked" if settings.get("detect_proxy_deletes", True) else ""}
                                style="margin-right: 12px; transform: scale(1.3); accent-color: #4caf50;">
                         <div>
                             <div style="font-weight: 500; color: #e0e0e0;">🔍 Detect proxy deletes</div>

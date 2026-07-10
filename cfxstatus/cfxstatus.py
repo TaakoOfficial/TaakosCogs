@@ -8,13 +8,15 @@ import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from html.parser import HTMLParser
-from typing import Dict, List, Optional
+from typing import TYPE_CHECKING
 
 import aiohttp
 import discord
 from discord.ext import tasks
 from redbot.core import Config, commands
-from redbot.core.bot import Red
+
+if TYPE_CHECKING:
+    from redbot.core.bot import Red
 
 log = logging.getLogger("red.taakoscogs.cfxstatus")
 
@@ -23,11 +25,11 @@ log = logging.getLogger("red.taakoscogs.cfxstatus")
 class CfxStatusPayload:
     """Parsed Cfx.re service-status data."""
 
-    updated_at: Optional[str]
-    components: Dict[str, str]
+    updated_at: str | None
+    components: dict[str, str]
     source_name: str
     source_url: str
-    source_note: Optional[str] = None
+    source_note: str | None = None
 
 
 class StatusPageError(RuntimeError):
@@ -41,7 +43,7 @@ class VisibleTextParser(HTMLParser):
 
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
-        self.parts: List[str] = []
+        self.parts: list[str] = []
         self._skip_depth = 0
 
     def handle_starttag(self, tag: str, attrs) -> None:
@@ -109,7 +111,7 @@ class CfxStatus(commands.Cog):
             poll_interval_minutes=self.DEFAULT_POLL_INTERVAL_MINUTES,
             last_poll_at=0,
         )
-        self._session: Optional[aiohttp.ClientSession] = None
+        self._session: aiohttp.ClientSession | None = None
         self.status_loop.start()
 
     async def cog_unload(self) -> None:
@@ -120,7 +122,7 @@ class CfxStatus(commands.Cog):
 
     async def red_delete_data_for_user(self, *, requester: str, user_id: int) -> None:
         """This cog does not store end user data."""
-        return None
+        return
 
     @tasks.loop(minutes=1)
     async def status_loop(self) -> None:
@@ -147,8 +149,8 @@ class CfxStatus(commands.Cog):
         if not due_guilds:
             return
 
-        payload: Optional[CfxStatusPayload] = None
-        error: Optional[str] = None
+        payload: CfxStatusPayload | None = None
+        error: str | None = None
         try:
             payload = await self.fetch_status()
         except StatusPageError as status_error:
@@ -188,7 +190,7 @@ class CfxStatus(commands.Cog):
     async def cfxstatus_setup(
         self,
         ctx: commands.Context,
-        channel: Optional[discord.TextChannel] = None,
+        channel: discord.TextChannel | None = None,
     ) -> None:
         """Choose a channel and post an auto-updating Cfx.re status panel."""
         assert ctx.guild is not None
@@ -217,7 +219,7 @@ class CfxStatus(commands.Cog):
         await ctx.send(
             "Cfx.re status panel is posting in "
             f"{channel.mention}: "
-            f"{self._message_url(ctx.guild.id, channel.id, message.id)}"
+            f"{self._message_url(ctx.guild.id, channel.id, message.id)}",
         )
 
     @cfxstatus.command(name="channel")
@@ -226,7 +228,7 @@ class CfxStatus(commands.Cog):
     async def cfxstatus_channel(
         self,
         ctx: commands.Context,
-        channel: Optional[discord.TextChannel] = None,
+        channel: discord.TextChannel | None = None,
     ) -> None:
         """Set the channel used for the auto-updating status panel."""
         assert ctx.guild is not None
@@ -263,7 +265,7 @@ class CfxStatus(commands.Cog):
         channel_id = await self.config.guild(ctx.guild).status_channel_id()
         await ctx.send(
             "Cfx.re status panel posted: "
-            f"{self._message_url(ctx.guild.id, channel_id, message.id)}"
+            f"{self._message_url(ctx.guild.id, channel_id, message.id)}",
         )
 
     @cfxstatus.command(name="refresh")
@@ -284,7 +286,7 @@ class CfxStatus(commands.Cog):
         channel_id = await self.config.guild(ctx.guild).status_channel_id()
         await ctx.send(
             "Cfx.re status panel refreshed: "
-            f"{self._message_url(ctx.guild.id, channel_id, message.id)}"
+            f"{self._message_url(ctx.guild.id, channel_id, message.id)}",
         )
 
     @cfxstatus.command(name="enable")
@@ -295,7 +297,7 @@ class CfxStatus(commands.Cog):
         assert ctx.guild is not None
         if enabled and not await self.config.guild(ctx.guild).status_channel_id():
             await ctx.send(
-                "Set a status channel first with `[p]cfxstatus setup [channel]`."
+                "Set a status channel first with `[p]cfxstatus setup [channel]`.",
             )
             return
 
@@ -310,14 +312,12 @@ class CfxStatus(commands.Cog):
         """Set how often the status panel refreshes, in minutes."""
         assert ctx.guild is not None
         if not (
-            self.MIN_POLL_INTERVAL_MINUTES
-            <= minutes
-            <= self.MAX_POLL_INTERVAL_MINUTES
+            self.MIN_POLL_INTERVAL_MINUTES <= minutes <= self.MAX_POLL_INTERVAL_MINUTES
         ):
             await ctx.send(
                 "The polling interval must be between "
                 f"{self.MIN_POLL_INTERVAL_MINUTES} and "
-                f"{self.MAX_POLL_INTERVAL_MINUTES} minutes."
+                f"{self.MAX_POLL_INTERVAL_MINUTES} minutes.",
             )
             return
 
@@ -373,26 +373,25 @@ class CfxStatus(commands.Cog):
             async with session.get(self.CFX_SUMMARY_API_URL) as response:
                 if response.status != 200:
                     raise StatusPageError(
-                        "Cfx.re's Statuspage API returned "
-                        f"HTTP {response.status}."
+                        f"Cfx.re's Statuspage API returned HTTP {response.status}.",
                     )
                 data = await response.json(content_type=None)
         except asyncio.TimeoutError as error:
             raise StatusPageError("Cfx.re's Statuspage API timed out.") from error
         except aiohttp.ClientError as error:
             raise StatusPageError(
-                "I could not reach Cfx.re's Statuspage API."
+                "I could not reach Cfx.re's Statuspage API.",
             ) from error
         except ValueError as error:
             raise StatusPageError(
-                "Cfx.re's Statuspage API returned invalid JSON."
+                "Cfx.re's Statuspage API returned invalid JSON.",
             ) from error
 
         components = self._parse_statuspage_components(data)
         if not components:
             raise StatusPageError(
                 "I reached Cfx.re's Statuspage API, but could not find "
-                "the expected components."
+                "the expected components.",
             )
 
         page = data.get("page") if isinstance(data, dict) else {}
@@ -413,16 +412,16 @@ class CfxStatus(commands.Cog):
                 if response.status != 200:
                     raise StatusPageError(
                         "Rockstar's service-status page returned "
-                        f"HTTP {response.status}."
+                        f"HTTP {response.status}.",
                     )
                 html = await response.text()
         except asyncio.TimeoutError as error:
             raise StatusPageError(
-                "Rockstar's service-status page timed out."
+                "Rockstar's service-status page timed out.",
             ) from error
         except aiohttp.ClientError as error:
             raise StatusPageError(
-                "I could not reach Rockstar's service-status page."
+                "I could not reach Rockstar's service-status page.",
             ) from error
 
         if not html.strip():
@@ -432,7 +431,7 @@ class CfxStatus(commands.Cog):
         if not payload.components:
             raise StatusPageError(
                 "I reached Rockstar's service-status page, but could not find "
-                "the Cfx.re status section."
+                "the Cfx.re status section.",
             )
         return payload
 
@@ -460,7 +459,7 @@ class CfxStatus(commands.Cog):
     def build_status_embed(
         self,
         payload: CfxStatusPayload,
-        poll_interval_minutes: Optional[int] = None,
+        poll_interval_minutes: int | None = None,
     ) -> discord.Embed:
         """Build the Discord embed for a parsed status payload."""
         status_text = self._overall_status(payload.components)
@@ -499,7 +498,7 @@ class CfxStatus(commands.Cog):
     def build_error_embed(
         self,
         error: str,
-        poll_interval_minutes: Optional[int] = None,
+        poll_interval_minutes: int | None = None,
     ) -> discord.Embed:
         """Build the Discord embed shown when a scheduled poll fails."""
         embed = discord.Embed(
@@ -529,7 +528,7 @@ class CfxStatus(commands.Cog):
     def build_settings_embed(
         self,
         guild: discord.Guild,
-        settings: Dict,
+        settings: dict,
     ) -> discord.Embed:
         """Build an embed showing this guild's panel settings."""
         channel_id = settings.get("status_channel_id")
@@ -573,9 +572,9 @@ class CfxStatus(commands.Cog):
     async def _update_status_message(
         self,
         guild: discord.Guild,
-        settings: Optional[Dict] = None,
-        payload: Optional[CfxStatusPayload] = None,
-        error: Optional[str] = None,
+        settings: dict | None = None,
+        payload: CfxStatusPayload | None = None,
+        error: str | None = None,
         *,
         force_post: bool = False,
         allow_error_embed: bool = False,
@@ -617,11 +616,11 @@ class CfxStatus(commands.Cog):
             except discord.Forbidden as discord_error:
                 raise commands.CommandError(
                     "I do not have permission to edit the configured Cfx.re "
-                    "status message."
+                    "status message.",
                 ) from discord_error
             except discord.HTTPException as discord_error:
                 raise commands.CommandError(
-                    "Discord rejected the Cfx.re status message update."
+                    "Discord rejected the Cfx.re status message update.",
                 ) from discord_error
 
         if message is None:
@@ -629,11 +628,11 @@ class CfxStatus(commands.Cog):
                 message = await channel.send(embed=embed)
             except discord.Forbidden as discord_error:
                 raise commands.CommandError(
-                    f"I do not have permission to post in {channel.mention}."
+                    f"I do not have permission to post in {channel.mention}.",
                 ) from discord_error
             except discord.HTTPException as discord_error:
                 raise commands.CommandError(
-                    "Discord rejected the Cfx.re status panel."
+                    "Discord rejected the Cfx.re status panel.",
                 ) from discord_error
             await self.config.guild(guild).status_message_id.set(message.id)
 
@@ -643,21 +642,21 @@ class CfxStatus(commands.Cog):
     def _configured_channel(
         self,
         guild: discord.Guild,
-        settings: Dict,
+        settings: dict,
     ) -> discord.TextChannel:
         """Return the configured text channel or raise a command-facing error."""
         channel_id = settings.get("status_channel_id")
         if not channel_id:
             raise commands.CommandError(
                 "No Cfx.re status channel is configured. Use "
-                "`[p]cfxstatus setup [channel]` first."
+                "`[p]cfxstatus setup [channel]` first.",
             )
 
         channel = guild.get_channel(channel_id)
         if not isinstance(channel, discord.TextChannel):
             raise commands.CommandError(
                 "The configured Cfx.re status channel no longer exists or is "
-                "not a text channel."
+                "not a text channel.",
             )
         return channel
 
@@ -683,14 +682,14 @@ class CfxStatus(commands.Cog):
         if missing:
             joined = ", ".join(missing)
             raise commands.CommandError(
-                f"I need {joined} in {channel.mention} to maintain the panel."
+                f"I need {joined} in {channel.mention} to maintain the panel.",
             )
 
     async def _resolve_target_channel(
         self,
         ctx: commands.Context,
-        channel: Optional[discord.TextChannel],
-    ) -> Optional[discord.TextChannel]:
+        channel: discord.TextChannel | None,
+    ) -> discord.TextChannel | None:
         """Resolve an optional setup channel argument."""
         if channel is not None:
             return channel
@@ -699,11 +698,10 @@ class CfxStatus(commands.Cog):
         await ctx.send("Run this in a text channel or provide a channel.")
         return None
 
-    def _poll_interval(self, settings: Dict) -> int:
+    def _poll_interval(self, settings: dict) -> int:
         """Return a clamped polling interval for a settings payload."""
         interval = int(
-            settings.get("poll_interval_minutes")
-            or self.DEFAULT_POLL_INTERVAL_MINUTES
+            settings.get("poll_interval_minutes") or self.DEFAULT_POLL_INTERVAL_MINUTES,
         )
         return max(
             self.MIN_POLL_INTERVAL_MINUTES,
@@ -743,7 +741,7 @@ class CfxStatus(commands.Cog):
             return "🟢"
         return "⚪"
 
-    def _overall_status_emoji(self, components: Dict[str, str]) -> str:
+    def _overall_status_emoji(self, components: dict[str, str]) -> str:
         statuses = list(components.values())
         if not statuses:
             return "⚪"
@@ -771,7 +769,7 @@ class CfxStatus(commands.Cog):
     def _message_url(guild_id: int, channel_id: int, message_id: int) -> str:
         return f"https://discord.com/channels/{guild_id}/{channel_id}/{message_id}"
 
-    def _parse_statuspage_components(self, data: Dict) -> Dict[str, str]:
+    def _parse_statuspage_components(self, data: dict) -> dict[str, str]:
         """Map Cfx.re Statuspage API components to the panel's display rows."""
         if not isinstance(data, dict):
             return {}
@@ -785,7 +783,7 @@ class CfxStatus(commands.Cog):
             for component in raw_components
             if isinstance(component, dict)
         }
-        components: Dict[str, str] = {}
+        components: dict[str, str] = {}
 
         for display_name, source_names in self.STATUSPAGE_COMPONENT_MAP.items():
             source_component = None
@@ -803,12 +801,12 @@ class CfxStatus(commands.Cog):
         return components
 
     @staticmethod
-    def _extract_visible_lines(html: str) -> List[str]:
+    def _extract_visible_lines(html: str) -> list[str]:
         parser = VisibleTextParser()
         parser.feed(html)
         parser.close()
 
-        lines: List[str] = []
+        lines: list[str] = []
         for part in parser.parts:
             for line in part.splitlines():
                 cleaned = re.sub(r"\s+", " ", line).strip()
@@ -817,13 +815,13 @@ class CfxStatus(commands.Cog):
         return lines
 
     @staticmethod
-    def _extract_updated_at(lines: List[str]) -> Optional[str]:
+    def _extract_updated_at(lines: list[str]) -> str | None:
         for line in lines:
             if line.lower().startswith("as of "):
                 return line[6:].strip()
         return None
 
-    def _extract_cfx_components(self, lines: List[str]) -> Dict[str, str]:
+    def _extract_cfx_components(self, lines: list[str]) -> dict[str, str]:
         cfx_index = self._find_line_index(lines, "Cfx.re")
         if cfx_index is None:
             return {}
@@ -837,10 +835,10 @@ class CfxStatus(commands.Cog):
 
     def _extract_components_from_lines(
         self,
-        lines: List[str],
+        lines: list[str],
         cfx_index: int,
-    ) -> Dict[str, str]:
-        components: Dict[str, str] = {}
+    ) -> dict[str, str]:
+        components: dict[str, str] = {}
         section_lines = lines[cfx_index + 1 :]
         component_names = {name.lower() for name in self.CFX_COMPONENTS}
 
@@ -855,8 +853,8 @@ class CfxStatus(commands.Cog):
 
         return components
 
-    def _extract_components_from_text(self, section_text: str) -> Dict[str, str]:
-        components: Dict[str, str] = {}
+    def _extract_components_from_text(self, section_text: str) -> dict[str, str]:
+        components: dict[str, str] = {}
         pattern = "|".join(re.escape(name) for name in self.CFX_COMPONENTS)
         for component in self.CFX_COMPONENTS:
             match = re.search(
@@ -871,14 +869,14 @@ class CfxStatus(commands.Cog):
         return components
 
     @staticmethod
-    def _find_line_index(lines: List[str], needle: str) -> Optional[int]:
+    def _find_line_index(lines: list[str], needle: str) -> int | None:
         normalized_needle = needle.lower()
         for index, line in enumerate(lines):
             if line.lower() == normalized_needle:
                 return index
         return None
 
-    def _next_status_line(self, lines: List[str], start_index: int) -> Optional[str]:
+    def _next_status_line(self, lines: list[str], start_index: int) -> str | None:
         component_names = {name.lower() for name in self.CFX_COMPONENTS}
         for line in lines[start_index:]:
             if line.lower() in component_names:
@@ -888,13 +886,13 @@ class CfxStatus(commands.Cog):
             return line
         return None
 
-    def _canonical_component_name(self, component: str) -> Optional[str]:
+    def _canonical_component_name(self, component: str) -> str | None:
         for name in self.CFX_COMPONENTS:
             if name.lower() == component.lower():
                 return name
         return None
 
-    def _overall_status(self, components: Dict[str, str]) -> str:
+    def _overall_status(self, components: dict[str, str]) -> str:
         if not components:
             return "Cfx.re service status is unknown."
 
@@ -911,7 +909,7 @@ class CfxStatus(commands.Cog):
             return "One or more Cfx.re services are degraded."
         return "Cfx.re service status has mixed or unknown results."
 
-    def _status_color(self, components: Dict[str, str]) -> int:
+    def _status_color(self, components: dict[str, str]) -> int:
         statuses = list(components.values())
         if not statuses:
             return self.UNKNOWN_COLOR
@@ -935,10 +933,7 @@ class CfxStatus(commands.Cog):
     @staticmethod
     def _is_degraded(status: str) -> bool:
         lowered = status.lower()
-        return any(
-            keyword in lowered
-            for keyword in ("degraded", "limited")
-        )
+        return any(keyword in lowered for keyword in ("degraded", "limited"))
 
     @staticmethod
     def _is_outage(status: str) -> bool:

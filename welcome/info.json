@@ -6,6 +6,7 @@
   "requirements": ["aiohttp", "Pillow"],
   "tags": ["welcome", "greetings", "embeds", "dashboard", "utility"],
   "min_bot_version": "3.0.0",
+  "min_python_version": [3, 9, 0],
   "hidden": false,
   "disabled": false,
   "type": "COG",

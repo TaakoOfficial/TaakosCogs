@@ -1,19 +1,23 @@
 """Utility functions for creating visual elements in Fable."""
-import discord
+
+from __future__ import annotations
+
 from datetime import datetime
-from typing import List, Dict, Optional
+
+import discord
+
 
 def create_timeline_embed(
-    events: List[Dict],
+    events: list[dict],
     char_name: str,
-    start_date: Optional[str] = None,
-    end_date: Optional[str] = None,
-    event_type: Optional[str] = None
+    start_date: str | None = None,
+    end_date: str | None = None,
+    event_type: str | None = None,
 ) -> discord.Embed:
     """Create a visual timeline embed for character events."""
     embed = discord.Embed(
         title=f"📅 Timeline: {char_name}",
-        color=0x7289DA
+        color=0x7289DA,
     )
 
     if not events:
@@ -25,7 +29,7 @@ def create_timeline_embed(
         filtered_events = []
         start = datetime.fromisoformat(start_date) if start_date else datetime.min
         end = datetime.fromisoformat(end_date) if end_date else datetime.max
-        
+
         for event in events:
             event_date = datetime.fromisoformat(event["date"])
             if start <= event_date <= end:
@@ -44,17 +48,17 @@ def create_timeline_embed(
     for i, event in enumerate(events):
         date = datetime.fromisoformat(event["date"]).strftime("%Y-%m-%d")
         event_type = event.get("type", "Event")
-        
+
         # Add visual elements based on event type
         icons = {
             "milestone": "🎯",
             "relationship": "👥",
             "story": "📖",
             "location": "📍",
-            "development": "📈"
+            "development": "📈",
         }
         icon = icons.get(event_type.lower(), "•")
-        
+
         timeline += f"{icon} **{date}** - {event['title']}\n"
         if event.get("description"):
             timeline += f"┗━ {event['description']}\n"
@@ -77,9 +81,9 @@ def create_timeline_embed(
 
             for i, part in enumerate(parts, 1):
                 embed.add_field(
-                    name=f"Timeline Part {i}/{len(parts)}", 
-                    value=part, 
-                    inline=False
+                    name=f"Timeline Part {i}/{len(parts)}",
+                    value=part,
+                    inline=False,
                 )
         else:
             embed.description = timeline
@@ -90,12 +94,16 @@ def create_timeline_embed(
         event_counts[event_type] = event_counts.get(event_type, 0) + 1
 
     if event_counts:
-        stats = "\n".join(f"{icons.get(t.lower(), '•')} {t}: {count}" for t, count in event_counts.items())
+        stats = "\n".join(
+            f"{icons.get(t.lower(), '•')} {t}: {count}"
+            for t, count in event_counts.items()
+        )
         embed.add_field(name="Event Statistics", value=stats, inline=False)
 
     return embed
 
-def create_relationship_graph(relationships: Dict) -> str:
+
+def create_relationship_graph(relationships: dict) -> str:
     """
     Create a DOT format graph of character relationships.
     Returns the DOT string that can be rendered into an image.
@@ -104,7 +112,7 @@ def create_relationship_graph(relationships: Dict) -> str:
         "digraph G {",
         "  rankdir=LR;",
         "  node [shape=box, style=rounded];",
-        "  edge [len=2];"
+        "  edge [len=2];",
     ]
 
     # Add nodes and edges
@@ -116,14 +124,17 @@ def create_relationship_graph(relationships: Dict) -> str:
                     "ally": "green",
                     "rival": "red",
                     "neutral": "gray",
-                    "family": "blue"
+                    "family": "blue",
                 }.get(rel_type, "black")
-                dot.append(f'  "{char}" -> "{target}" [color={color}, label="{rel_type}"];')
+                dot.append(
+                    f'  "{char}" -> "{target}" [color={color}, label="{rel_type}"];',
+                )
 
     dot.append("}")
     return "\n".join(dot)
 
-def create_location_map(locations: Dict) -> str:
+
+def create_location_map(locations: dict) -> str:
     """
     Create a DOT format graph of connected locations.
     Returns the DOT string that can be rendered into an image.
@@ -131,7 +142,7 @@ def create_location_map(locations: Dict) -> str:
     dot = [
         "graph G {",
         "  node [shape=box, style=filled];",
-        "  edge [len=3];"
+        "  edge [len=3];",
     ]
 
     # Add nodes with custom shapes based on category
@@ -142,9 +153,9 @@ def create_location_map(locations: Dict) -> str:
             "castle": "gray",
             "house": "green",
             "shop": "yellow",
-            "dungeon": "darkred"
+            "dungeon": "darkred",
         }.get(category, "lightblue")
-        
+
         dot.append(f'  "{loc_name}" [fillcolor={color}];')
 
     # Add connections

@@ -7,21 +7,23 @@ import csv
 import io
 import logging
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any
 
 import discord
 from redbot.core import Config, commands
-from redbot.core.bot import Red
 from redbot.core.utils.chat_formatting import box, pagify
 
 from .dashboard_integration import DashboardIntegration
 
+if TYPE_CHECKING:
+    from redbot.core.bot import Red
+
 log = logging.getLogger("red.taakoscogs.invitetracker")
 
 
-InviteCache = Dict[str, Dict[str, Any]]
-MemberRecord = Dict[str, Any]
-StatsRecord = Dict[str, int]
+InviteCache = dict[str, dict[str, Any]]
+MemberRecord = dict[str, Any]
+StatsRecord = dict[str, int]
 
 
 class InviteTracker(DashboardIntegration, commands.Cog):
@@ -34,7 +36,11 @@ class InviteTracker(DashboardIntegration, commands.Cog):
 
     def __init__(self, bot: Red) -> None:
         self.bot = bot
-        self.config = Config.get_conf(self, identifier=2026051302, force_registration=True)
+        self.config = Config.get_conf(
+            self,
+            identifier=2026051302,
+            force_registration=True,
+        )
         self.config.register_guild(
             enabled=False,
             log_channel_id=None,
@@ -45,7 +51,7 @@ class InviteTracker(DashboardIntegration, commands.Cog):
             members={},
             unknown_joins=0,
         )
-        self._locks: Dict[int, asyncio.Lock] = {}
+        self._locks: dict[int, asyncio.Lock] = {}
         self._startup_task = asyncio.create_task(self._refresh_enabled_guilds())
 
     async def cog_unload(self) -> None:
@@ -122,20 +128,20 @@ class InviteTracker(DashboardIntegration, commands.Cog):
             return "Unknown"
 
     @staticmethod
-    def _invite_url(code: Optional[str]) -> str:
+    def _invite_url(code: str | None) -> str:
         if not code:
             return "Unknown"
         return f"https://discord.gg/{code}"
 
     @staticmethod
-    def _net_joins(stats: Dict[str, Any]) -> int:
+    def _net_joins(stats: dict[str, Any]) -> int:
         joins = int(stats.get("joins", 0))
         leaves = int(stats.get("leaves", 0))
         fake = int(stats.get("fake", 0))
         return max(joins - leaves - fake, 0)
 
     @classmethod
-    def _stats_line(cls, stats: Dict[str, Any]) -> str:
+    def _stats_line(cls, stats: dict[str, Any]) -> str:
         joins = int(stats.get("joins", 0))
         leaves = int(stats.get("leaves", 0))
         fake = int(stats.get("fake", 0))
@@ -148,7 +154,7 @@ class InviteTracker(DashboardIntegration, commands.Cog):
         )
 
     @staticmethod
-    def _invite_to_record(invite: discord.Invite) -> Dict[str, Any]:
+    def _invite_to_record(invite: discord.Invite) -> dict[str, Any]:
         channel = invite.channel
         inviter = invite.inviter
         created_at = invite.created_at
@@ -167,20 +173,25 @@ class InviteTracker(DashboardIntegration, commands.Cog):
     def _find_used_invite(
         before_cache: InviteCache,
         after_cache: InviteCache,
-    ) -> Tuple[Optional[str], Optional[Dict[str, Any]]]:
-        candidates: List[Tuple[int, int, str, Dict[str, Any]]] = []
+    ) -> tuple[str | None, dict[str, Any] | None]:
+        candidates: list[tuple[int, int, str, dict[str, Any]]] = []
 
         for code, after_record in after_cache.items():
             before_record = before_cache.get(code, {})
             before_uses = int(before_record.get("uses") or 0)
             after_uses = int(after_record.get("uses") or 0)
             if after_uses > before_uses:
-                candidates.append((after_uses - before_uses, before_uses, code, after_record))
+                candidates.append(
+                    (after_uses - before_uses, before_uses, code, after_record),
+                )
 
         if not candidates:
             return None, None
 
-        candidates.sort(key=lambda item: (item[0], int(item[3].get("uses") or 0)), reverse=True)
+        candidates.sort(
+            key=lambda item: (item[0], int(item[3].get("uses") or 0)),
+            reverse=True,
+        )
         _delta, before_uses, code, record = candidates[0]
         # Consume one observed use so burst joins can be attributed across member join events.
         record["uses"] = before_uses + 1
@@ -192,10 +203,12 @@ class InviteTracker(DashboardIntegration, commands.Cog):
         except discord.Forbidden as exc:
             raise commands.CommandError(
                 "I cannot read server invites. Give the bot `Manage Server` permission, "
-                "then run `[p]invitetracker refresh`."
+                "then run `[p]invitetracker refresh`.",
             ) from exc
         except discord.HTTPException as exc:
-            raise commands.CommandError("Discord did not return the server invite list.") from exc
+            raise commands.CommandError(
+                "Discord did not return the server invite list.",
+            ) from exc
 
         return {invite.code: self._invite_to_record(invite) for invite in invites}
 
@@ -217,7 +230,11 @@ class InviteTracker(DashboardIntegration, commands.Cog):
         return {"joins": 0, "leaves": 0, "fake": 0}
 
     @classmethod
-    def _ensure_stats(cls, inviters: Dict[str, StatsRecord], inviter_id: Any) -> StatsRecord:
+    def _ensure_stats(
+        cls,
+        inviters: dict[str, StatsRecord],
+        inviter_id: Any,
+    ) -> StatsRecord:
         key = str(inviter_id)
         stats = inviters.setdefault(key, cls._empty_stats())
         stats.setdefault("joins", 0)
@@ -246,15 +263,18 @@ class InviteTracker(DashboardIntegration, commands.Cog):
             return
 
         try:
-            await channel.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
+            await channel.send(
+                embed=embed,
+                allowed_mentions=discord.AllowedMentions.none(),
+            )
         except discord.HTTPException:
             log.exception("Failed to send InviteTracker log in guild %s", guild.id)
 
     def _join_embed(
         self,
         member: discord.Member,
-        invite_code: Optional[str],
-        invite_record: Optional[Dict[str, Any]],
+        invite_code: str | None,
+        invite_record: dict[str, Any] | None,
         is_fake: bool,
     ) -> discord.Embed:
         color = self.FAKE_COLOR if is_fake else self.JOIN_COLOR
@@ -289,7 +309,11 @@ class InviteTracker(DashboardIntegration, commands.Cog):
         embed.set_footer(text=f"User ID: {member.id}")
         return embed
 
-    def _leave_embed(self, member: discord.Member, record: MemberRecord) -> discord.Embed:
+    def _leave_embed(
+        self,
+        member: discord.Member,
+        record: MemberRecord,
+    ) -> discord.Embed:
         embed = discord.Embed(
             title="Member Left",
             description=f"{member} left the server.",
@@ -297,15 +321,27 @@ class InviteTracker(DashboardIntegration, commands.Cog):
             timestamp=self._now(),
         )
         embed.set_thumbnail(url=member.display_avatar.url)
-        embed.add_field(name="Invited By", value=self._user_ref(record.get("inviter_id")), inline=True)
+        embed.add_field(
+            name="Invited By",
+            value=self._user_ref(record.get("inviter_id")),
+            inline=True,
+        )
 
         invite_code = record.get("invite_code")
         invite_text = "Unknown"
         if invite_code:
             invite_text = f"`{invite_code}`\n{self._invite_url(invite_code)}"
         embed.add_field(name="Invite", value=invite_text, inline=True)
-        embed.add_field(name="Joined", value=self._format_ts(record.get("joined_at"), "R"), inline=True)
-        embed.add_field(name="Fake Join", value="Yes" if record.get("fake") else "No", inline=True)
+        embed.add_field(
+            name="Joined",
+            value=self._format_ts(record.get("joined_at"), "R"),
+            inline=True,
+        )
+        embed.add_field(
+            name="Fake Join",
+            value="Yes" if record.get("fake") else "No",
+            inline=True,
+        )
         embed.set_footer(text=f"User ID: {member.id}")
         return embed
 
@@ -317,8 +353,8 @@ class InviteTracker(DashboardIntegration, commands.Cog):
         if member.bot and not settings.get("include_bots"):
             return
 
-        invite_code: Optional[str] = None
-        invite_record: Optional[Dict[str, Any]] = None
+        invite_code: str | None = None
+        invite_record: dict[str, Any] | None = None
 
         async with self._guild_lock(guild.id):
             before_cache = await self.config.guild(guild).invite_cache()
@@ -326,9 +362,15 @@ class InviteTracker(DashboardIntegration, commands.Cog):
                 after_cache = await self._fetch_invite_cache(guild)
             except commands.CommandError:
                 await self._increment_unknown_joins(guild)
-                log.warning("Invite lookup failed for member join in guild %s", guild.id)
+                log.warning(
+                    "Invite lookup failed for member join in guild %s",
+                    guild.id,
+                )
             else:
-                invite_code, invite_record = self._find_used_invite(before_cache, after_cache)
+                invite_code, invite_record = self._find_used_invite(
+                    before_cache,
+                    after_cache,
+                )
                 await self.config.guild(guild).invite_cache.set(after_cache)
                 if invite_record is None:
                     await self._increment_unknown_joins(guild)
@@ -356,7 +398,10 @@ class InviteTracker(DashboardIntegration, commands.Cog):
                 if is_fake:
                     stats["fake"] += 1
 
-        await self._send_log(guild, self._join_embed(member, invite_code, invite_record, is_fake))
+        await self._send_log(
+            guild,
+            self._join_embed(member, invite_code, invite_record, is_fake),
+        )
 
     async def _record_leave(self, member: discord.Member) -> None:
         guild = member.guild
@@ -367,7 +412,7 @@ class InviteTracker(DashboardIntegration, commands.Cog):
             return
 
         member_key = str(member.id)
-        record: Optional[MemberRecord] = None
+        record: MemberRecord | None = None
         async with self.config.guild(guild).members() as members:
             raw_record = members.get(member_key)
             if raw_record:
@@ -435,7 +480,9 @@ class InviteTracker(DashboardIntegration, commands.Cog):
         total_joins = sum(int(stats.get("joins", 0)) for stats in inviters.values())
         total_leaves = sum(int(stats.get("leaves", 0)) for stats in inviters.values())
         total_fake = sum(int(stats.get("fake", 0)) for stats in inviters.values())
-        active_tracked = sum(1 for record in members.values() if not record.get("left_at"))
+        active_tracked = sum(
+            1 for record in members.values() if not record.get("left_at")
+        )
 
         embed = discord.Embed(
             title="InviteTracker Settings",
@@ -517,7 +564,7 @@ class InviteTracker(DashboardIntegration, commands.Cog):
     async def invitetracker_setup(
         self,
         ctx: commands.Context,
-        channel: Optional[discord.TextChannel] = None,
+        channel: discord.TextChannel | None = None,
     ) -> None:
         """Enable invite tracking, set a log channel, and cache current invites."""
         assert ctx.guild is not None
@@ -537,12 +584,16 @@ class InviteTracker(DashboardIntegration, commands.Cog):
         await self.config.guild(ctx.guild).enabled.set(True)
         await ctx.send(
             f"InviteTracker is enabled. Logs will post in {channel.mention}. "
-            f"Cached **{self._count(len(invite_cache))}** invite(s)."
+            f"Cached **{self._count(len(invite_cache))}** invite(s).",
         )
 
     @invitetracker.command(name="enable")
     @commands.admin_or_permissions(manage_guild=True)
-    async def invitetracker_enable(self, ctx: commands.Context, enabled: bool = True) -> None:
+    async def invitetracker_enable(
+        self,
+        ctx: commands.Context,
+        enabled: bool = True,
+    ) -> None:
         """Enable or disable invite tracking."""
         assert ctx.guild is not None
         if enabled:
@@ -552,7 +603,9 @@ class InviteTracker(DashboardIntegration, commands.Cog):
                 await ctx.send(str(error))
                 return
         await self.config.guild(ctx.guild).enabled.set(enabled)
-        await ctx.send(f"Invite tracking is now {'enabled' if enabled else 'disabled'}.")
+        await ctx.send(
+            f"Invite tracking is now {'enabled' if enabled else 'disabled'}.",
+        )
 
     @invitetracker.command(name="disable")
     @commands.admin_or_permissions(manage_guild=True)
@@ -567,7 +620,7 @@ class InviteTracker(DashboardIntegration, commands.Cog):
     async def invitetracker_channel(
         self,
         ctx: commands.Context,
-        channel: Optional[discord.TextChannel] = None,
+        channel: discord.TextChannel | None = None,
     ) -> None:
         """Set the invite log channel. Omit the channel to use the current channel."""
         assert ctx.guild is not None
@@ -600,7 +653,11 @@ class InviteTracker(DashboardIntegration, commands.Cog):
 
     @invitetracker.command(name="includebots")
     @commands.admin_or_permissions(manage_guild=True)
-    async def invitetracker_include_bots(self, ctx: commands.Context, include_bots: bool) -> None:
+    async def invitetracker_include_bots(
+        self,
+        ctx: commands.Context,
+        include_bots: bool,
+    ) -> None:
         """Choose whether bot joins should be tracked."""
         assert ctx.guild is not None
         await self.config.guild(ctx.guild).include_bots.set(include_bots)
@@ -616,15 +673,23 @@ class InviteTracker(DashboardIntegration, commands.Cog):
         except commands.CommandError as error:
             await ctx.send(str(error))
             return
-        await ctx.send(f"Invite cache refreshed. Cached **{self._count(len(invite_cache))}** invite(s).")
+        await ctx.send(
+            f"Invite cache refreshed. Cached **{self._count(len(invite_cache))}** invite(s).",
+        )
 
     @invitetracker.command(name="resetstats")
     @commands.admin_or_permissions(manage_guild=True)
-    async def invitetracker_reset_stats(self, ctx: commands.Context, confirmation: str = "") -> None:
+    async def invitetracker_reset_stats(
+        self,
+        ctx: commands.Context,
+        confirmation: str = "",
+    ) -> None:
         """Reset all InviteTracker stats. Use `confirm` to proceed."""
         assert ctx.guild is not None
         if confirmation.lower() != "confirm":
-            await ctx.send("This clears all invite stats for this server. Run the command again with `confirm`.")
+            await ctx.send(
+                "This clears all invite stats for this server. Run the command again with `confirm`.",
+            )
             return
 
         await self.config.guild(ctx.guild).inviters.set({})
@@ -633,7 +698,9 @@ class InviteTracker(DashboardIntegration, commands.Cog):
         try:
             await self._refresh_invite_cache(ctx.guild)
         except commands.CommandError as error:
-            await ctx.send(f"Stats were reset, but the invite cache could not be refreshed: {error}")
+            await ctx.send(
+                f"Stats were reset, but the invite cache could not be refreshed: {error}",
+            )
             return
         await ctx.send("InviteTracker stats have been reset.")
 
@@ -649,7 +716,7 @@ class InviteTracker(DashboardIntegration, commands.Cog):
     async def invites(
         self,
         ctx: commands.Context,
-        member: Optional[discord.Member] = None,
+        member: discord.Member | None = None,
     ) -> None:
         """Show invite stats for yourself or another member."""
         assert ctx.guild is not None
@@ -670,9 +737,14 @@ class InviteTracker(DashboardIntegration, commands.Cog):
         active = sum(
             1
             for record in members.values()
-            if str(record.get("inviter_id")) == str(member.id) and not record.get("left_at")
+            if str(record.get("inviter_id")) == str(member.id)
+            and not record.get("left_at")
         )
-        embed.add_field(name="Currently Tracked Members", value=self._count(active), inline=True)
+        embed.add_field(
+            name="Currently Tracked Members",
+            value=self._count(active),
+            inline=True,
+        )
         embed.set_footer(text=f"User ID: {member.id}")
         await ctx.send(embed=embed)
 
@@ -704,7 +776,7 @@ class InviteTracker(DashboardIntegration, commands.Cog):
                 f"**{self._count(self._net_joins(stats))}** net "
                 f"({self._count(int(stats.get('joins', 0)))} joins, "
                 f"{self._count(int(stats.get('leaves', 0)))} left, "
-                f"{self._count(int(stats.get('fake', 0)))} fake)"
+                f"{self._count(int(stats.get('fake', 0)))} fake)",
             )
 
         embed = discord.Embed(
@@ -718,7 +790,11 @@ class InviteTracker(DashboardIntegration, commands.Cog):
     @invites.command(name="source", aliases=["joined"])
     @commands.guild_only()
     @commands.bot_has_permissions(embed_links=True)
-    async def invites_source(self, ctx: commands.Context, member: discord.Member) -> None:
+    async def invites_source(
+        self,
+        ctx: commands.Context,
+        member: discord.Member,
+    ) -> None:
         """Show which invite a member joined with."""
         assert ctx.guild is not None
         members = await self.config.guild(ctx.guild).members()
@@ -739,11 +815,27 @@ class InviteTracker(DashboardIntegration, commands.Cog):
             timestamp=self._now(),
         )
         embed.set_thumbnail(url=member.display_avatar.url)
-        embed.add_field(name="Invited By", value=self._user_ref(record.get("inviter_id")), inline=True)
+        embed.add_field(
+            name="Invited By",
+            value=self._user_ref(record.get("inviter_id")),
+            inline=True,
+        )
         embed.add_field(name="Invite", value=invite_text, inline=True)
-        embed.add_field(name="Joined", value=self._format_ts(record.get("joined_at"), "F"), inline=True)
-        embed.add_field(name="Left", value=self._format_ts(record.get("left_at"), "R"), inline=True)
-        embed.add_field(name="Fake Join", value="Yes" if record.get("fake") else "No", inline=True)
+        embed.add_field(
+            name="Joined",
+            value=self._format_ts(record.get("joined_at"), "F"),
+            inline=True,
+        )
+        embed.add_field(
+            name="Left",
+            value=self._format_ts(record.get("left_at"), "R"),
+            inline=True,
+        )
+        embed.add_field(
+            name="Fake Join",
+            value="Yes" if record.get("fake") else "No",
+            inline=True,
+        )
         embed.set_footer(text=f"User ID: {member.id}")
         await ctx.send(embed=embed)
 
@@ -762,11 +854,17 @@ class InviteTracker(DashboardIntegration, commands.Cog):
         records = [
             record
             for record in members.values()
-            if str(record.get("inviter_id")) == str(inviter.id) and not record.get("left_at")
+            if str(record.get("inviter_id")) == str(inviter.id)
+            and not record.get("left_at")
         ]
-        records.sort(key=lambda record: float(record.get("joined_at") or 0), reverse=True)
+        records.sort(
+            key=lambda record: float(record.get("joined_at") or 0),
+            reverse=True,
+        )
         if not records:
-            await ctx.send(f"No currently tracked members were invited by {inviter.mention}.")
+            await ctx.send(
+                f"No currently tracked members were invited by {inviter.mention}.",
+            )
             return
 
         lines = []
@@ -776,7 +874,7 @@ class InviteTracker(DashboardIntegration, commands.Cog):
             fake_text = " fake" if record.get("fake") else ""
             lines.append(
                 f"{self._user_ref(member_id)} - `{invite_code}` - "
-                f"{self._format_ts(record.get('joined_at'), 'R')}{fake_text}"
+                f"{self._format_ts(record.get('joined_at'), 'R')}{fake_text}",
             )
 
         header = f"Current tracked members invited by {inviter} ({len(records)} total):"
@@ -798,7 +896,9 @@ class InviteTracker(DashboardIntegration, commands.Cog):
 
         output = io.StringIO()
         writer = csv.writer(output)
-        writer.writerow(["member_id", "inviter_id", "invite_code", "joined_at", "left_at", "fake"])
+        writer.writerow(
+            ["member_id", "inviter_id", "invite_code", "joined_at", "left_at", "fake"],
+        )
         for record in members.values():
             writer.writerow(
                 [
@@ -808,7 +908,7 @@ class InviteTracker(DashboardIntegration, commands.Cog):
                     self._format_export_time(record.get("joined_at")),
                     self._format_export_time(record.get("left_at")),
                     "yes" if record.get("fake") else "no",
-                ]
+                ],
             )
 
         data = output.getvalue().encode("utf-8")

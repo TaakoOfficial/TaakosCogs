@@ -1,8 +1,9 @@
 """Character profile module for Fable."""
-from typing import Optional
-import discord
+
 from redbot.core import commands
+
 from .style_utils import FableEmbed
+
 
 class CharacterProfile(commands.Cog):
     """Handles character profile management in Fable."""
@@ -16,7 +17,7 @@ class CharacterProfile(commands.Cog):
     async def view_profile(
         self,
         ctx: commands.Context,
-        character_name: str
+        character_name: str,
     ) -> None:
         """
         View a character's profile with rich formatting.
@@ -38,21 +39,21 @@ class CharacterProfile(commands.Cog):
                     "name": "Basic Information",
                     "icon": "character",
                     "value": "**Species:** High Elf\n**Age:** 247\n**Role:** Spy",
-                    "inline": True
+                    "inline": True,
                 },
                 {
                     "name": "Current Status",
                     "icon": "progress",
                     "value": "**Location:** Silverwood\n**Mission:** Active\n**Condition:** Healthy",
-                    "inline": True
+                    "inline": True,
                 },
                 {
                     "name": "Recent Milestone",
                     "icon": "milestone",
                     "value": "Completed advanced magical training",
-                    "inline": False
-                }
-            ]
+                    "inline": False,
+                },
+            ],
         }
 
         embed = await FableEmbed.character_embed(
@@ -60,7 +61,7 @@ class CharacterProfile(commands.Cog):
             character_data["name"],
             character_data["description"],
             character_data["image_url"],
-            character_data["fields"]
+            character_data["fields"],
         )
 
         await ctx.send(embed=embed)
@@ -71,7 +72,7 @@ class CharacterProfile(commands.Cog):
     async def view_location(
         self,
         ctx: commands.Context,
-        location_name: str
+        location_name: str,
     ) -> None:
         """
         View a location's details with themed formatting.
@@ -94,15 +95,15 @@ class CharacterProfile(commands.Cog):
                     "name": "Notable Features",
                     "icon": "landmark",
                     "value": "- Ancient library\n- Magical barriers\n- Hidden passages",
-                    "inline": True
+                    "inline": True,
                 },
                 {
                     "name": "Current Visitors",
                     "icon": "character",
                     "value": "- Aria (Studying)\n- Elder Moonshadow (Teaching)",
-                    "inline": True
-                }
-            ]
+                    "inline": True,
+                },
+            ],
         }
 
         embed = await FableEmbed.location_embed(
@@ -110,7 +111,7 @@ class CharacterProfile(commands.Cog):
             location_data["name"],
             location_data["description"],
             location_data["image_url"],
-            location_data["fields"]
+            location_data["fields"],
         )
 
         await ctx.send(embed=embed)

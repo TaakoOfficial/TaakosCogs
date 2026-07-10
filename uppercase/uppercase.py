@@ -3,12 +3,17 @@
 from __future__ import annotations
 
 import re
+from typing import TYPE_CHECKING
 
 import discord
 from redbot.core import app_commands, commands
-from redbot.core.bot import Red
 
-__red_end_user_data_statement__ = "This cog does not persistently store any end user data."
+if TYPE_CHECKING:
+    from redbot.core.bot import Red
+
+__red_end_user_data_statement__ = (
+    "This cog does not persistently store any end user data."
+)
 
 
 class Uppercase(commands.Cog):

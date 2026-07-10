@@ -19,11 +19,7 @@
         "aiohttp"
     ],
     "min_bot_version": "3.5.0",
-    "min_python_version": [
-        3,
-        9,
-        0
-    ],
+    "min_python_version": [3, 9, 0],
     "hidden": false,
     "disabled": false,
     "type": "COG",

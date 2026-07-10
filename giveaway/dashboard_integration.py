@@ -45,7 +45,7 @@ class DashboardIntegration:
         user: discord.User,
         guild: discord.Guild,
         **kwargs,
-    ) -> typing.Dict[str, typing.Any]:
+    ) -> dict[str, typing.Any]:
         """Render and process the Giveaway dashboard page."""
         member, can_manage = await self._dashboard_member_can_manage(user, guild)
         if not can_manage:
@@ -76,7 +76,7 @@ class DashboardIntegration:
                     {
                         "message": f"Giveaway dashboard action failed: {error}",
                         "category": "error",
-                    }
+                    },
                 )
             else:
                 notifications.extend(messages)
@@ -95,7 +95,7 @@ class DashboardIntegration:
         self,
         user: discord.User,
         guild: discord.Guild,
-    ) -> typing.Tuple[typing.Optional[discord.Member], bool]:
+    ) -> tuple[discord.Member | None, bool]:
         member = guild.get_member(user.id)
         is_owner = user.id in getattr(self.bot, "owner_ids", set())
         is_admin = member is not None and await self.bot.is_admin(member)
@@ -106,7 +106,7 @@ class DashboardIntegration:
         )
         return member, can_manage
 
-    def _dashboard_form_data(self, kwargs: typing.Dict[str, typing.Any]) -> typing.Any:
+    def _dashboard_form_data(self, kwargs: dict[str, typing.Any]) -> typing.Any:
         data = kwargs.get("data") or {}
         if isinstance(data, dict) and ("form" in data or "json" in data):
             return data.get("form") or data.get("json") or {}
@@ -114,8 +114,8 @@ class DashboardIntegration:
 
     def _dashboard_active_tab(
         self,
-        kwargs: typing.Dict[str, typing.Any],
-        action_tabs: typing.Dict[str, str],
+        kwargs: dict[str, typing.Any],
+        action_tabs: dict[str, str],
         default: str,
     ) -> str:
         form_data = self._dashboard_form_data(kwargs)
@@ -212,11 +212,11 @@ class DashboardIntegration:
         form_data: typing.Any,
         key: str,
         *,
-        default: typing.Optional[int] = None,
-        minimum: typing.Optional[int] = None,
-        maximum: typing.Optional[int] = None,
+        default: int | None = None,
+        minimum: int | None = None,
+        maximum: int | None = None,
         optional: bool = False,
-    ) -> typing.Optional[int]:
+    ) -> int | None:
         value = self._dash_value(form_data, key).strip()
         if optional and value == "":
             return None
@@ -233,7 +233,7 @@ class DashboardIntegration:
             number = min(maximum, number)
         return number
 
-    def _dash_optional_id(self, form_data: typing.Any, key: str) -> typing.Optional[int]:
+    def _dash_optional_id(self, form_data: typing.Any, key: str) -> int | None:
         value = self._dash_value(form_data, key).strip()
         if not value:
             return None
@@ -242,7 +242,7 @@ class DashboardIntegration:
         except (TypeError, ValueError) as exc:
             raise commands.BadArgument(f"`{key}` must be a Discord ID.") from exc
 
-    def _dash_csrf(self, kwargs: typing.Dict[str, typing.Any]) -> str:
+    def _dash_csrf(self, kwargs: dict[str, typing.Any]) -> str:
         csrf_token = kwargs.get("csrf_token")
         if not isinstance(csrf_token, (tuple, list)) or len(csrf_token) != 2:
             return ""
@@ -255,11 +255,11 @@ class DashboardIntegration:
         self,
         guild: discord.Guild,
         user: discord.User,
-        member: typing.Optional[discord.Member],
+        member: discord.Member | None,
         action: str,
         form_data: typing.Any,
-    ) -> typing.List[typing.Dict[str, str]]:
-        messages: typing.List[typing.Dict[str, str]] = []
+    ) -> list[dict[str, str]]:
+        messages: list[dict[str, str]] = []
 
         if action == "start_giveaway":
             record, message, duration_text = await self._dashboard_start_giveaway(
@@ -277,13 +277,16 @@ class DashboardIntegration:
                 {
                     "message": f"Giveaway started. It ends in {duration_text}: {jump_url}",
                     "category": "success",
-                }
+                },
             )
 
         elif action == "attach_giveaway":
-            record, entry_message, status_message, duration_text = (
-                await self._dashboard_attach_giveaway(guild, user, member, form_data)
-            )
+            (
+                record,
+                entry_message,
+                status_message,
+                duration_text,
+            ) = await self._dashboard_attach_giveaway(guild, user, member, form_data)
             entry_url = self._build_jump_url(
                 guild.id,
                 int(record["channel_id"]),
@@ -301,17 +304,19 @@ class DashboardIntegration:
                         f"Entry: {entry_url} Status: {status_url}"
                     ),
                     "category": "success",
-                }
+                },
             )
 
         elif action == "end_giveaway":
             record, winners = await self._dashboard_end_giveaway(guild, form_data)
-            winner_text = ", ".join(str(winner) for winner in winners) or "No valid entries"
+            winner_text = (
+                ", ".join(str(winner) for winner in winners) or "No valid entries"
+            )
             messages.append(
                 {
                     "message": f"Giveaway `{record['message_id']}` ended. Winner(s): {winner_text}",
                     "category": "success",
-                }
+                },
             )
 
         elif action == "cancel_giveaway":
@@ -320,7 +325,7 @@ class DashboardIntegration:
                 {
                     "message": f"Giveaway `{record['message_id']}` cancelled.",
                     "category": "success",
-                }
+                },
             )
 
         elif action == "reroll_giveaway":
@@ -331,7 +336,7 @@ class DashboardIntegration:
                 {
                     "message": f"Giveaway `{record['message_id']}` rerolled. Winner(s): {winner_text}",
                     "category": "success",
-                }
+                },
             )
 
         elif action == "refresh_giveaway":
@@ -340,7 +345,7 @@ class DashboardIntegration:
                 {
                     "message": f"Giveaway `{record['message_id']}` message refreshed.",
                     "category": "success",
-                }
+                },
             )
 
         elif action:
@@ -352,9 +357,9 @@ class DashboardIntegration:
         self,
         guild: discord.Guild,
         user: discord.User,
-        member: typing.Optional[discord.Member],
+        member: discord.Member | None,
         form_data: typing.Any,
-    ) -> typing.Tuple[typing.Dict[str, typing.Any], discord.Message, str]:
+    ) -> tuple[dict[str, typing.Any], discord.Message, str]:
         channel = self._dashboard_required_text_channel(
             guild,
             self._dash_optional_id(form_data, "start_channel_id"),
@@ -369,7 +374,9 @@ class DashboardIntegration:
             maximum=self.MAX_WINNERS,
         )
         prize = self._dash_value(form_data, "start_prize").strip()
-        host_id = self._dash_optional_id(form_data, "start_host_id") or (member or user).id
+        host_id = (
+            self._dash_optional_id(form_data, "start_host_id") or (member or user).id
+        )
         return await self._create_giveaway(
             guild,
             channel,
@@ -383,11 +390,13 @@ class DashboardIntegration:
         self,
         guild: discord.Guild,
         user: discord.User,
-        member: typing.Optional[discord.Member],
+        member: discord.Member | None,
         form_data: typing.Any,
-    ) -> typing.Tuple[typing.Dict[str, typing.Any], discord.Message, discord.Message, str]:
+    ) -> tuple[dict[str, typing.Any], discord.Message, discord.Message, str]:
         current_channel_id = self._dash_optional_id(form_data, "attach_channel_id")
-        current_channel = guild.get_channel(current_channel_id) if current_channel_id else None
+        current_channel = (
+            guild.get_channel(current_channel_id) if current_channel_id else None
+        )
         if current_channel_id and not isinstance(current_channel, discord.TextChannel):
             raise commands.BadArgument("Attach channel must be a text channel.")
         reference = self._dash_value(form_data, "attach_reference").strip()
@@ -400,10 +409,14 @@ class DashboardIntegration:
             maximum=self.MAX_WINNERS,
         )
         prize = self._dash_value(form_data, "attach_prize").strip() or None
-        host_id = self._dash_optional_id(form_data, "attach_host_id") or (member or user).id
+        host_id = (
+            self._dash_optional_id(form_data, "attach_host_id") or (member or user).id
+        )
         return await self._attach_giveaway(
             guild,
-            current_channel if isinstance(current_channel, discord.TextChannel) else None,
+            current_channel
+            if isinstance(current_channel, discord.TextChannel)
+            else None,
             host_id,
             reference,
             duration,
@@ -415,7 +428,7 @@ class DashboardIntegration:
         self,
         guild: discord.Guild,
         form_data: typing.Any,
-    ) -> typing.Tuple[typing.Dict[str, typing.Any], typing.List[discord.Member]]:
+    ) -> tuple[dict[str, typing.Any], list[discord.Member]]:
         reference = self._dash_value(form_data, "manage_reference").strip()
         key, _record = await self._get_record_from_reference(guild, reference)
         return await self._end_giveaway(guild, int(key))
@@ -424,7 +437,7 @@ class DashboardIntegration:
         self,
         guild: discord.Guild,
         form_data: typing.Any,
-    ) -> typing.Dict[str, typing.Any]:
+    ) -> dict[str, typing.Any]:
         reference = self._dash_value(form_data, "manage_reference").strip()
         key, _record = await self._get_record_from_reference(guild, reference)
         return await self._cancel_giveaway(guild, int(key))
@@ -433,7 +446,7 @@ class DashboardIntegration:
         self,
         guild: discord.Guild,
         form_data: typing.Any,
-    ) -> typing.Tuple[typing.Dict[str, typing.Any], typing.List[discord.Member]]:
+    ) -> tuple[dict[str, typing.Any], list[discord.Member]]:
         reference = self._dash_value(form_data, "reroll_reference").strip()
         key, record = await self._get_record_from_reference(guild, reference)
         winner_count = self._dash_int(
@@ -450,7 +463,7 @@ class DashboardIntegration:
         self,
         guild: discord.Guild,
         form_data: typing.Any,
-    ) -> typing.Dict[str, typing.Any]:
+    ) -> dict[str, typing.Any]:
         reference = self._dash_value(form_data, "refresh_reference").strip()
         _key, record = await self._get_record_from_reference(guild, reference)
         await self._edit_giveaway_message(guild, record)
@@ -459,7 +472,7 @@ class DashboardIntegration:
     async def _dashboard_source(
         self,
         guild: discord.Guild,
-        kwargs: typing.Dict[str, typing.Any],
+        kwargs: dict[str, typing.Any],
     ) -> str:
         giveaways = await self.config.guild(guild).giveaways()
         csrf = self._dash_csrf(kwargs)
@@ -470,7 +483,9 @@ class DashboardIntegration:
         )
         active_count = sum(1 for record in records if record.get("status") == "active")
         ended_count = sum(1 for record in records if record.get("status") == "ended")
-        cancelled_count = sum(1 for record in records if record.get("status") == "cancelled")
+        cancelled_count = sum(
+            1 for record in records if record.get("status") == "cancelled"
+        )
         active_tab = self._dashboard_active_tab(
             kwargs,
             {
@@ -527,9 +542,9 @@ class DashboardIntegration:
                 {self._dashboard_tab_button("create", "Create", active_tab)}
                 {self._dashboard_tab_button("manage", "Manage", active_tab)}
             </div>
-            <section class="dash-panel{' active' if active_tab == 'overview' else ''}" data-tab-panel="overview">{self._dashboard_records_section(guild, records)}</section>
-            <section class="dash-panel{' active' if active_tab == 'create' else ''}" data-tab-panel="create">{self._dashboard_start_section(guild, csrf)}{self._dashboard_attach_section(guild, csrf)}</section>
-            <section class="dash-panel{' active' if active_tab == 'manage' else ''}" data-tab-panel="manage">{self._dashboard_manage_section(giveaways, csrf)}{self._dashboard_reroll_section(giveaways, csrf)}</section>
+            <section class="dash-panel{" active" if active_tab == "overview" else ""}" data-tab-panel="overview">{self._dashboard_records_section(guild, records)}</section>
+            <section class="dash-panel{" active" if active_tab == "create" else ""}" data-tab-panel="create">{self._dashboard_start_section(guild, csrf)}{self._dashboard_attach_section(guild, csrf)}</section>
+            <section class="dash-panel{" active" if active_tab == "manage" else ""}" data-tab-panel="manage">{self._dashboard_manage_section(giveaways, csrf)}{self._dashboard_reroll_section(giveaways, csrf)}</section>
             {self._dashboard_tabs_script()}
         </div>
         """
@@ -537,7 +552,7 @@ class DashboardIntegration:
     def _dashboard_records_section(
         self,
         guild: discord.Guild,
-        records: typing.Sequence[typing.Dict[str, typing.Any]],
+        records: typing.Sequence[dict[str, typing.Any]],
     ) -> str:
         rows = []
         for record in records[:100]:
@@ -558,7 +573,7 @@ class DashboardIntegration:
                 f"<td>{self._h(record.get('entry_count') or 0)}</td>"
                 f"<td>{self._h(self._format_dashboard_time(record.get('ends_at')))}</td>"
                 f'<td><a href="{self._h(jump_url)}">Jump</a></td>'
-                "</tr>"
+                "</tr>",
             )
         table = "".join(rows) or (
             '<tr><td colspan="9" class="gw-muted">No giveaways are tracked.</td></tr>'
@@ -614,7 +629,7 @@ class DashboardIntegration:
 
     def _dashboard_manage_section(
         self,
-        giveaways: typing.Dict[str, typing.Dict[str, typing.Any]],
+        giveaways: dict[str, dict[str, typing.Any]],
         csrf: str,
     ) -> str:
         options = self._record_options(giveaways, status_filter={"active"})
@@ -647,7 +662,7 @@ class DashboardIntegration:
 
     def _dashboard_reroll_section(
         self,
-        giveaways: typing.Dict[str, typing.Dict[str, typing.Any]],
+        giveaways: dict[str, dict[str, typing.Any]],
         csrf: str,
     ) -> str:
         options = self._record_options(giveaways, status_filter={"ended"})
@@ -668,9 +683,9 @@ class DashboardIntegration:
 
     def _record_options(
         self,
-        giveaways: typing.Dict[str, typing.Dict[str, typing.Any]],
+        giveaways: dict[str, dict[str, typing.Any]],
         *,
-        status_filter: typing.Optional[typing.Set[str]] = None,
+        status_filter: set[str] | None = None,
     ) -> str:
         records = []
         for key, record in giveaways.items():
@@ -693,7 +708,7 @@ class DashboardIntegration:
     def _dashboard_required_text_channel(
         self,
         guild: discord.Guild,
-        channel_id: typing.Optional[int],
+        channel_id: int | None,
         error_message: str,
     ) -> discord.TextChannel:
         channel = guild.get_channel(channel_id) if channel_id else None
@@ -711,7 +726,7 @@ class DashboardIntegration:
         options = ['<option value="">None</option>']
         for channel in sorted(guild.text_channels, key=lambda item: item.name.lower()):
             options.append(
-                f'<option value="{channel.id}" {self._selected(channel.id, selected)}>#{self._h(channel.name)}</option>'
+                f'<option value="{channel.id}" {self._selected(channel.id, selected)}>#{self._h(channel.name)}</option>',
             )
         return (
             f'<div class="gw-field"><label>{self._h(label)}</label>'
@@ -725,8 +740,8 @@ class DashboardIntegration:
         value: typing.Any,
         input_type: str = "text",
         *,
-        min_value: typing.Optional[int] = None,
-        max_value: typing.Optional[int] = None,
+        min_value: int | None = None,
+        max_value: int | None = None,
     ) -> str:
         attrs = []
         if min_value is not None:
@@ -739,7 +754,14 @@ class DashboardIntegration:
             f'value="{self._h(value)}" {" ".join(attrs)}></div>'
         )
 
-    def _textarea(self, name: str, label: str, value: typing.Any, *, rows: int = 4) -> str:
+    def _textarea(
+        self,
+        name: str,
+        label: str,
+        value: typing.Any,
+        *,
+        rows: int = 4,
+    ) -> str:
         return (
             f'<div class="gw-field"><label>{self._h(label)}</label>'
             f'<textarea name="{self._h(name)}" rows="{rows}">{self._h(value)}</textarea></div>'
@@ -753,7 +775,9 @@ class DashboardIntegration:
             timestamp = float(value)
         except (TypeError, ValueError):
             return "Unknown"
-        return datetime.fromtimestamp(timestamp, tz=timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+        return datetime.fromtimestamp(timestamp, tz=timezone.utc).strftime(
+            "%Y-%m-%d %H:%M UTC",
+        )
 
     def _h(self, value: typing.Any) -> str:
         return html.escape("" if value is None else str(value), quote=True)

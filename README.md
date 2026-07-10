@@ -230,6 +230,23 @@ For command help inside Discord, use:
 [p]help <cogname>
 ```
 
+## Contributing
+
+Before opening a pull request, run [Ruff](https://docs.astral.sh/ruff/) to lint and format your changes:
+
+```bash
+ruff check --fix .
+ruff format .
+```
+
+If you have [pre-commit](https://pre-commit.com/) installed, you can also just run:
+
+```bash
+pre-commit install
+```
+
+once, and it will run these checks automatically on every commit.
+
 ## License
 
 This repository is licensed under the GNU AGPLv3 unless an individual cog states otherwise. See [LICENSE](./LICENSE) for details.

@@ -1,12 +1,9 @@
 [tool.ruff]
-line-length = 88
-target-version = "py38"
-force-exclude = true
+target-version = "py39"
 
 [tool.ruff.lint]
-select = [
-    "E9",
-    "F63",
-    "F7",
-    "F82",
+extend-select = [
+    "F", "W", "E", "I", "UP", "C4", "FA", "ISC", "ICN",
+    "RET", "SIM", "TID", "TC", "PTH", "NPY", "A", "BLE",
+    "COM", "DTZ", "N", "ASYNC"
 ]

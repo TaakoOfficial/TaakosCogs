@@ -1,11 +1,14 @@
-from .rpcalander import RPCalander
+import logging
 import subprocess
 import sys
-import logging
+
 import pkg_resources
 from redbot.core import commands
 
+from .rpcalander import RPCalander
+
 log = logging.getLogger("red.taakoscogs.rpcalander")
+
 
 def check_and_install_pytz():
     try:
@@ -22,7 +25,11 @@ def check_and_install_pytz():
             raise commands.ExtensionFailed(name="RPCalander", original=e) from e
         except pkg_resources.DistributionNotFound:
             log.error("pytz still not found after attempting installation.")
-            raise commands.ExtensionFailed(name="RPCalander", original=RuntimeError("Failed to install and verify pytz dependency."))
+            raise commands.ExtensionFailed(
+                name="RPCalander",
+                original=RuntimeError("Failed to install and verify pytz dependency."),
+            )
+
 
 async def setup(bot: commands.Bot):
     check_and_install_pytz()

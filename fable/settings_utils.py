@@ -1,8 +1,13 @@
 """Settings management for Fable's visual customization."""
-from typing import Dict, Optional
-from redbot.core import Config
-import discord
+
+from __future__ import annotations
+
 import re
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from redbot.core import Config
+
 
 class FableSettings:
     """Manages server-specific visual settings for Fable."""
@@ -18,10 +23,10 @@ class FableSettings:
             "background_color": 0x2F3136,
             "use_emojis": True,
             "compact_mode": False,
-            "show_timestamps": True
+            "show_timestamps": True,
         }
 
-    async def get_theme(self, guild_id: int) -> Dict:
+    async def get_theme(self, guild_id: int) -> dict:
         """
         Get the server's theme settings.
 
@@ -42,7 +47,7 @@ class FableSettings:
         self,
         guild_id: int,
         color_type: str,
-        color_value: str
+        color_value: str,
     ) -> bool:
         """
         Set a theme color for the server.
@@ -62,16 +67,16 @@ class FableSettings:
             Whether the color was set successfully
         """
         # Validate hex color
-        if not re.match(r'^#(?:[0-9a-fA-F]{3}){1,2}$', color_value):
+        if not re.match(r"^#(?:[0-9a-fA-F]{3}){1,2}$", color_value):
             return False
 
         async with self.config.guild_from_id(guild_id).theme() as theme:
             if not theme:
                 theme = self.default_theme.copy()
-            
-            color_int = int(color_value.lstrip('#'), 16)
+
+            color_int = int(color_value.lstrip("#"), 16)
             color_key = f"{color_type.lower()}_color"
-            
+
             if color_key in theme:
                 theme[color_key] = color_int
                 return True
@@ -80,8 +85,8 @@ class FableSettings:
     async def toggle_setting(
         self,
         guild_id: int,
-        setting: str
-    ) -> Optional[bool]:
+        setting: str,
+    ) -> bool | None:
         """
         Toggle a boolean theme setting.
 
@@ -100,7 +105,7 @@ class FableSettings:
         async with self.config.guild_from_id(guild_id).theme() as theme:
             if not theme:
                 theme = self.default_theme.copy()
-            
+
             if setting in theme and isinstance(theme[setting], bool):
                 theme[setting] = not theme[setting]
                 return theme[setting]
@@ -117,7 +122,7 @@ class FableSettings:
         """
         await self.config.guild_from_id(guild_id).theme.set(self.default_theme)
 
-    async def get_embed_style(self, guild_id: int) -> Dict:
+    async def get_embed_style(self, guild_id: int) -> dict:
         """
         Get the server's embed style preferences.
 
@@ -139,9 +144,9 @@ class FableSettings:
                 "warning": theme["warning_color"],
                 "error": theme["error_color"],
                 "info": theme["info_color"],
-                "background": theme["background_color"]
+                "background": theme["background_color"],
             },
             "use_emojis": theme["use_emojis"],
             "compact_mode": theme["compact_mode"],
-            "show_timestamps": theme["show_timestamps"]
+            "show_timestamps": theme["show_timestamps"],
         }

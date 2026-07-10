@@ -2,21 +2,26 @@
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import secrets
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import TYPE_CHECKING, Any
 
 import discord
 from redbot.core import Config, commands
-from redbot.core.bot import Red
 from redbot.core.utils.chat_formatting import box, pagify
 
 from .dashboard_integration import DashboardIntegration
 
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+    from redbot.core.bot import Red
+
 log = logging.getLogger("red.taakoscogs.captcha")
 
-PanelRecord = Dict[str, Any]
-ChallengeKey = Tuple[int, int, int]
+PanelRecord = dict[str, Any]
+ChallengeKey = tuple[int, int, int]
 
 
 class CaptchaCodeModal(discord.ui.Modal):
@@ -24,7 +29,7 @@ class CaptchaCodeModal(discord.ui.Modal):
 
     def __init__(
         self,
-        cog: "Captcha",
+        cog: Captcha,
         guild_id: int,
         panel_message_id: int,
         member_id: int,
@@ -63,7 +68,11 @@ class CaptchaCodeModal(discord.ui.Modal):
             self.code,
         )
 
-    async def on_error(self, interaction: discord.Interaction, error: Exception) -> None:
+    async def on_error(
+        self,
+        interaction: discord.Interaction,
+        error: Exception,
+    ) -> None:
         log.exception(
             "Captcha verification modal failed.",
             exc_info=(type(error), error, error.__traceback__),
@@ -84,7 +93,7 @@ class CaptchaCodeModal(discord.ui.Modal):
 class CaptchaPanelView(discord.ui.View):
     """Persistent verification button for one configured panel."""
 
-    def __init__(self, cog: "Captcha", message_id: int, label: str = "Verify") -> None:
+    def __init__(self, cog: Captcha, message_id: int, label: str = "Verify") -> None:
         super().__init__(timeout=None)
         self.cog = cog
         self.message_id = message_id
@@ -126,9 +135,9 @@ class Captcha(DashboardIntegration, commands.Cog):
             force_registration=True,
         )
         self.config.register_guild(panels={})
-        self._panel_views: Dict[Tuple[int, int], CaptchaPanelView] = {}
-        self._active_challenges: Dict[ChallengeKey, str] = {}
-        self._last_codes: Dict[ChallengeKey, str] = {}
+        self._panel_views: dict[tuple[int, int], CaptchaPanelView] = {}
+        self._active_challenges: dict[ChallengeKey, str] = {}
+        self._last_codes: dict[ChallengeKey, str] = {}
 
     async def cog_load(self) -> None:
         all_guilds = await self.config.all_guilds()
@@ -163,9 +172,11 @@ class Captcha(DashboardIntegration, commands.Cog):
                 self._last_codes.pop(key, None)
 
     @classmethod
-    def _generate_code(cls, previous: Optional[str] = None) -> str:
+    def _generate_code(cls, previous: str | None = None) -> str:
         while True:
-            code = "".join(secrets.choice(cls.CODE_ALPHABET) for _ in range(cls.CODE_LENGTH))
+            code = "".join(
+                secrets.choice(cls.CODE_ALPHABET) for _ in range(cls.CODE_LENGTH)
+            )
             if code != previous:
                 return code
 
@@ -182,31 +193,33 @@ class Captcha(DashboardIntegration, commands.Cog):
                 permissions.ban_members,
                 permissions.moderate_members,
                 permissions.manage_webhooks,
-            )
+            ),
         )
 
     def _validate_role(self, guild: discord.Guild, role: discord.Role) -> None:
         me = guild.me
         if role.guild.id != guild.id:
-            raise commands.BadArgument("The verification role must belong to this server.")
+            raise commands.BadArgument(
+                "The verification role must belong to this server.",
+            )
         if role.is_default() or role.managed:
             raise commands.BadArgument("Choose a normal role managed by server staff.")
         if self._dangerous_role_permissions(role):
             raise commands.BadArgument(
-                "The verification role cannot have administrative or moderation permissions."
+                "The verification role cannot have administrative or moderation permissions.",
             )
         if me is None or not me.guild_permissions.manage_roles:
             raise commands.CommandError("I need the Manage Roles permission.")
         if role >= me.top_role:
             raise commands.CommandError(
-                "Move my highest role above the verification role before using it."
+                "Move my highest role above the verification role before using it.",
             )
 
     def _validate_roles(
         self,
         guild: discord.Guild,
         roles: Sequence[discord.Role],
-    ) -> List[discord.Role]:
+    ) -> list[discord.Role]:
         unique_roles = list({role.id: role for role in roles}.values())
         if not unique_roles:
             raise commands.BadArgument("Configure at least one verification role.")
@@ -220,7 +233,7 @@ class Captcha(DashboardIntegration, commands.Cog):
         self,
         guild: discord.Guild,
         panel: PanelRecord,
-    ) -> List[discord.Role]:
+    ) -> list[discord.Role]:
         raw_role_ids = panel.get("role_ids")
         if not isinstance(raw_role_ids, list):
             raw_role_ids = [panel.get("role_id")]
@@ -235,7 +248,7 @@ class Captcha(DashboardIntegration, commands.Cog):
         roles = [guild.get_role(role_id) for role_id in role_ids]
         if not roles or any(role is None for role in roles):
             raise commands.CommandError(
-                "One or more verification roles no longer exist. Please contact server staff."
+                "One or more verification roles no longer exist. Please contact server staff.",
             )
         return self._validate_roles(guild, roles)
 
@@ -295,7 +308,9 @@ class Captcha(DashboardIntegration, commands.Cog):
         try:
             await message.edit(view=view)
         except discord.HTTPException as exc:
-            raise commands.CommandError("I could not attach the verification button.") from exc
+            raise commands.CommandError(
+                "I could not attach the verification button.",
+            ) from exc
         await self._save_panel(guild, message, roles, label, view)
 
     async def start_challenge(
@@ -310,7 +325,10 @@ class Captcha(DashboardIntegration, commands.Cog):
             )
             return
         if interaction.user.bot:
-            await interaction.response.send_message("Bots cannot verify.", ephemeral=True)
+            await interaction.response.send_message(
+                "Bots cannot verify.",
+                ephemeral=True,
+            )
             return
         if interaction.message is None or interaction.message.id != message_id:
             await interaction.response.send_message(
@@ -321,7 +339,9 @@ class Captcha(DashboardIntegration, commands.Cog):
         try:
             panel = await self._get_panel(interaction.guild, message_id)
             if str(panel.get("channel_id")) != str(interaction.channel_id):
-                raise commands.CommandError("This verification panel is not valid here.")
+                raise commands.CommandError(
+                    "This verification panel is not valid here.",
+                )
             roles = self._panel_roles(interaction.guild, panel)
         except commands.CommandError as error:
             await interaction.response.send_message(str(error), ephemeral=True)
@@ -344,7 +364,7 @@ class Captcha(DashboardIntegration, commands.Cog):
                 message_id,
                 interaction.user.id,
                 code,
-            )
+            ),
         )
 
     def clear_challenge(
@@ -396,7 +416,9 @@ class Captcha(DashboardIntegration, commands.Cog):
         try:
             panel = await self._get_panel(interaction.guild, message_id)
             roles = self._panel_roles(interaction.guild, panel)
-            missing_roles = [role for role in roles if role not in interaction.user.roles]
+            missing_roles = [
+                role for role in roles if role not in interaction.user.roles
+            ]
             if missing_roles:
                 await interaction.user.add_roles(
                     *missing_roles,
@@ -424,7 +446,11 @@ class Captcha(DashboardIntegration, commands.Cog):
             ephemeral=True,
         )
 
-    @commands.hybrid_group(name="captcha", aliases=["verification"], invoke_without_command=True)
+    @commands.hybrid_group(
+        name="captcha",
+        aliases=["verification"],
+        invoke_without_command=True,
+    )
     @commands.guild_only()
     @commands.bot_has_permissions(embed_links=True)
     async def captcha(self, ctx: commands.Context) -> None:
@@ -452,7 +478,11 @@ class Captcha(DashboardIntegration, commands.Cog):
 
     @captcha.command(name="post", with_app_command=False)
     @commands.admin_or_permissions(manage_guild=True)
-    @commands.bot_has_permissions(send_messages=True, embed_links=True, manage_roles=True)
+    @commands.bot_has_permissions(
+        send_messages=True,
+        embed_links=True,
+        manage_roles=True,
+    )
     async def captcha_post(
         self,
         ctx: commands.Context,
@@ -480,15 +510,16 @@ class Captcha(DashboardIntegration, commands.Cog):
             await self._install_panel(ctx.guild, message, roles, label)
         except (commands.CommandError, discord.HTTPException) as error:
             if message is not None:
-                try:
+                with contextlib.suppress(discord.HTTPException):
                     await message.delete()
-                except discord.HTTPException:
-                    pass
             await ctx.send(str(error))
             return
         await ctx.send(f"Captcha panel posted: {message.jump_url}")
 
-    @captcha.app_command.command(name="post", description="Post a captcha verification panel.")
+    @captcha.app_command.command(
+        name="post",
+        description="Post a captcha verification panel.",
+    )
     @discord.app_commands.describe(
         channel="Channel where the captcha panel will be posted",
         role="Role granted after successful verification",
@@ -510,15 +541,15 @@ class Captcha(DashboardIntegration, commands.Cog):
         interaction: discord.Interaction,
         channel: discord.TextChannel,
         role: discord.Role,
-        role_2: Optional[discord.Role] = None,
-        role_3: Optional[discord.Role] = None,
-        role_4: Optional[discord.Role] = None,
-        role_5: Optional[discord.Role] = None,
-        role_6: Optional[discord.Role] = None,
-        role_7: Optional[discord.Role] = None,
-        role_8: Optional[discord.Role] = None,
-        role_9: Optional[discord.Role] = None,
-        role_10: Optional[discord.Role] = None,
+        role_2: discord.Role | None = None,
+        role_3: discord.Role | None = None,
+        role_4: discord.Role | None = None,
+        role_5: discord.Role | None = None,
+        role_6: discord.Role | None = None,
+        role_7: discord.Role | None = None,
+        role_8: discord.Role | None = None,
+        role_9: discord.Role | None = None,
+        role_10: discord.Role | None = None,
         label: str = "Verify",
     ) -> None:
         """Native slash wrapper for the Greedy role-based prefix command."""
@@ -597,15 +628,15 @@ class Captcha(DashboardIntegration, commands.Cog):
         interaction: discord.Interaction,
         message_link: str,
         role: discord.Role,
-        role_2: Optional[discord.Role] = None,
-        role_3: Optional[discord.Role] = None,
-        role_4: Optional[discord.Role] = None,
-        role_5: Optional[discord.Role] = None,
-        role_6: Optional[discord.Role] = None,
-        role_7: Optional[discord.Role] = None,
-        role_8: Optional[discord.Role] = None,
-        role_9: Optional[discord.Role] = None,
-        role_10: Optional[discord.Role] = None,
+        role_2: discord.Role | None = None,
+        role_3: discord.Role | None = None,
+        role_4: discord.Role | None = None,
+        role_5: discord.Role | None = None,
+        role_6: discord.Role | None = None,
+        role_7: discord.Role | None = None,
+        role_8: discord.Role | None = None,
+        role_9: discord.Role | None = None,
+        role_10: discord.Role | None = None,
         label: str = "Verify",
     ) -> None:
         """Native slash wrapper for message conversion and Greedy roles."""
@@ -675,7 +706,7 @@ class Captcha(DashboardIntegration, commands.Cog):
                 f"Message {message_id} | "
                 f"{channel.mention if channel else 'missing channel'} | "
                 f"{role_text} | "
-                f"button `{record.get('button_label') or 'Verify'}`"
+                f"button `{record.get('button_label') or 'Verify'}`",
             )
         for page in pagify("\n".join(lines), page_length=1800):
             await ctx.send(box(page))
