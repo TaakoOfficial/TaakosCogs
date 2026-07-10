@@ -8,6 +8,8 @@ from typing import TYPE_CHECKING
 import discord
 from redbot.core import app_commands, commands
 
+from .dashboard_integration import DashboardIntegration
+
 if TYPE_CHECKING:
     from redbot.core.bot import Red
 
@@ -16,7 +18,7 @@ __red_end_user_data_statement__ = (
 )
 
 
-class Uppercase(commands.Cog):
+class Uppercase(DashboardIntegration, commands.Cog):
     """Create and rename text channels with visibly uppercase names."""
 
     BOLD_SANS_A_ORD = 0x1D5D4

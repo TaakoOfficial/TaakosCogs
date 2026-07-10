@@ -13,6 +13,8 @@ import discord
 from redbot.core import Config, commands
 from redbot.core.utils.chat_formatting import box, pagify
 
+from .dashboard_integration import DashboardIntegration
+
 if TYPE_CHECKING:
     from redbot.core.bot import Red
 
@@ -23,7 +25,7 @@ RepRecord = dict[str, Any]
 StatsRecord = dict[str, Any]
 
 
-class RepBoard(commands.Cog):
+class RepBoard(DashboardIntegration, commands.Cog):
     """Community reputation, kudos, public rep boards, and leaderboards."""
 
     CONFIG_IDENTIFIER = 2026051501
@@ -96,7 +98,8 @@ class RepBoard(commands.Cog):
                         )
                     record["reason"] = "[deleted by data request]"
                     record["active"] = False
-                    record["removed_at"] = record.get("removed_at") or self._now_ts()
+                    record["removed_at"] = record.get(
+                        "removed_at") or self._now_ts()
                     record["remove_reason"] = "Deleted by data request."
             await guild_conf.stats.set(stats)
             await guild_conf.records.set(records)
@@ -212,7 +215,8 @@ class RepBoard(commands.Cog):
         cleaned = " ".join((reason or "").strip().split())
         require_reason = bool(settings.get("require_reason"))
         min_length = int(settings.get("min_reason_length") or 0)
-        max_length = int(settings.get("max_reason_length") or cls.MAX_REASON_LENGTH)
+        max_length = int(settings.get("max_reason_length")
+                         or cls.MAX_REASON_LENGTH)
         max_length = max(1, min(max_length, cls.MAX_REASON_LENGTH))
 
         if not cleaned and require_reason:
@@ -359,7 +363,8 @@ class RepBoard(commands.Cog):
             for record in self._active_records(records)
             if str(record.get("receiver_id")) == str(member.id)
         ]
-        recent.sort(key=lambda item: float(item.get("created_at") or 0), reverse=True)
+        recent.sort(key=lambda item: float(
+            item.get("created_at") or 0), reverse=True)
 
         embed = discord.Embed(
             title=f"{member.display_name}'s Reputation",
@@ -367,7 +372,8 @@ class RepBoard(commands.Cog):
             timestamp=self._now(),
         )
         embed.set_thumbnail(url=member.display_avatar.url)
-        embed.add_field(name="Received", value=self._count(received), inline=True)
+        embed.add_field(name="Received", value=self._count(
+            received), inline=True)
         embed.add_field(name="Given", value=self._count(given), inline=True)
         embed.add_field(
             name="Rank",
@@ -379,7 +385,8 @@ class RepBoard(commands.Cog):
             for record in recent[:5]:
                 giver = self._user_ref(record.get("giver_id"))
                 reason = str(record.get("reason") or "No reason provided.")
-                lines.append(f"#{record.get('id')} from {giver}: {reason[:90]}")
+                lines.append(
+                    f"#{record.get('id')} from {giver}: {reason[:90]}")
             embed.add_field(
                 name="Recent Rep",
                 value="\n".join(lines)[:1024],
@@ -435,10 +442,12 @@ class RepBoard(commands.Cog):
         if me is None:
             return None
 
-        embed = self._rep_embed(ctx.guild, record, receiver_total=receiver_total)
+        embed = self._rep_embed(
+            ctx.guild, record, receiver_total=receiver_total)
         board_channel = await self._get_board_channel(ctx.guild, settings)
         fallback_channel = (
-            ctx.channel if isinstance(ctx.channel, discord.TextChannel) else None
+            ctx.channel if isinstance(
+                ctx.channel, discord.TextChannel) else None
         )
 
         channels: list[discord.TextChannel] = []
@@ -510,9 +519,11 @@ class RepBoard(commands.Cog):
                     "RepBoard is not enabled yet. Ask staff to run `[p]repboard setup`.",
                 )
             if receiver.bot and not settings.get("allow_bots"):
-                raise commands.CommandError("Reputation for bots is disabled here.")
+                raise commands.CommandError(
+                    "Reputation for bots is disabled here.")
             if giver.id == receiver.id and not settings.get("allow_self_rep"):
-                raise commands.CommandError("You cannot give reputation to yourself.")
+                raise commands.CommandError(
+                    "You cannot give reputation to yourself.")
 
             cleaned_reason = self._clean_reason(reason, settings)
             stats: dict[str, StatsRecord] = settings.get("stats") or {}
@@ -562,8 +573,10 @@ class RepBoard(commands.Cog):
 
             giver_stats["given"] = int(giver_stats.get("given") or 0) + 1
             giver_stats["last_given_at"] = now
-            giver_stats["daily_given"] = int(giver_stats.get("daily_given") or 0) + 1
-            receiver_stats["received"] = int(receiver_stats.get("received") or 0) + 1
+            giver_stats["daily_given"] = int(
+                giver_stats.get("daily_given") or 0) + 1
+            receiver_stats["received"] = int(
+                receiver_stats.get("received") or 0) + 1
             receiver_total = int(receiver_stats.get("received") or 0)
 
             records[self._record_key(rep_id)] = record
@@ -606,7 +619,8 @@ class RepBoard(commands.Cog):
             receiver_id = record.get("receiver_id")
             if giver_id:
                 giver_stats = self._ensure_stats(stats, giver_id)
-                giver_stats["given"] = max(0, int(giver_stats.get("given") or 0) - 1)
+                giver_stats["given"] = max(
+                    0, int(giver_stats.get("given") or 0) - 1)
             if receiver_id:
                 receiver_stats = self._ensure_stats(stats, receiver_id)
                 receiver_stats["received"] = max(
@@ -692,7 +706,8 @@ class RepBoard(commands.Cog):
         try:
             message = await self.bot.wait_for("message", check=check, timeout=timeout)
         except asyncio.TimeoutError as exc:
-            raise commands.CommandError("RepBoard walkthrough timed out.") from exc
+            raise commands.CommandError(
+                "RepBoard walkthrough timed out.") from exc
 
         answer = message.content.strip()
         if answer.lower() in {"cancel", "stop", "quit"}:
@@ -817,7 +832,8 @@ class RepBoard(commands.Cog):
         try:
             board_channel = await self._prompt_text_channel(
                 ctx,
-                "Step 1/5: Which channel should public reputation posts go to? Reply with a channel, `here`, or `none`.",
+                "Step 1/5: Which channel should public reputation posts go to? "
+                "Reply with a channel, `here`, or `none`.",
                 allow_none=True,
             )
             log_channel = await self._prompt_text_channel(
@@ -1096,7 +1112,8 @@ class RepBoard(commands.Cog):
             for record in self._active_records(records)
             if str(record.get("receiver_id")) == str(member.id)
         ]
-        history.sort(key=lambda item: float(item.get("created_at") or 0), reverse=True)
+        history.sort(key=lambda item: float(
+            item.get("created_at") or 0), reverse=True)
         if not history:
             await ctx.send(f"{member.mention} has not received reputation yet.")
             return

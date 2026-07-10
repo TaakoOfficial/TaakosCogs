@@ -7,8 +7,8 @@ import contextlib
 import io
 import json
 import logging
-import os
 import re
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import aiohttp
@@ -28,6 +28,17 @@ except ImportError:
     UnidentifiedImageError = OSError
 
 log = logging.getLogger("red.taakoscogs.welcome")
+
+RECOVERABLE_EXCEPTIONS = (
+    aiohttp.ClientError,
+    discord.DiscordException,
+    OSError,
+    RuntimeError,
+    ValueError,
+    KeyError,
+    TypeError,
+    AttributeError,
+)
 
 
 class Welcome(DashboardIntegration, commands.Cog):
@@ -180,11 +191,13 @@ class Welcome(DashboardIntegration, commands.Cog):
 
     @staticmethod
     def _sanitize_filename(url: str, content_type: str | None) -> str:
-        parsed_name = os.path.basename(url.split("?")[0].strip())
+        parsed_name = Path(url.split("?")[0].strip()).name
         if not parsed_name:
             parsed_name = "welcome-image"
 
-        name, ext = os.path.splitext(parsed_name)
+        parsed_path = Path(parsed_name)
+        name = parsed_path.stem
+        ext = parsed_path.suffix
         if not ext:
             guessed = None
             if content_type:
@@ -196,7 +209,8 @@ class Welcome(DashboardIntegration, commands.Cog):
                 "image/webp": ".webp",
                 "image/gif": ".gif",
             }.get(guessed, ".png")
-        safe_name = re.sub(r"[^a-zA-Z0-9._-]", "-", name).strip("-") or "welcome-image"
+        safe_name = re.sub(r"[^a-zA-Z0-9._-]", "-",
+                           name).strip("-") or "welcome-image"
         return f"{safe_name[:40]}{ext.lower()}"
 
     @classmethod
@@ -227,7 +241,8 @@ class Welcome(DashboardIntegration, commands.Cog):
         return sorted(unknown)
 
     def _member_context(self, member: discord.Member) -> dict[str, str]:
-        roles = [role for role in member.roles if role != member.guild.default_role]
+        roles = [role for role in member.roles if role !=
+            member.guild.default_role]
         top_role = (
             member.top_role if member.top_role != member.guild.default_role else None
         )
@@ -384,7 +399,8 @@ class Welcome(DashboardIntegration, commands.Cog):
         if "embeds" in payload:
             embeds = payload.get("embeds")
             if not isinstance(embeds, list) or not embeds:
-                raise commands.BadArgument("`embeds` must be a non-empty list.")
+                raise commands.BadArgument(
+                    "`embeds` must be a non-empty list.")
             if not isinstance(embeds[0], dict):
                 raise commands.BadArgument(
                     "The first entry in `embeds` must be an object.",
@@ -455,7 +471,8 @@ class Welcome(DashboardIntegration, commands.Cog):
             source = f"attachment `{attachment.filename}`"
 
         if not payload:
-            raise commands.BadArgument("Provide JSON text or attach a `.json` file.")
+            raise commands.BadArgument(
+                "Provide JSON text or attach a `.json` file.")
 
         payload = payload.strip()
         if payload.startswith("```") and payload.endswith("```"):
@@ -469,7 +486,8 @@ class Welcome(DashboardIntegration, commands.Cog):
             ) from exc
 
         if not isinstance(parsed, dict):
-            raise commands.BadArgument("Embed JSON must be a single JSON object.")
+            raise commands.BadArgument(
+                "Embed JSON must be a single JSON object.")
 
         embed_object = self._extract_embed_object(parsed)
         cleaned_embed = self._sanitize_embed_dict(embed_object)
@@ -477,34 +495,34 @@ class Welcome(DashboardIntegration, commands.Cog):
 
     async def _download_image(self, url: str) -> dict[str, str]:
         timeout = aiohttp.ClientTimeout(total=30)
-        async with aiohttp.ClientSession(timeout=timeout) as session:
-            async with session.get(url) as response:
-                if response.status != 200:
-                    raise commands.CommandError(
-                        f"Failed to download the image. HTTP status: {response.status}",
-                    )
-
-                content_type = (
-                    response.headers.get("Content-Type", "").split(";")[0].lower()
+        async with aiohttp.ClientSession(timeout=timeout) as session, session.get(url) as response:
+            if response.status != 200:
+                raise commands.CommandError(
+                    f"Failed to download the image. HTTP status: {response.status}",
                 )
-                if not content_type.startswith("image/"):
-                    raise commands.BadArgument(
-                        "The provided URL did not return an image.",
-                    )
 
-                data = await response.read()
-                if len(data) > self.IMAGE_SIZE_LIMIT:
-                    raise commands.BadArgument(
-                        "The downloaded image is larger than 8 MB. Use a smaller image.",
-                    )
+            content_type = (
+                response.headers.get(
+                    "Content-Type", "").split(";")[0].lower()
+            )
+            if not content_type.startswith("image/"):
+                raise commands.BadArgument(
+                    "The provided URL did not return an image.",
+                )
 
-                filename = self._sanitize_filename(url, content_type)
-                return {
-                    "source_url": url,
-                    "filename": filename,
-                    "content_type": content_type,
-                    "data_base64": base64.b64encode(data).decode("ascii"),
-                }
+            data = await response.read()
+            if len(data) > self.IMAGE_SIZE_LIMIT:
+                raise commands.BadArgument(
+                    "The downloaded image is larger than 8 MB. Use a smaller image.",
+                )
+
+            filename = self._sanitize_filename(url, content_type)
+            return {
+                "source_url": url,
+                "filename": filename,
+                "content_type": content_type,
+                "data_base64": base64.b64encode(data).decode("ascii"),
+            }
 
     @staticmethod
     def _discord_asset_size(size: int = 1024) -> int:
@@ -539,27 +557,27 @@ class Welcome(DashboardIntegration, commands.Cog):
     async def _download_member_avatar(self, member: discord.Member) -> bytes:
         url = self._member_avatar_url(member)
         timeout = aiohttp.ClientTimeout(total=30)
-        async with aiohttp.ClientSession(timeout=timeout) as session:
-            async with session.get(url) as response:
-                if response.status != 200:
-                    raise commands.CommandError(
-                        f"Failed to download the member avatar. HTTP status: {response.status}",
-                    )
-
-                content_type = (
-                    response.headers.get("Content-Type", "").split(";")[0].lower()
+        async with aiohttp.ClientSession(timeout=timeout) as session, session.get(url) as response:
+            if response.status != 200:
+                raise commands.CommandError(
+                    f"Failed to download the member avatar. HTTP status: {response.status}",
                 )
-                if not content_type.startswith("image/"):
-                    raise commands.CommandError(
-                        "The member avatar URL did not return an image.",
-                    )
 
-                data = await response.read()
-                if len(data) > self.IMAGE_SIZE_LIMIT:
-                    raise commands.CommandError(
-                        "The member avatar is larger than 8 MB.",
-                    )
-                return data
+            content_type = (
+                response.headers.get(
+                    "Content-Type", "").split(";")[0].lower()
+            )
+            if not content_type.startswith("image/"):
+                raise commands.CommandError(
+                    "The member avatar URL did not return an image.",
+                )
+
+            data = await response.read()
+            if len(data) > self.IMAGE_SIZE_LIMIT:
+                raise commands.CommandError(
+                    "The member avatar is larger than 8 MB.",
+                )
+            return data
 
     @staticmethod
     def _resampling_filter() -> Any:
@@ -568,8 +586,9 @@ class Welcome(DashboardIntegration, commands.Cog):
 
     @classmethod
     def _avatar_overlay_filename(cls, original_filename: str, extension: str) -> str:
-        name = os.path.splitext(original_filename or "welcome-image")[0]
-        safe_name = re.sub(r"[^a-zA-Z0-9._-]", "-", name).strip("-") or "welcome-image"
+        name = Path(original_filename or "welcome-image").stem
+        safe_name = re.sub(r"[^a-zA-Z0-9._-]", "-",
+                           name).strip("-") or "welcome-image"
         return f"{safe_name[:32]}-avatar{extension}"
 
     @classmethod
@@ -679,10 +698,11 @@ class Welcome(DashboardIntegration, commands.Cog):
     async def _get_guild_settings(self, guild: discord.Guild) -> dict[str, Any]:
         guild_conf = self.config.guild(guild)
         image_data = await guild_conf.image()
-        if not isinstance(image_data, dict):
-            image_data = self._empty_image_data()
-        else:
-            image_data = {**self._empty_image_data(), **image_data}
+        image_data = (
+            self._empty_image_data()
+            if not isinstance(image_data, dict)
+            else {**self._empty_image_data(), **image_data}
+        )
 
         avatar_overlay = self._normalize_avatar_overlay(
             await guild_conf.avatar_overlay(),
@@ -720,7 +740,7 @@ class Welcome(DashboardIntegration, commands.Cog):
                     filename,
                     avatar_overlay,
                 )
-            except Exception:
+            except RECOVERABLE_EXCEPTIONS:
                 log.exception(
                     "Failed to render welcome avatar overlay in guild %s for member %s",
                     member.guild.id,
@@ -739,7 +759,8 @@ class Welcome(DashboardIntegration, commands.Cog):
         if not embed_json:
             return None
 
-        rendered = self._normalise_embed_dict(self._render_data(embed_json, member))
+        rendered = self._normalise_embed_dict(
+            self._render_data(embed_json, member))
         embed = discord.Embed.from_dict(rendered)
         if image_mode == "embed" and attachment_filename and not embed.image.url:
             embed.set_image(url=f"attachment://{attachment_filename}")
@@ -822,7 +843,7 @@ class Welcome(DashboardIntegration, commands.Cog):
 
         try:
             await self._send_welcome_message(channel, member, settings)
-        except Exception:
+        except RECOVERABLE_EXCEPTIONS:
             log.exception(
                 "Failed to send welcome message in guild %s for member %s",
                 member.guild.id,
@@ -897,14 +918,16 @@ class Welcome(DashboardIntegration, commands.Cog):
             raise commands.BadArgument(f"Unknown placeholders: {unknown_text}")
 
         preview_member = (
-            ctx.author if isinstance(ctx.author, discord.Member) else ctx.guild.me
+            ctx.author if isinstance(
+                ctx.author, discord.Member) else ctx.guild.me
         )
         if preview_member is None:
-            raise commands.CommandError("I could not build a preview for this embed.")
+            raise commands.CommandError(
+                "I could not build a preview for this embed.")
 
         try:
             self._build_embed(embed_json, preview_member, None, "embed")
-        except Exception as exc:
+        except RECOVERABLE_EXCEPTIONS as exc:
             raise commands.BadArgument(
                 f"That JSON could not be converted into a Discord embed: {exc}",
             )
@@ -1054,7 +1077,8 @@ class Welcome(DashboardIntegration, commands.Cog):
             settings.get("avatar_overlay") or self._default_avatar_overlay()
         )
 
-        embed = discord.Embed(title="Welcome Settings", color=discord.Color.blurple())
+        embed = discord.Embed(title="Welcome Settings",
+                              color=discord.Color.blurple())
         embed.add_field(
             name="Enabled",
             value="Yes" if settings.get("enabled") else "No",
@@ -1079,7 +1103,8 @@ class Welcome(DashboardIntegration, commands.Cog):
                 inline=False,
             )
         else:
-            embed.add_field(name="Message Template", value="Not set", inline=False)
+            embed.add_field(name="Message Template",
+                            value="Not set", inline=False)
 
         embed.add_field(
             name="Custom Embed JSON",
@@ -1126,7 +1151,8 @@ class Welcome(DashboardIntegration, commands.Cog):
         """Preview the welcome message in the current channel."""
         member = member or ctx.author
         if not isinstance(member, discord.Member):
-            raise commands.BadArgument("The preview target must be a server member.")
+            raise commands.BadArgument(
+                "The preview target must be a server member.")
 
         settings = await self._get_guild_settings(ctx.guild)
         await self._send_welcome_message(ctx.channel, member, settings)

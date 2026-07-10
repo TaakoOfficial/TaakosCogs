@@ -19,6 +19,16 @@ from .dashboard_integration import DashboardIntegration
 if TYPE_CHECKING:
     from redbot.core.bot import Red
 
+RECOVERABLE_EXCEPTIONS = (
+    discord.DiscordException,
+    OSError,
+    RuntimeError,
+    ValueError,
+    KeyError,
+    TypeError,
+    AttributeError,
+)
+
 
 class YALC(DashboardIntegration, commands.Cog):
     """Yet Another Logging Cog for Red-DiscordBot.
@@ -290,7 +300,8 @@ class YALC(DashboardIntegration, commands.Cog):
             "ignore_webhooks": False,
             "ignore_tupperbox": True,
             "ignore_apps": True,
-            "tupperbox_ids": ["239232811662311425"],  # Default Tupperbox bot ID
+            # Default Tupperbox bot ID
+            "tupperbox_ids": ["239232811662311425"],
             "include_thumbnails": True,
             "detect_proxy_deletes": True,
             "message_prefix_filter": [],
@@ -300,7 +311,8 @@ class YALC(DashboardIntegration, commands.Cog):
             "custom_message": "",
             "log_retention_days": 7,
             # Voice session tracking
-            "voice_sessions": {},  # Active sessions: user_id -> {"channel_id": int, "start_time": float}
+            # Active sessions: user_id -> {"channel_id": int, "start_time": float}
+            "voice_sessions": {},
             "voice_events": [],  # Recent events history: max 50 entries
         }
 
@@ -379,7 +391,7 @@ class YALC(DashboardIntegration, commands.Cog):
             except (discord.Forbidden, asyncio.TimeoutError):
                 # Don't retry for permission or timeout errors
                 break
-            except Exception as e:
+            except RECOVERABLE_EXCEPTIONS as e:
                 self.log.error(f"Unexpected error in audit log fetch: {e}")
                 break
 
@@ -487,7 +499,7 @@ class YALC(DashboardIntegration, commands.Cog):
         if callable(checker):
             try:
                 return bool(checker())
-            except Exception:
+            except RECOVERABLE_EXCEPTIONS:
                 return False
         return bool(getattr(role, "premium_subscriber", False))
 
@@ -546,7 +558,7 @@ class YALC(DashboardIntegration, commands.Cog):
                     reset(seek=True)
                 except TypeError:
                     reset()
-                except Exception:
+                except RECOVERABLE_EXCEPTIONS:
                     continue
 
     async def _copy_deleted_image_attachments(
@@ -588,7 +600,7 @@ class YALC(DashboardIntegration, commands.Cog):
                 copy_notes.append(
                     f"`{filename}` could not be copied ({e.__class__.__name__}).",
                 )
-            except Exception as e:
+            except RECOVERABLE_EXCEPTIONS as e:
                 self.log.debug(
                     f"Could not copy deleted image attachment {filename}: {e}",
                     exc_info=True,
@@ -596,7 +608,8 @@ class YALC(DashboardIntegration, commands.Cog):
                 copy_notes.append(f"`{filename}` could not be copied.")
 
         if copied_files:
-            copy_notes.insert(0, f"Copied {len(copied_files)} deleted image(s) below.")
+            copy_notes.insert(
+                0, f"Copied {len(copied_files)} deleted image(s) below.")
 
         return copied_files, copy_notes
 
@@ -607,7 +620,7 @@ class YALC(DashboardIntegration, commands.Cog):
             if callable(close):
                 try:
                     close()
-                except Exception:
+                except RECOVERABLE_EXCEPTIONS:
                     continue
 
     def _prune_recent_role_event_logs(self) -> None:
@@ -723,12 +736,13 @@ class YALC(DashboardIntegration, commands.Cog):
                 embed.add_field(name="Reason", value=reason, inline=False)
 
             event_time = datetime.datetime.now(datetime.UTC)
-            self.set_embed_footer(embed, event_time=event_time, label=footer_label)
+            self.set_embed_footer(
+                embed, event_time=event_time, label=footer_label)
 
             sent_message = await self.safe_send(channel, embed=embed)
             if sent_message:
                 self._mark_role_event_logged(guild.id, event_type, role_key)
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(
                 f"Failed to log {event_type} from audit log fallback: {e}",
                 exc_info=True,
@@ -773,7 +787,8 @@ class YALC(DashboardIntegration, commands.Cog):
 
             # 1. Check if this event type is enabled at all
             if not settings["events"].get(event_type, False):
-                self.log.debug(f"Event type {event_type} is disabled in settings")
+                self.log.debug(
+                    f"Event type {event_type} is disabled in settings")
                 return False
 
             # 2. Channel-based ignore checks
@@ -814,7 +829,8 @@ class YALC(DashboardIntegration, commands.Cog):
             if user:
                 # Direct user ignore
                 if user.id in settings["ignored_users"]:
-                    self.log.debug(f"User {user.id} is in the ignored users list")
+                    self.log.debug(
+                        f"User {user.id} is in the ignored users list")
                     return False
 
                 # Role-based ignore (only for Members)
@@ -881,7 +897,12 @@ class YALC(DashboardIntegration, commands.Cog):
                             and rule["channel_id"] == channel.parent.id
                         ):
                             self.log.debug(
-                                f"Event {event_type} from user {user.id} in thread {channel.id} (parent channel {channel.parent.id} granularly ignored)",
+                                "Event %s from user %s in thread %s "
+                                "(parent channel %s granularly ignored)",
+                                event_type,
+                                user.id,
+                                channel.id,
+                                channel.parent.id,
                             )
                             return False
 
@@ -900,7 +921,7 @@ class YALC(DashboardIntegration, commands.Cog):
             # If we've passed all ignore checks, we should log this event
             return True
 
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Error in should_log_event: {e}", exc_info=True)
             # Default to True if an error occurred (better to log in case of doubt)
             return True
@@ -1122,12 +1143,14 @@ class YALC(DashboardIntegration, commands.Cog):
                     and len(field_value_str) > 512
                 ):
                     # Be more conservative with content fields
-                    field_value_str = self._smart_truncate(field_value_str, 509) + "..."
+                    field_value_str = self._smart_truncate(
+                        field_value_str, 509) + "..."
 
                 embed.add_field(
                     name=self._format_embed_field_name(field_name),
                     value=field_value_str,
-                    inline=self._should_inline_embed_field(field_name, field_value_str),
+                    inline=self._should_inline_embed_field(
+                        field_name, field_value_str),
                 )
 
         return embed
@@ -1253,14 +1276,18 @@ class YALC(DashboardIntegration, commands.Cog):
 
         # Check if the embed exceeds Discord limits after footer is added
         total_size = self._calculate_embed_size(embed)
-        DISCORD_EMBED_LIMIT = 6000  # Discord's total embed character limit
+        discord_embed_limit = 6000  # Discord's total embed character limit
 
-        if total_size <= DISCORD_EMBED_LIMIT:
+        if total_size <= discord_embed_limit:
             return embed
 
         # If we're over the limit, we need to intelligently truncate content
         self.log.warning(
-            f"Embed size ({total_size}) exceeds Discord limit ({DISCORD_EMBED_LIMIT}) for event_type: {event_type}. Applying intelligent truncation.",
+            "Embed size (%s) exceeds Discord limit (%s) for event_type: %s. "
+            "Applying intelligent truncation.",
+            total_size,
+            discord_embed_limit,
+            event_type,
         )
 
         # Create a new embed with more aggressive truncation
@@ -1274,7 +1301,8 @@ class YALC(DashboardIntegration, commands.Cog):
         )
 
         # Add fields with more aggressive truncation, prioritizing important fields
-        important_fields = ["user", "author", "member", "channel", "role", "reason"]
+        important_fields = ["user", "author",
+            "member", "channel", "role", "reason"]
         regular_fields = []
         content_fields = []
 
@@ -1285,7 +1313,8 @@ class YALC(DashboardIntegration, commands.Cog):
                 if any(important in field_name_lower for important in important_fields):
                     # Important fields get priority and moderate truncation
                     if isinstance(field_value, str) and len(field_value) > 512:
-                        field_value = self._smart_truncate(field_value, 509) + "..."
+                        field_value = self._smart_truncate(
+                            field_value, 509) + "..."
                     embed.add_field(
                         name=self._format_embed_field_name(field_name),
                         value=self._format_embed_field_value(field_name, field_value)[
@@ -1302,31 +1331,35 @@ class YALC(DashboardIntegration, commands.Cog):
 
         # Add regular fields if we have space
         current_size = self._calculate_embed_size(embed)
-        DISCORD_EMBED_LIMIT - current_size - 500  # Reserve space for footer and safety
+        discord_embed_limit - current_size - 500  # Reserve space for footer and safety
 
         for field_name, field_value in regular_fields:
-            field_value_str = self._format_embed_field_value(field_name, field_value)
+            field_value_str = self._format_embed_field_value(
+                field_name, field_value)
             if len(field_value_str) > 256:
-                field_value_str = self._smart_truncate(field_value_str, 253) + "..."
+                field_value_str = self._smart_truncate(
+                    field_value_str, 253) + "..."
 
             # Estimate field size (name + value + some overhead)
             field_name_str = self._format_embed_field_name(field_name)
             field_size = len(field_name_str) + len(field_value_str) + 10
 
-            if current_size + field_size < DISCORD_EMBED_LIMIT - 200:  # Safety margin
+            if current_size + field_size < discord_embed_limit - 200:  # Safety margin
                 embed.add_field(
                     name=field_name_str,
                     value=field_value_str,
-                    inline=self._should_inline_embed_field(field_name, field_value_str),
+                    inline=self._should_inline_embed_field(
+                        field_name, field_value_str),
                 )
                 current_size += field_size
             else:
                 break  # No more space
 
         # Add content fields if we still have space
-        for field_name, field_value in content_fields[:1]:  # Only add one content field
+        # Only add one content field
+        for field_name, field_value in content_fields[:1]:
             current_size = self._calculate_embed_size(embed)
-            available_space = DISCORD_EMBED_LIMIT - current_size - 200  # Safety margin
+            available_space = discord_embed_limit - current_size - 200  # Safety margin
 
             if available_space > 100:  # Only if we have reasonable space
                 max_content_length = min(
@@ -1339,7 +1372,8 @@ class YALC(DashboardIntegration, commands.Cog):
                 )
                 if len(field_value_str) > max_content_length:
                     field_value_str = (
-                        self._smart_truncate(field_value_str, max_content_length - 3)
+                        self._smart_truncate(
+                            field_value_str, max_content_length - 3)
                         + "..."
                     )
 
@@ -1357,7 +1391,7 @@ class YALC(DashboardIntegration, commands.Cog):
         if fields_added < total_fields_available:
             # Try to add a notice about truncated content
             current_size = self._calculate_embed_size(embed)
-            if current_size + 100 < DISCORD_EMBED_LIMIT:
+            if current_size + 100 < discord_embed_limit:
                 skipped_count = total_fields_available - fields_added
                 embed.add_field(
                     name="⚠️ Content Truncated",
@@ -1370,21 +1404,21 @@ class YALC(DashboardIntegration, commands.Cog):
 
         # Final size check and emergency truncation
         final_size = self._calculate_embed_size(embed)
-        if final_size > DISCORD_EMBED_LIMIT:
+        if final_size > discord_embed_limit:
             # Emergency truncation - remove fields from the end until we fit
             while (
                 len(embed.fields) > 0
-                and self._calculate_embed_size(embed) > DISCORD_EMBED_LIMIT
+                and self._calculate_embed_size(embed) > discord_embed_limit
             ):
                 embed.remove_field(-1)
 
             # If we still don't fit, truncate the description more aggressively
             if (
-                self._calculate_embed_size(embed) > DISCORD_EMBED_LIMIT
+                self._calculate_embed_size(embed) > discord_embed_limit
                 and embed.description
             ):
                 available_desc_space = (
-                    DISCORD_EMBED_LIMIT
+                    discord_embed_limit
                     - (self._calculate_embed_size(embed) - len(embed.description))
                     - 100
                 )
@@ -1433,7 +1467,8 @@ class YALC(DashboardIntegration, commands.Cog):
         # Set footer with the existing logo URL
         embed.set_footer(
             text=f"{label} • {formatted_time}",
-            icon_url="https://cdn-icons-png.flaticon.com/512/928/928797.png",  # Preserved existing logo
+            # Preserved existing logo
+            icon_url="https://cdn-icons-png.flaticon.com/512/928/928797.png",
         )
 
     async def cog_unload(self) -> None:
@@ -1441,9 +1476,11 @@ class YALC(DashboardIntegration, commands.Cog):
         try:
             dashboard_cog = self.bot.get_cog("Dashboard")
             if dashboard_cog and hasattr(dashboard_cog, "rpc"):
-                dashboard_cog.rpc.third_parties_handler.remove_third_party(self)
-        except Exception as e:
-            self.log.error(f"Error removing dashboard integration: {e}", exc_info=True)
+                dashboard_cog.rpc.third_parties_handler.remove_third_party(
+                    self)
+        except RECOVERABLE_EXCEPTIONS as e:
+            self.log.error(
+                f"Error removing dashboard integration: {e}", exc_info=True)
 
         # Clean up voice sessions and other resources
         try:
@@ -1451,7 +1488,7 @@ class YALC(DashboardIntegration, commands.Cog):
             for guild in self.bot.guilds:
                 async with self.config.guild(guild).voice_sessions() as sessions:
                     sessions.clear()
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(
                 f"Error clearing voice sessions during unload: {e}",
                 exc_info=True,
@@ -1476,7 +1513,7 @@ class YALC(DashboardIntegration, commands.Cog):
         try:
             await modlog.register_casetypes(case_types)
             self.log.info("Registered all YALC events as modlog case types.")
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Failed to register YALC case types: {e}")
 
         # Dashboard integration will be handled by the on_dashboard_cog_add listener
@@ -1595,30 +1632,37 @@ class YALC(DashboardIntegration, commands.Cog):
                 changes = []
 
                 if before.self_mute != after.self_mute:
-                    changes.append(f"Self Mute: {before.self_mute} → {after.self_mute}")
+                    changes.append(
+                        f"Self Mute: {before.self_mute} → {after.self_mute}")
                 if before.self_deaf != after.self_deaf:
                     changes.append(
                         f"Self Deafen: {before.self_deaf} → {after.self_deaf}",
                     )
                 if before.mute != after.mute:
-                    changes.append(f"Server Mute: {before.mute} → {after.mute}")
+                    changes.append(
+                        f"Server Mute: {before.mute} → {after.mute}")
                 if before.deaf != after.deaf:
-                    changes.append(f"Server Deafen: {before.deaf} → {after.deaf}")
+                    changes.append(
+                        f"Server Deafen: {before.deaf} → {after.deaf}")
                 if before.self_stream != after.self_stream:
                     changes.append(
                         f"Streaming: {before.self_stream} → {after.self_stream}",
                     )
                 if before.self_video != after.self_video:
-                    changes.append(f"Camera: {before.self_video} → {after.self_video}")
+                    changes.append(
+                        f"Camera: {before.self_video} → {after.self_video}")
                 if before.suppress != after.suppress:
-                    changes.append(f"Suppressed: {before.suppress} → {after.suppress}")
+                    changes.append(
+                        f"Suppressed: {before.suppress} → {after.suppress}")
                 if getattr(before, "requested_to_speak_at", None) != getattr(
                     after,
                     "requested_to_speak_at",
                     None,
                 ):
-                    before_request = getattr(before, "requested_to_speak_at", None)
-                    after_request = getattr(after, "requested_to_speak_at", None)
+                    before_request = getattr(
+                        before, "requested_to_speak_at", None)
+                    after_request = getattr(
+                        after, "requested_to_speak_at", None)
                     changes.append(
                         "Request to Speak: "
                         f"{discord.utils.format_dt(before_request, 'R') if before_request else 'None'} → "
@@ -1664,7 +1708,10 @@ class YALC(DashboardIntegration, commands.Cog):
                 if before.channel and after.channel:
                     embed.add_field(
                         name="Channels",
-                        value=f"**From:** {before.channel.mention} (`{before.channel.name}`)\n**To:** {after.channel.mention} (`{after.channel.name}`)",
+                        value=(
+                            f"**From:** {before.channel.mention} (`{before.channel.name}`)\n"
+                            f"**To:** {after.channel.mention} (`{after.channel.name}`)"
+                        ),
                         inline=True,
                     )
                 elif before.channel:
@@ -1762,7 +1809,8 @@ class YALC(DashboardIntegration, commands.Cog):
                 embed.set_thumbnail(url=member.display_avatar.url)
 
             # Set footer
-            self.set_embed_footer(embed, label="YALC Logger • Voice State Update")
+            self.set_embed_footer(
+                embed, label="YALC Logger • Voice State Update")
 
             await self.safe_send(channel, embed=embed)
 
@@ -1829,21 +1877,24 @@ class YALC(DashboardIntegration, commands.Cog):
                             session_key = str(user_id)
                             if session_key in sessions:
                                 session = sessions[session_key]
-                                if session.get("active", False):
-                                    # Update channel if necessary
-                                    if session["channel_id"] != current_channel_id:
-                                        await self._log_voice_event(
-                                            guild,
-                                            user_id,
-                                            "channel_move",
-                                            channel_id=current_channel_id,
+                                if (
+                                    session.get("active", False)
+                                    and session["channel_id"] != current_channel_id
+                                ):
+                                    await self._log_voice_event(
+                                        guild,
+                                        user_id,
+                                        "channel_move",
+                                        channel_id=current_channel_id,
                                         )
 
-            except Exception as e:
-                self.log.error(f"Error in voice session tracking: {e}", exc_info=True)
+            except RECOVERABLE_EXCEPTIONS as e:
+                self.log.error(
+                    f"Error in voice session tracking: {e}", exc_info=True)
 
-        except Exception as e:
-            self.log.error(f"Failed to log voice_state_update: {e}", exc_info=True)
+        except RECOVERABLE_EXCEPTIONS as e:
+            self.log.error(
+                f"Failed to log voice_state_update: {e}", exc_info=True)
 
     async def _log_message_pin(self, message: discord.Message) -> None:
         """Log message pin events with audit log integration."""
@@ -1891,7 +1942,8 @@ class YALC(DashboardIntegration, commands.Cog):
                     inline=True,
                 )
                 if entry.reason:
-                    embed.add_field(name="Reason", value=entry.reason, inline=False)
+                    embed.add_field(
+                        name="Reason", value=entry.reason, inline=False)
 
             # Include user thumbnail
             settings = await self.config.guild(message.guild).all()
@@ -1903,7 +1955,7 @@ class YALC(DashboardIntegration, commands.Cog):
 
             await self.safe_send(channel, embed=embed)
 
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Failed to log message_pin: {e}")
 
     async def _log_message_unpin(self, message: discord.Message) -> None:
@@ -1952,7 +2004,8 @@ class YALC(DashboardIntegration, commands.Cog):
                     inline=True,
                 )
                 if entry.reason:
-                    embed.add_field(name="Reason", value=entry.reason, inline=False)
+                    embed.add_field(
+                        name="Reason", value=entry.reason, inline=False)
 
             # Include user thumbnail
             settings = await self.config.guild(message.guild).all()
@@ -1964,7 +2017,7 @@ class YALC(DashboardIntegration, commands.Cog):
 
             await self.safe_send(channel, embed=embed)
 
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Failed to log message_unpin: {e}")
 
     @commands.Cog.listener()
@@ -2025,7 +2078,7 @@ class YALC(DashboardIntegration, commands.Cog):
 
             await self.safe_send(channel, embed=embed)
 
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Failed to log reaction_add: {e}")
 
     @commands.Cog.listener()
@@ -2089,7 +2142,7 @@ class YALC(DashboardIntegration, commands.Cog):
 
             await self.safe_send(channel, embed=embed)
 
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Failed to log reaction_remove: {e}")
 
     @commands.Cog.listener()
@@ -2145,7 +2198,7 @@ class YALC(DashboardIntegration, commands.Cog):
 
             await self.safe_send(channel, embed=embed)
 
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Failed to log reaction_clear: {e}")
 
     @commands.Cog.listener()
@@ -2197,7 +2250,7 @@ class YALC(DashboardIntegration, commands.Cog):
 
             await self.safe_send(channel, embed=embed)
 
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Failed to log integration_create: {e}")
 
     @commands.Cog.listener()
@@ -2231,8 +2284,10 @@ class YALC(DashboardIntegration, commands.Cog):
                 "integration_update",
                 f"🔄 Integration updated: **{integration.name}**",
             )
-            embed.add_field(name="Type", value=str(integration.type), inline=True)
-            embed.add_field(name="Enabled", value=str(integration.enabled), inline=True)
+            embed.add_field(name="Type", value=str(
+                integration.type), inline=True)
+            embed.add_field(name="Enabled", value=str(
+                integration.enabled), inline=True)
 
             if entry and entry.user:
                 embed.add_field(
@@ -2241,13 +2296,14 @@ class YALC(DashboardIntegration, commands.Cog):
                     inline=True,
                 )
                 if entry.reason:
-                    embed.add_field(name="Reason", value=entry.reason, inline=False)
+                    embed.add_field(
+                        name="Reason", value=entry.reason, inline=False)
 
             embed.set_footer(text=f"Integration ID: {integration.id}")
 
             await self.safe_send(channel, embed=embed)
 
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Failed to log integration_update: {e}")
 
     @commands.Cog.listener()
@@ -2298,14 +2354,15 @@ class YALC(DashboardIntegration, commands.Cog):
                     inline=True,
                 )
                 if entry.reason:
-                    embed.add_field(name="Reason", value=entry.reason, inline=False)
+                    embed.add_field(
+                        name="Reason", value=entry.reason, inline=False)
 
             if integration_id:
                 embed.set_footer(text=f"Integration ID: {integration_id}")
 
             await self.safe_send(channel, embed=embed)
 
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Failed to log integration_delete: {e}")
 
     @commands.Cog.listener()
@@ -2355,7 +2412,7 @@ class YALC(DashboardIntegration, commands.Cog):
 
             await self.safe_send(log_channel, embed=embed)
 
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Failed to log webhook_update: {e}")
 
     @commands.Cog.listener()
@@ -2425,7 +2482,7 @@ class YALC(DashboardIntegration, commands.Cog):
 
             await self.safe_send(channel, embed=embed)
 
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Failed to log automod_rule_create: {e}")
 
     @commands.Cog.listener()
@@ -2470,7 +2527,8 @@ class YALC(DashboardIntegration, commands.Cog):
             actions_list = []
             for action in rule.actions:
                 action_type = (
-                    str(getattr(action, "type", action)).replace("_", " ").title()
+                    str(getattr(action, "type", action),
+                        ).replace("_", " ").title()
                 )
                 actions_list.append(f"• {action_type}")
             if actions_list:
@@ -2487,13 +2545,14 @@ class YALC(DashboardIntegration, commands.Cog):
                     inline=True,
                 )
                 if entry.reason:
-                    embed.add_field(name="Reason", value=entry.reason, inline=False)
+                    embed.add_field(
+                        name="Reason", value=entry.reason, inline=False)
 
             embed.set_footer(text=f"Rule ID: {rule.id}")
 
             await self.safe_send(channel, embed=embed)
 
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Failed to log automod_rule_update: {e}")
 
     @commands.Cog.listener()
@@ -2540,7 +2599,7 @@ class YALC(DashboardIntegration, commands.Cog):
 
             await self.safe_send(channel, embed=embed)
 
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Failed to log automod_rule_delete: {e}")
 
     @commands.Cog.listener()
@@ -2598,7 +2657,8 @@ class YALC(DashboardIntegration, commands.Cog):
                 metadata_info = []
                 for metadata in execution.action.metadatas:
                     if hasattr(metadata, "channel_id"):
-                        channel_obj = execution.guild.get_channel(metadata.channel_id)
+                        channel_obj = execution.guild.get_channel(
+                            metadata.channel_id)
                         metadata_info.append(
                             f"• Timeout in {channel_obj.mention}"
                             if channel_obj
@@ -2638,237 +2698,8 @@ class YALC(DashboardIntegration, commands.Cog):
 
             await self.safe_send(channel, embed=embed)
 
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Failed to log automod_action: {e}")
-
-    @commands.Cog.listener()
-    async def on_thread_create(self, thread: discord.Thread) -> None:
-        """Log thread creation events."""
-        self.log.debug("Listener triggered: on_thread_create")
-        if not thread.guild:
-            return
-        try:
-            should_log = await self.should_log_event(
-                thread.guild,
-                "thread_create",
-                channel=thread,
-            )
-            if not should_log:
-                return
-            channel = await self.get_log_channel(thread.guild, "thread_create")
-            if not channel:
-                return
-
-            # Try to get audit log information
-            entry = await self._get_audit_log_entry(
-                thread.guild,
-                discord.AuditLogAction.thread_create,
-                target=thread.parent,
-                timeout_seconds=10,
-            )
-
-            embed = self.create_embed(
-                "thread_create",
-                f"🧵 Thread created: {thread.mention}",
-                thread_name=thread.name,
-                parent_channel=thread.parent.mention if thread.parent else "Unknown",
-                thread_type=str(thread.type).replace("_", " ").title(),
-                auto_archive_duration=f"{thread.auto_archive_duration} minutes"
-                if thread.auto_archive_duration
-                else "Default",
-            )
-
-            if entry and entry.user:
-                embed.add_field(
-                    name="Created By",
-                    value=f"{entry.user.mention} (`{entry.user}`, ID: `{entry.user.id}`)",
-                    inline=True,
-                )
-
-            embed.set_footer(text=f"Thread ID: {thread.id}")
-            await self.safe_send(channel, embed=embed)
-
-        except Exception as e:
-            self.log.error(f"Failed to log thread_create: {e}")
-
-    @commands.Cog.listener()
-    async def on_thread_delete(self, thread: discord.Thread) -> None:
-        """Log thread deletion events."""
-        self.log.debug("Listener triggered: on_thread_delete")
-        if not thread.guild:
-            return
-        try:
-            should_log = await self.should_log_event(
-                thread.guild,
-                "thread_delete",
-                channel=thread,
-            )
-            if not should_log:
-                return
-            channel = await self.get_log_channel(thread.guild, "thread_delete")
-            if not channel:
-                return
-
-            # Try to get audit log information
-            entry = await self._get_audit_log_entry(
-                thread.guild,
-                discord.AuditLogAction.thread_delete,
-                target=thread.parent,
-                timeout_seconds=10,
-            )
-
-            embed = self.create_embed(
-                "thread_delete",
-                f"🗑️ Thread deleted: **{thread.name}**",
-                parent_channel=thread.parent.mention if thread.parent else "Unknown",
-                thread_type=str(thread.type).replace("_", " ").title(),
-            )
-
-            if entry and entry.user:
-                embed.add_field(
-                    name="Deleted By",
-                    value=f"{entry.user.mention} (`{entry.user}`, ID: `{entry.user.id}`)",
-                    inline=True,
-                )
-
-            embed.set_footer(text=f"Thread ID: {thread.id}")
-            await self.safe_send(channel, embed=embed)
-
-        except Exception as e:
-            self.log.error(f"Failed to log thread_delete: {e}")
-
-    @commands.Cog.listener()
-    async def on_thread_update(
-        self,
-        before: discord.Thread,
-        after: discord.Thread,
-    ) -> None:
-        """Log thread update events."""
-        self.log.debug("Listener triggered: on_thread_update")
-        if not before.guild:
-            return
-        try:
-            should_log = await self.should_log_event(
-                before.guild,
-                "thread_update",
-                channel=after,
-            )
-            if not should_log:
-                return
-            channel = await self.get_log_channel(before.guild, "thread_update")
-            if not channel:
-                return
-
-            changes = []
-            if before.name != after.name:
-                changes.append(f"Name: `{before.name}` → `{after.name}`")
-            if before.archived != after.archived:
-                changes.append(f"Archived: `{before.archived}` → `{after.archived}`")
-            if before.locked != after.locked:
-                changes.append(f"Locked: `{before.locked}` → `{after.locked}`")
-            if before.auto_archive_duration != after.auto_archive_duration:
-                changes.append(
-                    f"Auto Archive: `{before.auto_archive_duration}` → `{after.auto_archive_duration}` minutes",
-                )
-
-            if not changes:
-                return
-
-            # Try to get audit log information
-            entry = await self._get_audit_log_entry(
-                before.guild,
-                discord.AuditLogAction.thread_update,
-                target=after.parent,
-                timeout_seconds=10,
-            )
-
-            embed = self.create_embed(
-                "thread_update",
-                f"🔄 Thread updated: {after.mention}",
-            )
-
-            embed.add_field(name="Changes", value="\n".join(changes), inline=False)
-
-            if entry and entry.user:
-                embed.add_field(
-                    name="Updated By",
-                    value=f"{entry.user.mention} (`{entry.user}`, ID: `{entry.user.id}`)",
-                    inline=True,
-                )
-
-            embed.set_footer(text=f"Thread ID: {after.id}")
-            await self.safe_send(channel, embed=embed)
-
-        except Exception as e:
-            self.log.error(f"Failed to log thread_update: {e}")
-
-    @commands.Cog.listener()
-    async def on_thread_member_join(self, member: discord.ThreadMember) -> None:
-        """Log thread member join events."""
-        self.log.debug("Listener triggered: on_thread_member_join")
-        if not member.thread.guild:
-            return
-        try:
-            should_log = await self.should_log_event(
-                member.thread.guild,
-                "thread_member_join",
-                channel=member.thread,
-            )
-            if not should_log:
-                return
-            channel = await self.get_log_channel(
-                member.thread.guild,
-                "thread_member_join",
-            )
-            if not channel:
-                return
-
-            user = member.thread.guild.get_member(member.id)
-            embed = self.create_embed(
-                "thread_member_join",
-                f"➡️ {user.mention if user else f'User ID: {member.id}'} joined thread {member.thread.mention}",
-                thread=member.thread.name,
-                user=f"{user} ({user.id})" if user else f"Unknown User ({member.id})",
-            )
-
-            await self.safe_send(channel, embed=embed)
-
-        except Exception as e:
-            self.log.error(f"Failed to log thread_member_join: {e}")
-
-    @commands.Cog.listener()
-    async def on_thread_member_remove(self, member: discord.ThreadMember) -> None:
-        """Log thread member leave events."""
-        self.log.debug("Listener triggered: on_thread_member_remove")
-        if not member.thread.guild:
-            return
-        try:
-            should_log = await self.should_log_event(
-                member.thread.guild,
-                "thread_member_leave",
-                channel=member.thread,
-            )
-            if not should_log:
-                return
-            channel = await self.get_log_channel(
-                member.thread.guild,
-                "thread_member_leave",
-            )
-            if not channel:
-                return
-
-            user = member.thread.guild.get_member(member.id)
-            embed = self.create_embed(
-                "thread_member_leave",
-                f"⬅️ {user.mention if user else f'User ID: {member.id}'} left thread {member.thread.mention}",
-                thread=member.thread.name,
-                user=f"{user} ({user.id})" if user else f"Unknown User ({member.id})",
-            )
-
-            await self.safe_send(channel, embed=embed)
-
-        except Exception as e:
-            self.log.error(f"Failed to log thread_member_remove: {e}")
 
     async def _log_voice_event(
         self,
@@ -2893,7 +2724,7 @@ class YALC(DashboardIntegration, commands.Cog):
                 if len(events) > 50:  # Keep only last 50 events
                     events.pop(0)
 
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Error logging voice event: {e}")
 
     async def _start_voice_session(
@@ -2917,7 +2748,7 @@ class YALC(DashboardIntegration, commands.Cog):
                 f"Started voice session for user {user_id} in channel {channel_id}",
             )
 
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Error starting voice session: {e}")
 
     async def _end_voice_session(
@@ -2953,7 +2784,7 @@ class YALC(DashboardIntegration, commands.Cog):
 
             return None
 
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Error ending voice session: {e}")
             return None
 
@@ -2977,11 +2808,12 @@ class YALC(DashboardIntegration, commands.Cog):
                         channel_id = session["channel_id"]
                         if channel_id not in stats["sessions_by_channel"]:
                             stats["sessions_by_channel"][channel_id] = []
-                        stats["sessions_by_channel"][channel_id].append(user_id)
+                        stats["sessions_by_channel"][channel_id].append(
+                            user_id)
 
                 return stats
 
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Error getting voice session stats: {e}")
             return {"error": str(e)}
 
@@ -2995,7 +2827,7 @@ class YALC(DashboardIntegration, commands.Cog):
             async with self.config.guild(guild).voice_events() as events:
                 return events[-limit:] if len(events) >= limit else events
 
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Error getting recent voice events: {e}")
             return []
 
@@ -3014,7 +2846,7 @@ class YALC(DashboardIntegration, commands.Cog):
                     if session.get("active", False)
                 ]
 
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Error getting active voice sessions: {e}")
             return []
 
@@ -3069,7 +2901,7 @@ class YALC(DashboardIntegration, commands.Cog):
                 desc + f" (by {after.mention} ({after}))",
             )
             await self.safe_send(channel, embed=embed)
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Failed to log presence_update: {e}")
 
     @commands.Cog.listener()
@@ -3095,7 +2927,7 @@ class YALC(DashboardIntegration, commands.Cog):
                 text="Note: Detailed integration changes are logged separately",
             )
             await self.safe_send(channel, embed=embed)
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Failed to log guild_integrations_update: {e}")
 
     @commands.Cog.listener()
@@ -3119,7 +2951,7 @@ class YALC(DashboardIntegration, commands.Cog):
                     desc += f" by {entry.user.mention} ({entry.user})"
             embed = self.create_embed("invite_create", desc)
             await self.safe_send(channel, embed=embed)
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Failed to log invite_create: {e}")
 
     @commands.Cog.listener()
@@ -3140,7 +2972,7 @@ class YALC(DashboardIntegration, commands.Cog):
                 desc += f" by {entry.user.mention} ({entry.user})"
             embed = self.create_embed("invite_delete", desc)
             await self.safe_send(channel, embed=embed)
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Failed to log invite_delete: {e}")
 
     @commands.Cog.listener()
@@ -3173,10 +3005,12 @@ class YALC(DashboardIntegration, commands.Cog):
             )
             if entry and entry.user:
                 desc += f" by {entry.user.mention} ({entry.user})"
-            embed = self.create_embed("application_cmd_permissions_update", desc)
+            embed = self.create_embed(
+                "application_cmd_permissions_update", desc)
             await self.safe_send(channel, embed=embed)
-        except Exception as e:
-            self.log.error(f"Failed to log application_command_permissions_update: {e}")
+        except RECOVERABLE_EXCEPTIONS as e:
+            self.log.error(
+                f"Failed to log application_command_permissions_update: {e}")
 
     @commands.Cog.listener()
     async def on_audit_log_entry_create(self, entry):
@@ -3214,7 +3048,7 @@ class YALC(DashboardIntegration, commands.Cog):
                     for key in expired_keys:
                         del self.recent_audit_entries[key]
 
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(
                 f"Failed to handle audit_log_entry_create: {e}",
                 exc_info=True,
@@ -3246,7 +3080,8 @@ class YALC(DashboardIntegration, commands.Cog):
                 return
 
             # 2. Enhanced Tupperbox message detection
-            tupperbox_ids = settings.get("tupperbox_ids", ["239232811662311425"])
+            tupperbox_ids = settings.get(
+                "tupperbox_ids", ["239232811662311425"])
             ignore_tupperbox = settings.get("ignore_tupperbox", True)
 
             if ignore_tupperbox:
@@ -3269,14 +3104,17 @@ class YALC(DashboardIntegration, commands.Cog):
                         content = getattr(message, "content", "").lower()
 
                         # Common proxy message command patterns
-                        proxy_commands = [";", "!", "//", "pk;", "tb:", "$", "t!"]
+                        proxy_commands = [";", "!", "//",
+                            "pk;", "tb:", "$", "t!"]
 
                         if any(content.startswith(cmd) for cmd in proxy_commands):
-                            self.log.debug("Skipping likely proxy command deletion.")
+                            self.log.debug(
+                                "Skipping likely proxy command deletion.")
                             return
 
                         # Check for message prefix patterns from settings
-                        custom_prefixes = settings.get("message_prefix_filter", [])
+                        custom_prefixes = settings.get(
+                            "message_prefix_filter", [])
                         if any(
                             content.startswith(prefix) for prefix in custom_prefixes
                         ):
@@ -3306,7 +3144,8 @@ class YALC(DashboardIntegration, commands.Cog):
                         )
                         return
                 else:
-                    self.log.debug("Skipping webhook message (all webhooks ignored).")
+                    self.log.debug(
+                        "Skipping webhook message (all webhooks ignored).")
                     return
 
             # 4. Check app message ignore setting
@@ -3337,7 +3176,7 @@ class YALC(DashboardIntegration, commands.Cog):
                 self.log.warning("No log channel set for message_delete.")
                 return
 
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(
                 f"Error in pre-processing message_delete event: {e}",
                 exc_info=True,
@@ -3348,7 +3187,8 @@ class YALC(DashboardIntegration, commands.Cog):
         try:
             author = getattr(message, "author", None)
             content = getattr(message, "content", "")
-            attachment_objects = list(getattr(message, "attachments", []) or [])
+            attachment_objects = list(
+                getattr(message, "attachments", []) or [])
             (
                 deleted_image_files,
                 image_copy_notes,
@@ -3364,15 +3204,18 @@ class YALC(DashboardIntegration, commands.Cog):
             )
 
             # Additional context for debugging
-            self.log.debug(f"Logging message_delete: {author} in #{channel_name}")
+            self.log.debug(
+                f"Logging message_delete: {author} in #{channel_name}")
 
             # Rich message metadata for comprehensive logging
             metadata = {}
 
             # Format timestamps consistently with Discord native formatting
             if hasattr(message, "created_at") and message.created_at:
-                formatted_time = discord.utils.format_dt(message.created_at, style="F")
-                relative_time = discord.utils.format_dt(message.created_at, style="R")
+                formatted_time = discord.utils.format_dt(
+                    message.created_at, style="F")
+                relative_time = discord.utils.format_dt(
+                    message.created_at, style="R")
                 metadata["Created"] = f"{formatted_time} ({relative_time})"
 
             # User information with clickable link
@@ -3382,7 +3225,8 @@ class YALC(DashboardIntegration, commands.Cog):
 
                 # Add role info if author is a member (not a webhook or system user)
                 if isinstance(author, discord.Member) and author.roles:
-                    top_role = author.roles[-1] if len(author.roles) > 1 else None
+                    top_role = author.roles[-1] if len(
+                        author.roles) > 1 else None
                     if top_role and top_role.name != "@everyone":
                         metadata["Top Role"] = f"{top_role.mention} ({top_role.id})"
             else:
@@ -3405,7 +3249,7 @@ class YALC(DashboardIntegration, commands.Cog):
                             "deleted_by": audit_entry.user,
                             "reason": getattr(audit_entry, "reason", None),
                         }
-                except Exception as e:
+                except RECOVERABLE_EXCEPTIONS as e:
                     self.log.debug(
                         f"Could not fetch audit log for message deletion: {e}",
                     )
@@ -3478,13 +3322,15 @@ class YALC(DashboardIntegration, commands.Cog):
                         inline=False,
                     )
             else:
-                embed.add_field(name="Content", value="*No text content*", inline=False)
+                embed.add_field(
+                    name="Content", value="*No text content*", inline=False)
 
             # Handle attachments with better formatting
             if attachment_objects:
                 attachment_list = []
                 for attachment in attachment_objects:
-                    file_name = getattr(attachment, "filename", None) or "Attachment"
+                    file_name = getattr(
+                        attachment, "filename", None) or "Attachment"
                     url = getattr(attachment, "url", None)
                     size = getattr(attachment, "size", None)
                     file_label = file_name
@@ -3556,7 +3402,8 @@ class YALC(DashboardIntegration, commands.Cog):
                                     f"**Author**: [{author_name}]({author_url})",
                                 )
                             else:
-                                embed_details.append(f"**Author**: {author_name}")
+                                embed_details.append(
+                                    f"**Author**: {author_name}")
 
                             if author_icon:
                                 embed_details.append(
@@ -3568,7 +3415,8 @@ class YALC(DashboardIntegration, commands.Cog):
                     if embed_fields:
                         embed_details.append("**Fields**:")
                         for j, field in enumerate(embed_fields[:3]):
-                            field_name = getattr(field, "name", "Unnamed Field")
+                            field_name = getattr(
+                                field, "name", "Unnamed Field")
                             field_value = getattr(field, "value", "")
                             field_inline = getattr(field, "inline", False)
 
@@ -3613,7 +3461,8 @@ class YALC(DashboardIntegration, commands.Cog):
                             msg_embed.timestamp,
                             style="f",
                         )
-                        embed_details.append(f"**Timestamp**: {formatted_time}")
+                        embed_details.append(
+                            f"**Timestamp**: {formatted_time}")
 
                     # Footer with enhanced formatting
                     embed_footer = getattr(msg_embed, "footer", None)
@@ -3659,7 +3508,8 @@ class YALC(DashboardIntegration, commands.Cog):
 
                 # Show info about additional embeds
                 if len(embeds) > 3:
-                    embed_info.append(f"*...and {len(embeds) - 3} more embeds*")
+                    embed_info.append(
+                        f"*...and {len(embeds) - 3} more embeds*")
 
                 # Add all embed info to the logging embed
                 embed.add_field(
@@ -3697,7 +3547,7 @@ class YALC(DashboardIntegration, commands.Cog):
             finally:
                 self._close_send_files(deleted_image_files)
 
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Failed to log message_delete: {e}", exc_info=True)
 
     @commands.Cog.listener()
@@ -3732,7 +3582,8 @@ class YALC(DashboardIntegration, commands.Cog):
                 return
 
             # 2. Enhanced Tupperbot filtering
-            tupperbox_ids = settings.get("tupperbox_ids", ["239232811662311425"])
+            tupperbox_ids = settings.get(
+                "tupperbox_ids", ["239232811662311425"])
             ignore_tupperbox = settings.get("ignore_tupperbox", True)
 
             if ignore_tupperbox:
@@ -3779,7 +3630,8 @@ class YALC(DashboardIntegration, commands.Cog):
                     )
                     return
                 # If content and embeds are the same, nothing meaningful changed
-                self.log.debug("Skipping message edit - no meaningful changes detected")
+                self.log.debug(
+                    "Skipping message edit - no meaningful changes detected")
                 return
 
             # 4. Get the appropriate log channel
@@ -3788,7 +3640,7 @@ class YALC(DashboardIntegration, commands.Cog):
                 self.log.warning("No log channel set for message_edit.")
                 return
 
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(
                 f"Error in pre-processing message_edit event: {e}",
                 exc_info=True,
@@ -3808,7 +3660,8 @@ class YALC(DashboardIntegration, commands.Cog):
             )
 
             # Additional context for debugging
-            self.log.debug(f"Logging message_edit in #{channel_name} by {author}")
+            self.log.debug(
+                f"Logging message_edit in #{channel_name} by {author}")
 
             # Prepare user identification with link
             user_link = (
@@ -3835,7 +3688,8 @@ class YALC(DashboardIntegration, commands.Cog):
                     style="F",
                 )
             if hasattr(after, "edited_at") and after.edited_at:
-                metadata["Edited"] = discord.utils.format_dt(after.edited_at, style="R")
+                metadata["Edited"] = discord.utils.format_dt(
+                    after.edited_at, style="R")
 
             # Create a visually appealing and comprehensive embed
             embed = self.create_embed(
@@ -3862,7 +3716,8 @@ class YALC(DashboardIntegration, commands.Cog):
                 value=f"```\n{before_text}\n```",
                 inline=False,
             )
-            embed.add_field(name="After", value=f"```\n{after_text}\n```", inline=False)
+            embed.add_field(
+                name="After", value=f"```\n{after_text}\n```", inline=False)
 
             # Add jump link to original message
             if jump_url:
@@ -3880,7 +3735,8 @@ class YALC(DashboardIntegration, commands.Cog):
                         for i, url in enumerate(attachments)
                     ],
                 )
-                embed.add_field(name="Attachments", value=attachment_text, inline=False)
+                embed.add_field(name="Attachments",
+                                value=attachment_text, inline=False)
 
             if embeds:
                 embed_info = []
@@ -3921,7 +3777,8 @@ class YALC(DashboardIntegration, commands.Cog):
                                     f"**Author**: [{author_name}]({author_url})",
                                 )
                             else:
-                                embed_details.append(f"**Author**: {author_name}")
+                                embed_details.append(
+                                    f"**Author**: {author_name}")
 
                             if author_icon:
                                 embed_details.append(
@@ -3933,7 +3790,8 @@ class YALC(DashboardIntegration, commands.Cog):
                     if embed_fields:
                         embed_details.append("**Fields**:")
                         for j, field in enumerate(embed_fields[:3]):
-                            field_name = getattr(field, "name", "Unnamed Field")
+                            field_name = getattr(
+                                field, "name", "Unnamed Field")
                             field_value = getattr(field, "value", "")
                             field_inline = getattr(field, "inline", False)
 
@@ -3978,7 +3836,8 @@ class YALC(DashboardIntegration, commands.Cog):
                             msg_embed.timestamp,
                             style="f",
                         )
-                        embed_details.append(f"**Timestamp**: {formatted_time}")
+                        embed_details.append(
+                            f"**Timestamp**: {formatted_time}")
 
                     # Footer with enhanced formatting
                     embed_footer = getattr(msg_embed, "footer", None)
@@ -4025,7 +3884,8 @@ class YALC(DashboardIntegration, commands.Cog):
 
                 # Show info about additional embeds
                 if len(embeds) > 3:
-                    embed_info.append(f"*...and {len(embeds) - 3} more embeds*")
+                    embed_info.append(
+                        f"*...and {len(embeds) - 3} more embeds*")
 
                 # Add all embed info to the logging embed
                 embed.add_field(
@@ -4053,7 +3913,7 @@ class YALC(DashboardIntegration, commands.Cog):
             # Send the log embed
             await self.safe_send(channel, embed=embed)
 
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Failed to log message_edit: {e}", exc_info=True)
 
     @commands.Cog.listener()
@@ -4094,21 +3954,26 @@ class YALC(DashboardIntegration, commands.Cog):
 
             # Check if channel is in ignore list
             if channel.id in settings.get("ignored_channels", []):
-                self.log.debug(f"Channel {channel.id} is in the ignored channels list.")
+                self.log.debug(
+                    f"Channel {channel.id} is in the ignored channels list.")
                 return
 
             # Check if channel category is ignored
-            if isinstance(channel, discord.TextChannel) and channel.category:
-                if channel.category.id in settings.get("ignored_categories", []):
-                    self.log.debug(
-                        f"Category {channel.category.id} is in the ignored categories list.",
-                    )
-                    return
+            if (
+                isinstance(channel, discord.TextChannel)
+                and channel.category
+                and channel.category.id in settings.get("ignored_categories", [])
+            ):
+                self.log.debug(
+                    f"Category {channel.category.id} is in the ignored categories list.",
+                )
+                return
 
             # Get the appropriate log channel
             log_channel = await self.get_log_channel(guild, "message_bulk_delete")
             if not log_channel:
-                self.log.debug("No log channel configured for message_bulk_delete.")
+                self.log.debug(
+                    "No log channel configured for message_bulk_delete.")
                 return
 
             # Apply enhanced filtering
@@ -4117,7 +3982,8 @@ class YALC(DashboardIntegration, commands.Cog):
 
             # Filter out Tupperbot messages if configured
             if settings.get("ignore_tupperbox", True):
-                tupperbox_ids = settings.get("tupperbox_ids", ["239232811662311425"])
+                tupperbox_ids = settings.get(
+                    "tupperbox_ids", ["239232811662311425"])
 
                 original_count = len(filtered_messages)
 
@@ -4198,7 +4064,8 @@ class YALC(DashboardIntegration, commands.Cog):
             if filtered_out_count > 0:
                 message_count_text += f" ({filtered_out_count} filtered out)"
 
-            embed.add_field(name="Message Count", value=message_count_text, inline=True)
+            embed.add_field(name="Message Count",
+                            value=message_count_text, inline=True)
 
             # Add moderation data if available using centralized audit log helper
             audit_entry = None
@@ -4210,7 +4077,7 @@ class YALC(DashboardIntegration, commands.Cog):
                     target=channel,
                     timeout_seconds=10,
                 )
-            except Exception as e:
+            except RECOVERABLE_EXCEPTIONS as e:
                 self.log.debug(
                     f"Could not fetch audit log for bulk message delete: {e}",
                 )
@@ -4261,7 +4128,8 @@ class YALC(DashboardIntegration, commands.Cog):
                 )
 
                 authors_text = []
-                for author_id, data in sorted_authors[:10]:  # Limit to top 10 authors
+                # Limit to top 10 authors
+                for author_id, data in sorted_authors[:10]:
                     authors_text.append(
                         f"• {data['mention']} (`{data['name']}`, ID: `{data['id']}`): **{data['count']} message(s)**",
                     )
@@ -4295,8 +4163,10 @@ class YALC(DashboardIntegration, commands.Cog):
                     content = msg.content if msg.content else "[No text content]"
                     if len(content) > 60:
                         content = content[:57] + "..."
-                    timestamp = discord.utils.format_dt(msg.created_at, style="R")
-                    preview_text.append(f"• **{author_name}** ({timestamp}): {content}")
+                    timestamp = discord.utils.format_dt(
+                        msg.created_at, style="R")
+                    preview_text.append(
+                        f"• **{author_name}** ({timestamp}): {content}")
 
                 embed.add_field(
                     name=f"First {preview_count} Messages"
@@ -4312,29 +4182,34 @@ class YALC(DashboardIntegration, commands.Cog):
 
                     preview_text = []
                     for msg in last_msgs:
-                        author_name = str(msg.author) if msg.author else "Unknown"
+                        author_name = str(
+                            msg.author) if msg.author else "Unknown"
                         content = msg.content if msg.content else "[No text content]"
                         if len(content) > 60:
                             content = content[:57] + "..."
-                        timestamp = discord.utils.format_dt(msg.created_at, style="R")
+                        timestamp = discord.utils.format_dt(
+                            msg.created_at, style="R")
                         preview_text.append(
                             f"• **{author_name}** ({timestamp}): {content}",
                         )
 
                     embed.add_field(
                         name=f"Last {preview_count} Messages",
-                        value="\n".join(preview_text) or "*No preview available*",
+                        value="\n".join(
+                            preview_text) or "*No preview available*",
                         inline=False,
                     )
 
             # Add timestamp for when deletion occurred
-            self.set_embed_footer(embed, label="YALC Logger • Bulk Message Delete")
+            self.set_embed_footer(
+                embed, label="YALC Logger • Bulk Message Delete")
 
             # Send the log entry
             await self.safe_send(log_channel, embed=embed)
 
-        except Exception as e:
-            self.log.error(f"Error logging bulk message delete: {e}", exc_info=True)
+        except RECOVERABLE_EXCEPTIONS as e:
+            self.log.error(
+                f"Error logging bulk message delete: {e}", exc_info=True)
 
     @commands.Cog.listener()
     async def on_member_join(self, member: discord.Member) -> None:
@@ -4345,7 +4220,7 @@ class YALC(DashboardIntegration, commands.Cog):
             return
         try:
             should_log = await self.should_log_event(member.guild, "member_join")
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Error in should_log_event: {e}")
             return
         if not should_log:
@@ -4353,7 +4228,7 @@ class YALC(DashboardIntegration, commands.Cog):
             return
         try:
             channel = await self.get_log_channel(member.guild, "member_join")
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Error in get_log_channel: {e}")
             return
         self.log.debug(f"About to send to channel: {channel}")
@@ -4367,7 +4242,7 @@ class YALC(DashboardIntegration, commands.Cog):
                 user=f"{member} ({member.id})",
             )
             await self.safe_send(channel, embed=embed)
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Failed to log member_join: {e}")
 
     @commands.Cog.listener()
@@ -4402,7 +4277,7 @@ class YALC(DashboardIntegration, commands.Cog):
                     target=member,
                     timeout_seconds=10,
                 )
-            except Exception as e:
+            except RECOVERABLE_EXCEPTIONS as e:
                 self.log.debug(f"Could not fetch audit log for kick: {e}")
 
         if kick_entry:
@@ -4499,7 +4374,7 @@ class YALC(DashboardIntegration, commands.Cog):
                 return recent_entries[0]
         except discord.Forbidden:
             self.log.debug("No permission to view audit logs")
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             self.log.debug(f"Error fetching audit logs: {e}")
 
         return None
@@ -4547,7 +4422,8 @@ class YALC(DashboardIntegration, commands.Cog):
 
         # Add join date information
         if member.joined_at:
-            join_date_formatted = member.joined_at.strftime("%B %d, %Y at %I:%M %p")
+            join_date_formatted = member.joined_at.strftime(
+                "%B %d, %Y at %I:%M %p")
             embed.add_field(
                 name="📅 Originally Joined",
                 value=join_date_formatted,
@@ -4555,7 +4431,8 @@ class YALC(DashboardIntegration, commands.Cog):
             )
 
             # Calculate how long they were in the server
-            time_in_server = datetime.datetime.now(datetime.UTC) - member.joined_at
+            time_in_server = datetime.datetime.now(
+                datetime.UTC) - member.joined_at
             days = time_in_server.days
             if days > 0:
                 embed.add_field(
@@ -4587,7 +4464,7 @@ class YALC(DashboardIntegration, commands.Cog):
         self.log.debug("Logging member leave")
         try:
             should_log = await self.should_log_event(member.guild, "member_leave")
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Error in should_log_event: {e}")
             return
         if not should_log:
@@ -4595,7 +4472,7 @@ class YALC(DashboardIntegration, commands.Cog):
             return
         try:
             channel = await self.get_log_channel(member.guild, "member_leave")
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Error in get_log_channel: {e}")
             return
         self.log.debug(f"About to send to channel: {channel}")
@@ -4620,7 +4497,8 @@ class YALC(DashboardIntegration, commands.Cog):
 
             # Add join date information - this is what was requested
             if member.joined_at:
-                join_date_formatted = member.joined_at.strftime("%B %d, %Y at %I:%M %p")
+                join_date_formatted = member.joined_at.strftime(
+                    "%B %d, %Y at %I:%M %p")
                 embed.add_field(
                     name="📅 Originally Joined",
                     value=join_date_formatted,
@@ -4628,7 +4506,8 @@ class YALC(DashboardIntegration, commands.Cog):
                 )
 
                 # Calculate how long they were in the server
-                time_in_server = datetime.datetime.now(datetime.UTC) - member.joined_at
+                time_in_server = datetime.datetime.now(
+                    datetime.UTC) - member.joined_at
                 days = time_in_server.days
                 if days > 0:
                     embed.add_field(
@@ -4638,7 +4517,8 @@ class YALC(DashboardIntegration, commands.Cog):
                     )
 
             # Add server information
-            embed.add_field(name="🏠 Server", value=member.guild.name, inline=True)
+            embed.add_field(name="🏠 Server",
+                            value=member.guild.name, inline=True)
             embed.add_field(
                 name="👥 Members",
                 value=str(member.guild.member_count),
@@ -4654,7 +4534,7 @@ class YALC(DashboardIntegration, commands.Cog):
             self.set_embed_footer(embed, label="YALC Logger • Member Leave")
 
             await self.safe_send(channel, embed=embed)
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Failed to log member_leave: {e}")
 
     @commands.Cog.listener()
@@ -4680,15 +4560,16 @@ class YALC(DashboardIntegration, commands.Cog):
                 event_type,
                 user=after,
             )
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Error in should_log_event: {e}")
             return
         if not should_log:
-            self.log.debug(f"should_log_event returned False for {event_type}.")
+            self.log.debug(
+                f"should_log_event returned False for {event_type}.")
             return
         try:
             channel = await self.get_log_channel(before.guild, event_type)
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Error in get_log_channel: {e}")
             return
         self.log.debug(f"About to send to channel: {channel}")
@@ -4719,7 +4600,7 @@ class YALC(DashboardIntegration, commands.Cog):
                             "moderator": audit_entry.user,
                             "reason": getattr(audit_entry, "reason", None),
                         }
-                except Exception as e:
+                except RECOVERABLE_EXCEPTIONS as e:
                     self.log.debug(
                         f"Could not fetch audit log for member role update: {e}",
                     )
@@ -4731,8 +4612,10 @@ class YALC(DashboardIntegration, commands.Cog):
                     changes.append(f"➖ Removed {role.mention}")
 
             # Check for timeout/communication restriction changes
-            before_timeout = getattr(before, "communication_disabled_until", None)
-            after_timeout = getattr(after, "communication_disabled_until", None)
+            before_timeout = getattr(
+                before, "communication_disabled_until", None)
+            after_timeout = getattr(
+                after, "communication_disabled_until", None)
 
             if before_timeout != after_timeout:
                 try:
@@ -4750,7 +4633,7 @@ class YALC(DashboardIntegration, commands.Cog):
                             "moderator": audit_entry.user,
                             "reason": getattr(audit_entry, "reason", None),
                         }
-                except Exception as e:
+                except RECOVERABLE_EXCEPTIONS as e:
                     self.log.debug(
                         f"Could not fetch audit log for member timeout update: {e}",
                     )
@@ -4789,7 +4672,7 @@ class YALC(DashboardIntegration, commands.Cog):
                             "moderator": audit_entry.user,
                             "reason": getattr(audit_entry, "reason", None),
                         }
-                except Exception as e:
+                except RECOVERABLE_EXCEPTIONS as e:
                     self.log.debug(
                         f"Could not fetch audit log for member nickname update: {e}",
                     )
@@ -4804,7 +4687,10 @@ class YALC(DashboardIntegration, commands.Cog):
 
             # Create the embed with enhanced information
             if moderator_info:
-                description = f"👤 {after.mention} ({after.display_name})'s profile was updated by {moderator_info['moderator'].mention}"
+                description = (
+                    f"👤 {after.mention} ({after.display_name})'s profile was "
+                    f"updated by {moderator_info['moderator'].mention}"
+                )
             else:
                 description = (
                     f"👤 {after.mention} ({after.display_name})'s profile was updated"
@@ -4826,7 +4712,11 @@ class YALC(DashboardIntegration, commands.Cog):
             if moderator_info:
                 embed.add_field(
                     name="Updated By",
-                    value=f"{moderator_info['moderator'].mention} (`{moderator_info['moderator']}`, ID: `{moderator_info['moderator'].id}`)",
+                    value=(
+                        f"{moderator_info['moderator'].mention} "
+                        f"(`{moderator_info['moderator']}`, "
+                        f"ID: `{moderator_info['moderator'].id}`)"
+                    ),
                     inline=True,
                 )
 
@@ -4878,12 +4768,13 @@ class YALC(DashboardIntegration, commands.Cog):
                 if event_type == "member_timeout"
                 else "YALC Logger • Member Update"
             )
-            self.set_embed_footer(embed, event_time=event_time, label=footer_label)
+            self.set_embed_footer(
+                embed, event_time=event_time, label=footer_label)
 
             # Send the log message
             await self.safe_send(channel, embed=embed)
 
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Failed to log member_update: {e}")
 
     @commands.Cog.listener()
@@ -4899,15 +4790,16 @@ class YALC(DashboardIntegration, commands.Cog):
                 "channel_create",
                 channel,
             )
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Error in should_log_event: {e}")
             return
         if not should_log:
-            self.log.debug("should_log_event returned False for channel_create.")
+            self.log.debug(
+                "should_log_event returned False for channel_create.")
             return
         try:
             log_channel = await self.get_log_channel(channel.guild, "channel_create")
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Error in get_log_channel: {e}")
             return
         self.log.debug(f"About to send to channel: {log_channel}")
@@ -4931,12 +4823,16 @@ class YALC(DashboardIntegration, commands.Cog):
                         "creator": audit_entry.user,
                         "reason": getattr(audit_entry, "reason", None),
                     }
-            except Exception as e:
-                self.log.debug(f"Could not fetch audit log for channel creation: {e}")
+            except RECOVERABLE_EXCEPTIONS as e:
+                self.log.debug(
+                    f"Could not fetch audit log for channel creation: {e}")
 
             # Create the embed with enhanced information
             if creator_info:
-                description = f"📝 Channel created: {getattr(channel, 'mention', str(channel))} by {creator_info['creator'].mention}"
+                description = (
+                    f"📝 Channel created: {getattr(channel, 'mention', str(channel))} "
+                    f"by {creator_info['creator'].mention}"
+                )
             else:
                 description = (
                     f"📝 Channel created: {getattr(channel, 'mention', str(channel))}"
@@ -5034,7 +4930,8 @@ class YALC(DashboardIntegration, commands.Cog):
                 and settings.get("include_thumbnails", True)
                 and hasattr(creator_info["creator"], "display_avatar")
             ):
-                embed.set_thumbnail(url=creator_info["creator"].display_avatar.url)
+                embed.set_thumbnail(
+                    url=creator_info["creator"].display_avatar.url)
 
             # Set footer
             event_time = datetime.datetime.now(datetime.UTC)
@@ -5045,7 +4942,7 @@ class YALC(DashboardIntegration, commands.Cog):
             )
 
             await self.safe_send(log_channel, embed=embed)
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Failed to log channel_create: {e}")
 
     @commands.Cog.listener()
@@ -5061,15 +4958,16 @@ class YALC(DashboardIntegration, commands.Cog):
                 "channel_delete",
                 channel,
             )
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Error in should_log_event: {e}")
             return
         if not should_log:
-            self.log.debug("should_log_event returned False for channel_delete.")
+            self.log.debug(
+                "should_log_event returned False for channel_delete.")
             return
         try:
             log_channel = await self.get_log_channel(channel.guild, "channel_delete")
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Error in get_log_channel: {e}")
             return
         self.log.debug(f"About to send to channel: {log_channel}")
@@ -5093,8 +4991,9 @@ class YALC(DashboardIntegration, commands.Cog):
                         "deleter": audit_entry.user,
                         "reason": getattr(audit_entry, "reason", None),
                     }
-            except Exception as e:
-                self.log.debug(f"Could not fetch audit log for channel deletion: {e}")
+            except RECOVERABLE_EXCEPTIONS as e:
+                self.log.debug(
+                    f"Could not fetch audit log for channel deletion: {e}")
 
             # Create the embed with enhanced information
             if deleter_info:
@@ -5196,7 +5095,8 @@ class YALC(DashboardIntegration, commands.Cog):
                 and settings.get("include_thumbnails", True)
                 and hasattr(deleter_info["deleter"], "display_avatar")
             ):
-                embed.set_thumbnail(url=deleter_info["deleter"].display_avatar.url)
+                embed.set_thumbnail(
+                    url=deleter_info["deleter"].display_avatar.url)
 
             # Set footer
             event_time = datetime.datetime.now(datetime.UTC)
@@ -5207,7 +5107,7 @@ class YALC(DashboardIntegration, commands.Cog):
             )
 
             await self.safe_send(log_channel, embed=embed)
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Failed to log channel_delete: {e}")
 
     @commands.Cog.listener()
@@ -5234,15 +5134,16 @@ class YALC(DashboardIntegration, commands.Cog):
         event_type = "voice_update" if voice_like_channel else "channel_update"
         try:
             should_log = await self.should_log_event(before.guild, event_type, after)
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Error in should_log_event: {e}")
             return
         if not should_log:
-            self.log.debug(f"should_log_event returned False for {event_type}.")
+            self.log.debug(
+                f"should_log_event returned False for {event_type}.")
             return
         try:
             log_channel = await self.get_log_channel(before.guild, event_type)
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Error in get_log_channel: {e}")
             return
         self.log.debug(f"About to send to channel: {log_channel}")
@@ -5270,7 +5171,8 @@ class YALC(DashboardIntegration, commands.Cog):
                 discord.VoiceChannel,
             ):
                 if before.bitrate != after.bitrate:
-                    changes.append(f"Bitrate: {before.bitrate} → {after.bitrate}")
+                    changes.append(
+                        f"Bitrate: {before.bitrate} → {after.bitrate}")
                 if before.user_limit != after.user_limit:
                     changes.append(
                         f"User limit: {before.user_limit} → {after.user_limit}",
@@ -5290,7 +5192,9 @@ class YALC(DashboardIntegration, commands.Cog):
                     None,
                 ):
                     changes.append(
-                        f"Video quality: {getattr(before, 'video_quality_mode', None)} → {getattr(after, 'video_quality_mode', None)}",
+                        "Video quality: "
+                        f"{getattr(before, 'video_quality_mode', None)} → "
+                        f"{getattr(after, 'video_quality_mode', None)}",
                     )
             if not changes:
                 return
@@ -5309,12 +5213,16 @@ class YALC(DashboardIntegration, commands.Cog):
                         "updater": audit_entry.user,
                         "reason": getattr(audit_entry, "reason", None),
                     }
-            except Exception as e:
-                self.log.debug(f"Could not fetch audit log for channel update: {e}")
+            except RECOVERABLE_EXCEPTIONS as e:
+                self.log.debug(
+                    f"Could not fetch audit log for channel update: {e}")
 
             # Build description with updater if available
             if updater_info:
-                description = f"🔄 Channel updated: {getattr(after, 'mention', str(after))} by {updater_info['updater'].mention}\n\u200b"
+                description = (
+                    f"🔄 Channel updated: {getattr(after, 'mention', str(after))} "
+                    f"by {updater_info['updater'].mention}\n\u200b"
+                )
             else:
                 description = f"🔄 Channel updated: {getattr(after, 'mention', str(after))}\n\u200b"
 
@@ -5346,7 +5254,7 @@ class YALC(DashboardIntegration, commands.Cog):
                 )
 
             await self.safe_send(log_channel, embed=embed)
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Failed to log channel_update: {e}")
 
     @commands.Cog.listener()
@@ -5356,7 +5264,8 @@ class YALC(DashboardIntegration, commands.Cog):
             self.log.debug("No guild on thread.")
             return
         event_type = (
-            "forum_post_create" if self._is_forum_thread(thread) else "thread_create"
+            "forum_post_create" if self._is_forum_thread(
+                thread) else "thread_create"
         )
         try:
             should_log = await self.should_log_event(
@@ -5364,15 +5273,16 @@ class YALC(DashboardIntegration, commands.Cog):
                 event_type,
                 channel=thread,
             )
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Error in should_log_event: {e}")
             return
         if not should_log:
-            self.log.debug(f"should_log_event returned False for {event_type}.")
+            self.log.debug(
+                f"should_log_event returned False for {event_type}.")
             return
         try:
             log_channel = await self.get_log_channel(thread.guild, event_type)
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Error in get_log_channel: {e}")
             return
         self.log.debug(f"About to send to channel: {log_channel}")
@@ -5394,13 +5304,18 @@ class YALC(DashboardIntegration, commands.Cog):
                         "creator": audit_entry.user,
                         "reason": getattr(audit_entry, "reason", None),
                     }
-            except Exception as e:
-                self.log.debug(f"Could not fetch audit log for thread creation: {e}")
+            except RECOVERABLE_EXCEPTIONS as e:
+                self.log.debug(
+                    f"Could not fetch audit log for thread creation: {e}")
 
             item_label = "Forum post" if event_type == "forum_post_create" else "Thread"
             item_emoji = "📋" if event_type == "forum_post_create" else "🧵"
             if creator_info:
-                description = f"{item_emoji} {item_label} created in {getattr(thread.parent, 'mention', None)} by {creator_info['creator'].mention}\n\u200b"
+                description = (
+                    f"{item_emoji} {item_label} created in "
+                    f"{getattr(thread.parent, 'mention', None)} "
+                    f"by {creator_info['creator'].mention}\n\u200b"
+                )
             else:
                 description = f"{item_emoji} {item_label} created in {getattr(thread.parent, 'mention', None)}\n\u200b"
 
@@ -5438,7 +5353,7 @@ class YALC(DashboardIntegration, commands.Cog):
                 )
 
             await self.safe_send(log_channel, embed=embed)
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Failed to log thread_create: {e}")
 
     @commands.Cog.listener()
@@ -5448,7 +5363,8 @@ class YALC(DashboardIntegration, commands.Cog):
             self.log.debug("No guild on thread.")
             return
         event_type = (
-            "forum_post_delete" if self._is_forum_thread(thread) else "thread_delete"
+            "forum_post_delete" if self._is_forum_thread(
+                thread) else "thread_delete"
         )
         try:
             should_log = await self.should_log_event(
@@ -5456,15 +5372,16 @@ class YALC(DashboardIntegration, commands.Cog):
                 event_type,
                 channel=thread,
             )
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Error in should_log_event: {e}")
             return
         if not should_log:
-            self.log.debug(f"should_log_event returned False for {event_type}.")
+            self.log.debug(
+                f"should_log_event returned False for {event_type}.")
             return
         try:
             log_channel = await self.get_log_channel(thread.guild, event_type)
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Error in get_log_channel: {e}")
             return
         self.log.debug(f"About to send to channel: {log_channel}")
@@ -5486,12 +5403,17 @@ class YALC(DashboardIntegration, commands.Cog):
                         "deleter": audit_entry.user,
                         "reason": getattr(audit_entry, "reason", None),
                     }
-            except Exception as e:
-                self.log.debug(f"Could not fetch audit log for thread deletion: {e}")
+            except RECOVERABLE_EXCEPTIONS as e:
+                self.log.debug(
+                    f"Could not fetch audit log for thread deletion: {e}")
 
             item_label = "forum post" if event_type == "forum_post_delete" else "thread"
             if deleter_info:
-                description = f"🗑️ {item_label.title()} deleted from {getattr(thread.parent, 'mention', None)} by {deleter_info['deleter'].mention}\n\u200b"
+                description = (
+                    f"🗑️ {item_label.title()} deleted from "
+                    f"{getattr(thread.parent, 'mention', None)} "
+                    f"by {deleter_info['deleter'].mention}\n\u200b"
+                )
             else:
                 description = f"🗑️ {item_label.title()} deleted from {getattr(thread.parent, 'mention', None)}\n\u200b"
 
@@ -5524,7 +5446,7 @@ class YALC(DashboardIntegration, commands.Cog):
                 )
 
             await self.safe_send(log_channel, embed=embed)
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Failed to log thread_delete: {e}")
 
     @commands.Cog.listener()
@@ -5538,7 +5460,8 @@ class YALC(DashboardIntegration, commands.Cog):
             self.log.debug("No guild on thread.")
             return
         event_type = (
-            "forum_post_update" if self._is_forum_thread(after) else "thread_update"
+            "forum_post_update" if self._is_forum_thread(
+                after) else "thread_update"
         )
         try:
             should_log = await self.should_log_event(
@@ -5546,15 +5469,16 @@ class YALC(DashboardIntegration, commands.Cog):
                 event_type,
                 channel=after,
             )
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Error in should_log_event: {e}")
             return
         if not should_log:
-            self.log.debug(f"should_log_event returned False for {event_type}.")
+            self.log.debug(
+                f"should_log_event returned False for {event_type}.")
             return
         try:
             log_channel = await self.get_log_channel(before.guild, event_type)
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Error in get_log_channel: {e}")
             return
         self.log.debug(f"About to send to channel: {log_channel}")
@@ -5566,7 +5490,8 @@ class YALC(DashboardIntegration, commands.Cog):
             if before.name != after.name:
                 changes.append(f"Name: {before.name} → {after.name}")
             if before.archived != after.archived:
-                changes.append(f"Archived: {before.archived} → {after.archived}")
+                changes.append(
+                    f"Archived: {before.archived} → {after.archived}")
             if before.locked != after.locked:
                 changes.append(f"Locked: {before.locked} → {after.locked}")
             if before.slowmode_delay != after.slowmode_delay:
@@ -5587,7 +5512,7 @@ class YALC(DashboardIntegration, commands.Cog):
                 changes="\n".join(changes),
             )
             await self.safe_send(log_channel, embed=embed)
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Failed to log thread_update: {e}")
 
     @commands.Cog.listener()
@@ -5598,18 +5523,19 @@ class YALC(DashboardIntegration, commands.Cog):
                 member.thread.guild,
                 "thread_member_join",
             )
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Error in should_log_event: {e}")
             return
         if not should_log:
-            self.log.debug("should_log_event returned False for thread_member_join.")
+            self.log.debug(
+                "should_log_event returned False for thread_member_join.")
             return
         try:
             log_channel = await self.get_log_channel(
                 member.thread.guild,
                 "thread_member_join",
             )
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Error in get_log_channel: {e}")
             return
         self.log.debug(f"About to send to channel: {log_channel}")
@@ -5629,7 +5555,7 @@ class YALC(DashboardIntegration, commands.Cog):
                 thread=member.thread.name,
             )
             await self.safe_send(log_channel, embed=embed)
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Failed to log thread_member_join: {e}")
 
     @commands.Cog.listener()
@@ -5640,18 +5566,19 @@ class YALC(DashboardIntegration, commands.Cog):
                 member.thread.guild,
                 "thread_member_leave",
             )
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Error in should_log_event: {e}")
             return
         if not should_log:
-            self.log.debug("should_log_event returned False for thread_member_leave.")
+            self.log.debug(
+                "should_log_event returned False for thread_member_leave.")
             return
         try:
             log_channel = await self.get_log_channel(
                 member.thread.guild,
                 "thread_member_leave",
             )
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Error in get_log_channel: {e}")
             return
         self.log.debug(f"About to send to channel: {log_channel}")
@@ -5670,7 +5597,7 @@ class YALC(DashboardIntegration, commands.Cog):
                 thread=member.thread.name,
             )
             await self.safe_send(log_channel, embed=embed)
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Failed to log thread_member_leave: {e}")
 
     @commands.Cog.listener()
@@ -5682,7 +5609,7 @@ class YALC(DashboardIntegration, commands.Cog):
             return
         try:
             should_log = await self.should_log_event(role.guild, "role_create")
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Error in should_log_event: {e}")
             return
         if not should_log:
@@ -5690,7 +5617,7 @@ class YALC(DashboardIntegration, commands.Cog):
             return
         try:
             channel = await self.get_log_channel(role.guild, "role_create")
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Error in get_log_channel: {e}")
             return
         self.log.debug(f"About to send to channel: {channel}")
@@ -5714,8 +5641,9 @@ class YALC(DashboardIntegration, commands.Cog):
                         "creator": audit_entry.user,
                         "reason": getattr(audit_entry, "reason", None),
                     }
-            except Exception as e:
-                self.log.debug(f"Could not fetch audit log for role creation: {e}")
+            except RECOVERABLE_EXCEPTIONS as e:
+                self.log.debug(
+                    f"Could not fetch audit log for role creation: {e}")
 
             # Create the embed with enhanced information
             if creator_info:
@@ -5841,7 +5769,8 @@ class YALC(DashboardIntegration, commands.Cog):
                 and settings.get("include_thumbnails", True)
                 and hasattr(creator_info["creator"], "display_avatar")
             ):
-                embed.set_thumbnail(url=creator_info["creator"].display_avatar.url)
+                embed.set_thumbnail(
+                    url=creator_info["creator"].display_avatar.url)
 
             # Set footer
             event_time = datetime.datetime.now(datetime.UTC)
@@ -5853,8 +5782,9 @@ class YALC(DashboardIntegration, commands.Cog):
 
             sent_message = await self.safe_send(channel, embed=embed)
             if sent_message:
-                self._mark_role_event_logged(role.guild.id, "role_create", role.id)
-        except Exception as e:
+                self._mark_role_event_logged(
+                    role.guild.id, "role_create", role.id)
+        except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Failed to log role_create: {e}", exc_info=True)
 
     @commands.Cog.listener()
@@ -5866,7 +5796,7 @@ class YALC(DashboardIntegration, commands.Cog):
             return
         try:
             should_log = await self.should_log_event(role.guild, "role_delete")
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Error in should_log_event: {e}")
             return
         if not should_log:
@@ -5874,7 +5804,7 @@ class YALC(DashboardIntegration, commands.Cog):
             return
         try:
             channel = await self.get_log_channel(role.guild, "role_delete")
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Error in get_log_channel: {e}")
             return
         self.log.debug(f"About to send to channel: {channel}")
@@ -5898,8 +5828,9 @@ class YALC(DashboardIntegration, commands.Cog):
                         "deleter": audit_entry.user,
                         "reason": getattr(audit_entry, "reason", None),
                     }
-            except Exception as e:
-                self.log.debug(f"Could not fetch audit log for role deletion: {e}")
+            except RECOVERABLE_EXCEPTIONS as e:
+                self.log.debug(
+                    f"Could not fetch audit log for role deletion: {e}")
 
             # Create the embed with enhanced information
             if deleter_info:
@@ -6025,7 +5956,8 @@ class YALC(DashboardIntegration, commands.Cog):
                 and settings.get("include_thumbnails", True)
                 and hasattr(deleter_info["deleter"], "display_avatar")
             ):
-                embed.set_thumbnail(url=deleter_info["deleter"].display_avatar.url)
+                embed.set_thumbnail(
+                    url=deleter_info["deleter"].display_avatar.url)
 
             # Set footer
             event_time = datetime.datetime.now(datetime.UTC)
@@ -6037,8 +5969,9 @@ class YALC(DashboardIntegration, commands.Cog):
 
             sent_message = await self.safe_send(channel, embed=embed)
             if sent_message:
-                self._mark_role_event_logged(role.guild.id, "role_delete", role.id)
-        except Exception as e:
+                self._mark_role_event_logged(
+                    role.guild.id, "role_delete", role.id)
+        except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Failed to log role_delete: {e}", exc_info=True)
 
     @commands.Cog.listener()
@@ -6060,7 +5993,7 @@ class YALC(DashboardIntegration, commands.Cog):
             return
         try:
             should_log = await self.should_log_event(before.guild, "role_update")
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Error in should_log_event: {e}")
             return
         if not should_log:
@@ -6068,7 +6001,7 @@ class YALC(DashboardIntegration, commands.Cog):
             return
         try:
             channel = await self.get_log_channel(before.guild, "role_update")
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Error in get_log_channel: {e}")
             return
         self.log.debug(f"About to send to channel: {channel}")
@@ -6082,7 +6015,8 @@ class YALC(DashboardIntegration, commands.Cog):
             position_changed = before.position != after.position
 
             if before.name != after.name:
-                self.log.debug(f"Role name changed: {before.name} -> {after.name}")
+                self.log.debug(
+                    f"Role name changed: {before.name} -> {after.name}")
                 changes.append(f"**Name:** `{before.name}` → `{after.name}`")
             if before.permissions != after.permissions:
                 self.log.debug(
@@ -6101,10 +6035,12 @@ class YALC(DashboardIntegration, commands.Cog):
                     f"**Mentionable:** `{before.mentionable}` → `{after.mentionable}`",
                 )
             if before.hoist != after.hoist:
-                changes.append(f"**Hoisted:** `{before.hoist}` → `{after.hoist}`")
+                changes.append(
+                    f"**Hoisted:** `{before.hoist}` → `{after.hoist}`")
 
             if color_changed:
-                self.log.debug(f"Role color changed: {before.color} -> {after.color}")
+                self.log.debug(
+                    f"Role color changed: {before.color} -> {after.color}")
 
             # Check if there are any meaningful changes
             if not changes and not color_changed:
@@ -6123,7 +6059,8 @@ class YALC(DashboardIntegration, commands.Cog):
                     audit_entry = audit_data["entry"]
                     user_who_changed = audit_entry.user
                     audit_reason = getattr(audit_entry, "reason", None)
-                    self.log.debug(f"Using real-time audit data for role {after.id}")
+                    self.log.debug(
+                        f"Using real-time audit data for role {after.id}")
 
                     # Clean up used entry
                     del self.recent_audit_entries[after.id]
@@ -6140,9 +6077,11 @@ class YALC(DashboardIntegration, commands.Cog):
                     if audit_entry:
                         user_who_changed = audit_entry.user
                         audit_reason = getattr(audit_entry, "reason", None)
-                        self.log.debug(f"Using API audit data for role {after.id}")
-                except Exception as e:
-                    self.log.debug(f"Could not fetch audit log for role update: {e}")
+                        self.log.debug(
+                            f"Using API audit data for role {after.id}")
+                except RECOVERABLE_EXCEPTIONS as e:
+                    self.log.debug(
+                        f"Could not fetch audit log for role update: {e}")
 
             # Create enhanced embed with attribution
             if user_who_changed:
@@ -6217,7 +6156,8 @@ class YALC(DashboardIntegration, commands.Cog):
                                 "🟨"
                                 if before.color.value >= 0x008080
                                 else (
-                                    "🟧" if before.color.value >= 0x808000 else ("🟥")
+                                    "🟧" if before.color.value >= 0x808000 else (
+                                        "🟥")
                                 )
                             )
                         )
@@ -6264,7 +6204,7 @@ class YALC(DashboardIntegration, commands.Cog):
             )
 
             await self.safe_send(channel, embed=embed)
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Failed to log role_update: {e}", exc_info=True)
 
     @commands.Cog.listener()
@@ -6276,7 +6216,7 @@ class YALC(DashboardIntegration, commands.Cog):
         self.log.debug("Listener triggered: on_guild_update")
         try:
             should_log = await self.should_log_event(before, "guild_update")
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Error in should_log_event: {e}")
             return
         if not should_log:
@@ -6284,7 +6224,7 @@ class YALC(DashboardIntegration, commands.Cog):
             return
         try:
             channel = await self.get_log_channel(before, "guild_update")
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Error in get_log_channel: {e}")
             return
         self.log.debug(f"About to send to channel: {channel}")
@@ -6351,14 +6291,16 @@ class YALC(DashboardIntegration, commands.Cog):
                         "updater": audit_entry.user,
                         "reason": getattr(audit_entry, "reason", None),
                     }
-            except Exception as e:
-                self.log.debug(f"Could not fetch audit log for guild update: {e}")
+            except RECOVERABLE_EXCEPTIONS as e:
+                self.log.debug(
+                    f"Could not fetch audit log for guild update: {e}")
 
             # Build description with updater if available
-            if updater_info:
-                description = f"⚙️ Server updated by {updater_info['updater'].mention}"
-            else:
-                description = "⚙️ Server updated"
+            description = (
+                f"⚙️ Server updated by {updater_info['updater'].mention}"
+                if updater_info
+                else "⚙️ Server updated"
+            )
 
             embed = self.create_embed(
                 "guild_update",
@@ -6387,7 +6329,7 @@ class YALC(DashboardIntegration, commands.Cog):
                 )
 
             await self.safe_send(channel, embed=embed)
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Failed to log guild_update: {e}")
 
     @commands.Cog.listener()
@@ -6395,7 +6337,7 @@ class YALC(DashboardIntegration, commands.Cog):
         self.log.debug("Listener triggered: on_guild_emojis_update")
         try:
             should_log = await self.should_log_event(guild, "emoji_update")
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Error in should_log_event: {e}")
             return
         if not should_log:
@@ -6403,7 +6345,7 @@ class YALC(DashboardIntegration, commands.Cog):
             return
         try:
             channel = await self.get_log_channel(guild, "emoji_update")
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Error in get_log_channel: {e}")
             return
         self.log.debug(f"About to send to channel: {channel}")
@@ -6419,7 +6361,8 @@ class YALC(DashboardIntegration, commands.Cog):
             if added:
                 changes.append(f"Added: {', '.join(str(e) for e in added)}")
             if removed:
-                changes.append(f"Removed: {', '.join(str(e) for e in removed)}")
+                changes.append(
+                    f"Removed: {', '.join(str(e) for e in removed)}")
             if not changes:
                 return
             embed = self.create_embed(
@@ -6428,7 +6371,7 @@ class YALC(DashboardIntegration, commands.Cog):
                 changes="\n".join(changes),
             )
             await self.safe_send(channel, embed=embed)
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Failed to log emoji_update: {e}")
 
     @commands.Cog.listener()
@@ -6514,10 +6457,11 @@ class YALC(DashboardIntegration, commands.Cog):
                     inline=True,
                 )
                 if entry.reason:
-                    embed.add_field(name="Reason", value=entry.reason, inline=False)
+                    embed.add_field(
+                        name="Reason", value=entry.reason, inline=False)
 
             await self.safe_send(channel, embed=embed)
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Failed to log sticker_update: {e}", exc_info=True)
 
     @commands.Cog.listener()
@@ -6576,7 +6520,7 @@ class YALC(DashboardIntegration, commands.Cog):
 
             self.set_embed_footer(embed, label="YALC Logger • Command Use")
             await self.safe_send(channel, embed=embed)
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Failed to log command_use: {e}", exc_info=True)
 
     @commands.Cog.listener()
@@ -6646,10 +6590,12 @@ class YALC(DashboardIntegration, commands.Cog):
             ):
                 embed.set_thumbnail(url=interaction.user.display_avatar.url)
 
-            self.set_embed_footer(embed, label="YALC Logger • Application Command")
+            self.set_embed_footer(
+                embed, label="YALC Logger • Application Command")
             await self.safe_send(channel, embed=embed)
-        except Exception as e:
-            self.log.error(f"Failed to log application_cmd: {e}", exc_info=True)
+        except RECOVERABLE_EXCEPTIONS as e:
+            self.log.error(
+                f"Failed to log application_cmd: {e}", exc_info=True)
 
     @commands.Cog.listener()
     async def on_app_command_error(
@@ -6720,7 +6666,7 @@ class YALC(DashboardIntegration, commands.Cog):
                 label="YALC Logger • Application Command Error",
             )
             await self.safe_send(channel, embed=embed)
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(
                 f"Failed to log application command error: {e}",
                 exc_info=True,
@@ -6846,7 +6792,7 @@ class YALC(DashboardIntegration, commands.Cog):
             # Send the log
             await self.safe_send(log_channel, embed=embed)
 
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Error logging command_error: {e}", exc_info=True)
 
     @commands.Cog.listener()
@@ -6893,7 +6839,7 @@ class YALC(DashboardIntegration, commands.Cog):
                     creator = guild.get_member(
                         event.creator_id,
                     ) or await self.bot.fetch_user(event.creator_id)
-            except Exception:
+            except RECOVERABLE_EXCEPTIONS:
                 pass
 
             # Create the log embed
@@ -6918,7 +6864,8 @@ class YALC(DashboardIntegration, commands.Cog):
 
             # Add location info
             if hasattr(event, "location") and event.location:
-                embed.add_field(name="Location", value=event.location, inline=True)
+                embed.add_field(name="Location",
+                                value=event.location, inline=True)
             elif hasattr(event, "channel") and event.channel:
                 embed.add_field(
                     name="Channel",
@@ -6974,7 +6921,7 @@ class YALC(DashboardIntegration, commands.Cog):
             # Send the log
             await self.safe_send(log_channel, embed=embed)
 
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(
                 f"Error logging guild_scheduled_event_create: {e}",
                 exc_info=True,
@@ -7091,7 +7038,8 @@ class YALC(DashboardIntegration, commands.Cog):
                 and hasattr(after, "status")
                 and before.status != after.status
             ):
-                changes.append(f"**Status:** `{before.status}` → `{after.status}`")
+                changes.append(
+                    f"**Status:** `{before.status}` → `{after.status}`")
 
             # Skip if no changes (shouldn't happen, but just in case)
             if not changes:
@@ -7113,7 +7061,8 @@ class YALC(DashboardIntegration, commands.Cog):
             )
 
             # Add event details
-            embed.add_field(name="Event ID", value=f"`{after.id}`", inline=True)
+            embed.add_field(name="Event ID",
+                            value=f"`{after.id}`", inline=True)
 
             # Add event URL
             if hasattr(after, "url") and after.url:
@@ -7133,7 +7082,7 @@ class YALC(DashboardIntegration, commands.Cog):
             # Send the log
             await self.safe_send(log_channel, embed=embed)
 
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(
                 f"Error logging guild_scheduled_event_update: {e}",
                 exc_info=True,
@@ -7183,7 +7132,7 @@ class YALC(DashboardIntegration, commands.Cog):
                     creator = guild.get_member(
                         event.creator_id,
                     ) or await self.bot.fetch_user(event.creator_id)
-            except Exception:
+            except RECOVERABLE_EXCEPTIONS:
                 pass
 
             # Create the log embed
@@ -7196,7 +7145,8 @@ class YALC(DashboardIntegration, commands.Cog):
 
             # Add event details
             embed.add_field(name="Name", value=event.name, inline=True)
-            embed.add_field(name="Event ID", value=f"`{event.id}`", inline=True)
+            embed.add_field(name="Event ID",
+                            value=f"`{event.id}`", inline=True)
 
             if event.description:
                 embed.add_field(
@@ -7209,7 +7159,8 @@ class YALC(DashboardIntegration, commands.Cog):
 
             # Add location info
             if hasattr(event, "location") and event.location:
-                embed.add_field(name="Location", value=event.location, inline=True)
+                embed.add_field(name="Location",
+                                value=event.location, inline=True)
             elif hasattr(event, "channel") and event.channel:
                 embed.add_field(
                     name="Channel",
@@ -7250,7 +7201,7 @@ class YALC(DashboardIntegration, commands.Cog):
             # Send the log
             await self.safe_send(log_channel, embed=embed)
 
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(
                 f"Error logging guild_scheduled_event_delete: {e}",
                 exc_info=True,
@@ -7313,14 +7264,16 @@ class YALC(DashboardIntegration, commands.Cog):
 
             self.set_embed_footer(embed, label="YALC Logger • Stage Created")
             await self.safe_send(channel, embed=embed)
-        except Exception as e:
-            self.log.error(f"Failed to log stage_instance_create: {e}", exc_info=True)
+        except RECOVERABLE_EXCEPTIONS as e:
+            self.log.error(
+                f"Failed to log stage_instance_create: {e}", exc_info=True)
 
     @commands.Cog.listener()
     async def on_stage_instance_update(self, before, after) -> None:
         """Log stage instance updates."""
         stage_channel = getattr(after, "channel", None)
-        guild = getattr(after, "guild", None) or getattr(stage_channel, "guild", None)
+        guild = getattr(after, "guild", None) or getattr(
+            stage_channel, "guild", None)
         if not guild:
             return
 
@@ -7386,8 +7339,9 @@ class YALC(DashboardIntegration, commands.Cog):
 
             self.set_embed_footer(embed, label="YALC Logger • Stage Updated")
             await self.safe_send(channel, embed=embed)
-        except Exception as e:
-            self.log.error(f"Failed to log stage_instance_update: {e}", exc_info=True)
+        except RECOVERABLE_EXCEPTIONS as e:
+            self.log.error(
+                f"Failed to log stage_instance_update: {e}", exc_info=True)
 
     @commands.Cog.listener()
     async def on_stage_instance_delete(self, stage_instance) -> None:
@@ -7445,8 +7399,9 @@ class YALC(DashboardIntegration, commands.Cog):
 
             self.set_embed_footer(embed, label="YALC Logger • Stage Deleted")
             await self.safe_send(channel, embed=embed)
-        except Exception as e:
-            self.log.error(f"Failed to log stage_instance_delete: {e}", exc_info=True)
+        except RECOVERABLE_EXCEPTIONS as e:
+            self.log.error(
+                f"Failed to log stage_instance_delete: {e}", exc_info=True)
 
     @commands.Cog.listener()
     async def on_soundboard_sound_create(self, sound) -> None:
@@ -7495,10 +7450,12 @@ class YALC(DashboardIntegration, commands.Cog):
                     inline=True,
                 )
 
-            self.set_embed_footer(embed, label="YALC Logger • Soundboard Sound Created")
+            self.set_embed_footer(
+                embed, label="YALC Logger • Soundboard Sound Created")
             await self.safe_send(channel, embed=embed)
-        except Exception as e:
-            self.log.error(f"Failed to log soundboard_sound_create: {e}", exc_info=True)
+        except RECOVERABLE_EXCEPTIONS as e:
+            self.log.error(
+                f"Failed to log soundboard_sound_create: {e}", exc_info=True)
 
     @commands.Cog.listener()
     async def on_soundboard_sound_update(self, before, after) -> None:
@@ -7557,10 +7514,12 @@ class YALC(DashboardIntegration, commands.Cog):
                     inline=True,
                 )
 
-            self.set_embed_footer(embed, label="YALC Logger • Soundboard Sound Updated")
+            self.set_embed_footer(
+                embed, label="YALC Logger • Soundboard Sound Updated")
             await self.safe_send(channel, embed=embed)
-        except Exception as e:
-            self.log.error(f"Failed to log soundboard_sound_update: {e}", exc_info=True)
+        except RECOVERABLE_EXCEPTIONS as e:
+            self.log.error(
+                f"Failed to log soundboard_sound_update: {e}", exc_info=True)
 
     @commands.Cog.listener()
     async def on_soundboard_sound_delete(self, sound) -> None:
@@ -7606,10 +7565,12 @@ class YALC(DashboardIntegration, commands.Cog):
                     inline=True,
                 )
 
-            self.set_embed_footer(embed, label="YALC Logger • Soundboard Sound Deleted")
+            self.set_embed_footer(
+                embed, label="YALC Logger • Soundboard Sound Deleted")
             await self.safe_send(channel, embed=embed)
-        except Exception as e:
-            self.log.error(f"Failed to log soundboard_sound_delete: {e}", exc_info=True)
+        except RECOVERABLE_EXCEPTIONS as e:
+            self.log.error(
+                f"Failed to log soundboard_sound_delete: {e}", exc_info=True)
 
     @commands.hybrid_group(name="yalc", aliases=["logger"], invoke_without_command=True)
     @commands.guild_only()
@@ -7678,7 +7639,7 @@ class YALC(DashboardIntegration, commands.Cog):
                         session_info.append(
                             f"• {member_display} in **#{channel_name}** ({duration})",
                         )
-                    except Exception:
+                    except RECOVERABLE_EXCEPTIONS:
                         session_info.append(
                             f"• Unknown user in unknown channel ({self._format_duration(session['duration'])})",
                         )
@@ -7727,7 +7688,8 @@ class YALC(DashboardIntegration, commands.Cog):
                             event["timestamp"],
                             tz=datetime.timezone.utc,
                         )
-                        relative_time = discord.utils.format_dt(event_time, style="R")
+                        relative_time = discord.utils.format_dt(
+                            event_time, style="R")
 
                         duration_text = ""
                         if event.get("duration") and event["duration"] > 0:
@@ -7738,16 +7700,18 @@ class YALC(DashboardIntegration, commands.Cog):
                         event_info.append(
                             f"• **{event['event_type']}** - {member_display} {channel_name}{duration_text}",
                         )
-                        event_info.append(f"  {relative_time}")  # No emoji, clean
+                        # No emoji, clean
+                        event_info.append(f"  {relative_time}")
                         event_info.append("")  # Empty line for spacing
 
-                    except Exception as e:
+                    except RECOVERABLE_EXCEPTIONS as e:
                         self.log.debug(f"Error processing event: {e}")
                         continue
 
                 embed.add_field(
                     name="📜 Recent Voice Events",
-                    value="\n".join(event_info)[:1024],  # Discord embed field limit
+                    # Discord embed field limit
+                    value="\n".join(event_info)[:1024],
                     inline=False,
                 )
             else:
@@ -7798,10 +7762,20 @@ class YALC(DashboardIntegration, commands.Cog):
                 if event.startswith("voice_") and settings["events"].get(event, False)
             ]
 
+            voice_state_status = (
+                "✅ Enabled"
+                if settings["events"].get("voice_state_update", False)
+                else "❌ Disabled"
+            )
+            voice_channel_status = (
+                "✅ Yes"
+                if settings["event_channels"].get("voice_state_update")
+                else "❌ No"
+            )
             embed.add_field(
                 name="⚙️ Voice Configuration",
-                value=f"• Voice state update event: {'✅ Enabled' if settings['events'].get('voice_state_update', False) else '❌ Disabled'}\n"
-                f"• Log channel configured: {'✅ Yes' if settings['event_channels'].get('voice_state_update') else '❌ No'}\n"
+                value=f"• Voice state update event: {voice_state_status}\n"
+                f"• Log channel configured: {voice_channel_status}\n"
                 f"• Voice events enabled: **{len(enabled_voice_events)}**\n"
                 f"• Ignore bots: {'✅ Yes' if settings.get('ignore_bots', False) else '❌ No'}",
                 inline=False,
@@ -7833,7 +7807,7 @@ class YALC(DashboardIntegration, commands.Cog):
                 f"🔊 Monitoring {len(voice_channels)} voice channels",
             )
 
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             error_embed = discord.Embed(
                 title="❌ Diagnostic Error",
                 description=f"An error occurred during diagnostics:\n```{e}```",
@@ -7942,7 +7916,8 @@ class YALC(DashboardIntegration, commands.Cog):
                             for e in events
                         ],
                     )
-                    embed.add_field(name=category, value=event_list, inline=False)
+                    embed.add_field(
+                        name=category, value=event_list, inline=False)
 
             embed.set_footer(
                 text=f"Use {ctx.prefix}yalc enable <event_type> to enable a specific event type",
@@ -8064,10 +8039,11 @@ class YALC(DashboardIntegration, commands.Cog):
                 channel_info = ""
                 if channel_id:
                     channel = ctx.guild.get_channel(channel_id)
-                    if channel:
-                        channel_info = f" → {channel.mention}"
-                    else:
-                        channel_info = " → *Channel not found*"
+                    channel_info = (
+                        f" → {channel.mention}"
+                        if channel
+                        else " → *Channel not found*"
+                    )
                 else:
                     channel_info = " → *No channel set*"
 
@@ -8149,7 +8125,8 @@ class YALC(DashboardIntegration, commands.Cog):
             ignore_settings.append(f"🚫 Ignored Users: {len(ignored_users)}")
         ignored_channels = settings.get("ignored_channels", [])
         if ignored_channels:
-            channel_names = [f"<#{channel_id}>" for channel_id in ignored_channels[:3]]
+            channel_names = [
+                f"<#{channel_id}>" for channel_id in ignored_channels[:3]]
             ignore_settings.append(
                 f"🚫 Ignored Channels: {', '.join(channel_names)}"
                 + (
@@ -8798,7 +8775,8 @@ class YALC(DashboardIntegration, commands.Cog):
                 other_ignores.append("📱 Application messages")
 
             if other_ignores:
-                broad_rules.append(f"**⚙️ System Ignores:** {', '.join(other_ignores)}")
+                broad_rules.append(
+                    f"**⚙️ System Ignores:** {', '.join(other_ignores)}")
 
             if broad_rules:
                 embed.add_field(
@@ -8872,7 +8850,11 @@ class YALC(DashboardIntegration, commands.Cog):
 
         embed.add_field(
             name="📊 Summary",
-            value=f"• **Broad rules:** {total_broad}\n• **Granular rules:** {total_granular}\n• **Total:** {total_broad + total_granular}",
+            value=(
+                f"• **Broad rules:** {total_broad}\n"
+                f"• **Granular rules:** {total_granular}\n"
+                f"• **Total:** {total_broad + total_granular}"
+            ),
             inline=False,
         )
 
@@ -8899,7 +8881,9 @@ class YALC(DashboardIntegration, commands.Cog):
         """
         if category is None:
             await ctx.send(
-                "❌ Please specify a category: `message`, `member`, `channel`, `role`, `voice`, `guild`, `application`, `automod`, `stage`, `soundboard`, `webhook`, `invite`, or `all`",
+                "❌ Please specify a category: `message`, `member`, `channel`, "
+                "`role`, `voice`, `guild`, `application`, `automod`, `stage`, "
+                "`soundboard`, `webhook`, `invite`, or `all`",
             )
             return
 
@@ -8971,7 +8955,9 @@ class YALC(DashboardIntegration, commands.Cog):
         """
         if category is None:
             await ctx.send(
-                "❌ Please specify a category: `message`, `member`, `channel`, `role`, `voice`, `guild`, `application`, `automod`, `stage`, `soundboard`, `webhook`, `invite`, or `all`",
+                "❌ Please specify a category: `message`, `member`, `channel`, "
+                "`role`, `voice`, `guild`, `application`, `automod`, `stage`, "
+                "`soundboard`, `webhook`, `invite`, or `all`",
             )
             return
 
@@ -9063,7 +9049,7 @@ class YALC(DashboardIntegration, commands.Cog):
             await self.config.guild(ctx.guild).clear()
             self._invalidate_settings_cache(ctx.guild)
             await ctx.send("✅ All YALC settings have been reset to defaults.")
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             await ctx.send(f"❌ Error resetting configuration: {e}")
 
     @yalc_group.command(name="validate")
@@ -9112,21 +9098,25 @@ class YALC(DashboardIntegration, commands.Cog):
                     # Try to fetch user from API as fallback
                     try:
                         fetched_user = await self.bot.fetch_user(user_id)
-                        if fetched_user:
-                            username_info = f"{fetched_user} (ID: {user_id})"
-                        else:
-                            username_info = f"ID: {user_id}"
-                    except Exception:
+                        username_info = (
+                            f"{fetched_user} (ID: {user_id})"
+                            if fetched_user
+                            else f"ID: {user_id}"
+                        )
+                    except RECOVERABLE_EXCEPTIONS:
                         username_info = f"ID: {user_id}"
-                    warnings.append(f"Ignored user {username_info} not found in server")
+                    warnings.append(
+                        f"Ignored user {username_info} not found in server")
                 else:
                     username_info = f"{user} (ID: {user_id})"
-                    warnings.append(f"Ignored user {username_info} not found in server")
+                    warnings.append(
+                        f"Ignored user {username_info} not found in server")
 
             for role_id in settings.get("ignored_roles", []):
                 role = ctx.guild.get_role(role_id)
                 if not role:
-                    warnings.append(f"Ignored role ID {role_id} not found in server")
+                    warnings.append(
+                        f"Ignored role ID {role_id} not found in server")
 
             for channel_id in settings.get("ignored_channels", []):
                 channel = ctx.guild.get_channel(channel_id)
@@ -9168,7 +9158,7 @@ class YALC(DashboardIntegration, commands.Cog):
                                 warnings.append(
                                     f"Granular ignore rule #{i + 1} references unknown user ID {user_id}",
                                 )
-                        except Exception:
+                        except RECOVERABLE_EXCEPTIONS:
                             warnings.append(
                                 f"Granular ignore rule #{i + 1} references unknown user ID {user_id}",
                             )
@@ -9221,7 +9211,8 @@ class YALC(DashboardIntegration, commands.Cog):
             if warnings:
                 embed.add_field(
                     name="⚠️ Warnings (recommended fixes)",
-                    value="\n".join(f"• {warning}" for warning in warnings[:10])
+                    value="\n".join(
+                        f"• {warning}" for warning in warnings[:10])
                     + (
                         f"\n• ...and {len(warnings) - 10} more"
                         if len(warnings) > 10
@@ -9244,7 +9235,7 @@ class YALC(DashboardIntegration, commands.Cog):
 
             await ctx.send(embed=embed)
 
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             await ctx.send(f"❌ Error validating configuration: {e}")
 
     @yalc_group.command(name="setup")
@@ -9261,10 +9252,14 @@ class YALC(DashboardIntegration, commands.Cog):
         if confirm != "CONFIRM":
             embed = discord.Embed(
                 title="🏗️ YALC Full Setup",
-                description="This will create a complete logging category and route supported YALC events to dedicated log channels.",
+                description=(
+                    "This will create a complete logging category and route "
+                    "supported YALC events to dedicated log channels."
+                ),
                 color=discord.Color.blue(),
             )
-            channel_lines = [f"• **#{name}**" for _, name, _ in self.SETUP_LOG_CHANNELS]
+            channel_lines = [f"• **#{name}**" for _,
+                name, _ in self.SETUP_LOG_CHANNELS]
             embed.add_field(
                 name="Created Category",
                 value="• **YALC Logs**",
@@ -9328,13 +9323,12 @@ class YALC(DashboardIntegration, commands.Cog):
                 event_mappings[event_type] = channel.id
 
             # Apply configuration
-            async with self.config.guild(ctx.guild).events() as events:
-                async with self.config.guild(
-                    ctx.guild,
-                ).event_channels() as event_channels:
-                    for event_type, channel_id in event_mappings.items():
-                        events[event_type] = True
-                        event_channels[event_type] = channel_id
+            async with self.config.guild(ctx.guild).events() as events, self.config.guild(
+                ctx.guild,
+            ).event_channels() as event_channels:
+                for event_type, channel_id in event_mappings.items():
+                    events[event_type] = True
+                    event_channels[event_type] = channel_id
 
             # Set up default ignore settings
             await self.config.guild(ctx.guild).ignore_tupperbox.set(True)
@@ -9397,9 +9391,10 @@ class YALC(DashboardIntegration, commands.Cog):
 
         except discord.Forbidden:
             await ctx.send(
-                "❌ I don't have permission to create channels and categories. Please ensure I have `Manage Channels` permission.",
+                "❌ I don't have permission to create channels and categories. "
+                "Please ensure I have `Manage Channels` permission.",
             )
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             await ctx.send(f"❌ Error during setup: {e}")
 
     @yalc_group.command(name="autodetect", aliases=["smartsetup", "autosetup"])
@@ -9463,7 +9458,11 @@ class YALC(DashboardIntegration, commands.Cog):
             # Send summary embed first
             summary_embed = discord.Embed(
                 title="🔍 Log Channel Auto-Detection Summary",
-                description=f"Found {len(detected_config)} potential log channels with {sum(len(data['events']) for data in detected_config.values())} total events.",
+                description=(
+                    f"Found {len(detected_config)} potential log channels with "
+                    f"{sum(len(data['events']) for data in detected_config.values())} "
+                    "total events."
+                ),
                 color=discord.Color.blue(),
             )
 
@@ -9527,14 +9526,16 @@ class YALC(DashboardIntegration, commands.Cog):
                                 for e in events[:5]
                                 if e in self.event_descriptions
                             ]
-                            event_text = "".join(event_emojis) if event_emojis else "📝"
+                            event_text = "".join(
+                                event_emojis) if event_emojis else "📝"
                         else:
                             event_emojis = [
                                 self.event_descriptions[e][0]
                                 for e in events[:3]
                                 if e in self.event_descriptions
                             ]
-                            event_text = "".join(event_emojis) + f"+{len(events) - 3}"
+                            event_text = "".join(
+                                event_emojis) + f"+{len(events) - 3}"
 
                         channel_lines.append(
                             f"📂 **{ch_name}** → {event_text} ({len(events)} events)",
@@ -9687,7 +9688,8 @@ class YALC(DashboardIntegration, commands.Cog):
                             yalc_registered = self.qualified_name in third_parties
 
                             if yalc_registered:
-                                pages = third_parties.get(self.qualified_name, {})
+                                pages = third_parties.get(
+                                    self.qualified_name, {})
                                 embed.add_field(
                                     name="✅ YALC Registration",
                                     value=f"YALC is registered as a third party with {len(pages)} page(s)",
@@ -9714,7 +9716,7 @@ class YALC(DashboardIntegration, commands.Cog):
                                 ),
                                 inline=False,
                             )
-                        except Exception as e:
+                        except RECOVERABLE_EXCEPTIONS as e:
                             embed.add_field(
                                 name="❌ Registration Check",
                                 value=f"Error checking registration: {e}",
@@ -9778,7 +9780,7 @@ class YALC(DashboardIntegration, commands.Cog):
                 else:
                     await ctx.send("⚠️ Registration completed but verification failed.")
 
-            except Exception as e:
+            except RECOVERABLE_EXCEPTIONS as e:
                 await ctx.send(f"❌ Failed to register YALC: {e}")
 
         else:
@@ -9810,7 +9812,8 @@ class YALC(DashboardIntegration, commands.Cog):
 
         # Check if the event type exists
         if event_type not in self.event_descriptions:
-            available_events = ", ".join(list(self.event_descriptions.keys())[:10])
+            available_events = ", ".join(
+                list(self.event_descriptions.keys())[:10])
             await interaction.response.send_message(
                 f"❌ Unknown event type: `{event_type}`.\n"
                 f"Available events: {available_events}{'...' if len(self.event_descriptions) > 10 else ''}",
@@ -9851,7 +9854,8 @@ class YALC(DashboardIntegration, commands.Cog):
 
         # Check if the event type exists
         if event_type not in self.event_descriptions:
-            available_events = ", ".join(list(self.event_descriptions.keys())[:10])
+            available_events = ", ".join(
+                list(self.event_descriptions.keys())[:10])
             await interaction.response.send_message(
                 f"❌ Unknown event type: `{event_type}`.\n"
                 f"Available events: {available_events}{'...' if len(self.event_descriptions) > 10 else ''}",
@@ -9896,7 +9900,8 @@ class YALC(DashboardIntegration, commands.Cog):
 
         # Check if the event type exists
         if event_type not in self.event_descriptions and event_type != "all":
-            available_events = ", ".join(list(self.event_descriptions.keys())[:10])
+            available_events = ", ".join(
+                list(self.event_descriptions.keys())[:10])
             await interaction.response.send_message(
                 f"❌ Unknown event type: `{event_type}`.\n"
                 f"Available events: {available_events}{'...' if len(self.event_descriptions) > 10 else ''}\n"
@@ -10131,7 +10136,8 @@ class YALC(DashboardIntegration, commands.Cog):
                         continue
 
                     # Filter events to only include ones that exist in our descriptions
-                    valid_events = [e for e in events if e in self.event_descriptions]
+                    valid_events = [
+                        e for e in events if e in self.event_descriptions]
 
                     if valid_events:
                         detected_config[channel.name] = {
@@ -10142,13 +10148,12 @@ class YALC(DashboardIntegration, commands.Cog):
                         break
 
             # If no specific pattern match, check for broader patterns like numbering or log indicators
-            if not found_match:
+            if not found_match and "log" in channel_name_lower:
                 # Look for patterns like "mod-log-1", "message-logs-2", etc.
-                if "log" in channel_name_lower:
-                    for pattern, events in patterns.items():
-                        if (
-                            pattern in channel_name_lower and len(pattern) > 2
-                        ):  # Avoid matching just "log"
+                for pattern, events in patterns.items():
+                    if (
+                        pattern in channel_name_lower and len(pattern) > 2
+                    ):  # Avoid matching just "log"
                             valid_events = [
                                 e for e in events if e in self.event_descriptions
                             ]
@@ -10184,10 +10189,11 @@ class YALC(DashboardIntegration, commands.Cog):
                 channel_info = ""
                 if channel_id:
                     channel = interaction.guild.get_channel(channel_id)
-                    if channel:
-                        channel_info = f" → {channel.mention}"
-                    else:
-                        channel_info = " → *Channel not found*"
+                    channel_info = (
+                        f" → {channel.mention}"
+                        if channel
+                        else " → *Channel not found*"
+                    )
                 else:
                     channel_info = " → *No channel set*"
 
@@ -10273,7 +10279,8 @@ class YALC(DashboardIntegration, commands.Cog):
 
         ignored_channels = settings.get("ignored_channels", [])
         if ignored_channels:
-            channel_names = [f"<#{channel_id}>" for channel_id in ignored_channels[:3]]
+            channel_names = [
+                f"<#{channel_id}>" for channel_id in ignored_channels[:3]]
             ignore_settings.append(
                 f"🚫 Ignored Channels: {', '.join(channel_names)}"
                 + (
@@ -10394,7 +10401,7 @@ class YALC(DashboardIntegration, commands.Cog):
 
             await interaction.response.send_message(embed=embed)
 
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             await interaction.response.send_message(
                 f"❌ Error during quick setup: {e}",
                 ephemeral=True,
@@ -10454,7 +10461,7 @@ class YALC(DashboardIntegration, commands.Cog):
                         return True
                 except discord.NotFound:
                     pass  # Referenced message not found, ignore
-                except Exception as e:
+                except RECOVERABLE_EXCEPTIONS as e:
                     self.log.debug(f"Error checking referenced message: {e}")
 
         return False
@@ -10483,7 +10490,8 @@ class YALC(DashboardIntegration, commands.Cog):
             The sent message if successful, None otherwise
         """
         if not channel:
-            self.log.warning("Attempted to send a message to a nonexistent channel")
+            self.log.warning(
+                "Attempted to send a message to a nonexistent channel")
             return None
 
         max_retries = 3
@@ -10504,7 +10512,8 @@ class YALC(DashboardIntegration, commands.Cog):
                         channel.guild,
                     )
                     if fallback_channel and fallback_channel != channel:
-                        self.log.info(f"Attempting fallback to {fallback_channel.name}")
+                        self.log.info(
+                            f"Attempting fallback to {fallback_channel.name}")
                         try:
                             fallback_embed = kwargs.get("embed")
                             if fallback_embed:
@@ -10515,19 +10524,22 @@ class YALC(DashboardIntegration, commands.Cog):
                                 )
                             self._reset_send_files(kwargs)
                             return await fallback_channel.send(**kwargs)
-                        except Exception as fallback_e:
-                            self.log.error(f"Fallback send also failed: {fallback_e}")
+                        except RECOVERABLE_EXCEPTIONS as fallback_e:
+                            self.log.error(
+                                f"Fallback send also failed: {fallback_e}")
                 break  # Don't retry permission errors
 
             except discord.HTTPException as e:
                 if e.status == 429:  # Rate limited
-                    retry_after = getattr(e, "retry_after", base_delay * (2**attempt))
+                    retry_after = getattr(
+                        e, "retry_after", base_delay * (2**attempt))
                     self.log.warning(
                         f"Rate limited when sending to channel {channel.id}, retrying after {retry_after}s",
                     )
                     await asyncio.sleep(retry_after)
                 elif e.code == 50013:  # Missing permissions
-                    self.log.warning(f"Missing permissions for channel {channel.id}")
+                    self.log.warning(
+                        f"Missing permissions for channel {channel.id}")
                     break
                 elif e.code == 50001:  # Missing access
                     self.log.warning(f"Missing access to channel {channel.id}")
@@ -10544,7 +10556,7 @@ class YALC(DashboardIntegration, commands.Cog):
                             f"Failed to send message to channel {channel.id} after {max_retries} attempts: {e}",
                         )
 
-            except Exception as e:
+            except RECOVERABLE_EXCEPTIONS as e:
                 if attempt < max_retries - 1:
                     delay = base_delay * (2**attempt)
                     self.log.warning(
@@ -10576,7 +10588,7 @@ class YALC(DashboardIntegration, commands.Cog):
                         try:
                             if channel.permissions_for(guild.me).send_messages:
                                 return channel
-                        except Exception:
+                        except RECOVERABLE_EXCEPTIONS:
                             continue
 
             # Fallback to the first text channel we can send to
@@ -10584,10 +10596,10 @@ class YALC(DashboardIntegration, commands.Cog):
                 try:
                     if channel.permissions_for(guild.me).send_messages:
                         return channel
-                except Exception:
+                except RECOVERABLE_EXCEPTIONS:
                     continue
 
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Error finding fallback log channel: {e}")
 
         return None
@@ -10661,7 +10673,7 @@ class YALC(DashboardIntegration, commands.Cog):
 
             await self.safe_send(channel, embed=embed)
 
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Error handling bulk {change_type} operation: {e}")
 
     async def _background_log_worker(self):
@@ -10684,8 +10696,9 @@ class YALC(DashboardIntegration, commands.Cog):
                 self.log.info("Background log worker cancelled")
                 break
 
-            except Exception as e:
-                self.log.error(f"Error in background log worker: {e}", exc_info=True)
+            except RECOVERABLE_EXCEPTIONS as e:
+                self.log.error(
+                    f"Error in background log worker: {e}", exc_info=True)
                 await asyncio.sleep(1)  # Prevent rapid error loops
 
         self.log.info("Background log worker stopped")
@@ -10713,10 +10726,12 @@ class YALC(DashboardIntegration, commands.Cog):
             if handler:
                 await handler(guild, event_data)
             else:
-                self.log.warning(f"Unknown background event type: {event_type}")
+                self.log.warning(
+                    f"Unknown background event type: {event_type}")
 
-        except Exception as e:
-            self.log.error(f"Error processing background log item: {e}", exc_info=True)
+        except RECOVERABLE_EXCEPTIONS as e:
+            self.log.error(
+                f"Error processing background log item: {e}", exc_info=True)
 
     async def _cleanup_expired_caches(self):
         """Clean up expired cache entries."""

@@ -1,5 +1,10 @@
 # 🌦️ RandomWeather Changelog
 
+## [Unreleased]
+
+- Added standalone Red-Web-Dashboard integration for viewing visible commands and current server configuration.
+
+
 ## [v2.3.1] - 2026-07-09
 
 - Renamed the repository package folder from `RandomWeather` to `randomweather` to match Red cog naming standards.

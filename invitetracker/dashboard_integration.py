@@ -63,7 +63,8 @@ class DashboardIntegration:
             try:
                 messages = await self._dashboard_handle_action(guild, action, form_data)
             except commands.CommandError as error:
-                notifications.append({"message": str(error), "category": "error"})
+                notifications.append(
+                    {"message": str(error), "category": "error"})
             except Exception as error:
                 log.exception("InviteTracker dashboard action failed.")
                 notifications.append(
@@ -118,19 +119,77 @@ class DashboardIntegration:
 
     def _dashboard_tab_button(self, name: str, label: str, active: str) -> str:
         selected = name == active
-        return f'<button type="button" class="dash-tab{" active" if selected else ""}" data-tab="{self._h(name)}" role="tab" aria-selected="{str(selected).lower()}" tabindex="{0 if selected else -1}">{self._h(label)}</button>'
+        active_class = " active" if selected else ""
+        aria_selected = str(selected).lower()
+        tabindex = 0 if selected else -1
+        return (
+            f'<button type="button" class="dash-tab{active_class}" '
+            f'data-tab="{self._h(name)}" role="tab" '
+            f'aria-selected="{aria_selected}" tabindex="{tabindex}">'
+            f"{self._h(label)}</button>"
+        )
 
     @staticmethod
     def _dashboard_tabs_script() -> str:
         return """
 <script>
 (() => {
-  const root = document.currentScript.closest("[data-dashboard-tabs]"); if (!root) return;
-  const tabs = Array.from(root.querySelectorAll("[data-tab]")); const panels = Array.from(root.querySelectorAll("[data-tab-panel]")); const names = new Set(tabs.map((tab) => tab.dataset.tab));
-  const activate = (name, hash = false) => { if (!names.has(name)) return; tabs.forEach((tab) => { const on = tab.dataset.tab === name; tab.classList.toggle("active", on); tab.setAttribute("aria-selected", on ? "true" : "false"); tab.tabIndex = on ? 0 : -1; }); panels.forEach((panel) => { const on = panel.dataset.tabPanel === name; panel.classList.toggle("active", on); panel.hidden = !on; }); if (hash) history.replaceState(null, "", `#tab-${name}`); };
-  const fromHash = () => { const hash = location.hash.slice(1); if (hash.startsWith("tab-") && names.has(hash.slice(4))) return hash.slice(4); const section = document.getElementById(hash); const panel = section ? section.closest("[data-tab-panel]") : null; return panel ? panel.dataset.tabPanel : null; };
-  tabs.forEach((tab, index) => { tab.addEventListener("click", () => activate(tab.dataset.tab, true)); tab.addEventListener("keydown", (event) => { const move = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0; if (!move) return; event.preventDefault(); const next = tabs[(index + move + tabs.length) % tabs.length]; next.focus(); activate(next.dataset.tab, true); }); });
-  root.querySelectorAll("form").forEach((form) => form.addEventListener("submit", () => { let input = form.querySelector('input[name="active_tab"]'); if (!input) { input = document.createElement("input"); input.type = "hidden"; input.name = "active_tab"; form.appendChild(input); } input.value = root.querySelector("[data-tab].active").dataset.tab; }));
+  const root = document.currentScript.closest("[data-dashboard-tabs]");
+  if (!root) return;
+
+  const tabs = Array.from(root.querySelectorAll("[data-tab]"));
+  const panels = Array.from(root.querySelectorAll("[data-tab-panel]"));
+  const names = new Set(tabs.map((tab) => tab.dataset.tab));
+
+  const activate = (name, hash = false) => {
+    if (!names.has(name)) return;
+    tabs.forEach((tab) => {
+      const on = tab.dataset.tab === name;
+      tab.classList.toggle("active", on);
+      tab.setAttribute("aria-selected", on ? "true" : "false");
+      tab.tabIndex = on ? 0 : -1;
+    });
+    panels.forEach((panel) => {
+      const on = panel.dataset.tabPanel === name;
+      panel.classList.toggle("active", on);
+      panel.hidden = !on;
+    });
+    if (hash) history.replaceState(null, "", `#tab-${name}`);
+  };
+
+  const fromHash = () => {
+    const hash = location.hash.slice(1);
+    if (hash.startsWith("tab-") && names.has(hash.slice(4))) return hash.slice(4);
+    const section = document.getElementById(hash);
+    const panel = section ? section.closest("[data-tab-panel]") : null;
+    return panel ? panel.dataset.tabPanel : null;
+  };
+
+  tabs.forEach((tab, index) => {
+    tab.addEventListener("click", () => activate(tab.dataset.tab, true));
+    tab.addEventListener("keydown", (event) => {
+      const move = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
+      if (!move) return;
+      event.preventDefault();
+      const next = tabs[(index + move + tabs.length) % tabs.length];
+      next.focus();
+      activate(next.dataset.tab, true);
+    });
+  });
+
+  root.querySelectorAll("form").forEach((form) => {
+    form.addEventListener("submit", () => {
+      let input = form.querySelector('input[name="active_tab"]');
+      if (!input) {
+        input = document.createElement("input");
+        input.type = "hidden";
+        input.name = "active_tab";
+        form.appendChild(input);
+      }
+      input.value = root.querySelector("[data-tab].active").dataset.tab;
+    });
+  });
+
   activate(fromHash() || root.querySelector("[data-tab].active").dataset.tab);
 })();
 </script>
@@ -188,7 +247,8 @@ class DashboardIntegration:
         try:
             return int(value)
         except (TypeError, ValueError) as exc:
-            raise commands.BadArgument(f"`{key}` must be a Discord ID.") from exc
+            raise commands.BadArgument(
+                f"`{key}` must be a Discord ID.") from exc
 
     def _dash_csrf(self, kwargs: dict[str, typing.Any]) -> str:
         csrf_token = kwargs.get("csrf_token")
@@ -228,7 +288,8 @@ class DashboardIntegration:
             return await self._dashboard_reset_stats(guild, form_data)
 
         if action:
-            raise commands.BadArgument("Unknown InviteTracker dashboard action.")
+            raise commands.BadArgument(
+                "Unknown InviteTracker dashboard action.")
         return []
 
     async def _dashboard_save_settings(
@@ -255,7 +316,8 @@ class DashboardIntegration:
                 )
             me = guild.me
             if me is None:
-                raise commands.CommandError("I could not check my channel permissions.")
+                raise commands.CommandError(
+                    "I could not check my channel permissions.")
             permissions = channel.permissions_for(me)
             if not permissions.send_messages or not permissions.embed_links:
                 raise commands.CommandError(
@@ -279,7 +341,8 @@ class DashboardIntegration:
         guild: discord.Guild,
         form_data: typing.Any,
     ) -> list[dict[str, str]]:
-        confirmation = self._dash_value(form_data, "reset_confirm").strip().lower()
+        confirmation = self._dash_value(
+            form_data, "reset_confirm").strip().lower()
         if confirmation != "confirm":
             raise commands.BadArgument(
                 "Type `confirm` to reset all InviteTracker stats.",
@@ -321,9 +384,12 @@ class DashboardIntegration:
         members = settings.get("members") or {}
         csrf = self._dash_csrf(kwargs)
 
-        total_joins = sum(int(stats.get("joins", 0)) for stats in inviters.values())
-        total_leaves = sum(int(stats.get("leaves", 0)) for stats in inviters.values())
-        total_fake = sum(int(stats.get("fake", 0)) for stats in inviters.values())
+        total_joins = sum(int(stats.get("joins", 0))
+                          for stats in inviters.values())
+        total_leaves = sum(int(stats.get("leaves", 0))
+                           for stats in inviters.values())
+        total_fake = sum(int(stats.get("fake", 0))
+                         for stats in inviters.values())
         active_members = sum(
             1 for record in members.values() if not record.get("left_at")
         )
@@ -369,16 +435,21 @@ class DashboardIntegration:
 }}
 .it-actions button.danger {{ background: var(--danger); color: #210909; }}
 .it-table {{ width: 100%; border-collapse: collapse; font-size: 14px; }}
-.it-table th, .it-table td {{ border-bottom: 1px solid var(--line); padding: 8px; text-align: left; vertical-align: top; }}
+.it-table th, .it-table td {{ border-bottom: 1px solid var(--line); padding: 8px; text-align: left; vertical-align: top;
+ }}
 .it-table th {{ color: var(--muted); font-weight: 600; }}
-.dash-tabs {{ display: flex; gap: 4px; overflow-x: auto; position: sticky; top: 0; z-index: 10; padding: 5px; background: #0c0f14; border: 1px solid var(--line); border-radius: 8px; }}
-.dash-tab {{ flex: 0 0 auto; border: 0; border-radius: 6px; padding: 9px 13px; background: transparent; color: var(--muted); cursor: pointer; font-weight: 700; white-space: nowrap; }}
-.dash-tab:hover {{ background: var(--panel); color: var(--text); }} .dash-tab.active {{ background: var(--accent); color: #07111f; }}
+.dash-tabs {{ display: flex; gap: 4px; overflow-x: auto; position: sticky; top: 0; z-index: 10; padding: 5px;
+background: #0c0f14; border: 1px solid var(--line); border-radius: 8px; }}
+.dash-tab {{ flex: 0 0 auto; border: 0; border-radius: 6px; padding: 9px 13px; background: transparent; color:
+var(--muted); cursor: pointer; font-weight: 700; white-space: nowrap; }}
+.dash-tab:hover {{ background: var(--panel); color: var(--text); }} .dash-tab.active {{ background: var(--accent);
+color: #07111f; }}
 .dash-panel {{ display: none; }} .dash-panel.active {{ display: block; }}
 </style>
 <div class="it-dash" data-dashboard-tabs="1">
   <div class="it-stats">
-    <div class="it-stat"><strong>{self._h("Enabled" if settings.get("enabled") else "Disabled")}</strong><span>Status</span></div>
+    <div class="it-stat"><strong>{self._h("Enabled" if settings.get("enabled") else
+    "Disabled")}</strong><span>Status</span></div>
     <div class="it-stat"><strong>{self._count(total_joins)}</strong><span>joins</span></div>
     <div class="it-stat"><strong>{self._count(total_leaves)}</strong><span>leaves</span></div>
     <div class="it-stat"><strong>{self._count(total_fake)}</strong><span>fake joins</span></div>
@@ -390,19 +461,23 @@ class DashboardIntegration:
     {self._dashboard_tab_button("settings", "Settings", active_tab)}
     {self._dashboard_tab_button("maintenance", "Maintenance", active_tab)}
   </div>
-  <section class="dash-panel{" active" if active_tab == "settings" else ""}" data-tab-panel="settings"><div class="it-grid">
+  <section class="dash-panel{" active" if active_tab == "settings" else ""}" data-tab-panel="settings"><div
+  class="it-grid">
     <form class="it-card" method="post">
       {csrf}
       <input type="hidden" name="action" value="save_settings">
       <h2>Settings</h2>
       {self._checkbox("enabled", "Enable invite tracking", settings.get("enabled"))}
-      {self._select("log_channel_id", "Invite log channel", self._text_options(guild), settings.get("log_channel_id"), "No log channel")}
-      {self._input("fake_age_hours", "Fake join threshold hours", settings.get("fake_age_hours") or 0, "number", 0, 8760)}
+      {self._select("log_channel_id", "Invite log channel", self._text_options(guild), settings.get("log_channel_id"),
+      "No log channel")}
+      {self._input("fake_age_hours", "Fake join threshold hours", settings.get("fake_age_hours") or 0, "number", 0,
+      8760)}
       {self._checkbox("include_bots", "Track bot joins", settings.get("include_bots"))}
       <div class="it-actions"><button type="submit">Save settings</button></div>
     </form>
   </div></section>
-  <section class="dash-panel{" active" if active_tab == "maintenance" else ""}" data-tab-panel="maintenance"><div class="it-grid">
+  <section class="dash-panel{" active" if active_tab == "maintenance" else ""}" data-tab-panel="maintenance"><div
+  class="it-grid">
     <div class="it-card">
       <h2>Maintenance</h2>
       <form method="post" class="it-actions">
@@ -419,7 +494,8 @@ class DashboardIntegration:
       <p class="it-muted">Reset clears inviter totals, tracked member sources, and unknown join count.</p>
     </div>
   </div></section>
-  <section class="dash-panel{" active" if active_tab == "reports" else ""}" data-tab-panel="reports"><div class="it-grid">
+  <section class="dash-panel{" active" if active_tab == "reports" else ""}" data-tab-panel="reports"><div
+  class="it-grid">
     <div class="it-card">
       <h2>Top Inviters</h2>
       {leaderboard}

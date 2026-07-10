@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any
 import discord
 from redbot.core import Config, app_commands, commands
 
+from .dashboard_integration import DashboardIntegration
 from .validation_utils import (
     ValidationError,
     validate_client_id,
@@ -31,8 +32,22 @@ __red_end_user_data_statement__ = (
 
 log = logging.getLogger("red.WHMCS")
 
+RECOVERABLE_EXCEPTIONS = (
+    discord.DiscordException,
+    WHMCSAPIError,
+    WHMCSAuthenticationError,
+    WHMCSRateLimitError,
+    ValidationError,
+    RuntimeError,
+    OSError,
+    ValueError,
+    KeyError,
+    TypeError,
+    AttributeError,
+)
 
-class WHMCS(commands.Cog):
+
+class WHMCS(DashboardIntegration, commands.Cog):
     """WHMCS Integration for Red-Bot.
 
     Provides Discord integration with WHMCS billing and client management system.
@@ -91,17 +106,19 @@ class WHMCS(commands.Cog):
         while not self.bot.is_closed():
             try:
                 await self._sync_all_ticket_channels()
-            except Exception:
+            except RECOVERABLE_EXCEPTIONS:
                 log.exception("Error in ticket reply sync loop")
             await asyncio.sleep(60)
 
     async def _sync_all_ticket_channels(self):
         # For each guild, for each mapped ticket/channel, fetch latest replies and post new ones
         for guild in self.bot.guilds:
-            log.info(f"[WHMCS SYNC] Processing guild {guild.id} ({guild.name})")
+            log.info(
+                f"[WHMCS SYNC] Processing guild {guild.id} ({guild.name})")
             api_client = await self._get_api_client(guild)
             if not api_client:
-                log.info(f"[WHMCS SYNC] No API client for guild {guild.id}, skipping")
+                log.info(
+                    f"[WHMCS SYNC] No API client for guild {guild.id}, skipping")
                 continue
             async with api_client:
                 ticket_mappings = await self.config.guild(guild).ticket_mappings()
@@ -111,7 +128,8 @@ class WHMCS(commands.Cog):
             log.info(
                 f"[WHMCS SYNC] Ticket mappings types: {[type(k) for k in ticket_mappings]}",
             )
-            log.info(f"[WHMCS SYNC] Ticket mappings before cleanup: {ticket_mappings}")
+            log.info(
+                f"[WHMCS SYNC] Ticket mappings before cleanup: {ticket_mappings}")
 
             # Normalize ticket mapping keys: always store as int if possible, never remove if convertible
             converted_mappings = {}
@@ -127,14 +145,16 @@ class WHMCS(commands.Cog):
                     else:
                         converted_mappings[key] = value
                 except (ValueError, TypeError):
-                    log.warning(f"[WHMCS SYNC] Skipping invalid mapping key: {key}")
+                    log.warning(
+                        f"[WHMCS SYNC] Skipping invalid mapping key: {key}")
 
             # Only update if normalization changed the mapping
             if converted_mappings != ticket_mappings:
                 async with self.config.guild(guild).ticket_mappings() as mappings:
                     mappings.clear()
                     mappings.update(converted_mappings)
-                log.info("[WHMCS SYNC] Updated ticket mappings with integer keys")
+                log.info(
+                    "[WHMCS SYNC] Updated ticket mappings with integer keys")
                 ticket_mappings = converted_mappings
 
             # After normalization, do not remove any mapping that can be converted to int
@@ -148,7 +168,7 @@ class WHMCS(commands.Cog):
                         int(channel_id)
                         # Convertible, already handled above, skip removal
                         continue
-                    except Exception:
+                    except RECOVERABLE_EXCEPTIONS:
                         pass
                 # Only remove if not int and not convertible to int
                 log.warning(
@@ -159,7 +179,8 @@ class WHMCS(commands.Cog):
                 async with self.config.guild(guild).ticket_mappings() as mappings:
                     for k in keys_to_remove:
                         if k in mappings:
-                            log.warning(f"Removing corrupted ticket mapping key: {k}")
+                            log.warning(
+                                f"Removing corrupted ticket mapping key: {k}")
                             del mappings[k]
                 ticket_mappings = await self.config.guild(guild).ticket_mappings()
             # Do not reassign or clean further; int keys persist
@@ -198,7 +219,7 @@ class WHMCS(commands.Cog):
                                 ticket = resp.get("ticket")
                                 if ticket:
                                     found_ticket = (ticketnum, ticket)
-                        except Exception:
+                        except RECOVERABLE_EXCEPTIONS:
                             continue
                     if not found_ticket:
                         continue
@@ -231,7 +252,9 @@ class WHMCS(commands.Cog):
                         )
                     new_replies = []
                     log.info(
-                        f"[WHMCS SYNC] Checking {len(replies) if isinstance(replies, list) else 1} replies against last_reply_time={last_reply_time}",
+                        "[WHMCS SYNC] Checking %s replies against last_reply_time=%s",
+                        len(replies) if isinstance(replies, list) else 1,
+                        last_reply_time,
                     )
                     for i, reply in enumerate(replies):
                         date = reply.get("date")
@@ -240,14 +263,20 @@ class WHMCS(commands.Cog):
                         )
                         if last_reply_time is None or (date and date > last_reply_time):
                             new_replies.append(reply)
-                            log.info(f"[WHMCS SYNC] Reply {i} is new (date={date})")
+                            log.info(
+                                f"[WHMCS SYNC] Reply {i} is new (date={date})")
                         else:
-                            log.info(f"[WHMCS SYNC] Reply {i} is old (date={date})")
+                            log.info(
+                                f"[WHMCS SYNC] Reply {i} is old (date={date})")
                     log.info(
-                        f"[WHMCS SYNC] Final new replies count: {len(new_replies)} for ticket {ticket_id} in channel {channel_id}",
+                        "[WHMCS SYNC] Final new replies count: %s for ticket %s in channel %s",
+                        len(new_replies),
+                        ticket_id,
+                        channel_id,
                     )
                     for reply in new_replies:
-                        author = reply.get("admin") or reply.get("name", "Unknown")
+                        author = reply.get("admin") or reply.get(
+                            "name", "Unknown")
                         date = reply.get("date", "N/A")
                         rmsg = reply.get("message", "")
                         if len(rmsg) > 1000:
@@ -263,7 +292,11 @@ class WHMCS(commands.Cog):
                             inline=False,
                         )
                         log.info(
-                            f"[WHMCS SYNC] Posting reply to Discord channel {channel_id}: author={author}, date={date}, message={rmsg[:100]}",
+                            "[WHMCS SYNC] Posting reply to Discord channel %s: author=%s, date=%s, message=%s",
+                            channel_id,
+                            author,
+                            date,
+                            rmsg[:100],
                         )
                         try:
                             await channel.send(embed=reply_embed)
@@ -274,7 +307,7 @@ class WHMCS(commands.Cog):
                                 f"last_reply_time_{ticket_id}",
                                 value=date,
                             )
-                        except Exception as e:
+                        except RECOVERABLE_EXCEPTIONS as e:
                             log.error(
                                 f"[WHMCS SYNC] Failed to post reply to Discord channel {channel_id}: {e}",
                             )
@@ -283,7 +316,8 @@ class WHMCS(commands.Cog):
                     ticket_id = channel_id
                     # Ensure info is converted to int if it's a string
                     try:
-                        channel_id_int = int(info) if isinstance(info, str) else info
+                        channel_id_int = int(info) if isinstance(
+                            info, str) else info
                         channel = guild.get_channel(channel_id_int)
                     except (ValueError, TypeError):
                         channel = None
@@ -299,7 +333,7 @@ class WHMCS(commands.Cog):
                             async with api_client:
                                 resp = await api_client.get_ticket(str(ticket_id))
                                 ticket = resp.get("ticket")
-                        except Exception:
+                        except RECOVERABLE_EXCEPTIONS:
                             continue
                         if not ticket or not ticket.get("replies"):
                             continue
@@ -316,7 +350,8 @@ class WHMCS(commands.Cog):
                             ):
                                 new_replies.append(reply)
                         for reply in new_replies:
-                            author = reply.get("admin") or reply.get("name", "Unknown")
+                            author = reply.get("admin") or reply.get(
+                                "name", "Unknown")
                             date = reply.get("date", "N/A")
                             rmsg = reply.get("message", "")
                             if len(rmsg) > 1000:
@@ -630,7 +665,8 @@ class WHMCS(commands.Cog):
 
             # Store mapping: {channel_id: {"ticket_ids": {...}}}
             # Always resolve and store the internal ticketid for this mapping
-            internal_ticketid = ticket_data.get("id") or ticket_data.get("ticketid")
+            internal_ticketid = ticket_data.get(
+                "id") or ticket_data.get("ticketid")
             if not internal_ticketid:
                 # Try to resolve using API if missing
                 api_client = await self._get_api_client(guild)
@@ -655,7 +691,10 @@ class WHMCS(commands.Cog):
             async with self.config.guild(guild).ticket_mappings() as mappings:
                 mappings[channel_id_int] = {"ticket_ids": ticket_ids}
                 log.info(
-                    f"Created ticket mapping for channel {channel_id_int} (type: {type(channel_id_int)}), ticketid={internal_ticketid}",
+                    "Created ticket mapping for channel %s (type: %s), ticketid=%s",
+                    channel_id_int,
+                    type(channel_id_int),
+                    internal_ticketid,
                 )
 
             self._ticket_channels.setdefault(guild.id, {})[channel_id_int] = {
@@ -667,7 +706,7 @@ class WHMCS(commands.Cog):
 
             return channel
 
-        except Exception:
+        except RECOVERABLE_EXCEPTIONS:
             log.exception(f"Failed to create ticket channel for {ticket_id}")
             return None
 
@@ -752,8 +791,9 @@ class WHMCS(commands.Cog):
                         inline=False,
                     )
                     await channel.send(embed=reply_embed)
-        except Exception:
-            log.exception(f"Failed to send ticket info to channel {channel.id}")
+        except RECOVERABLE_EXCEPTIONS:
+            log.exception(
+                f"Failed to send ticket info to channel {channel.id}")
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
@@ -820,7 +860,8 @@ class WHMCS(commands.Cog):
                 # Ensure channel_id is converted to int for comparison
                 try:
                     channel_id_int = (
-                        int(channel_id) if isinstance(channel_id, str) else channel_id
+                        int(channel_id) if isinstance(
+                            channel_id, str) else channel_id
                     )
                     if channel_id_int == message.channel.id:
                         ticket_ids = {"tid": tid}
@@ -861,7 +902,8 @@ class WHMCS(commands.Cog):
                 ticketnum = ticket_ids.get("ticketnum")
                 found_ticket = None
                 if ticketnum:
-                    log.info(f"[WHMCS Discord Auto-Reply] Trying ticketnum={ticketnum}")
+                    log.info(
+                        f"[WHMCS Discord Auto-Reply] Trying ticketnum={ticketnum}")
                     ticket_resp = await api_client.get_ticket(str(ticketnum))
                     log.info(
                         f"[WHMCS Discord Auto-Reply] API response for ticketnum={ticketnum}: {ticket_resp}",
@@ -891,14 +933,19 @@ class WHMCS(commands.Cog):
                 reply_success = False
                 tried_ids = []
                 # AddTicketReply API requires internal ticketid (database ID), but we only look up by ticketnum now
-                internal_id = found_ticket.get("id") or found_ticket.get("ticketid")
+                internal_id = found_ticket.get(
+                    "id") or found_ticket.get("ticketid")
                 if internal_id:
                     tried_ids.append(f"internal_id={internal_id}")
                     payload_preview = message.content[:100] + (
                         "..." if len(message.content) > 100 else ""
                     )
                     log.info(
-                        f"[WHMCS Discord Auto-Reply] Attempting add_ticket_reply using internal ID: {internal_id}, admin_username={admin_username}, message_preview={payload_preview}",
+                        "[WHMCS Discord Auto-Reply] Attempting add_ticket_reply using internal ID: %s, "
+                        "admin_username=%s, message_preview=%s",
+                        internal_id,
+                        admin_username,
+                        payload_preview,
                     )
                     try:
                         response = await api_client.add_ticket_reply(
@@ -915,11 +962,12 @@ class WHMCS(commands.Cog):
                             )
                             reply_success = True
                         else:
-                            error_msg = response.get("message", "No error message")
+                            error_msg = response.get(
+                                "message", "No error message")
                             log.warning(
                                 f"[WHMCS Discord Auto-Reply] API call failed for internal_id={internal_id}: {error_msg}",
                             )
-                    except Exception as e:
+                    except RECOVERABLE_EXCEPTIONS as e:
                         log.warning(
                             f"[WHMCS Discord Auto-Reply] Exception for internal_id={internal_id}: {e}",
                         )
@@ -945,7 +993,7 @@ class WHMCS(commands.Cog):
                     )
                     await message.add_reaction("❌")
 
-        except Exception:
+        except RECOVERABLE_EXCEPTIONS:
             log.exception(
                 f"Failed to auto-reply to ticket channel {message.channel.id}",
             )
@@ -1017,7 +1065,8 @@ class WHMCS(commands.Cog):
                         clients = [clients]
 
                     for client in clients:
-                        name = f"{client.get('firstname', '')} {client.get('lastname', '')}".strip()
+                        name = f"{client.get('firstname', '')} {client.get('lastname', '')}".strip(
+                        )
                         if not name:
                             name = f"Client {client.get('id')}"
 
@@ -1052,7 +1101,8 @@ class WHMCS(commands.Cog):
                     await ctx.send(embed=embed)
                 else:
                     # Plain text format for when embeds are disabled
-                    output = [f"👥 **Client Directory - Page {page} of {total_pages}**"]
+                    output = [
+                        f"👥 **Client Directory - Page {page} of {total_pages}**"]
                     output.append(f"📊 {total} total clients\n")
 
                     clients = response["clients"]["client"]
@@ -1060,7 +1110,8 @@ class WHMCS(commands.Cog):
                         clients = [clients]
 
                     for client in clients:
-                        name = f"{client.get('firstname', '')} {client.get('lastname', '')}".strip()
+                        name = f"{client.get('firstname', '')} {client.get('lastname', '')}".strip(
+                        )
                         if not name:
                             name = f"Client {client.get('id')}"
 
@@ -1093,7 +1144,7 @@ class WHMCS(commands.Cog):
             await self._send_error(ctx, "Rate limit exceeded. Please try again later.")
         except WHMCSAPIError as e:
             await self._send_error(ctx, f"WHMCS API error: {e}")
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             log.exception("Error in client_list command")
             await self._send_error(ctx, f"An unexpected error occurred: {e}")
 
@@ -1136,7 +1187,8 @@ class WHMCS(commands.Cog):
 
                 client = response["client"]
 
-                client_name = f"{client.get('firstname', '')} {client.get('lastname', '')}".strip()
+                client_name = f"{client.get('firstname', '')} {client.get('lastname', '')}".strip(
+                )
                 if not client_name:
                     client_name = f"Client {client_id}"
 
@@ -1207,7 +1259,8 @@ class WHMCS(commands.Cog):
                         inline=False,
                     )
 
-                embed.set_footer(text=f"WHMCS Integration • Client ID: {client_id}")
+                embed.set_footer(
+                    text=f"WHMCS Integration • Client ID: {client_id}")
 
                 await ctx.send(embed=embed)
 
@@ -1220,7 +1273,7 @@ class WHMCS(commands.Cog):
             await self._send_error(ctx, "Rate limit exceeded. Please try again later.")
         except WHMCSAPIError as e:
             await self._send_error(ctx, f"WHMCS API error: {e}")
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             log.exception("Error in client_view command")
             await self._send_error(ctx, f"An unexpected error occurred: {e}")
 
@@ -1259,14 +1312,19 @@ class WHMCS(commands.Cog):
                     clients = [clients]
 
                 embed = self._create_embed("🔍 Search Results")
-                embed.description = f"**Search term:** '{search_term}' • {response.get('totalresults', len(clients))} results found"
+                total_results = response.get("totalresults", len(clients))
+                embed.description = (
+                    f"**Search term:** '{search_term}' • {total_results} results found"
+                )
 
                 for client in clients[
                     :5
                 ]:  # Limit to first 5 results for better display
-                    name = f"{client.get('firstname', '')} {client.get('lastname', '')}".strip()
+                    name = f"{client.get('firstname', '')} {client.get('lastname', '')}".strip(
+                    )
                     if not name:
-                        name = client.get("email", f"Client {client.get('id')}")
+                        name = client.get(
+                            "email", f"Client {client.get('id')}")
 
                     # Consistent formatting with emoji indicators
                     client_info = (
@@ -1287,7 +1345,8 @@ class WHMCS(commands.Cog):
                         text=f"WHMCS Integration • Showing first 5 of {total} results",
                     )
                 else:
-                    embed.set_footer(text=f"WHMCS Integration • {total} results found")
+                    embed.set_footer(
+                        text=f"WHMCS Integration • {total} results found")
 
                 await ctx.send(embed=embed)
 
@@ -1300,7 +1359,7 @@ class WHMCS(commands.Cog):
             await self._send_error(ctx, "Rate limit exceeded. Please try again later.")
         except WHMCSAPIError as e:
             await self._send_error(ctx, f"WHMCS API error: {e}")
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             log.exception("Error in client_search command")
             await self._send_error(ctx, f"An unexpected error occurred: {e}")
 
@@ -1448,7 +1507,7 @@ class WHMCS(commands.Cog):
                     )
                     await ctx.send(embed=embed)
 
-            except Exception as e:
+            except RECOVERABLE_EXCEPTIONS as e:
                 await self._send_error(ctx, f"Validation error: {e}")
 
         elif action == "ratelimit":
@@ -1680,7 +1739,8 @@ class WHMCS(commands.Cog):
 
             archive_category_info = "Not set"
             if config.get("archive_category_id"):
-                archive_category = ctx.guild.get_channel(config["archive_category_id"])
+                archive_category = ctx.guild.get_channel(
+                    config["archive_category_id"])
                 if archive_category:
                     archive_category_info = (
                         f"{archive_category.name} ({config['archive_category_id']})"
@@ -1751,7 +1811,8 @@ class WHMCS(commands.Cog):
                 return
 
             setting = setting.lower()
-            valid_settings = ["category", "archive_category", "prefix", "auto_archive"]
+            valid_settings = ["category",
+                "archive_category", "prefix", "auto_archive"]
 
             if setting not in valid_settings:
                 await self._send_error(
@@ -1840,7 +1901,8 @@ class WHMCS(commands.Cog):
                     # Sanitize prefix for Discord channel names
                     import re
 
-                    sanitized_prefix = re.sub(r"[^a-z0-9\-]", "-", value.lower())
+                    sanitized_prefix = re.sub(
+                        r"[^a-z0-9\-]", "-", value.lower())
                     if not sanitized_prefix.endswith("-"):
                         sanitized_prefix += "-"
 
@@ -1921,7 +1983,7 @@ class WHMCS(commands.Cog):
             )
         except WHMCSAPIError as e:
             await self._send_error(ctx, f"❌ API connection failed: {e}")
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             log.exception("Error in admin_test command")
             await self._send_error(ctx, f"❌ Connection test failed: {e}")
 
@@ -2048,10 +2110,11 @@ class WHMCS(commands.Cog):
                 if len(raw) <= 2000:
                     await ctx.send(f"```py\n{raw[:1990]}```")
                 else:
-                    blocks = [raw[i : i + max_len] for i in range(0, len(raw), max_len)]
+                    blocks = [raw[i : i + max_len]
+                        for i in range(0, len(raw), max_len)]
                     for block in blocks:
                         await ctx.send(f"```py\n{block.strip()}```")
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             import logging
 
             logging.getLogger("red.WHMCS").exception(
@@ -2091,7 +2154,8 @@ class WHMCS(commands.Cog):
                 debug_info = []
                 debug_info.append(f"**Original ID:** {ticket_id}")
                 debug_info.append(f"**Cleaned ID:** {clean_ticket_id}")
-                debug_info.append(f"**Is Numeric:** {clean_ticket_id.isdigit()}")
+                debug_info.append(
+                    f"**Is Numeric:** {clean_ticket_id.isdigit()}")
 
                 # Try both API parameter methods
                 success_count = 0
@@ -2101,14 +2165,16 @@ class WHMCS(commands.Cog):
                     async with api_client:
                         response1 = await api_client.get_ticket(clean_ticket_id)
                     if response1.get("ticket"):
-                        debug_info.append("✅ **get_ticket() wrapper:** SUCCESS")
+                        debug_info.append(
+                            "✅ **get_ticket() wrapper:** SUCCESS")
                         success_count += 1
                     else:
                         debug_info.append(
                             "❌ **get_ticket() wrapper:** No ticket returned",
                         )
-                except Exception as e:
-                    debug_info.append(f"❌ **get_ticket() wrapper:** Error - {e}")
+                except RECOVERABLE_EXCEPTIONS as e:
+                    debug_info.append(
+                        f"❌ **get_ticket() wrapper:** Error - {e}")
 
                 # Test 2: Try direct API call with ticketid parameter
                 try:
@@ -2124,7 +2190,7 @@ class WHMCS(commands.Cog):
                         debug_info.append(
                             "❌ **ticketid parameter:** No ticket returned",
                         )
-                except Exception as e:
+                except RECOVERABLE_EXCEPTIONS as e:
                     debug_info.append(f"❌ **ticketid parameter:** Error - {e}")
 
                 # Test 3: Try direct API call with ticketnum parameter
@@ -2141,8 +2207,9 @@ class WHMCS(commands.Cog):
                         debug_info.append(
                             "❌ **ticketnum parameter:** No ticket returned",
                         )
-                except Exception as e:
-                    debug_info.append(f"❌ **ticketnum parameter:** Error - {e}")
+                except RECOVERABLE_EXCEPTIONS as e:
+                    debug_info.append(
+                        f"❌ **ticketnum parameter:** Error - {e}")
 
                 # Test 4: Try direct API call with tid parameter (some WHMCS versions)
                 try:
@@ -2155,8 +2222,9 @@ class WHMCS(commands.Cog):
                         debug_info.append("✅ **tid parameter:** SUCCESS")
                         success_count += 1
                     else:
-                        debug_info.append("❌ **tid parameter:** No ticket returned")
-                except Exception as e:
+                        debug_info.append(
+                            "❌ **tid parameter:** No ticket returned")
+                except RECOVERABLE_EXCEPTIONS as e:
                     debug_info.append(f"❌ **tid parameter:** Error - {e}")
 
                 embed.add_field(
@@ -2239,7 +2307,7 @@ class WHMCS(commands.Cog):
             )
         except WHMCSAPIError as e:
             await self._send_error(ctx, f"❌ API debug failed: {e}")
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             log.exception("Error in admin_debug command")
             await self._send_error(ctx, f"❌ Debug test failed: {e}")
 
@@ -2387,7 +2455,7 @@ class WHMCS(commands.Cog):
             )
         except WHMCSAPIError as e:
             await self._send_error(ctx, f"❌ API search failed: {e}")
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             log.exception("Error in admin_find_ticket command")
             await self._send_error(ctx, f"❌ Ticket search failed: {e}")
 
@@ -2497,7 +2565,7 @@ class WHMCS(commands.Cog):
             await self._send_error(ctx, "Rate limit exceeded. Please try again later.")
         except WHMCSAPIError as e:
             await self._send_error(ctx, f"WHMCS API error: {e}")
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             log.exception("Error in billing_invoices command")
             await self._send_error(ctx, f"An unexpected error occurred: {e}")
 
@@ -2569,7 +2637,8 @@ class WHMCS(commands.Cog):
 
                 # Client information
                 if invoice.get("userid"):
-                    client_name = f"{invoice.get('firstname', '')} {invoice.get('lastname', '')}".strip()
+                    client_name = f"{invoice.get('firstname', '')} {invoice.get('lastname', '')}".strip(
+                    )
                     embed.add_field(
                         name="👤 Client Information",
                         value=(
@@ -2588,7 +2657,8 @@ class WHMCS(commands.Cog):
                         inline=False,
                     )
 
-                embed.set_footer(text=f"WHMCS Integration • Invoice ID: {invoice_id}")
+                embed.set_footer(
+                    text=f"WHMCS Integration • Invoice ID: {invoice_id}")
 
                 await ctx.send(embed=embed)
 
@@ -2601,7 +2671,7 @@ class WHMCS(commands.Cog):
             await self._send_error(ctx, "Rate limit exceeded. Please try again later.")
         except WHMCSAPIError as e:
             await self._send_error(ctx, f"WHMCS API error: {e}")
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             log.exception("Error in billing_invoice command")
             await self._send_error(ctx, f"An unexpected error occurred: {e}")
 
@@ -2675,7 +2745,7 @@ class WHMCS(commands.Cog):
             await self._send_error(ctx, "Rate limit exceeded. Please try again later.")
         except WHMCSAPIError as e:
             await self._send_error(ctx, f"WHMCS API error: {e}")
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             log.exception("Error in billing_credit command")
             await self._send_error(ctx, f"An unexpected error occurred: {e}")
 
@@ -2744,7 +2814,8 @@ class WHMCS(commands.Cog):
                     note_message = f"A Discord channel has been created for this ticket: {channel_url} (created by {ctx.author})"
                     # Only use the minimal, proven working approach for ticket lookup
                     reply_success = False
-                    internal_id = found_ticket.get("id") or found_ticket.get("ticketid")
+                    internal_id = found_ticket.get(
+                        "id") or found_ticket.get("ticketid")
                     if internal_id:
                         try:
                             response = await api_client.add_ticket_reply(
@@ -2757,7 +2828,7 @@ class WHMCS(commands.Cog):
                             )
                             if response.get("result") == "success":
                                 reply_success = True
-                        except Exception as e:
+                        except RECOVERABLE_EXCEPTIONS as e:
                             log.warning(
                                 f"Failed to add reply using internal_id={internal_id}: {e}",
                             )
@@ -2770,7 +2841,7 @@ class WHMCS(commands.Cog):
                             f"Ticket department: {found_ticket.get('department')}\n"
                             f"Please verify the ticket exists in WHMCS and the API user has department access.",
                         )
-                except Exception:
+                except RECOVERABLE_EXCEPTIONS:
                     log.exception(
                         "Failed to add Discord channel creation note to WHMCS ticket",
                     )
@@ -2779,7 +2850,7 @@ class WHMCS(commands.Cog):
                     ctx,
                     "Failed to create ticket channel. Check category and permissions.",
                 )
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             import logging
 
             logging.getLogger("red.WHMCS").exception(
@@ -2851,7 +2922,8 @@ class WHMCS(commands.Cog):
                         search_lower = ticket_id.lower().lstrip('#').strip()
                         for ticket in tickets:
                             for id_field in ['tid', 'ticketnum', 'maskid']:
-                                if ticket.get(id_field) and search_lower == str(ticket[id_field]).lower().lstrip('#').strip():
+                                if ticket.get(id_field) and search_lower ==
+                                str(ticket[id_field]).lower().lstrip('#').strip():
                                     found_ticket = ticket
                                     break
                             if found_ticket:
@@ -2862,12 +2934,13 @@ class WHMCS(commands.Cog):
                     await self._send_error(ctx, f"Ticket {ticket_id} not found.")
                     return
                 # Attempt to create the channel
-                channel = await self._get_or_create_ticket_channel(ctx.guild, str(found_ticket.get("tid") or found_ticket.get("ticketnum") or found_ticket.get("maskid")), found_ticket)
+                channel = await self._get_or_create_ticket_channel(ctx.guild, str(found_ticket.get("tid") or
+                found_ticket.get("ticketnum") or found_ticket.get("maskid")), found_ticket)
                 if channel:
                     await self._send_success(ctx, f"Channel <#{channel.id}> created for ticket {ticket_id}.")
                 else:
                     await self._send_error(ctx, "Failed to create ticket channel. Check category and permissions.")
-            except Exception as e:
+            except RECOVERABLE_EXCEPTIONS as e:
                 import logging
                 logging.getLogger("red.WHMCS").exception("Error in support_ticket_channel command")
                 await self._send_error(ctx, f"An unexpected error occurred: {e}")
@@ -2943,7 +3016,8 @@ class WHMCS(commands.Cog):
                         if ticket.get("status") == status_filter
                     ]
 
-                total = len(tickets)  # Use filtered count for more accurate pagination
+                # Use filtered count for more accurate pagination
+                total = len(tickets)
                 total_pages = (total + limit - 1) // limit if total > 0 else 1
 
                 # Build filter description
@@ -3008,9 +3082,11 @@ class WHMCS(commands.Cog):
                         if tid_value:
                             # Determine if tid is actually numeric (internal) or alphanumeric (ticket number)
                             if str(tid_value).isdigit():
-                                id_display_parts.append(f"Internal: {tid_value}")
+                                id_display_parts.append(
+                                    f"Internal: {tid_value}")
                             else:
-                                id_display_parts.append(f"Ticket Number: {tid_value}")
+                                id_display_parts.append(
+                                    f"Ticket Number: {tid_value}")
 
                         if ticket.get("ticketnum") and ticket.get("ticketnum") != str(
                             tid_value,
@@ -3019,7 +3095,8 @@ class WHMCS(commands.Cog):
                                 f"Number: {ticket.get('ticketnum')}",
                             )
                         if ticket.get("maskid"):
-                            id_display_parts.append(f"Mask: {ticket.get('maskid')}")
+                            id_display_parts.append(
+                                f"Mask: {ticket.get('maskid')}")
 
                         id_display = (
                             " • ".join(id_display_parts)
@@ -3146,9 +3223,11 @@ class WHMCS(commands.Cog):
                         if tid_value:
                             # Determine if tid is actually numeric (internal) or alphanumeric (ticket number)
                             if str(tid_value).isdigit():
-                                id_display_parts.append(f"Internal: {tid_value}")
+                                id_display_parts.append(
+                                    f"Internal: {tid_value}")
                             else:
-                                id_display_parts.append(f"Ticket Number: {tid_value}")
+                                id_display_parts.append(
+                                    f"Ticket Number: {tid_value}")
 
                         if ticket.get("ticketnum") and ticket.get("ticketnum") != str(
                             tid_value,
@@ -3157,7 +3236,8 @@ class WHMCS(commands.Cog):
                                 f"Number: {ticket.get('ticketnum')}",
                             )
                         if ticket.get("maskid"):
-                            id_display_parts.append(f"Mask: {ticket.get('maskid')}")
+                            id_display_parts.append(
+                                f"Mask: {ticket.get('maskid')}")
 
                         id_display = (
                             " • ".join(id_display_parts)
@@ -3218,7 +3298,7 @@ class WHMCS(commands.Cog):
             await self._send_error(ctx, "Rate limit exceeded. Please try again later.")
         except WHMCSAPIError as e:
             await self._send_error(ctx, f"WHMCS API error: {e}")
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             log.exception("Error in support_tickets command")
             await self._send_error(ctx, f"An unexpected error occurred: {e}")
 
@@ -3306,7 +3386,8 @@ class WHMCS(commands.Cog):
                     id_lines.append(f"**tid:** {ticket['tid']}")
                 if ticket.get("maskid"):
                     id_lines.append(f"**maskid:** {ticket['maskid']}")
-                id_block = "\n".join(id_lines) if id_lines else "No ID fields found"
+                id_block = "\n".join(
+                    id_lines) if id_lines else "No ID fields found"
                 embed.description = (
                     f"{id_block}\n\n**#{ticket.get('tid')} - {subject}**"
                 )
@@ -3369,7 +3450,8 @@ class WHMCS(commands.Cog):
                     )
                     # Show up to 3 most recent replies
                     for reply in replies[-3:]:
-                        author = reply.get("admin", reply.get("name", "Unknown"))
+                        author = reply.get(
+                            "admin", reply.get("name", "Unknown"))
                         date = reply.get("date", "N/A")
                         message = reply.get("message", "")
                         if len(message) > 300:
@@ -3380,7 +3462,8 @@ class WHMCS(commands.Cog):
                             inline=False,
                         )
 
-                embed.set_footer(text=f"WHMCS Integration • Ticket ID: {ticket_id}")
+                embed.set_footer(
+                    text=f"WHMCS Integration • Ticket ID: {ticket_id}")
 
                 await ctx.send(embed=embed)
 
@@ -3393,7 +3476,7 @@ class WHMCS(commands.Cog):
             await self._send_error(ctx, "Rate limit exceeded. Please try again later.")
         except WHMCSAPIError as e:
             await self._send_error(ctx, f"WHMCS API error: {e}")
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             log.exception("Error in support_ticket command")
             await self._send_error(ctx, f"An unexpected error occurred: {e}")
 
@@ -3470,7 +3553,10 @@ class WHMCS(commands.Cog):
                             email="discord-taako@example.com",
                         )
                         log.info(
-                            f"Attempted add_ticket_reply with internal_id={internal_id}, payload={debug_payload}, response={response}",
+                            "Attempted add_ticket_reply with internal_id=%s, payload=%s, response=%s",
+                            internal_id,
+                            debug_payload,
+                            response,
                         )
                         if response.get("result") == "success":
                             reply_success = True
@@ -3478,7 +3564,7 @@ class WHMCS(commands.Cog):
                             log.warning(
                                 f"Failed to add reply using internal_id={internal_id}: {response}",
                             )
-                    except Exception as e:
+                    except RECOVERABLE_EXCEPTIONS as e:
                         log.warning(
                             f"Failed to add reply using internal_id={internal_id}: {e}\nTicket fields:\n{debug_ticket_fields}",
                         )
@@ -3519,7 +3605,8 @@ class WHMCS(commands.Cog):
                         inline=False,
                     )
                     # Show preview of message (truncated)
-                    preview = message if len(message) <= 200 else message[:197] + "..."
+                    preview = message if len(
+                        message) <= 200 else message[:197] + "..."
                     embed.add_field(
                         name="💬 Message Preview",
                         value=f"```{preview}```",
@@ -3543,7 +3630,7 @@ class WHMCS(commands.Cog):
             await self._send_error(ctx, "Rate limit exceeded. Please try again later.")
         except WHMCSAPIError as e:
             await self._send_error(ctx, f"WHMCS API error: {e}")
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             log.exception("Error in support_reply command")
             await self._send_error(ctx, f"An unexpected error occurred: {e}")
 

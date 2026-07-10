@@ -249,7 +249,8 @@ def validate_search_term(search_term: str) -> str:
     forbidden_chars = ["<", ">", '"', "'", "&", "\x00"]
     for char in forbidden_chars:
         if char in search_term:
-            raise ValidationError(f"Search term contains forbidden character: {char}")
+            raise ValidationError(
+                f"Search term contains forbidden character: {char}")
 
     return search_term
 
@@ -429,7 +430,8 @@ def validate_client_data(data: dict[str, Any]) -> dict[str, Any]:
         if len(name) < 1:
             raise ValidationError(f"{name_field} cannot be empty")
         if len(name) > 50:
-            raise ValidationError(f"{name_field} is too long (max: 50 characters)")
+            raise ValidationError(
+                f"{name_field} is too long (max: 50 characters)")
         # Check for potentially dangerous characters
         if re.search(r'[<>"\']', name):
             raise ValidationError(f"{name_field} contains invalid characters")

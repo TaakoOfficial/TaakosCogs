@@ -15,6 +15,8 @@ import discord
 from discord.ext import tasks
 from redbot.core import Config, commands
 
+from .dashboard_integration import DashboardIntegration
+
 if TYPE_CHECKING:
     from redbot.core.bot import Red
 
@@ -59,7 +61,7 @@ class VisibleTextParser(HTMLParser):
             self.parts.append(data)
 
 
-class CfxStatus(commands.Cog):
+class CfxStatus(DashboardIntegration, commands.Cog):
     """Check the official Cfx.re service status."""
 
     CONFIG_IDENTIFIER = 2026070801
@@ -156,14 +158,16 @@ class CfxStatus(commands.Cog):
         except StatusPageError as status_error:
             error = str(status_error)
         except Exception:
-            log.exception("Unexpected error while polling Cfx.re service status")
+            log.exception(
+                "Unexpected error while polling Cfx.re service status")
             error = "I could not check the Cfx.re service status right now."
 
         for guild, settings in due_guilds:
             try:
                 await self._update_status_message(guild, settings, payload, error)
             except Exception:
-                log.exception("Failed to update Cfx.re status for guild %s", guild.id)
+                log.exception(
+                    "Failed to update Cfx.re status for guild %s", guild.id)
 
     @status_loop.before_loop
     async def before_status_loop(self) -> None:
@@ -341,7 +345,8 @@ class CfxStatus(commands.Cog):
                 await ctx.send(str(error))
                 return
             except Exception:
-                log.exception("Unexpected error while checking Cfx.re service status")
+                log.exception(
+                    "Unexpected error while checking Cfx.re service status")
                 await ctx.send("I could not check the Cfx.re service status right now.")
                 return
 
@@ -364,7 +369,8 @@ class CfxStatus(commands.Cog):
             log.warning("Rockstar service-status page failed: %s", error)
 
         detail = " ".join(errors) or "No status source returned data."
-        raise StatusPageError(f"I could not check the Cfx.re service status. {detail}")
+        raise StatusPageError(
+            f"I could not check the Cfx.re service status. {detail}")
 
     async def _fetch_statuspage_status(self) -> CfxStatusPayload:
         """Fetch Cfx.re status from the official Statuspage JSON API."""
@@ -377,7 +383,8 @@ class CfxStatus(commands.Cog):
                     )
                 data = await response.json(content_type=None)
         except asyncio.TimeoutError as error:
-            raise StatusPageError("Cfx.re's Statuspage API timed out.") from error
+            raise StatusPageError(
+                "Cfx.re's Statuspage API timed out.") from error
         except aiohttp.ClientError as error:
             raise StatusPageError(
                 "I could not reach Cfx.re's Statuspage API.",
@@ -425,7 +432,8 @@ class CfxStatus(commands.Cog):
             ) from error
 
         if not html.strip():
-            raise StatusPageError("Rockstar's service-status page returned no content.")
+            raise StatusPageError(
+                "Rockstar's service-status page returned no content.")
 
         payload = self.parse_status_page(html)
         if not payload.components:
@@ -491,7 +499,8 @@ class CfxStatus(commands.Cog):
         if poll_interval_minutes is not None:
             details.append(f"Refresh: every {poll_interval_minutes} minutes")
         details.append(f"Source: {payload.source_name}")
-        embed.add_field(name="Panel Info", value="\n".join(details), inline=False)
+        embed.add_field(name="Panel Info",
+                        value="\n".join(details), inline=False)
         embed.set_footer(text="Cfx.re status panel | Last checked")
         return embed
 
@@ -546,7 +555,8 @@ class CfxStatus(commands.Cog):
             value="Enabled" if settings.get("enabled") else "Disabled",
             inline=True,
         )
-        embed.add_field(name="Interval", value=f"{interval} minutes", inline=True)
+        embed.add_field(name="Interval",
+                        value=f"{interval} minutes", inline=True)
 
         if isinstance(channel, discord.TextChannel):
             channel_value = channel.mention
@@ -562,11 +572,13 @@ class CfxStatus(commands.Cog):
             )
         else:
             message_value = "Not posted"
-        embed.add_field(name="Panel Message", value=message_value, inline=False)
+        embed.add_field(name="Panel Message",
+                        value=message_value, inline=False)
 
         last_poll_value = f"<t:{last_poll_at}:R>" if last_poll_at else "Never"
         embed.add_field(name="Last Poll", value=last_poll_value, inline=True)
-        embed.set_footer(text="Use setup or channel to choose where the panel posts.")
+        embed.set_footer(
+            text="Use setup or channel to choose where the panel posts.")
         return embed
 
     async def _update_status_message(
@@ -668,7 +680,8 @@ class CfxStatus(commands.Cog):
         """Raise a command-facing error if the bot cannot maintain the panel."""
         me = guild.me
         if me is None:
-            raise commands.CommandError("I could not check my channel permissions.")
+            raise commands.CommandError(
+                "I could not check my channel permissions.")
 
         permissions = channel.permissions_for(me)
         missing = []
@@ -701,7 +714,8 @@ class CfxStatus(commands.Cog):
     def _poll_interval(self, settings: dict) -> int:
         """Return a clamped polling interval for a settings payload."""
         interval = int(
-            settings.get("poll_interval_minutes") or self.DEFAULT_POLL_INTERVAL_MINUTES,
+            settings.get(
+                "poll_interval_minutes") or self.DEFAULT_POLL_INTERVAL_MINUTES,
         )
         return max(
             self.MIN_POLL_INTERVAL_MINUTES,

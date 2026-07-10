@@ -1,5 +1,10 @@
 # Changelog
 
+## [Unreleased]
+
+- Added standalone Red-Web-Dashboard integration for viewing visible commands and current server configuration.
+
+
 ## [1.2.1] - 2026-07-09
 
 - Renamed the repository package folder from `Paranoia` to `paranoia` to match Red cog naming standards.

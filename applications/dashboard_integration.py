@@ -83,7 +83,8 @@ class DashboardIntegration:
                     selected_application,
                 )
             except commands.CommandError as error:
-                notifications.append({"message": str(error), "category": "error"})
+                notifications.append(
+                    {"message": str(error), "category": "error"})
             except Exception as error:
                 log.exception("Applications dashboard action failed.")
                 notifications.append(
@@ -138,19 +139,77 @@ class DashboardIntegration:
 
     def _dashboard_tab_button(self, name: str, label: str, active: str) -> str:
         selected = name == active
-        return f'<button type="button" class="dash-tab{" active" if selected else ""}" data-tab="{self._h(name)}" role="tab" aria-selected="{str(selected).lower()}" tabindex="{0 if selected else -1}">{self._h(label)}</button>'
+        active_class = " active" if selected else ""
+        aria_selected = str(selected).lower()
+        tabindex = 0 if selected else -1
+        return (
+            f'<button type="button" class="dash-tab{active_class}" '
+            f'data-tab="{self._h(name)}" role="tab" '
+            f'aria-selected="{aria_selected}" tabindex="{tabindex}">'
+            f"{self._h(label)}</button>"
+        )
 
     @staticmethod
     def _dashboard_tabs_script() -> str:
         return """
 <script>
 (() => {
-  const root = document.currentScript.closest("[data-dashboard-tabs]"); if (!root) return;
-  const tabs = Array.from(root.querySelectorAll("[data-tab]")); const panels = Array.from(root.querySelectorAll("[data-tab-panel]")); const names = new Set(tabs.map((tab) => tab.dataset.tab));
-  const activate = (name, hash = false) => { if (!names.has(name)) return; tabs.forEach((tab) => { const on = tab.dataset.tab === name; tab.classList.toggle("active", on); tab.setAttribute("aria-selected", on ? "true" : "false"); tab.tabIndex = on ? 0 : -1; }); panels.forEach((panel) => { const on = panel.dataset.tabPanel === name; panel.classList.toggle("active", on); panel.hidden = !on; }); if (hash) history.replaceState(null, "", `#tab-${name}`); };
-  const fromHash = () => { const hash = location.hash.slice(1); if (hash.startsWith("tab-") && names.has(hash.slice(4))) return hash.slice(4); const section = document.getElementById(hash); const panel = section ? section.closest("[data-tab-panel]") : null; return panel ? panel.dataset.tabPanel : null; };
-  tabs.forEach((tab, index) => { tab.addEventListener("click", () => activate(tab.dataset.tab, true)); tab.addEventListener("keydown", (event) => { const move = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0; if (!move) return; event.preventDefault(); const next = tabs[(index + move + tabs.length) % tabs.length]; next.focus(); activate(next.dataset.tab, true); }); });
-  root.querySelectorAll("form").forEach((form) => form.addEventListener("submit", () => { let input = form.querySelector('input[name="active_tab"]'); if (!input) { input = document.createElement("input"); input.type = "hidden"; input.name = "active_tab"; form.appendChild(input); } input.value = root.querySelector("[data-tab].active").dataset.tab; }));
+  const root = document.currentScript.closest("[data-dashboard-tabs]");
+  if (!root) return;
+
+  const tabs = Array.from(root.querySelectorAll("[data-tab]"));
+  const panels = Array.from(root.querySelectorAll("[data-tab-panel]"));
+  const names = new Set(tabs.map((tab) => tab.dataset.tab));
+
+  const activate = (name, hash = false) => {
+    if (!names.has(name)) return;
+    tabs.forEach((tab) => {
+      const on = tab.dataset.tab === name;
+      tab.classList.toggle("active", on);
+      tab.setAttribute("aria-selected", on ? "true" : "false");
+      tab.tabIndex = on ? 0 : -1;
+    });
+    panels.forEach((panel) => {
+      const on = panel.dataset.tabPanel === name;
+      panel.classList.toggle("active", on);
+      panel.hidden = !on;
+    });
+    if (hash) history.replaceState(null, "", `#tab-${name}`);
+  };
+
+  const fromHash = () => {
+    const hash = location.hash.slice(1);
+    if (hash.startsWith("tab-") && names.has(hash.slice(4))) return hash.slice(4);
+    const section = document.getElementById(hash);
+    const panel = section ? section.closest("[data-tab-panel]") : null;
+    return panel ? panel.dataset.tabPanel : null;
+  };
+
+  tabs.forEach((tab, index) => {
+    tab.addEventListener("click", () => activate(tab.dataset.tab, true));
+    tab.addEventListener("keydown", (event) => {
+      const move = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
+      if (!move) return;
+      event.preventDefault();
+      const next = tabs[(index + move + tabs.length) % tabs.length];
+      next.focus();
+      activate(next.dataset.tab, true);
+    });
+  });
+
+  root.querySelectorAll("form").forEach((form) => {
+    form.addEventListener("submit", () => {
+      let input = form.querySelector('input[name="active_tab"]');
+      if (!input) {
+        input = document.createElement("input");
+        input.type = "hidden";
+        input.name = "active_tab";
+        form.appendChild(input);
+      }
+      input.value = root.querySelector("[data-tab].active").dataset.tab;
+    });
+  });
+
   activate(fromHash() || root.querySelector("[data-tab].active").dataset.tab);
 })();
 </script>
@@ -227,7 +286,8 @@ class DashboardIntegration:
         try:
             return int(value)
         except (TypeError, ValueError) as exc:
-            raise commands.BadArgument(f"`{key}` must be a Discord ID.") from exc
+            raise commands.BadArgument(
+                f"`{key}` must be a Discord ID.") from exc
 
     def _dash_csrf(self, kwargs: dict[str, typing.Any]) -> str:
         csrf_token = kwargs.get("csrf_token")
@@ -250,7 +310,8 @@ class DashboardIntegration:
         messages: list[dict[str, str]] = []
 
         if action == "select_application":
-            selected_application = self._dashboard_selected_application(form_data)
+            selected_application = self._dashboard_selected_application(
+                form_data)
 
         elif action == "create_application":
             selected_application = await self._dashboard_create_application(
@@ -365,7 +426,8 @@ class DashboardIntegration:
             )
 
         elif action:
-            raise commands.BadArgument("Unknown Applications dashboard action.")
+            raise commands.BadArgument(
+                "Unknown Applications dashboard action.")
 
         return selected_application, messages
 
@@ -378,7 +440,8 @@ class DashboardIntegration:
         from .applications import app_key
 
         name = self._dash_value(form_data, "new_application_name").strip()
-        description = self._dash_value(form_data, "new_application_description").strip()
+        description = self._dash_value(
+            form_data, "new_application_description").strip()
         if not name:
             raise commands.BadArgument("Application name cannot be empty.")
         if len(name) > 60:
@@ -386,7 +449,8 @@ class DashboardIntegration:
                 "Application name must be 60 characters or fewer.",
             )
         if not description:
-            raise commands.BadArgument("Application description cannot be empty.")
+            raise commands.BadArgument(
+                "Application description cannot be empty.")
         if len(description) > 200:
             raise commands.BadArgument(
                 "Application description must be 200 characters or fewer.",
@@ -438,9 +502,11 @@ class DashboardIntegration:
             "application_name",
             app.get("name", key),
         ).strip()
-        description = self._dash_value(form_data, "application_description").strip()
+        description = self._dash_value(
+            form_data, "application_description").strip()
         if not name:
-            raise commands.BadArgument("Application display name cannot be empty.")
+            raise commands.BadArgument(
+                "Application display name cannot be empty.")
         if len(name) > 60:
             raise commands.BadArgument(
                 "Application display name must be 60 characters or fewer.",
@@ -456,13 +522,16 @@ class DashboardIntegration:
             "Choose a response channel.",
         )
         color_value = self._dashboard_parse_color(
-            self._dash_value(form_data, "color", self._color_hex(app.get("color"))),
+            self._dash_value(form_data, "color",
+                             self._color_hex(app.get("color"))),
         )
-        form_mode = self._dash_value(form_data, "form_mode", "dm").strip().lower()
+        form_mode = self._dash_value(
+            form_data, "form_mode", "dm").strip().lower()
         if form_mode not in {"dm", "modal"}:
             raise commands.BadArgument("Form mode must be `dm` or `modal`.")
         button_style = (
-            self._dash_value(form_data, "button_style", "green").strip().lower()
+            self._dash_value(form_data, "button_style",
+                             "green").strip().lower()
         )
         if button_style not in self.VALID_BUTTON_STYLES:
             raise commands.BadArgument(
@@ -497,7 +566,8 @@ class DashboardIntegration:
         app["form_mode"] = form_mode
         app["panel_message"] = self._dash_value(form_data, "panel_message")
         app["button_label"] = (
-            self._dash_value(form_data, "button_label", "Apply").strip() or "Apply"
+            self._dash_value(form_data, "button_label",
+                             "Apply").strip() or "Apply"
         )[:80]
         app["button_style"] = button_style
         app["button_emoji"] = (
@@ -505,10 +575,12 @@ class DashboardIntegration:
         )
         app["thread_enabled"] = self._dash_bool(form_data, "thread_enabled")
         app["thread_name"] = (
-            self._dash_value(form_data, "thread_name", "{application} - {user}").strip()
+            self._dash_value(form_data, "thread_name",
+                             "{application} - {user}").strip()
             or "{application} - {user}"
         )
-        app["notification_enabled"] = self._dash_bool(form_data, "notification_enabled")
+        app["notification_enabled"] = self._dash_bool(
+            form_data, "notification_enabled")
         app["notification_message"] = self._dash_value(
             form_data,
             "notification_message",
@@ -522,7 +594,8 @@ class DashboardIntegration:
             self._dash_values(form_data, "notification_role_ids"),
         )
         app["notification_role_target"] = notify_target
-        app["completion_message"] = self._dash_value(form_data, "completion_message")
+        app["completion_message"] = self._dash_value(
+            form_data, "completion_message")
         app["accept_message"] = self._dash_value(form_data, "accept_message")
         app["deny_message"] = self._dash_value(form_data, "deny_message")
         app["voting"] = {
@@ -567,7 +640,8 @@ class DashboardIntegration:
                 "Choose an application before adding a question.",
             )
         key, app = await self._get_app(guild.id, selected_application)
-        question_type = self._dash_value(form_data, "add_question_type", "text").lower()
+        question_type = self._dash_value(
+            form_data, "add_question_type", "text").lower()
         if question_type not in self.VALID_QUESTION_TYPES:
             raise commands.BadArgument(
                 "Question type must be text, boolean, choice, or attachment.",
@@ -605,7 +679,8 @@ class DashboardIntegration:
                 raise commands.BadArgument(
                     "Choice questions can have at most 25 choices.",
                 )
-            allow_other = any(choice.lower() == "other" for choice in choice_values)
+            allow_other = any(choice.lower() ==
+                              "other" for choice in choice_values)
             parsed_choices = [
                 choice for choice in choice_values if choice.lower() != "other"
             ]
@@ -665,9 +740,11 @@ class DashboardIntegration:
             self._dash_optional_id(form_data, "panel_channel_id"),
             "Choose a text channel for the panel.",
         )
-        mode = self._dash_value(form_data, "panel_mode", "buttons").strip().lower()
+        mode = self._dash_value(form_data, "panel_mode",
+                                "buttons").strip().lower()
         if mode not in {"buttons", "select"}:
-            raise commands.BadArgument("Panel mode must be `buttons` or `select`.")
+            raise commands.BadArgument(
+                "Panel mode must be `buttons` or `select`.")
 
         apps = await self._get_apps(guild.id)
         selected_keys = self._dash_values(form_data, "panel_application_keys")
@@ -675,14 +752,17 @@ class DashboardIntegration:
         if selected_keys:
             for key in selected_keys:
                 if key not in apps:
-                    raise commands.BadArgument(f"No application named `{key}` exists.")
+                    raise commands.BadArgument(
+                        f"No application named `{key}` exists.")
                 selected_apps.append(apps[key])
         else:
-            selected_apps = [app for app in apps.values() if app.get("open", True)]
+            selected_apps = [
+                app for app in apps.values() if app.get("open", True)]
         if not selected_apps:
             raise commands.BadArgument("No matching applications were found.")
         if len(selected_apps) > 25:
-            raise commands.BadArgument("A panel can contain at most 25 applications.")
+            raise commands.BadArgument(
+                "A panel can contain at most 25 applications.")
 
         title = (
             self._dash_value(form_data, "panel_title", "Applications").strip()
@@ -768,15 +848,18 @@ class DashboardIntegration:
         response_id = self._dash_value(form_data, "response_id").strip()
         if not response_id:
             raise commands.BadArgument("Choose a response to review.")
-        decision = self._dash_value(form_data, "response_decision").strip().lower()
+        decision = self._dash_value(
+            form_data, "response_decision").strip().lower()
         if decision not in {"accepted", "denied"}:
-            raise commands.BadArgument("Response decision must be accepted or denied.")
+            raise commands.BadArgument(
+                "Response decision must be accepted or denied.")
         reason = self._dash_value(form_data, "response_reason").strip()
 
         key, app = await self._get_app(guild.id, selected_application)
         response = self._find_response(app, response_id)
         if response.get("status") != "pending":
-            raise commands.BadArgument("That response has already been reviewed.")
+            raise commands.BadArgument(
+                "That response has already been reviewed.")
 
         response["status"] = decision
         response["reviewed_by"] = user.id
@@ -921,11 +1004,13 @@ class DashboardIntegration:
             ) from exc
         channel = guild.get_channel(clean_channel_id)
         if not isinstance(channel, discord.TextChannel):
-            raise commands.BadArgument("The channel ID must resolve to a text channel.")
+            raise commands.BadArgument(
+                "The channel ID must resolve to a text channel.")
         try:
             return await channel.fetch_message(clean_message_id)
         except discord.HTTPException as exc:
-            raise commands.CommandError("I could not fetch that message.") from exc
+            raise commands.CommandError(
+                "I could not fetch that message.") from exc
 
     async def _dashboard_source(
         self,
@@ -938,7 +1023,8 @@ class DashboardIntegration:
         polls = await self.config.guild(guild).polls()
         if selected_application not in apps:
             selected_application = next(
-                iter(sorted(apps, key=lambda key: apps[key].get("name", key).lower())),
+                iter(sorted(apps, key=lambda key: apps[key].get(
+                    "name", key).lower())),
                 "",
             )
         app = apps.get(selected_application)
@@ -953,7 +1039,8 @@ class DashboardIntegration:
             for response in app_data.get("responses", [])
             if response.get("status") == "pending"
         )
-        open_polls = sum(1 for poll in polls.values() if not poll.get("closed"))
+        open_polls = sum(1 for poll in polls.values()
+                         if not poll.get("closed"))
         active_tab = self._dashboard_active_tab(
             kwargs,
             {
@@ -976,8 +1063,10 @@ class DashboardIntegration:
         <style>
             .appdash-wrap {{ max-width: 1180px; margin: 0 auto; color: #e5e7eb; }}
             .appdash-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }}
-            .appdash-row {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-bottom: 12px; }}
-            .appdash-card {{ background: #1f2937; border: 1px solid #374151; border-radius: 8px; padding: 16px; margin-bottom: 16px; }}
+            .appdash-row {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px;
+            margin-bottom: 12px; }}
+            .appdash-card {{ background: #1f2937; border: 1px solid #374151; border-radius: 8px; padding: 16px;
+            margin-bottom: 16px; }}
             .appdash-card h2, .appdash-card h3 {{ margin: 0 0 12px 0; color: #f9fafb; }}
             .appdash-muted {{ color: #9ca3af; }}
             .appdash-stat {{ font-size: 1.5rem; font-weight: 700; color: #f9fafb; }}
@@ -989,15 +1078,20 @@ class DashboardIntegration:
             .appdash-field textarea {{ min-height: 82px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }}
             .appdash-check {{ display: flex; align-items: center; gap: 8px; margin: 6px 0; color: #d1d5db; }}
             .appdash-check input {{ width: auto; }}
-            .appdash-btn {{ background: #2563eb; color: white; border: 0; border-radius: 6px; padding: 9px 14px; cursor: pointer; font-weight: 700; }}
+            .appdash-btn {{ background: #2563eb; color: white; border: 0; border-radius: 6px; padding: 9px 14px; cursor:
+             pointer; font-weight: 700; }}
             .appdash-btn.secondary {{ background: #4b5563; }}
             .appdash-btn.danger {{ background: #dc2626; }}
-            .dash-tabs {{ display: flex; gap: 4px; overflow-x: auto; position: sticky; top: 0; z-index: 10; margin: 0 0 16px; padding: 5px; background: #111827; border: 1px solid #374151; border-radius: 8px; }}
-            .dash-tab {{ flex: 0 0 auto; border: 0; border-radius: 6px; padding: 9px 13px; background: transparent; color: #9ca3af; cursor: pointer; font-weight: 700; white-space: nowrap; }}
-            .dash-tab:hover {{ background: #1f2937; color: #f9fafb; }} .dash-tab.active {{ background: #2563eb; color: white; }}
+            .dash-tabs {{ display: flex; gap: 4px; overflow-x: auto; position: sticky; top: 0; z-index: 10; margin: 0 0
+            16px; padding: 5px; background: #111827; border: 1px solid #374151; border-radius: 8px; }}
+            .dash-tab {{ flex: 0 0 auto; border: 0; border-radius: 6px; padding: 9px 13px; background: transparent;
+            color: #9ca3af; cursor: pointer; font-weight: 700; white-space: nowrap; }}
+            .dash-tab:hover {{ background: #1f2937; color: #f9fafb; }} .dash-tab.active {{ background: #2563eb; color:
+            white; }}
             .dash-panel {{ display: none; }} .dash-panel.active {{ display: block; }}
             .appdash-table {{ width: 100%; border-collapse: collapse; font-size: 0.92rem; }}
-            .appdash-table th, .appdash-table td {{ border-bottom: 1px solid #374151; padding: 8px; text-align: left; vertical-align: top; }}
+            .appdash-table th, .appdash-table td {{ border-bottom: 1px solid #374151; padding: 8px; text-align: left;
+            vertical-align: top; }}
             .appdash-table th {{ color: #d1d5db; }}
             .appdash-inline {{ display: inline; }}
         </style>
@@ -1007,8 +1101,10 @@ class DashboardIntegration:
                 <div class="appdash-grid">
                     <div><div class="appdash-muted">Applications</div><div class="appdash-stat">{len(apps)}</div></div>
                     <div><div class="appdash-muted">Panels</div><div class="appdash-stat">{len(panels)}</div></div>
-                    <div><div class="appdash-muted">Responses</div><div class="appdash-stat">{total_responses}</div></div>
-                    <div><div class="appdash-muted">Pending Reviews</div><div class="appdash-stat">{pending_responses}</div></div>
+                    <div><div class="appdash-muted">Responses</div><div
+                    class="appdash-stat">{total_responses}</div></div>
+                    <div><div class="appdash-muted">Pending Reviews</div><div
+                    class="appdash-stat">{pending_responses}</div></div>
                     <div><div class="appdash-muted">Open Polls</div><div class="appdash-stat">{open_polls}</div></div>
                 </div>
             </div>
@@ -1019,11 +1115,19 @@ class DashboardIntegration:
                 {self._dashboard_tab_button("responses", "Responses", active_tab)}
                 {self._dashboard_tab_button("polls", "Polls", active_tab)}
             </div>
-            <section class="dash-panel{" active" if active_tab == "setup" else ""}" data-tab-panel="setup">{self._dashboard_application_selector(apps, selected_application, guild, csrf)}{self._dashboard_application_settings(guild, selected_application, app, csrf)}</section>
-            <section class="dash-panel{" active" if active_tab == "questions" else ""}" data-tab-panel="questions">{self._dashboard_questions_section(selected_application, app, csrf)}</section>
-            <section class="dash-panel{" active" if active_tab == "panels" else ""}" data-tab-panel="panels">{self._dashboard_panels_section(guild, apps, panels, selected_application, csrf)}</section>
-            <section class="dash-panel{" active" if active_tab == "responses" else ""}" data-tab-panel="responses">{self._dashboard_responses_section(guild, selected_application, app, csrf)}</section>
-            <section class="dash-panel{" active" if active_tab == "polls" else ""}" data-tab-panel="polls">{self._dashboard_polls_section(guild, polls, csrf)}</section>
+            <section class="dash-panel{" active" if active_tab == "setup" else ""}"
+            data-tab-panel="setup">{self._dashboard_application_selector(apps, selected_application, guild,
+            csrf)}{self._dashboard_application_settings(guild, selected_application, app, csrf)}</section>
+            <section class="dash-panel{" active" if active_tab == "questions" else ""}"
+            data-tab-panel="questions">{self._dashboard_questions_section(selected_application, app, csrf)}</section>
+            <section class="dash-panel{" active" if active_tab == "panels" else ""}"
+            data-tab-panel="panels">{self._dashboard_panels_section(guild, apps, panels, selected_application,
+            csrf)}</section>
+            <section class="dash-panel{" active" if active_tab == "responses" else ""}"
+            data-tab-panel="responses">{self._dashboard_responses_section(guild, selected_application, app,
+            csrf)}</section>
+            <section class="dash-panel{" active" if active_tab == "polls" else ""}"
+            data-tab-panel="polls">{self._dashboard_polls_section(guild, polls, csrf)}</section>
             {self._dashboard_tabs_script()}
         </div>
         """
@@ -1063,7 +1167,8 @@ class DashboardIntegration:
                     <input type="hidden" name="action" value="create_application">
                     <div class="appdash-row">
                         {self._input("new_application_name", "New Application Name", "")}
-                        {self._channel_select(guild, "new_application_channel_id", "Response Channel", None, include_none=False)}
+                        {self._channel_select(guild, "new_application_channel_id", "Response Channel", None,
+                        include_none=False)}
                     </div>
                     {self._textarea("new_application_description", "Description", "", rows=3)}
                     <button class="appdash-btn" type="submit">Create Application</button>
@@ -1097,6 +1202,79 @@ class DashboardIntegration:
             )
             for role_key, label in self.ROLE_FIELD_LABELS
         )
+        cooldown_input = self._input(
+            "cooldown_minutes",
+            "Cooldown Minutes",
+            app.get("cooldown_minutes", 0),
+            "number",
+            min_value=0,
+            max_value=43200,
+        )
+        voting_threshold_input = self._input(
+            "voting_threshold",
+            "Voting Threshold",
+            (app.get("voting") or {}).get("threshold", 0),
+            "number",
+            min_value=0,
+            max_value=100,
+        )
+        response_channel_select = self._channel_select(
+            guild,
+            "channel_id",
+            "Response Channel",
+            app.get("channel_id"),
+            include_none=False,
+        )
+        form_mode = app.get("form_mode", "dm")
+        form_mode_select = (
+            '<div class="appdash-field"><label>Form Mode</label>'
+            '<select name="form_mode">'
+            f'{self._option("dm", "DM Flow", form_mode)}'
+            f'{self._option("modal", "Discord Modal", form_mode)}'
+            "</select></div>"
+        )
+        thread_name_input = self._input(
+            "thread_name",
+            "Thread Name Template",
+            app.get("thread_name") or "{application} - {user}",
+        )
+        button_style = app.get("button_style")
+        button_style_select = (
+            '<div class="appdash-field"><label>Panel Button Style</label>'
+            '<select name="button_style">'
+            f'{self._option("green", "Green", button_style)}'
+            f'{self._option("red", "Red", button_style)}'
+            f'{self._option("gray", "Gray", button_style)}'
+            f'{self._option("blurple", "Blurple", button_style)}'
+            "</select></div>"
+        )
+        role_target = self._notification_role_target(app)
+        notification_target_select = (
+            '<div class="appdash-field"><label>Notification Role Ping Target</label>'
+            '<select name="notification_role_target">'
+            f'{self._option("channel", "Channel", role_target)}'
+            f'{self._option("thread", "Thread", role_target)}'
+            f'{self._option("both", "Both", role_target)}'
+            "</select></div>"
+        )
+        notification_message = self._textarea(
+            "notification_message",
+            "Notification Message",
+            app.get("notification_message") or "",
+            rows=3,
+        )
+        notification_channels = self._multi_channel_select(
+            guild,
+            "notification_channel_ids",
+            "Extra Notification Channels",
+            app.get("notification_channel_ids") or [],
+        )
+        notification_roles = self._multi_role_select(
+            guild,
+            "notification_role_ids",
+            "Notification Ping Roles",
+            app.get("notification_role_ids") or [],
+        )
         return f"""
         <div id="settings" class="appdash-card">
             <h3>Settings: {self._h(app.get("name") or selected_application)}</h3>
@@ -1106,34 +1284,39 @@ class DashboardIntegration:
                 <input type="hidden" name="selected_application" value="{self._h(selected_application)}">
                 <div class="appdash-grid">
                     <div>
-                        <label class="appdash-check"><input type="checkbox" name="open" value="1" {self._checked(app.get("open", True))}> Open</label>
-                        <label class="appdash-check"><input type="checkbox" name="allow_multiple_pending" value="1" {self._checked(app.get("allow_multiple_pending"))}> Allow Multiple Pending</label>
-                        <label class="appdash-check"><input type="checkbox" name="thread_enabled" value="1" {self._checked(app.get("thread_enabled", True))}> Create Review Threads</label>
-                        <label class="appdash-check"><input type="checkbox" name="notification_enabled" value="1" {self._checked(app.get("notification_enabled", True))}> Notifications Enabled</label>
-                        <label class="appdash-check"><input type="checkbox" name="voting_enabled" value="1" {self._checked((app.get("voting") or {}).get("enabled", True))}> Review Voting</label>
+                        <label class="appdash-check"><input type="checkbox" name="open" value="1"
+                        {self._checked(app.get("open", True))}> Open</label>
+                        <label class="appdash-check"><input type="checkbox" name="allow_multiple_pending" value="1"
+                        {self._checked(app.get("allow_multiple_pending"))}> Allow Multiple Pending</label>
+                        <label class="appdash-check"><input type="checkbox" name="thread_enabled" value="1"
+                        {self._checked(app.get("thread_enabled", True))}> Create Review Threads</label>
+                        <label class="appdash-check"><input type="checkbox" name="notification_enabled" value="1"
+                        {self._checked(app.get("notification_enabled", True))}> Notifications Enabled</label>
+                        <label class="appdash-check"><input type="checkbox" name="voting_enabled" value="1"
+                        {self._checked((app.get("voting") or {}).get("enabled", True))}> Review Voting</label>
                     </div>
                     <div class="appdash-row">
                         {self._input("application_name", "Display Name", app.get("name") or "")}
                         {self._input("color", "Embed Color", self._color_hex(app.get("color")))}
-                        {self._input("cooldown_minutes", "Cooldown Minutes", app.get("cooldown_minutes", 0), "number", min_value=0, max_value=43200)}
-                        {self._input("voting_threshold", "Voting Threshold", (app.get("voting") or {}).get("threshold", 0), "number", min_value=0, max_value=100)}
+                        {cooldown_input}
+                        {voting_threshold_input}
                     </div>
                 </div>
                 <div class="appdash-row">
-                    {self._channel_select(guild, "channel_id", "Response Channel", app.get("channel_id"), include_none=False)}
-                    <div class="appdash-field"><label>Form Mode</label><select name="form_mode">{self._option("dm", "DM Flow", app.get("form_mode", "dm"))}{self._option("modal", "Discord Modal", app.get("form_mode", "dm"))}</select></div>
-                    {self._input("thread_name", "Thread Name Template", app.get("thread_name") or "{application} - {user}")}
+                    {response_channel_select}
+                    {form_mode_select}
+                    {thread_name_input}
                 </div>
                 <div class="appdash-row">
                     {self._input("button_label", "Panel Button Label", app.get("button_label") or "Apply")}
-                    <div class="appdash-field"><label>Panel Button Style</label><select name="button_style">{self._option("green", "Green", app.get("button_style"))}{self._option("red", "Red", app.get("button_style"))}{self._option("gray", "Gray", app.get("button_style"))}{self._option("blurple", "Blurple", app.get("button_style"))}</select></div>
+                    {button_style_select}
                     {self._input("button_emoji", "Panel Button Emoji", app.get("button_emoji") or "")}
-                    <div class="appdash-field"><label>Notification Role Ping Target</label><select name="notification_role_target">{self._option("channel", "Channel", self._notification_role_target(app))}{self._option("thread", "Thread", self._notification_role_target(app))}{self._option("both", "Both", self._notification_role_target(app))}</select></div>
+                    {notification_target_select}
                 </div>
                 <div class="appdash-row">
                     {self._textarea("application_description", "Description", app.get("description") or "", rows=3)}
                     {self._textarea("panel_message", "Panel Message", app.get("panel_message") or "", rows=3)}
-                    {self._textarea("notification_message", "Notification Message", app.get("notification_message") or "", rows=3)}
+                    {notification_message}
                 </div>
                 <div class="appdash-row">
                     {self._textarea("completion_message", "Completion DM", app.get("completion_message") or "", rows=3)}
@@ -1142,8 +1325,8 @@ class DashboardIntegration:
                 </div>
                 <h3>Notification Targets</h3>
                 <div class="appdash-row">
-                    {self._multi_channel_select(guild, "notification_channel_ids", "Extra Notification Channels", app.get("notification_channel_ids") or [])}
-                    {self._multi_role_select(guild, "notification_role_ids", "Notification Ping Roles", app.get("notification_role_ids") or [])}
+                    {notification_channels}
+                    {notification_roles}
                 </div>
                 <h3>Roles</h3>
                 <div class="appdash-row">{role_fields}</div>
@@ -1207,7 +1390,8 @@ class DashboardIntegration:
         return f"""
         <div id="questions" class="appdash-card">
             <h3>Questions</h3>
-            <table class="appdash-table"><thead><tr><th>#</th><th>Type</th><th>Required</th><th>Question</th><th>Choices</th></tr></thead><tbody>{table}</tbody></table>
+            <table
+            class="appdash-table"><thead><tr><th>#</th><th>Type</th><th>Required</th><th>Question</th><th>Choices</th></tr></thead><tbody>{table}</tbody></table>
             <div class="appdash-grid">
                 <form method="POST">
                     {csrf}
@@ -1215,8 +1399,12 @@ class DashboardIntegration:
                     <input type="hidden" name="selected_application" value="{self._h(selected_application)}">
                     {self._textarea("add_question_text", "New Question", "", rows=3)}
                     <div class="appdash-row">
-                        <div class="appdash-field"><label>Type</label><select name="add_question_type">{self._option("text", "Text", "text")}{self._option("boolean", "Boolean", "text")}{self._option("choice", "Choice", "text")}{self._option("attachment", "Attachment", "text")}</select></div>
-                        <label class="appdash-check"><input type="checkbox" name="add_question_required" value="1" checked> Required</label>
+                        <div class="appdash-field"><label>Type</label><select
+                        name="add_question_type">{self._option("text", "Text", "text")}{self._option("boolean",
+                        "Boolean", "text")}{self._option("choice", "Choice", "text")}{self._option("attachment",
+                        "Attachment", "text")}</select></div>
+                        <label class="appdash-check"><input type="checkbox" name="add_question_required" value="1"
+                        checked> Required</label>
                     </div>
                     {self._input("add_question_choices", "Choices for Choice Type", "")}
                     <button class="appdash-btn" type="submit">Add Question</button>
@@ -1256,18 +1444,22 @@ class DashboardIntegration:
         return f"""
         <div id="panels" class="appdash-card">
             <h3>Panels</h3>
-            <table class="appdash-table"><thead><tr><th>Message</th><th>Channel</th><th>Mode</th><th>Applications</th></tr></thead><tbody>{table}</tbody></table>
+            <table
+            class="appdash-table"><thead><tr><th>Message</th><th>Channel</th><th>Mode</th><th>Applications</th></tr></thead><tbody>{table}</tbody></table>
             <div class="appdash-grid">
                 <form method="POST">
                     {csrf}
                     <input type="hidden" name="action" value="post_panel">
                     <input type="hidden" name="selected_application" value="{self._h(selected_application)}">
                     <div class="appdash-row">
-                        {self._channel_select(guild, "panel_channel_id", "Post Panel Channel", None, include_none=False)}
-                        <div class="appdash-field"><label>Mode</label><select name="panel_mode">{self._option("buttons", "Buttons", "buttons")}{self._option("select", "Dropdown", "buttons")}</select></div>
+                        {self._channel_select(guild, "panel_channel_id", "Post Panel Channel", None,
+                        include_none=False)}
+                        <div class="appdash-field"><label>Mode</label><select name="panel_mode">{self._option("buttons",
+                         "Buttons", "buttons")}{self._option("select", "Dropdown", "buttons")}</select></div>
                         {self._input("panel_title", "Panel Title", "Applications")}
                     </div>
-                    {self._multi_application_select(apps, "panel_application_keys", "Panel Applications", [selected_application] if selected_application else [])}
+                    {self._multi_application_select(apps, "panel_application_keys", "Panel Applications",
+                    [selected_application] if selected_application else [])}
                     {self._textarea("panel_description", "Panel Description Override", "", rows=3)}
                     <button class="appdash-btn" type="submit">Post Panel</button>
                 </form>
@@ -1334,8 +1526,11 @@ class DashboardIntegration:
                 <input type="hidden" name="action" value="set_response_status">
                 <input type="hidden" name="selected_application" value="{self._h(selected_application)}">
                 <div class="appdash-row">
-                    <div class="appdash-field"><label>Pending Response</label><select name="response_id">{"".join(pending_options)}</select></div>
-                    <div class="appdash-field"><label>Decision</label><select name="response_decision">{self._option("accepted", "Accept", "accepted")}{self._option("denied", "Deny", "accepted")}</select></div>
+                    <div class="appdash-field"><label>Pending Response</label><select
+                    name="response_id">{"".join(pending_options)}</select></div>
+                    <div class="appdash-field"><label>Decision</label><select
+                    name="response_decision">{self._option("accepted", "Accept", "accepted")}{self._option("denied",
+                    "Deny", "accepted")}</select></div>
                 </div>
                 {self._textarea("response_reason", "Reason", "", rows=3)}
                 <button class="appdash-btn" type="submit">Set Response Status</button>
@@ -1347,7 +1542,8 @@ class DashboardIntegration:
         return f"""
         <div id="responses" class="appdash-card">
             <h3>Responses</h3>
-            <table class="appdash-table"><thead><tr><th>ID</th><th>Status</th><th>User</th><th>Created</th><th>Votes</th></tr></thead><tbody>{table}</tbody></table>
+            <table
+            class="appdash-table"><thead><tr><th>ID</th><th>Status</th><th>User</th><th>Created</th><th>Votes</th></tr></thead><tbody>{table}</tbody></table>
             {decision_form}
         </div>
         """
@@ -1386,7 +1582,8 @@ class DashboardIntegration:
             <form method="POST">
                 {csrf}
                 <input type="hidden" name="action" value="close_poll">
-                <div class="appdash-field"><label>Open Poll</label><select name="poll_id">{"".join(close_options)}</select></div>
+                <div class="appdash-field"><label>Open Poll</label><select
+                name="poll_id">{"".join(close_options)}</select></div>
                 <button class="appdash-btn danger" type="submit">Close Poll</button>
             </form>
             """
@@ -1396,7 +1593,8 @@ class DashboardIntegration:
         return f"""
         <div id="polls" class="appdash-card">
             <h3>Polls</h3>
-            <table class="appdash-table"><thead><tr><th>ID</th><th>Question</th><th>Channel</th><th>Status</th><th>Votes</th></tr></thead><tbody>{table}</tbody></table>
+            <table
+            class="appdash-table"><thead><tr><th>ID</th><th>Question</th><th>Channel</th><th>Status</th><th>Votes</th></tr></thead><tbody>{table}</tbody></table>
             <div class="appdash-grid">
                 <form method="POST">
                     {csrf}
@@ -1528,8 +1726,10 @@ class DashboardIntegration:
         selected_ids = {str(channel_id) for channel_id in selected}
         options = []
         for channel in sorted(guild.text_channels, key=lambda item: item.name.lower()):
+            selected_attr = "selected" if str(channel.id) in selected_ids else ""
             options.append(
-                f'<option value="{channel.id}" {"selected" if str(channel.id) in selected_ids else ""}>#{self._h(channel.name)}</option>',
+                f'<option value="{channel.id}" {selected_attr}>'
+                f"#{self._h(channel.name)}</option>",
             )
         return (
             f'<div class="appdash-field"><label>{self._h(label)}</label>'
@@ -1571,8 +1771,10 @@ class DashboardIntegration:
             apps.items(),
             key=lambda item: item[1].get("name", item[0]).lower(),
         ):
+            selected_attr = "selected" if key in selected_keys else ""
             options.append(
-                f'<option value="{self._h(key)}" {"selected" if key in selected_keys else ""}>{self._h(app.get("name", key))}</option>',
+                f'<option value="{self._h(key)}" {selected_attr}>'
+                f'{self._h(app.get("name", key))}</option>',
             )
         return (
             f'<div class="appdash-field"><label>{self._h(label)}</label>'

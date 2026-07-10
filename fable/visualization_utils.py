@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 import discord
 
@@ -27,8 +27,16 @@ def create_timeline_embed(
     # Filter events by date range if provided
     if start_date or end_date:
         filtered_events = []
-        start = datetime.fromisoformat(start_date) if start_date else datetime.min
-        end = datetime.fromisoformat(end_date) if end_date else datetime.max
+        start = (
+            datetime.fromisoformat(start_date)
+            if start_date
+            else datetime.min.replace(tzinfo=timezone.utc)
+        )
+        end = (
+            datetime.fromisoformat(end_date)
+            if end_date
+            else datetime.max.replace(tzinfo=timezone.utc)
+        )
 
         for event in events:
             event_date = datetime.fromisoformat(event["date"])
@@ -38,7 +46,8 @@ def create_timeline_embed(
 
     # Filter by event type if provided
     if event_type:
-        events = [e for e in events if e.get("type", "").lower() == event_type.lower()]
+        events = [e for e in events if e.get(
+            "type", "").lower() == event_type.lower()]
 
     # Sort events by date
     events.sort(key=lambda x: x["date"])

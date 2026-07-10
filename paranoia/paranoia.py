@@ -7,8 +7,10 @@ import discord
 from redbot.core import Config, commands
 from redbot.core.utils.chat_formatting import humanize_list
 
+from .dashboard_integration import DashboardIntegration
 
-class Paranoia(commands.Cog):
+
+class Paranoia(DashboardIntegration, commands.Cog):
     """
     A cog for playing the social party game Paranoia in Discord.
 
@@ -94,7 +96,8 @@ class Paranoia(commands.Cog):
         matches = re.findall(user_id_pattern, content)
 
         for match in matches:
-            user_id = match[0] or match[1] if isinstance(match, tuple) else match
+            user_id = match[0] or match[1] if isinstance(
+                match, tuple) else match
             if user_id and user_id.isdigit():
                 try:
                     member = guild.get_member(int(user_id))
@@ -372,7 +375,8 @@ class Paranoia(commands.Cog):
         if len(game_data["current_answers"]) == len(game_data["players"]):
             await self._reveal_answers(ctx, game_data)
         else:
-            remaining = len(game_data["players"]) - len(game_data["current_answers"])
+            remaining = len(game_data["players"]) - \
+                            len(game_data["current_answers"])
             await ctx.send(f"⏳ Waiting for {remaining} more answer(s)...")
 
         await self.config.guild(ctx.guild).active_games.set(guild_data)
@@ -395,7 +399,8 @@ class Paranoia(commands.Cog):
                     "answerer_display_name",
                     player.display_name,
                 )
-                answer_name = answer_data.get("answer_name", answer_player.display_name)
+                answer_name = answer_data.get(
+                    "answer_name", answer_player.display_name)
 
                 embed.add_field(
                     name=f"{answerer_name}'s Answer",
@@ -638,7 +643,8 @@ class Paranoia(commands.Cog):
             color=discord.Color.blue(),
         )
         embed.add_field(name="Round", value=game_data["round"], inline=True)
-        embed.add_field(name="Players", value=humanize_list(players), inline=False)
+        embed.add_field(name="Players", value=humanize_list(
+            players), inline=False)
         embed.add_field(
             name="Progress",
             value=f"{answers_submitted}/{total_players} answers submitted",

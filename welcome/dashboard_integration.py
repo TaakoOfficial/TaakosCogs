@@ -69,7 +69,8 @@ class DashboardIntegration:
                     form_data,
                 )
             except commands.CommandError as error:
-                notifications.append({"message": str(error), "category": "error"})
+                notifications.append(
+                    {"message": str(error), "category": "error"})
             except Exception as error:
                 log.exception("Welcome dashboard action failed.")
                 notifications.append(
@@ -235,7 +236,8 @@ class DashboardIntegration:
         try:
             return int(value)
         except (TypeError, ValueError) as exc:
-            raise commands.BadArgument(f"`{key}` must be a Discord ID.") from exc
+            raise commands.BadArgument(
+                f"`{key}` must be a Discord ID.") from exc
 
     def _dash_csrf(self, kwargs: dict[str, typing.Any]) -> str:
         csrf_token = kwargs.get("csrf_token")
@@ -318,7 +320,8 @@ class DashboardIntegration:
         channel_id = self._dash_optional_id(form_data, "channel_id")
         channel = guild.get_channel(channel_id) if channel_id else None
         if channel_id and not isinstance(channel, discord.TextChannel):
-            raise commands.BadArgument("Welcome channel must be a text channel.")
+            raise commands.BadArgument(
+                "Welcome channel must be a text channel.")
         enabled = self._dash_bool(form_data, "enabled")
         if enabled and channel is None:
             raise commands.BadArgument(
@@ -328,9 +331,11 @@ class DashboardIntegration:
         message_template = self._dash_value(form_data, "message_template")
         self._validate_placeholders(message_template)
 
-        image_mode = self._dash_value(form_data, "image_mode", "embed").strip().lower()
+        image_mode = self._dash_value(
+            form_data, "image_mode", "embed").strip().lower()
         if image_mode not in {"embed", "attachment"}:
-            raise commands.BadArgument("Image mode must be `embed` or `attachment`.")
+            raise commands.BadArgument(
+                "Image mode must be `embed` or `attachment`.")
 
         current_overlay = self._normalize_avatar_overlay(
             await self.config.guild(guild).avatar_overlay(),
@@ -374,7 +379,8 @@ class DashboardIntegration:
         if embed_json_text:
             embed_data = self._dashboard_parse_embed_json(embed_json_text)
             self._validate_placeholders(embed_data)
-            preview_member = self._dashboard_preview_member(guild, preview_user)
+            preview_member = self._dashboard_preview_member(
+                guild, preview_user)
             try:
                 self._build_embed(embed_data, preview_member, None, image_mode)
             except Exception as exc:
@@ -417,7 +423,8 @@ class DashboardIntegration:
         ) or settings.get("channel_id")
         channel = guild.get_channel(channel_id) if channel_id else None
         if not isinstance(channel, discord.TextChannel):
-            raise commands.BadArgument("Choose a text channel for the welcome preview.")
+            raise commands.BadArgument(
+                "Choose a text channel for the welcome preview.")
 
         member_id = self._dash_optional_id(form_data, "test_member_id")
         member = (
@@ -467,8 +474,10 @@ class DashboardIntegration:
         <style>
             .wel-wrap {{ max-width: 1180px; margin: 0 auto; color: #e5e7eb; }}
             .wel-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }}
-            .wel-row {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-bottom: 12px; }}
-            .wel-card {{ background: #1f2937; border: 1px solid #374151; border-radius: 8px; padding: 16px; margin-bottom: 16px; }}
+            .wel-row {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px;
+            margin-bottom: 12px; }}
+            .wel-card {{ background: #1f2937; border: 1px solid #374151; border-radius: 8px; padding: 16px;
+            margin-bottom: 16px; }}
             .wel-card h2, .wel-card h3 {{ margin: 0 0 12px 0; color: #f9fafb; }}
             .wel-muted {{ color: #9ca3af; }}
             .wel-stat {{ font-size: 1.5rem; font-weight: 700; color: #f9fafb; }}
@@ -480,16 +489,20 @@ class DashboardIntegration:
             .wel-field textarea {{ min-height: 120px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }}
             .wel-check {{ display: flex; align-items: center; gap: 8px; margin: 6px 0; color: #d1d5db; }}
             .wel-check input {{ width: auto; }}
-            .wel-btn {{ background: #2563eb; color: white; border: 0; border-radius: 6px; padding: 9px 14px; cursor: pointer; font-weight: 700; }}
+            .wel-btn {{ background: #2563eb; color: white; border: 0; border-radius: 6px; padding: 9px 14px; cursor:
+            pointer; font-weight: 700; }}
             .wel-btn.secondary {{ background: #4b5563; }}
             .wel-btn.danger {{ background: #dc2626; }}
-            .dash-tabs {{ display: flex; gap: 4px; overflow-x: auto; position: sticky; top: 0; z-index: 10; margin: 0 0 16px; padding: 5px; background: #111827; border: 1px solid #374151; border-radius: 8px; }}
-            .dash-tab {{ flex: 0 0 auto; border: 0; border-radius: 6px; padding: 9px 13px; background: transparent; color: #9ca3af; cursor: pointer; font-weight: 700; white-space: nowrap; }}
+            .dash-tabs {{ display: flex; gap: 4px; overflow-x: auto; position: sticky; top: 0; z-index: 10; margin: 0 0
+            16px; padding: 5px; background: #111827; border: 1px solid #374151; border-radius: 8px; }}
+            .dash-tab {{ flex: 0 0 auto; border: 0; border-radius: 6px; padding: 9px 13px; background: transparent;
+            color: #9ca3af; cursor: pointer; font-weight: 700; white-space: nowrap; }}
             .dash-tab:hover {{ background: #1f2937; color: #f9fafb; }}
             .dash-tab.active {{ background: #2563eb; color: white; }}
             .dash-panel {{ display: none; }} .dash-panel.active {{ display: block; }}
             .wel-table {{ width: 100%; border-collapse: collapse; font-size: 0.92rem; }}
-            .wel-table th, .wel-table td {{ border-bottom: 1px solid #374151; padding: 8px; text-align: left; vertical-align: top; }}
+            .wel-table th, .wel-table td {{ border-bottom: 1px solid #374151; padding: 8px; text-align: left;
+            vertical-align: top; }}
             .wel-table th {{ color: #d1d5db; }}
             .wel-inline {{ display: inline; }}
         </style>
@@ -497,10 +510,14 @@ class DashboardIntegration:
             <div class="wel-card">
                 <h2>Welcome Dashboard</h2>
                 <div class="wel-grid">
-                    <div><div class="wel-muted">Enabled</div><div class="wel-stat">{"Yes" if settings.get("enabled") else "No"}</div></div>
-                    <div><div class="wel-muted">Channel</div><div class="wel-stat">{self._h("#" + channel.name if channel else "Not Set")}</div></div>
-                    <div><div class="wel-muted">Embed JSON</div><div class="wel-stat">{"Yes" if settings.get("embed_json") else "No"}</div></div>
-                    <div><div class="wel-muted">Cached Image</div><div class="wel-stat">{"Yes" if image_data.get("data_base64") else "No"}</div></div>
+                    <div><div class="wel-muted">Enabled</div><div class="wel-stat">{"Yes" if settings.get("enabled")
+                    else "No"}</div></div>
+                    <div><div class="wel-muted">Channel</div><div class="wel-stat">{self._h("#" + channel.name if
+                    channel else "Not Set")}</div></div>
+                    <div><div class="wel-muted">Embed JSON</div><div class="wel-stat">{"Yes" if
+                    settings.get("embed_json") else "No"}</div></div>
+                    <div><div class="wel-muted">Cached Image</div><div class="wel-stat">{"Yes" if
+                    image_data.get("data_base64") else "No"}</div></div>
                 </div>
             </div>
             <div class="dash-tabs" role="tablist" aria-label="Welcome sections">
@@ -509,10 +526,15 @@ class DashboardIntegration:
                 {self._dashboard_tab_button("preview", "Preview", active_tab)}
                 {self._dashboard_tab_button("reference", "Placeholders", active_tab)}
             </div>
-            <section class="dash-panel{" active" if active_tab == "settings" else ""}" data-tab-panel="settings">{self._dashboard_settings_section(guild, settings, avatar_overlay, embed_json_text, csrf)}</section>
-            <section class="dash-panel{" active" if active_tab == "image" else ""}" data-tab-panel="image">{self._dashboard_image_section(image_data, csrf)}</section>
-            <section class="dash-panel{" active" if active_tab == "preview" else ""}" data-tab-panel="preview">{self._dashboard_test_section(guild, settings, csrf)}</section>
-            <section class="dash-panel{" active" if active_tab == "reference" else ""}" data-tab-panel="reference">{self._dashboard_placeholders_section()}</section>
+            <section class="dash-panel{" active" if active_tab == "settings" else ""}"
+            data-tab-panel="settings">{self._dashboard_settings_section(guild, settings, avatar_overlay,
+            embed_json_text, csrf)}</section>
+            <section class="dash-panel{" active" if active_tab == "image" else ""}"
+            data-tab-panel="image">{self._dashboard_image_section(image_data, csrf)}</section>
+            <section class="dash-panel{" active" if active_tab == "preview" else ""}"
+            data-tab-panel="preview">{self._dashboard_test_section(guild, settings, csrf)}</section>
+            <section class="dash-panel{" active" if active_tab == "reference" else ""}"
+            data-tab-panel="reference">{self._dashboard_placeholders_section()}</section>
             {self._dashboard_tabs_script()}
         </div>
         """
@@ -533,20 +555,28 @@ class DashboardIntegration:
                 <input type="hidden" name="action" value="save_settings">
                 <div class="wel-grid">
                     <div>
-                        <label class="wel-check"><input type="checkbox" name="enabled" value="1" {self._checked(settings.get("enabled"))}> Enabled</label>
-                        <label class="wel-check"><input type="checkbox" name="include_bots" value="1" {self._checked(settings.get("include_bots"))}> Include Bots</label>
-                        <label class="wel-check"><input type="checkbox" name="avatar_overlay_enabled" value="1" {self._checked(avatar_overlay.get("enabled"))}> Avatar Overlay</label>
+                        <label class="wel-check"><input type="checkbox" name="enabled" value="1"
+                        {self._checked(settings.get("enabled"))}> Enabled</label>
+                        <label class="wel-check"><input type="checkbox" name="include_bots" value="1"
+                        {self._checked(settings.get("include_bots"))}> Include Bots</label>
+                        <label class="wel-check"><input type="checkbox" name="avatar_overlay_enabled" value="1"
+                        {self._checked(avatar_overlay.get("enabled"))}> Avatar Overlay</label>
                     </div>
                     <div class="wel-row">
                         {self._channel_select(guild, "channel_id", "Welcome Channel", settings.get("channel_id"))}
-                        <div class="wel-field"><label>Image Mode</label><select name="image_mode">{self._option("embed", "Embed Image", settings.get("image_mode"))}{self._option("attachment", "Attachment", settings.get("image_mode"))}</select></div>
+                        <div class="wel-field"><label>Image Mode</label><select name="image_mode">{self._option("embed",
+                         "Embed Image", settings.get("image_mode"))}{self._option("attachment", "Attachment",
+                        settings.get("image_mode"))}</select></div>
                     </div>
                 </div>
                 {self._textarea("message_template", "Message Template", settings.get("message_template") or "", rows=4)}
                 <div class="wel-row">
-                    {self._input("avatar_overlay_x_percent", "Avatar Center X Percent", avatar_overlay.get("x_percent", 82.0), "number", min_value=0, max_value=100, step="0.1")}
-                    {self._input("avatar_overlay_y_percent", "Avatar Center Y Percent", avatar_overlay.get("y_percent", 52.0), "number", min_value=0, max_value=100, step="0.1")}
-                    {self._input("avatar_overlay_size_percent", "Avatar Diameter Percent", avatar_overlay.get("size_percent", 17.0), "number", min_value=1, max_value=100, step="0.1")}
+                    {self._input("avatar_overlay_x_percent", "Avatar Center X Percent", avatar_overlay.get("x_percent",
+                    82.0), "number", min_value=0, max_value=100, step="0.1")}
+                    {self._input("avatar_overlay_y_percent", "Avatar Center Y Percent", avatar_overlay.get("y_percent",
+                    52.0), "number", min_value=0, max_value=100, step="0.1")}
+                    {self._input("avatar_overlay_size_percent", "Avatar Diameter Percent",
+                    avatar_overlay.get("size_percent", 17.0), "number", min_value=1, max_value=100, step="0.1")}
                 </div>
                 <div id="embed" class="wel-field">
                     <label>Embed JSON</label>
@@ -572,13 +602,16 @@ class DashboardIntegration:
         image_data: dict[str, typing.Any],
         csrf: str,
     ) -> str:
+        filename = self._h(image_data.get("filename") or "Not set")
+        content_type = self._h(image_data.get("content_type") or "Not set")
+        source_url = self._h(image_data.get("source_url") or "Not set")
         return f"""
         <div id="image" class="wel-card">
             <h3>Image</h3>
             <div class="wel-grid">
-                <div><div class="wel-muted">Filename</div><div>{self._h(image_data.get("filename") or "Not set")}</div></div>
-                <div><div class="wel-muted">Content Type</div><div>{self._h(image_data.get("content_type") or "Not set")}</div></div>
-                <div><div class="wel-muted">Source URL</div><div>{self._h(image_data.get("source_url") or "Not set")}</div></div>
+                <div><div class="wel-muted">Filename</div><div>{filename}</div></div>
+                <div><div class="wel-muted">Content Type</div><div>{content_type}</div></div>
+                <div><div class="wel-muted">Source URL</div><div>{source_url}</div></div>
             </div>
             <form method="POST">
                 {csrf}
@@ -651,7 +684,8 @@ class DashboardIntegration:
                 f"Invalid JSON near line {exc.lineno}, column {exc.colno}: {exc.msg}",
             ) from exc
         if not isinstance(parsed, dict):
-            raise commands.BadArgument("Embed JSON must be a single JSON object.")
+            raise commands.BadArgument(
+                "Embed JSON must be a single JSON object.")
         embed_object = self._extract_embed_object(parsed)
         cleaned = self._sanitize_embed_dict(embed_object)
         return self._normalise_embed_dict(cleaned)

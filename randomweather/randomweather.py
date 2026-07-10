@@ -11,6 +11,7 @@ import pytz
 from discord.ext import tasks
 from redbot.core import Config, app_commands, commands
 
+from .dashboard_integration import DashboardIntegration
 from .file_utils import write_last_posted
 from .time_utils import calculate_next_refresh_time, should_post_now
 from .weather_utils import (
@@ -21,6 +22,16 @@ from .weather_utils import (
 
 if TYPE_CHECKING:
     from redbot.core.bot import Red
+
+RECOVERABLE_EXCEPTIONS = (
+    discord.DiscordException,
+    OSError,
+    RuntimeError,
+    ValueError,
+    KeyError,
+    TypeError,
+    AttributeError,
+)
 
 
 class WeatherGroup(app_commands.Group):
@@ -109,7 +120,8 @@ class WeatherGroup(app_commands.Group):
                         ephemeral=True,
                     )
                 else:
-                    next_time = calculate_next_refresh_time(0, None, value, time_zone)
+                    next_time = calculate_next_refresh_time(
+                        0, None, value, time_zone)
                     await interaction.followup.send(
                         f"Weather will refresh daily at {value} ({discord.utils.format_dt(next_time)})",
                         ephemeral=True,
@@ -244,7 +256,7 @@ class WeatherGroup(app_commands.Group):
             color_value = int(color_str, 16)
             if not (0x000000 <= color_value <= 0xFFFFFF):
                 raise ValueError
-        except Exception:
+        except RECOVERABLE_EXCEPTIONS:
             await interaction.followup.send(
                 "Invalid color. Please provide a valid hex code (e.g. #00ff00).",
                 ephemeral=True,
@@ -286,8 +298,10 @@ class WeatherGroup(app_commands.Group):
             return
         await interaction.response.defer(ephemeral=True)
         guild_settings = await self.cog.config.guild(interaction.guild).all()
-        embed_color = discord.Color(guild_settings.get("embed_color", 0xFF0000))
-        embed = discord.Embed(title="RandomWeather Settings", color=embed_color)
+        embed_color = discord.Color(
+            guild_settings.get("embed_color", 0xFF0000))
+        embed = discord.Embed(
+            title="RandomWeather Settings", color=embed_color)
         channel = (
             self.cog.bot.get_channel(guild_settings.get("channel_id"))
             if guild_settings.get("channel_id")
@@ -336,9 +350,11 @@ class WeatherGroup(app_commands.Group):
             else:
                 hours = minutes // 60
                 timing = f"Every {hours}h"
-            embed.add_field(name="⏰ Update Interval:", value=timing, inline=True)
+            embed.add_field(name="⏰ Update Interval:",
+                            value=timing, inline=True)
         else:
-            embed.add_field(name="⏰ Updates:", value="Not configured", inline=True)
+            embed.add_field(name="⏰ Updates:",
+                            value="Not configured", inline=True)
         last_refresh = guild_settings.get("last_refresh", 0)
         next_post_time = calculate_next_refresh_time(
             last_refresh,
@@ -354,12 +370,14 @@ class WeatherGroup(app_commands.Group):
             )
         embed.add_field(
             name="🏷️ Role Tagging:",
-            value="✅ Enabled" if guild_settings.get("tag_role") else "❌ Disabled",
+            value="✅ Enabled" if guild_settings.get(
+                "tag_role") else "❌ Disabled",
             inline=True,
         )
         embed.add_field(
             name="📜 Footer:",
-            value="✅ Enabled" if guild_settings.get("show_footer") else "❌ Disabled",
+            value="✅ Enabled" if guild_settings.get(
+                "show_footer") else "❌ Disabled",
             inline=True,
         )
         await interaction.followup.send(embed=embed, ephemeral=True)
@@ -391,7 +409,7 @@ class WeatherGroup(app_commands.Group):
                 is_forced=True,
             )
             await interaction.followup.send("Weather update posted.", ephemeral=True)
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             logging.error(f"Error in slash force weather update: {e}")
             await interaction.followup.send(
                 f"Failed to post weather update: {e}",
@@ -430,7 +448,7 @@ class WeatherGroup(app_commands.Group):
                 "⚠️ Extreme weather alert posted! Take cover!",
                 ephemeral=True,
             )
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             logging.error(f"Error in slash force extreme weather update: {e}")
             await interaction.followup.send(
                 f"Failed to post extreme weather update: {e}",
@@ -438,7 +456,7 @@ class WeatherGroup(app_commands.Group):
             )
 
 
-class WeatherCog(commands.Cog):
+class WeatherCog(DashboardIntegration, commands.Cog):
     """A cog for generating random daily weather updates."""
 
     def __init__(self, bot: Red) -> None:
@@ -483,7 +501,8 @@ class WeatherCog(commands.Cog):
                     if not channel_id:
                         continue
 
-                    time_zone = cast("str", guild_settings.get("time_zone", "UTC"))
+                    time_zone = cast(
+                        "str", guild_settings.get("time_zone", "UTC"))
                     tz = pytz.timezone(time_zone)
                     now = datetime.now().astimezone(tz)
 
@@ -500,7 +519,8 @@ class WeatherCog(commands.Cog):
                             continue
 
                     # Calculate next refresh based on interval or scheduled time
-                    last_refresh = cast("int", guild_settings.get("last_refresh", 0))
+                    last_refresh = cast(
+                        "int", guild_settings.get("last_refresh", 0))
                     refresh_interval = cast(
                         "int | None",
                         guild_settings.get("refresh_interval"),
@@ -519,10 +539,10 @@ class WeatherCog(commands.Cog):
                             guild_settings,
                             scheduled_time=next_post_time.timestamp(),
                         )
-                except Exception as e:
+                except RECOVERABLE_EXCEPTIONS as e:
                     logging.error(f"Error processing guild {guild_id}: {e}")
 
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             logging.error(f"Error in weather update loop: {e}")
 
     async def _post_weather_update(
@@ -557,8 +577,9 @@ class WeatherCog(commands.Cog):
                 )
             write_last_posted()
 
-        except Exception as e:
-            logging.error(f"Error posting weather update for guild {guild_id}: {e}")
+        except RECOVERABLE_EXCEPTIONS as e:
+            logging.error(
+                f"Error posting weather update for guild {guild_id}: {e}")
 
     async def _post_extreme_weather_update(
         self,
@@ -590,7 +611,7 @@ class WeatherCog(commands.Cog):
                 )
             write_last_posted()
 
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             logging.error(
                 f"Error posting extreme weather update for guild {guild_id}: {e}",
             )
@@ -650,7 +671,8 @@ class WeatherCog(commands.Cog):
                         f"Weather will refresh daily at {value}. Posted initial update since it's that time now.",
                     )
                 else:
-                    next_time = calculate_next_refresh_time(0, None, value, time_zone)
+                    next_time = calculate_next_refresh_time(
+                        0, None, value, time_zone)
                     await ctx.send(
                         f"Weather will refresh daily at {value} ({discord.utils.format_dt(next_time)})",
                     )
@@ -744,8 +766,10 @@ class WeatherCog(commands.Cog):
     async def info(self, ctx: commands.Context) -> None:
         """View the current settings for weather updates."""
         guild_settings = await self.config.guild(ctx.guild).all()
-        embed_color = discord.Color(guild_settings.get("embed_color", 0xFF0000))
-        embed = discord.Embed(title="RandomWeather Settings", color=embed_color)
+        embed_color = discord.Color(
+            guild_settings.get("embed_color", 0xFF0000))
+        embed = discord.Embed(
+            title="RandomWeather Settings", color=embed_color)
         channel = (
             self.bot.get_channel(guild_settings.get("channel_id"))
             if guild_settings.get("channel_id")
@@ -794,9 +818,11 @@ class WeatherCog(commands.Cog):
             else:
                 hours = minutes // 60
                 timing = f"Every {hours}h"
-            embed.add_field(name="⏰ Update Interval:", value=timing, inline=True)
+            embed.add_field(name="⏰ Update Interval:",
+                            value=timing, inline=True)
         else:
-            embed.add_field(name="⏰ Updates:", value="Not configured", inline=True)
+            embed.add_field(name="⏰ Updates:",
+                            value="Not configured", inline=True)
         last_refresh = guild_settings.get("last_refresh", 0)
         next_post_time = calculate_next_refresh_time(
             last_refresh,
@@ -812,12 +838,14 @@ class WeatherCog(commands.Cog):
             )
         embed.add_field(
             name="🏷️ Role Tagging:",
-            value="✅ Enabled" if guild_settings.get("tag_role") else "❌ Disabled",
+            value="✅ Enabled" if guild_settings.get(
+                "tag_role") else "❌ Disabled",
             inline=True,
         )
         embed.add_field(
             name="📜 Footer:",
-            value="✅ Enabled" if guild_settings.get("show_footer") else "❌ Disabled",
+            value="✅ Enabled" if guild_settings.get(
+                "show_footer") else "❌ Disabled",
             inline=True,
         )
         await ctx.send(embed=embed)
@@ -839,7 +867,7 @@ class WeatherCog(commands.Cog):
                 is_forced=True,
             )
             await ctx.send("Weather update posted.")
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             logging.error(f"Error in classic force weather update: {e}")
             await ctx.send(f"Failed to post weather update: {e}")
 

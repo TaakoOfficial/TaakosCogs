@@ -63,7 +63,8 @@ class DashboardIntegration:
             try:
                 messages = await self._dashboard_handle_action(guild, action, form_data)
             except commands.CommandError as error:
-                notifications.append({"message": str(error), "category": "error"})
+                notifications.append(
+                    {"message": str(error), "category": "error"})
             except Exception as error:
                 log.exception("Captcha dashboard action failed.")
                 notifications.append(
@@ -121,7 +122,15 @@ class DashboardIntegration:
 
     def _dashboard_tab_button(self, name: str, label: str, active: str) -> str:
         selected = name == active
-        return f'<button type="button" class="dash-tab{" active" if selected else ""}" data-tab="{self._h(name)}" role="tab" aria-selected="{str(selected).lower()}" tabindex="{0 if selected else -1}">{self._h(label)}</button>'
+        active_class = " active" if selected else ""
+        aria_selected = str(selected).lower()
+        tabindex = 0 if selected else -1
+        return (
+            f'<button type="button" class="dash-tab{active_class}" '
+            f'data-tab="{self._h(name)}" role="tab" '
+            f'aria-selected="{aria_selected}" tabindex="{tabindex}">'
+            f"{self._h(label)}</button>"
+        )
 
     @staticmethod
     def _dashboard_tabs_script() -> str:
@@ -134,13 +143,23 @@ class DashboardIntegration:
   const names = new Set(tabs.map((tab) => tab.dataset.tab));
   const activate = (name, hash = false) => {
     if (!names.has(name)) return;
-    tabs.forEach((tab) => { const on = tab.dataset.tab === name; tab.classList.toggle("active", on); tab.setAttribute("aria-selected", on ? "true" : "false"); tab.tabIndex = on ? 0 : -1; });
-    panels.forEach((panel) => { const on = panel.dataset.tabPanel === name; panel.classList.toggle("active", on); panel.hidden = !on; });
+    tabs.forEach((tab) => { const on = tab.dataset.tab === name; tab.classList.toggle("active", on);
+    tab.setAttribute("aria-selected", on ? "true" : "false"); tab.tabIndex = on ? 0 : -1; });
+    panels.forEach((panel) => { const on = panel.dataset.tabPanel === name; panel.classList.toggle("active", on);
+    panel.hidden = !on; });
     if (hash) history.replaceState(null, "", `#tab-${name}`);
   };
-  const fromHash = () => { const hash = location.hash.slice(1); if (hash.startsWith("tab-") && names.has(hash.slice(4))) return hash.slice(4); const section = document.getElementById(hash); const panel = section ? section.closest("[data-tab-panel]") : null; return panel ? panel.dataset.tabPanel : null; };
-  tabs.forEach((tab, index) => { tab.addEventListener("click", () => activate(tab.dataset.tab, true)); tab.addEventListener("keydown", (event) => { const move = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0; if (!move) return; event.preventDefault(); const next = tabs[(index + move + tabs.length) % tabs.length]; next.focus(); activate(next.dataset.tab, true); }); });
-  root.querySelectorAll("form").forEach((form) => form.addEventListener("submit", () => { let input = form.querySelector('input[name="active_tab"]'); if (!input) { input = document.createElement("input"); input.type = "hidden"; input.name = "active_tab"; form.appendChild(input); } input.value = root.querySelector("[data-tab].active").dataset.tab; }));
+  const fromHash = () => { const hash = location.hash.slice(1); if (hash.startsWith("tab-") && names.has(hash.slice(4)))
+   return hash.slice(4); const section = document.getElementById(hash); const panel = section ?
+  section.closest("[data-tab-panel]") : null; return panel ? panel.dataset.tabPanel : null; };
+  tabs.forEach((tab, index) => { tab.addEventListener("click", () => activate(tab.dataset.tab, true));
+  tab.addEventListener("keydown", (event) => { const move = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ?
+   -1 : 0; if (!move) return; event.preventDefault(); const next = tabs[(index + move + tabs.length) % tabs.length];
+  next.focus(); activate(next.dataset.tab, true); }); });
+  root.querySelectorAll("form").forEach((form) => form.addEventListener("submit", () => { let input =
+  form.querySelector('input[name="active_tab"]'); if (!input) { input = document.createElement("input"); input.type =
+  "hidden"; input.name = "active_tab"; form.appendChild(input); } input.value =
+  root.querySelector("[data-tab].active").dataset.tab; }));
   activate(fromHash() || root.querySelector("[data-tab].active").dataset.tab);
 })();
 </script>
@@ -179,7 +198,8 @@ class DashboardIntegration:
         try:
             return int(value)
         except (TypeError, ValueError) as exc:
-            raise commands.BadArgument(f"`{key}` must be a Discord ID.") from exc
+            raise commands.BadArgument(
+                f"`{key}` must be a Discord ID.") from exc
 
     def _dash_required_id(self, form_data: typing.Any, key: str) -> int:
         value = self._dash_optional_id(form_data, key)
@@ -241,11 +261,13 @@ class DashboardIntegration:
         channel_id = self._dash_required_id(form_data, "channel_id")
         channel = guild.get_channel(channel_id)
         if not isinstance(channel, discord.TextChannel):
-            raise commands.BadArgument("Choose a text channel for the captcha panel.")
+            raise commands.BadArgument(
+                "Choose a text channel for the captcha panel.")
 
         me = guild.me
         if me is None:
-            raise commands.CommandError("I could not check my channel permissions.")
+            raise commands.CommandError(
+                "I could not check my channel permissions.")
         permissions = channel.permissions_for(me)
         if not permissions.send_messages or not permissions.embed_links:
             raise commands.CommandError(
@@ -253,7 +275,8 @@ class DashboardIntegration:
             )
 
         roles = self._dashboard_roles(guild, form_data)
-        label = self._dash_value(form_data, "label", "Verify").strip()[:80] or "Verify"
+        label = self._dash_value(form_data, "label", "Verify").strip()[
+                                 :80] or "Verify"
         embed = discord.Embed(
             title=self.DEFAULT_TITLE,
             description=self.DEFAULT_DESCRIPTION,
@@ -287,13 +310,15 @@ class DashboardIntegration:
         try:
             message = await channel.fetch_message(message_id)
         except discord.NotFound as exc:
-            raise commands.BadArgument("I could not find that message.") from exc
+            raise commands.BadArgument(
+                "I could not find that message.") from exc
         except discord.Forbidden as exc:
             raise commands.CommandError(
                 "I cannot read messages in that channel.",
             ) from exc
         except discord.HTTPException as exc:
-            raise commands.CommandError("Discord did not return that message.") from exc
+            raise commands.CommandError(
+                "Discord did not return that message.") from exc
 
         me = guild.me
         if me is None or message.author.id != me.id:
@@ -362,7 +387,8 @@ class DashboardIntegration:
                 role_ids.append(role_id)
         roles = [guild.get_role(role_id) for role_id in role_ids]
         if any(role is None for role in roles):
-            raise commands.BadArgument("One or more selected roles no longer exist.")
+            raise commands.BadArgument(
+                "One or more selected roles no longer exist.")
         return self._validate_roles(guild, typing.cast("list[discord.Role]", roles))
 
     async def _dashboard_source(
@@ -415,12 +441,16 @@ class DashboardIntegration:
 }}
 .captcha-actions button.warn {{ background: var(--warn); color: #1f1b00; }}
 .captcha-table {{ width: 100%; border-collapse: collapse; font-size: 14px; }}
-.captcha-table th, .captcha-table td {{ border-bottom: 1px solid var(--line); padding: 8px; text-align: left; vertical-align: top; }}
+.captcha-table th, .captcha-table td {{ border-bottom: 1px solid var(--line); padding: 8px; text-align: left;
+vertical-align: top; }}
 .captcha-table th {{ color: var(--muted); font-weight: 600; }}
 .captcha-link {{ color: #8ab4ff; }}
-.dash-tabs {{ display: flex; gap: 4px; overflow-x: auto; position: sticky; top: 0; z-index: 10; padding: 5px; background: #0c0f14; border: 1px solid var(--line); border-radius: 8px; }}
-.dash-tab {{ flex: 0 0 auto; border: 0; border-radius: 6px; padding: 9px 13px; background: transparent; color: var(--muted); cursor: pointer; font-weight: 700; white-space: nowrap; }}
-.dash-tab:hover {{ background: var(--panel); color: var(--text); }} .dash-tab.active {{ background: var(--accent); color: #102014; }}
+.dash-tabs {{ display: flex; gap: 4px; overflow-x: auto; position: sticky; top: 0; z-index: 10; padding: 5px;
+background: #0c0f14; border: 1px solid var(--line); border-radius: 8px; }}
+.dash-tab {{ flex: 0 0 auto; border: 0; border-radius: 6px; padding: 9px 13px; background: transparent; color:
+var(--muted); cursor: pointer; font-weight: 700; white-space: nowrap; }}
+.dash-tab:hover {{ background: var(--panel); color: var(--text); }} .dash-tab.active {{ background: var(--accent);
+color: #102014; }}
 .dash-panel {{ display: none; }} .dash-panel.active {{ display: block; }}
 </style>
 <div class="captcha-dash" data-dashboard-tabs="1">
@@ -432,7 +462,8 @@ class DashboardIntegration:
     {self._dashboard_tab_button("create", "Create Panel", active_tab)}
     {self._dashboard_tab_button("panels", "Configured Panels", active_tab)}
   </div>
-  <section class="dash-panel{" active" if active_tab == "create" else ""}" data-tab-panel="create"><div class="captcha-grid">
+  <section class="dash-panel{" active" if active_tab == "create" else ""}" data-tab-panel="create"><div
+  class="captcha-grid">
     <form class="captcha-card" method="post">
       {csrf}
       <input type="hidden" name="action" value="post_panel">
@@ -453,7 +484,8 @@ class DashboardIntegration:
       <div class="captcha-actions"><button type="submit">Attach button</button></div>
     </form>
   </div></section>
-  <section class="dash-panel{" active" if active_tab == "panels" else ""}" data-tab-panel="panels"><div class="captcha-card" id="configured-panels">
+  <section class="dash-panel{" active" if active_tab == "panels" else ""}" data-tab-panel="panels"><div
+  class="captcha-card" id="configured-panels">
     <h2>Configured Panels</h2>
     {panel_rows}
   </div></section>
@@ -472,16 +504,21 @@ class DashboardIntegration:
 
         rows = []
         for message_id, record in sorted(panels.items()):
-            channel_id = record.get("channel_id") if isinstance(record, dict) else None
+            channel_id = record.get("channel_id") if isinstance(
+                record, dict) else None
             channel = guild.get_channel(int(channel_id or 0))
-            role_ids = record.get("role_ids") if isinstance(record, dict) else []
+            role_ids = record.get("role_ids") if isinstance(
+                record, dict) else []
             if not isinstance(role_ids, list):
-                role_ids = [record.get("role_id")] if isinstance(record, dict) else []
+                role_ids = [record.get("role_id")] if isinstance(
+                    record, dict) else []
             role_names = []
             for role_id in role_ids:
                 role = guild.get_role(int(role_id or 0))
-                role_names.append(role.name if role else f"Missing role {role_id}")
-            label = record.get("button_label") if isinstance(record, dict) else "Verify"
+                role_names.append(
+                    role.name if role else f"Missing role {role_id}")
+            label = record.get("button_label") if isinstance(
+                record, dict) else "Verify"
             jump_url = self._jump_url(guild.id, channel_id, message_id)
             rows.append(
                 "<tr>"

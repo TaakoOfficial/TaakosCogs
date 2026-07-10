@@ -1,17 +1,32 @@
 from __future__ import annotations
 
+import asyncio
 import importlib.util
+import json
 import subprocess
 import sys
+from contextlib import suppress
+from pathlib import Path
 
 import discord
 from redbot.core import Config, commands
 
+from .dashboard_integration import DashboardIntegration
 from .google_sync_utils import (
     export_to_doc,
     export_to_sheet,
     import_from_doc,
     import_from_sheet,
+)
+
+RECOVERABLE_EXCEPTIONS = (
+    discord.DiscordException,
+    OSError,
+    RuntimeError,
+    ValueError,
+    KeyError,
+    TypeError,
+    AttributeError,
 )
 
 
@@ -25,10 +40,14 @@ async def ensure_google_apis():
     ]
     for module, package in required:
         if importlib.util.find_spec(module) is None:
-            subprocess.run([sys.executable, "-m", "pip", "install", package])
+            await asyncio.to_thread(
+                subprocess.run,
+                [sys.executable, "-m", "pip", "install", package],
+                check=False,
+            )
 
 
-class Fable(commands.Cog):
+class Fable(DashboardIntegration, commands.Cog):
     """A living world tracker for character-driven RP groups."""
 
     def __init__(self, bot: commands.Bot):
@@ -176,13 +195,15 @@ class Fable(commands.Cog):
         # Create field groups in embed
         embed.add_field(
             name="📝 Identity",
-            value="\n".join(f"`{fname}` - {fdesc}" for fname, fdesc in identity_fields),
+            value="\n".join(f"`{fname}` - {fdesc}" for fname,
+                            fdesc in identity_fields),
             inline=False,
         )
 
         embed.add_field(
             name="ℹ️ Basic Information",
-            value="\n".join(f"`{fname}` - {fdesc}" for fname, fdesc in basic_fields),
+            value="\n".join(f"`{fname}` - {fdesc}" for fname,
+                            fdesc in basic_fields),
             inline=False,
         )
 
@@ -217,8 +238,10 @@ class Fable(commands.Cog):
     async def create(
         self,
         ctx: commands.Context,
-        name: str = commands.parameter(description="Short name for the character."),
-        description: str = commands.parameter(description="A detailed description."),
+        name: str = commands.parameter(
+            description="Short name for the character."),
+        description: str = commands.parameter(
+            description="A detailed description."),
         image_url: str | None = commands.parameter(
             default=None,
             description="URL to character's image/avatar.",
@@ -263,8 +286,10 @@ class Fable(commands.Cog):
             default=None,
             description="Job or role.",
         ),
-        height: str | None = commands.parameter(default=None, description="Height."),
-        weight: str | None = commands.parameter(default=None, description="Weight."),
+        height: str | None = commands.parameter(
+            default=None, description="Height."),
+        weight: str | None = commands.parameter(
+            default=None, description="Weight."),
         sexual_orientation: str | None = commands.parameter(
             default=None,
             description="Sexual orientation.",
@@ -335,7 +360,7 @@ class Fable(commands.Cog):
                     "❌ Invalid image URL. Please provide a direct link to an image file.",
                 )
                 return
-            except Exception:
+            except (discord.HTTPException, RuntimeError):
                 await ctx.send(
                     "❌ Could not validate image URL. Please check the URL and try again.",
                 )
@@ -345,12 +370,15 @@ class Fable(commands.Cog):
         traits_list = (
             [t.strip() for t in traits.split(",") if t.strip()] if traits else []
         )
-        goals_list = [g.strip() for g in goals.split(",") if g.strip()] if goals else []
+        goals_list = [g.strip() for g in goals.split(",")
+                              if g.strip()] if goals else []
         languages_list = (
-            [l.strip() for l in languages.split(",") if l.strip()] if languages else []
+            [language.strip() for language in languages.split(",")
+             if language.strip()] if languages else []
         )
         inventory_list = (
-            [i.strip() for i in inventory.split(",") if i.strip()] if inventory else []
+            [i.strip() for i in inventory.split(",")
+                     if i.strip()] if inventory else []
         )
         family_list = (
             [f.strip() for f in family.split(",") if f.strip()] if family else []
@@ -362,7 +390,8 @@ class Fable(commands.Cog):
             [r.strip() for r in rivals.split(",") if r.strip()] if rivals else []
         )
         neutrals_list = (
-            [n.strip() for n in neutrals.split(",") if n.strip()] if neutrals else []
+            [n.strip() for n in neutrals.split(",")
+                     if n.strip()] if neutrals else []
         )
 
         character_data = {
@@ -405,7 +434,8 @@ class Fable(commands.Cog):
             title=f"Character Created: {name}",
             color=0x43B581,
         )
-        embed.set_author(name=user.display_name, icon_url=user.display_avatar.url)
+        embed.set_author(name=user.display_name,
+                         icon_url=user.display_avatar.url)
         if image_url:
             embed.set_thumbnail(url=image_url)
 
@@ -424,7 +454,8 @@ class Fable(commands.Cog):
         if true_age:
             identity.append(f"**True Age:** {true_age}")
         if identity:
-            embed.add_field(name="📝 Identity", value="\n".join(identity), inline=False)
+            embed.add_field(name="📝 Identity",
+                            value="\n".join(identity), inline=False)
 
         # Basic Info Section
         basics = []
@@ -457,7 +488,8 @@ class Fable(commands.Cog):
                 inline=False,
             )
         if background:
-            embed.add_field(name="📜 Background", value=background[:1024], inline=False)
+            embed.add_field(name="📜 Background",
+                            value=background[:1024], inline=False)
         if quote:
             embed.add_field(name="💭 Quote", value=quote, inline=False)
 
@@ -477,7 +509,7 @@ class Fable(commands.Cog):
         if languages_list:
             embed.add_field(
                 name="🗣️ Languages",
-                value="\n".join(f"• {l}" for l in languages_list),
+                value="\n".join(f"• {language}" for language in languages_list),
                 inline=False,
             )
         if inventory_list:
@@ -581,7 +613,8 @@ class Fable(commands.Cog):
             field_name = list_fields[field]
             if field_name not in character:
                 character[field_name] = []
-            new_items = [item.strip() for item in new_value.split(",") if item.strip()]
+            new_items = [item.strip()
+                                    for item in new_value.split(",") if item.strip()]
             character[field_name] = new_items
             updated = True
 
@@ -613,7 +646,7 @@ class Fable(commands.Cog):
                     "❌ Invalid image URL. Please provide a direct link to an image file.",
                 )
                 return
-            except Exception:
+            except (discord.HTTPException, RuntimeError):
                 await ctx.send(
                     "❌ Could not validate image URL. Please check the URL and try again.",
                 )
@@ -711,7 +744,8 @@ class Fable(commands.Cog):
             color=0x7289DA,
         )
         if owner:
-            embed.set_author(name=owner.display_name, icon_url=owner.display_avatar.url)
+            embed.set_author(name=owner.display_name,
+                             icon_url=owner.display_avatar.url)
         if character.get("image_url"):
             embed.set_thumbnail(url=character["image_url"])
         if character.get("quote"):
@@ -728,11 +762,13 @@ class Fable(commands.Cog):
         if character.get("date_of_birth"):
             identity.append(f"**Date of Birth:** {character['date_of_birth']}")
         if character.get("age_appearance"):
-            identity.append(f"**Age Appearance:** {character['age_appearance']}")
+            identity.append(
+                f"**Age Appearance:** {character['age_appearance']}")
         if character.get("true_age"):
             identity.append(f"**True Age:** {character['true_age']}")
         if identity:
-            embed.add_field(name="📝 Identity", value="\n".join(identity), inline=False)
+            embed.add_field(name="📝 Identity",
+                            value="\n".join(identity), inline=False)
 
         # Basic Info Section
         basics = []
@@ -745,7 +781,8 @@ class Fable(commands.Cog):
         if character.get("weight"):
             basics.append(f"**Weight:** {character['weight']}")
         if character.get("sexual_orientation"):
-            basics.append(f"**Sexual Orientation:** {character['sexual_orientation']}")
+            basics.append(
+                f"**Sexual Orientation:** {character['sexual_orientation']}")
         if character.get("zodiac"):
             basics.append(f"**Zodiac:** {character['zodiac']}")
         if character.get("alignment"):
@@ -767,7 +804,8 @@ class Fable(commands.Cog):
                     inline=False,
                 )
             else:
-                embed.add_field(name="📖 Description", value=description, inline=False)
+                embed.add_field(name="📖 Description",
+                                value=description, inline=False)
 
         if character.get("background"):
             background = character["background"]
@@ -778,7 +816,8 @@ class Fable(commands.Cog):
                     inline=False,
                 )
             else:
-                embed.add_field(name="📜 Background", value=background, inline=False)
+                embed.add_field(name="📜 Background",
+                                value=background, inline=False)
 
         # Character Details
         if character.get("traits"):
@@ -796,7 +835,9 @@ class Fable(commands.Cog):
         if character.get("languages"):
             embed.add_field(
                 name="🗣️ Languages",
-                value="\n".join(f"• {l}" for l in character["languages"]),
+                value="\n".join(
+                    f"• {language}" for language in character["languages"]
+                ),
                 inline=False,
             )
         if character.get("inventory"):
@@ -810,7 +851,8 @@ class Fable(commands.Cog):
         relationships = []
         if character.get("family"):
             relationships.append(
-                "**Family:**\n" + "\n".join(f"• {f}" for f in character["family"]),
+                "**Family:**\n" + \
+                    "\n".join(f"• {f}" for f in character["family"]),
             )
         for rel_type, rel_list in character.get("relationships", {}).items():
             if rel_list and rel_type != "family":  # Family is handled separately
@@ -901,7 +943,8 @@ class Fable(commands.Cog):
         pages = [filtered[i : i + 10] for i in range(0, len(filtered), 10)]
         for idx, page in enumerate(pages, 1):
             embed = discord.Embed(
-                title=title + (f" (Page {idx}/{len(pages)})" if len(pages) > 1 else ""),
+                title=title + \
+                    (f" (Page {idx}/{len(pages)})" if len(pages) > 1 else ""),
                 color=0x7289DA,
             )
             for char in page:
@@ -1219,7 +1262,8 @@ class Fable(commands.Cog):
         history = await self.config.guild(guild).relationship_history()
         if rel_key in history and history[rel_key]:
             history_text = ""
-            for past_rel in reversed(history[rel_key][-3:]):  # Show last 3 changes
+            # Show last 3 changes
+            for past_rel in reversed(history[rel_key][-3:]):
                 start_date = discord.utils.parse_time(past_rel["start_date"])
                 end_date = discord.utils.parse_time(past_rel["end_date"])
                 history_text += f"**{start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}**\n"
@@ -1331,10 +1375,13 @@ class Fable(commands.Cog):
             description=description,
             color=0x43B581,
         )
-        embed.add_field(name="Characters", value=", ".join(involved), inline=False)
-        embed.add_field(name="IC Date", value=event_data["ic_date"], inline=True)
+        embed.add_field(name="Characters",
+                        value=", ".join(involved), inline=False)
+        embed.add_field(
+            name="IC Date", value=event_data["ic_date"], inline=True)
         embed.add_field(name="Event ID", value=str(event_id), inline=True)
-        embed.set_footer(text=f"Logged by {ctx.author.display_name} • Fable RP Tracker")
+        embed.set_footer(
+            text=f"Logged by {ctx.author.display_name} • Fable RP Tracker")
         await ctx.send(embed=embed)
 
     @event.command(
@@ -1406,7 +1453,8 @@ class Fable(commands.Cog):
             description=f"Event {event_id} description updated.",
             color=0x43B581,
         )
-        embed.add_field(name="New Description", value=new_description, inline=False)
+        embed.add_field(name="New Description",
+                        value=new_description, inline=False)
         embed.set_footer(
             text="Fable RP Tracker • Event Edit",
             icon_url="https://cdn-icons-png.flaticon.com/512/3336/3336643.png",
@@ -1490,9 +1538,13 @@ class Fable(commands.Cog):
             try:
                 import subprocess
 
-                subprocess.run([sys.executable, "-m", "pip", "install", "graphviz"])
+                await asyncio.to_thread(
+                    subprocess.run,
+                    [sys.executable, "-m", "pip", "install", "graphviz"],
+                    check=False,
+                )
                 import graphviz
-            except Exception as e:
+            except (ImportError, OSError, RuntimeError, subprocess.SubprocessError) as e:
                 await ctx.send(f"❌ Failed to install required package: {e}")
                 return
 
@@ -1506,7 +1558,8 @@ class Fable(commands.Cog):
             if character not in characters:
                 await ctx.send(f"❌ Character '{character}' not found.")
                 return
-            rel_data = {character: characters[character].get("relationships", {})}
+            rel_data = {character: characters[character].get(
+                "relationships", {})}
         else:
             rel_data = {
                 name: char.get("relationships", {}) for name, char in characters.items()
@@ -1524,16 +1577,14 @@ class Fable(commands.Cog):
                 content="👥 Character Relationship Graph:",
                 file=discord.File(f"{filename}.png"),
             )
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             await ctx.send(f"❌ Failed to generate graph: {e}")
         finally:
-            try:
-                import os
-
-                if os.path.exists(f"{filename}.png"):
-                    os.remove(f"{filename}.png")
-            except:
-                pass
+            with suppress(OSError):
+                await asyncio.to_thread(
+                    Path(f"{filename}.png").unlink,
+                    missing_ok=True,
+                )
 
     @visualize.command(name="locations", description="Generate a location map.")
     @commands.cooldown(1, 30, commands.BucketType.guild)
@@ -1546,9 +1597,13 @@ class Fable(commands.Cog):
             try:
                 import subprocess
 
-                subprocess.run([sys.executable, "-m", "pip", "install", "graphviz"])
+                await asyncio.to_thread(
+                    subprocess.run,
+                    [sys.executable, "-m", "pip", "install", "graphviz"],
+                    check=False,
+                )
                 import graphviz
-            except Exception as e:
+            except (ImportError, OSError, RuntimeError, subprocess.SubprocessError) as e:
                 await ctx.send(f"❌ Failed to install required package: {e}")
                 return
 
@@ -1573,16 +1628,14 @@ class Fable(commands.Cog):
                 content="🗺️ Location Map:",
                 file=discord.File(f"{filename}.png"),
             )
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             await ctx.send(f"❌ Failed to generate map: {e}")
         finally:
-            try:
-                import os
-
-                if os.path.exists(f"{filename}.png"):
-                    os.remove(f"{filename}.png")
-            except:
-                pass
+            with suppress(OSError):
+                await asyncio.to_thread(
+                    Path(f"{filename}.png").unlink,
+                    missing_ok=True,
+                )
 
     @character.command(name="timeline", description="View a character's timeline.")
     @commands.guild_only()
@@ -1731,7 +1784,7 @@ class Fable(commands.Cog):
                 export_to_doc(sync["id"], sync["api_key"], data)
                 msg = f"Exported data to Google Doc: `{sync['id']}`."
             color = 0x43B581
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             msg = f"❌ Export failed: {e}"
             color = 0xF04747
         embed = discord.Embed(
@@ -1761,14 +1814,14 @@ class Fable(commands.Cog):
             else:
                 imported = import_from_doc(sync["id"], sync["api_key"])
             if not imported:
-                raise Exception("No data found or invalid format.")
+                raise ValueError("No data found or invalid format.")
             if data_type and data_type != "all":
                 await self.config.guild(ctx.guild).set_raw(data_type, value=imported)
             else:
                 await self.config.guild(ctx.guild).set(imported)
             msg = f"Imported data from Google {sync['type'].capitalize()}: `{sync['id']}`."
             color = 0x43B581
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             msg = f"❌ Import failed: {e}"
             color = 0xF04747
         embed = discord.Embed(
@@ -1809,7 +1862,8 @@ class Fable(commands.Cog):
         embed = discord.Embed(
             title="🛠️ Google API Setup Guide",
             description=(
-                "To use Google Sheets/Docs sync, you must set up a Google Cloud service account and provide its key.\n\n"
+                "To use Google Sheets/Docs sync, you must set up a Google Cloud "
+                "service account and provide its key.\n\n"
                 "**Steps:**\n"
                 "1. Create a Google Cloud Project\n"
                 "2. Enable Google Sheets & Docs APIs\n"
@@ -1864,10 +1918,8 @@ class Fable(commands.Cog):
             The full JSON string of your Google service account key.
         """
         try:
-            import json
-
             json.loads(apikey)
-        except Exception:
+        except json.JSONDecodeError:
             await ctx.send(
                 "❌ That doesn't look like a valid JSON key. Please paste the full JSON string.",
             )
@@ -2155,7 +2207,8 @@ class Fable(commands.Cog):
         )
         embed.set_author(name=f"{character} - Character Development")
         embed.add_field(name="Category", value=category.title(), inline=True)
-        embed.add_field(name="Recorded by", value=ctx.author.display_name, inline=True)
+        embed.add_field(name="Recorded by",
+                        value=ctx.author.display_name, inline=True)
         embed.set_footer(text="Fable RP Tracker • Character Development")
         await ctx.send(embed=embed)
 
@@ -2191,14 +2244,16 @@ class Fable(commands.Cog):
 
         if category:
             category = category.title()
-            char_milestones = [m for m in char_milestones if m["category"] == category]
+            char_milestones = [
+                m for m in char_milestones if m["category"] == category]
 
         embed = discord.Embed(
             title=f"📈 {character}'s Development Timeline",
             color=0x7289DA,
         )
 
-        for milestone in reversed(char_milestones[-10:]):  # Show last 10 milestones
+        # Show last 10 milestones
+        for milestone in reversed(char_milestones[-10:]):
             date = discord.utils.parse_time(milestone["date"])
             embed.add_field(
                 name=f"[{milestone['category']}] {milestone['title']}",
@@ -2321,7 +2376,8 @@ class Fable(commands.Cog):
             color=0x43B581,
         )
         embed.add_field(name="Category", value=category, inline=True)
-        embed.add_field(name="Created by", value=ctx.author.display_name, inline=True)
+        embed.add_field(name="Created by",
+                        value=ctx.author.display_name, inline=True)
         embed.set_footer(text="Fable RP Tracker • Locations")
         await ctx.send(embed=embed)
 
@@ -2439,7 +2495,8 @@ class Fable(commands.Cog):
             color=0x43B581,
         )
         if description:
-            embed.add_field(name="Connection Details", value=description, inline=False)
+            embed.add_field(name="Connection Details",
+                            value=description, inline=False)
         embed.set_footer(text="Fable RP Tracker • Location Connection")
         await ctx.send(embed=embed)
 
@@ -2474,7 +2531,8 @@ class Fable(commands.Cog):
             color=0x7289DA,
         )
 
-        embed.add_field(name="Category", value=location["category"], inline=True)
+        embed.add_field(name="Category",
+                        value=location["category"], inline=True)
 
         # Recent visits
         if location["visits"]:
@@ -2503,7 +2561,8 @@ class Fable(commands.Cog):
                 if conn.get("description"):
                     connections += f" - {conn['description']}"
                 connections += "\n"
-            embed.add_field(name="Connected Locations", value=connections, inline=False)
+            embed.add_field(name="Connected Locations",
+                            value=connections, inline=False)
 
         # Events
         if location["events"]:
@@ -2517,7 +2576,8 @@ class Fable(commands.Cog):
                 events_text += (
                     f"• {event['title']} ({timestamp.strftime('%Y-%m-%d')})\n"
                 )
-            embed.add_field(name="Recent Events", value=events_text, inline=False)
+            embed.add_field(name="Recent Events",
+                            value=events_text, inline=False)
 
         embed.set_footer(text="Fable RP Tracker • Location Info")
         await ctx.send(embed=embed)

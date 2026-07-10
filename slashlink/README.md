@@ -14,6 +14,11 @@ already provide native or hybrid application commands are ignored.
 [p]load slashlink
 ```
 
+## Dashboard
+
+This cog includes standalone Red-Web-Dashboard integration. Server managers can use the dashboard to view visible commands and the current server configuration when Red-Web-Dashboard is installed.
+
+
 Then use Red's normal workflow:
 
 ```text

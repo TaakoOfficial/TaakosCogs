@@ -203,7 +203,8 @@ class Captcha(DashboardIntegration, commands.Cog):
                 "The verification role must belong to this server.",
             )
         if role.is_default() or role.managed:
-            raise commands.BadArgument("Choose a normal role managed by server staff.")
+            raise commands.BadArgument(
+                "Choose a normal role managed by server staff.")
         if self._dangerous_role_permissions(role):
             raise commands.BadArgument(
                 "The verification role cannot have administrative or moderation permissions.",
@@ -222,9 +223,11 @@ class Captcha(DashboardIntegration, commands.Cog):
     ) -> list[discord.Role]:
         unique_roles = list({role.id: role for role in roles}.values())
         if not unique_roles:
-            raise commands.BadArgument("Configure at least one verification role.")
+            raise commands.BadArgument(
+                "Configure at least one verification role.")
         if len(unique_roles) > 10:
-            raise commands.BadArgument("A captcha panel can assign at most 10 roles.")
+            raise commands.BadArgument(
+                "A captcha panel can assign at most 10 roles.")
         for role in unique_roles:
             self._validate_role(guild, role)
         return unique_roles
@@ -256,7 +259,8 @@ class Captcha(DashboardIntegration, commands.Cog):
         panels = await self.config.guild(guild).panels()
         record = panels.get(str(message_id))
         if not isinstance(record, dict):
-            raise commands.CommandError("That captcha panel is no longer configured.")
+            raise commands.CommandError(
+                "That captcha panel is no longer configured.")
         return record
 
     async def _save_panel(
@@ -346,7 +350,8 @@ class Captcha(DashboardIntegration, commands.Cog):
         except commands.CommandError as error:
             await interaction.response.send_message(str(error), ephemeral=True)
             return
-        missing_roles = [role for role in roles if role not in interaction.user.roles]
+        missing_roles = [
+            role for role in roles if role not in interaction.user.roles]
         if not missing_roles:
             await interaction.response.send_message(
                 "You already have every role assigned by this verification panel.",
@@ -465,7 +470,8 @@ class Captcha(DashboardIntegration, commands.Cog):
             ),
             color=self.DEFAULT_COLOR,
         )
-        embed.add_field(name="Configured Panels", value=str(len(panels)), inline=True)
+        embed.add_field(name="Configured Panels",
+                        value=str(len(panels)), inline=True)
         embed.add_field(
             name="Setup",
             value=(

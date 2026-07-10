@@ -16,17 +16,29 @@ from discord.ext import tasks
 from redbot.core import Config, commands
 from redbot.core.utils.chat_formatting import box, pagify
 
+from .dashboard_integration import DashboardIntegration
+
 if TYPE_CHECKING:
     from redbot.core.bot import Red
 
 log = logging.getLogger("red.taakoscogs.fivemstatus")
 
+RECOVERABLE_EXCEPTIONS = (
+    aiohttp.ClientError,
+    discord.DiscordException,
+    OSError,
+    RuntimeError,
+    ValueError,
+    KeyError,
+    TypeError,
+    AttributeError,
+)
 
 ServerData = dict[str, Any]
 GuildSettings = dict[str, Any]
 
 
-class FiveMStatus(commands.Cog):
+class FiveMStatus(DashboardIntegration, commands.Cog):
     """Post and maintain a live FiveM server status embed."""
 
     REQUEST_TIMEOUT = aiohttp.ClientTimeout(total=10)
@@ -85,8 +97,9 @@ class FiveMStatus(commands.Cog):
                 continue
             try:
                 await self._update_status_message(guild, settings)
-            except Exception:
-                log.exception("Failed to update FiveM status for guild %s", guild_id)
+            except RECOVERABLE_EXCEPTIONS:
+                log.exception(
+                    "Failed to update FiveM status for guild %s", guild_id)
 
     @status_loop.before_loop
     async def before_status_loop(self) -> None:
@@ -468,7 +481,8 @@ class FiveMStatus(commands.Cog):
         if cleaned.startswith("fivem://connect/"):
             cleaned = cleaned.split("/", 3)[-1]
 
-        join_match = re.search(r"(?:cfx\.re/join/|servers/single/)([a-z0-9]+)", cleaned)
+        join_match = re.search(
+            r"(?:cfx\.re/join/|servers/single/)([a-z0-9]+)", cleaned)
         if join_match:
             cleaned = join_match.group(1)
 
@@ -498,7 +512,8 @@ class FiveMStatus(commands.Cog):
             server = server.split("/", 3)[-1]
             lowered = server.lower()
 
-        join_match = re.search(r"(?:cfx\.re/join/|servers/single/)([a-z0-9]+)", lowered)
+        join_match = re.search(
+            r"(?:cfx\.re/join/|servers/single/)([a-z0-9]+)", lowered)
         if join_match:
             return f"cfx:{join_match.group(1)}"
 
@@ -529,11 +544,13 @@ class FiveMStatus(commands.Cog):
     def _parse_restart_time(value: str) -> str:
         match = re.fullmatch(r"(\d{1,2}):?(\d{2})", value.strip())
         if not match:
-            raise commands.BadArgument("Use 24-hour time like `06:00` or `1800`.")
+            raise commands.BadArgument(
+                "Use 24-hour time like `06:00` or `1800`.")
         hour = int(match.group(1))
         minute = int(match.group(2))
         if hour > 23 or minute > 59:
-            raise commands.BadArgument("Restart times must be valid 24-hour times.")
+            raise commands.BadArgument(
+                "Restart times must be valid 24-hour times.")
         return f"{hour:02d}:{minute:02d}"
 
     async def _session_get_json(self, url: str) -> Any:
@@ -571,11 +588,13 @@ class FiveMStatus(commands.Cog):
         url = f"https://servers-frontend.fivem.net/api/servers/single/{join_code}"
         try:
             payload = await self._session_get_json(url)
-            data = payload.get("Data", payload) if isinstance(payload, dict) else {}
+            data = payload.get("Data", payload) if isinstance(
+                payload, dict) else {}
             players = data.get("players") or data.get("Players") or []
             vars_data = data.get("vars") or data.get("Vars") or {}
             endpoints = (
-                data.get("connectEndPoints") or data.get("connectEndpoints") or []
+                data.get("connectEndPoints") or data.get(
+                    "connectEndpoints") or []
             )
             connect_endpoint = endpoints[0] if endpoints else f"cfx.re/join/{join_code}"
             hostname = (
@@ -602,7 +621,7 @@ class FiveMStatus(commands.Cog):
                 "join_code": join_code,
                 "error": None,
             }
-        except Exception as error:
+        except RECOVERABLE_EXCEPTIONS as error:
             data = self._offline_data(f"cfx.re/join/{join_code}", error)
             data["join_code"] = join_code
             return data
@@ -633,7 +652,8 @@ class FiveMStatus(commands.Cog):
             info_data = info if isinstance(info, dict) else {}
             players_data = players if isinstance(players, list) else []
             vars_data = (
-                info_data.get("vars") if isinstance(info_data.get("vars"), dict) else {}
+                info_data.get("vars") if isinstance(
+                    info_data.get("vars"), dict) else {}
             )
 
             hostname = (
@@ -642,7 +662,8 @@ class FiveMStatus(commands.Cog):
                 or vars_data.get("sv_hostname")
                 or "FiveM Server"
             )
-            clients = self._to_int(dynamic_data.get("clients"), len(players_data))
+            clients = self._to_int(dynamic_data.get(
+                "clients"), len(players_data))
             max_clients = self._to_int(
                 dynamic_data.get("sv_maxclients")
                 or dynamic_data.get("sv_maxClients")
@@ -661,7 +682,7 @@ class FiveMStatus(commands.Cog):
                 "join_code": None,
                 "error": None,
             }
-        except Exception as error:
+        except RECOVERABLE_EXCEPTIONS as error:
             return self._offline_data(server_address, error)
 
     @classmethod
@@ -729,8 +750,10 @@ class FiveMStatus(commands.Cog):
         candidates = []
         for raw_time in restart_times:
             try:
-                hour, minute = [int(part) for part in str(raw_time).split(":", 1)]
-                restart_at = datetime.combine(now.date(), time(hour, minute), tzinfo=tz)
+                hour, minute = [int(part)
+                                    for part in str(raw_time).split(":", 1)]
+                restart_at = datetime.combine(
+                    now.date(), time(hour, minute), tzinfo=tz)
             except (TypeError, ValueError):
                 continue
             if restart_at <= now:
@@ -855,14 +878,16 @@ class FiveMStatus(commands.Cog):
             or self.DEFAULT_COLOR
         )
         color = configured_color if online else self.OFFLINE_COLOR
-        title = settings.get("display_name") or data.get("hostname") or "FiveM Server"
+        title = settings.get("display_name") or data.get(
+            "hostname") or "FiveM Server"
         description = settings.get("status_message") or ""
         if not online and data.get("error"):
             description = "The city is currently offline or unreachable."
 
         embed = discord.Embed(
             title=self._shorten(str(title), 256),
-            description=self._shorten(str(description), 350) if description else None,
+            description=self._shorten(
+                str(description), 350) if description else None,
             color=discord.Color(color),
             timestamp=discord.utils.utcnow(),
         )
@@ -891,7 +916,8 @@ class FiveMStatus(commands.Cog):
         online_since = self._to_int(settings.get("online_since"), None)
         uptime_seconds = None
         if online and online_since:
-            uptime_seconds = datetime.now(timezone.utc).timestamp() - online_since
+            uptime_seconds = datetime.now(
+                timezone.utc).timestamp() - online_since
 
         embed.add_field(name="STATUS", value=f"`{status_text}`", inline=True)
         embed.add_field(name="PLAYERS", value=f"`{players_text}`", inline=True)
@@ -953,7 +979,8 @@ class FiveMStatus(commands.Cog):
             if join_code:
                 connect_url = self._cfx_join_url(str(join_code))
         if connect_url:
-            view.add_item(discord.ui.Button(label="Join Server", url=connect_url))
+            view.add_item(discord.ui.Button(
+                label="Join Server", url=connect_url))
 
         discord_url = settings.get("discord_url")
         if discord_url:

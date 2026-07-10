@@ -26,6 +26,7 @@ def check_and_install_google_dependencies():
                     ],
                 )
                 __import__(import_name)
-            except Exception as e:
+            except (subprocess.SubprocessError, ImportError) as e:
                 logging.error(f"Failed to install {pkg}: {e}")
-                raise ImportError(f"Could not install required dependency: {pkg}")
+                raise ImportError(
+                    f"Could not install required dependency: {pkg}")

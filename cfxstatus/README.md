@@ -13,6 +13,10 @@ auto-updating status panel.
 [p]load cfxstatus
 ```
 
+## Dashboard
+
+This cog includes standalone Red-Web-Dashboard integration. Server managers can use the dashboard to view visible commands and the current server configuration when Red-Web-Dashboard is installed.
+
 ## Highlights
 
 - Fetches the official Cfx.re Statuspage API, with Rockstar Games' service-status page as a fallback.

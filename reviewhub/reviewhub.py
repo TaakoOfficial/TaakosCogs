@@ -14,6 +14,8 @@ from typing import TYPE_CHECKING, Any
 import discord
 from redbot.core import Config, app_commands, commands
 
+from .dashboard_integration import DashboardIntegration
+
 if TYPE_CHECKING:
     from redbot.core.bot import Red
 
@@ -40,7 +42,8 @@ class ReviewSubmitModal(discord.ui.Modal):
         mode_override: str | None = None,
         title: str = "Rate your experience",
     ) -> None:
-        super().__init__(title=title[:45] or "Rate your experience", timeout=300.0)
+        super().__init__(title=title[:45]
+              or "Rate your experience", timeout=300.0)
         self.cog = cog
         self.guild_id = guild_id
         self.reviewer_id = reviewer_id
@@ -193,8 +196,10 @@ class ReviewPublicView(discord.ui.View):
 
         if include_submit:
             button = discord.ui.Button(
-                label=str(settings.get("review_button_label") or "Submit Review")[:80],
-                emoji=str(settings.get("submit_review_emoji") or "\N{MEMO}")[:100],
+                label=str(settings.get("review_button_label")
+                          or "Submit Review")[:80],
+                emoji=str(settings.get("submit_review_emoji")
+                          or "\N{MEMO}")[:100],
                 style=discord.ButtonStyle.primary,
                 custom_id=self.SUBMIT_ID,
             )
@@ -245,7 +250,8 @@ class ReviewRequestView(discord.ui.View):
         self.cog = cog
         settings = settings or {}
         button = discord.ui.Button(
-            label=str(settings.get("review_button_label") or "Submit Review")[:80],
+            label=str(settings.get("review_button_label")
+                      or "Submit Review")[:80],
             emoji=str(settings.get("submit_review_emoji") or "\N{MEMO}")[:100],
             style=discord.ButtonStyle.primary,
             custom_id=self.SUBMIT_ID,
@@ -299,7 +305,8 @@ class ReviewTargetPickerView(discord.ui.View):
             )
             return
         title = str(
-            self.settings.get("rate_experience_title") or "Rate your experience",
+            self.settings.get(
+                "rate_experience_title") or "Rate your experience",
         )
         await interaction.response.send_modal(
             ReviewSubmitModal(
@@ -447,7 +454,8 @@ class ReviewHubConfigGroup(app_commands.Group):
             changed.append(f"report channel -> {reportchannel.mention}")
         if autothread is not None:
             await guild_conf.auto_thread.set(autothread)
-            changed.append(f"auto threads -> {self.cog._enabled_text(autothread)}")
+            changed.append(
+                f"auto threads -> {self.cog._enabled_text(autothread)}")
         if threadtitle is not None:
             await guild_conf.thread_title.set(threadtitle[:100])
             changed.append("thread title")
@@ -465,7 +473,8 @@ class ReviewHubConfigGroup(app_commands.Group):
             changed.append("rate experience title")
         if reviewcommand is not None:
             await guild_conf.review_command_enabled.set(reviewcommand)
-            changed.append(f"review command -> {self.cog._enabled_text(reviewcommand)}")
+            changed.append(
+                f"review command -> {self.cog._enabled_text(reviewcommand)}")
         if reviewcommandname is not None:
             await guild_conf.review_command_name.set(reviewcommandname)
             changed.append(f"display command name -> {reviewcommandname}")
@@ -476,10 +485,12 @@ class ReviewHubConfigGroup(app_commands.Group):
             )
         if vouchmode is not None:
             await guild_conf.vouch_mode.set(vouchmode)
-            changed.append(f"vouch mode -> {self.cog._enabled_text(vouchmode)}")
+            changed.append(
+                f"vouch mode -> {self.cog._enabled_text(vouchmode)}")
         if reviewtargets is not None:
             await guild_conf.review_targets_enabled.set(reviewtargets)
-            changed.append(f"review targets -> {self.cog._enabled_text(reviewtargets)}")
+            changed.append(
+                f"review targets -> {self.cog._enabled_text(reviewtargets)}")
 
         if not changed:
             await interaction.response.send_message(
@@ -629,7 +640,8 @@ class ReviewHubConfigGroup(app_commands.Group):
             changed.append("review command role cleared")
         elif reviewcommandrole is not None:
             await guild_conf.review_command_role_id.set(reviewcommandrole.id)
-            changed.append(f"review command role -> {reviewcommandrole.mention}")
+            changed.append(
+                f"review command role -> {reviewcommandrole.mention}")
 
         if not changed:
             await interaction.response.send_message(
@@ -643,7 +655,7 @@ class ReviewHubConfigGroup(app_commands.Group):
         )
 
 
-class ReviewHub(commands.Cog):
+class ReviewHub(DashboardIntegration, commands.Cog):
     """Collect reviews and vouches with ReviewHub-style commands."""
 
     CONFIG_IDENTIFIER = 2026051601
@@ -843,10 +855,12 @@ class ReviewHub(commands.Cog):
     def _parse_color(cls, value: str) -> int:
         cleaned = value.strip().lower().replace("#", "").replace("0x", "")
         if not re.fullmatch(r"[0-9a-f]{1,6}", cleaned):
-            raise commands.BadArgument("Color must be a hex value like `#5865F2`.")
+            raise commands.BadArgument(
+                "Color must be a hex value like `#5865F2`.")
         color = int(cleaned, 16)
         if not 0 <= color <= 0xFFFFFF:
-            raise commands.BadArgument("Color must be between `#000000` and `#FFFFFF`.")
+            raise commands.BadArgument(
+                "Color must be between `#000000` and `#FFFFFF`.")
         return color
 
     @staticmethod
@@ -920,7 +934,8 @@ class ReviewHub(commands.Cog):
         for key, record in records.items():
             if str(record.get("display_id", "")).lower() == lowered:
                 return key
-        raise commands.BadArgument(f"No review with ID `{review_id}` was found.")
+        raise commands.BadArgument(
+            f"No review with ID `{review_id}` was found.")
 
     @staticmethod
     def _empty_stats() -> StatsRecord:
@@ -1072,7 +1087,8 @@ class ReviewHub(commands.Cog):
     ) -> discord.Embed:
         active = bool(record.get("active", True))
         display_id = str(
-            record.get("display_id") or self._display_review_id(record.get("id")),
+            record.get("display_id") or self._display_review_id(
+                record.get("id")),
         )
         rating = int(record.get("rating") or 0)
         useful_count = len(record.get("useful_user_ids", []))
@@ -1137,7 +1153,8 @@ class ReviewHub(commands.Cog):
                 embed.add_field(name="Target", value=target_text, inline=True)
 
         if useful_count:
-            embed.add_field(name="Useful", value=self._count(useful_count), inline=True)
+            embed.add_field(name="Useful", value=self._count(
+                useful_count), inline=True)
         if not active:
             embed.add_field(
                 name="Deleted By",
@@ -1193,11 +1210,13 @@ class ReviewHub(commands.Cog):
         review_channel = await self._get_review_channel(guild, settings)
         report_channel = await self._get_report_channel(guild, settings)
         rateme_role = self._role_from_id(guild, settings.get("rateme_role_id"))
-        review_role = self._role_from_id(guild, settings.get("review_command_role_id"))
+        review_role = self._role_from_id(
+            guild, settings.get("review_command_role_id"))
 
         embed = discord.Embed(
             title="ReviewHub Settings",
-            color=int(settings.get("review_embed_color") or self.DEFAULT_COLOR),
+            color=int(settings.get("review_embed_color")
+                      or self.DEFAULT_COLOR),
             timestamp=self._now(),
         )
         embed.add_field(
@@ -1269,7 +1288,8 @@ class ReviewHub(commands.Cog):
         permissions = message.channel.permissions_for(me)
         if not getattr(permissions, "create_public_threads", False):
             return
-        title_template = str(settings.get("thread_title") or "Review {id} discussion")
+        title_template = str(settings.get("thread_title")
+                             or "Review {id} discussion")
         title = self._placeholders(
             title_template,
             guild=guild,
@@ -1280,7 +1300,8 @@ class ReviewHub(commands.Cog):
         try:
             await message.create_thread(name=title, auto_archive_duration=1440)
         except discord.HTTPException:
-            log.exception("Failed to create ReviewHub thread in guild %s", guild.id)
+            log.exception(
+                "Failed to create ReviewHub thread in guild %s", guild.id)
 
     async def _store_review_message(
         self,
@@ -1379,7 +1400,8 @@ class ReviewHub(commands.Cog):
             guild_conf = self.config.guild(guild)
             settings = await guild_conf.all()
             if not settings.get("review_command_enabled"):
-                raise commands.CommandError("Review submissions are disabled here.")
+                raise commands.CommandError(
+                    "Review submissions are disabled here.")
             if not self._has_role(
                 reviewer,
                 settings.get("review_command_role_id"),
@@ -1391,12 +1413,14 @@ class ReviewHub(commands.Cog):
                 "vouch" if settings.get("vouch_mode") else "review"
             )
             if mode == "vouch" and target is None:
-                raise commands.CommandError("Choose the member you want to vouch for.")
+                raise commands.CommandError(
+                    "Choose the member you want to vouch for.")
             targeted_review = (
                 target is not None and mode != "vouch" and request_message_id is None
             )
             if targeted_review and not settings.get("review_targets_enabled"):
-                raise commands.CommandError("Targeted reviews are disabled here.")
+                raise commands.CommandError(
+                    "Targeted reviews are disabled here.")
             if target is not None:
                 if target.bot:
                     raise commands.CommandError(
@@ -1415,7 +1439,8 @@ class ReviewHub(commands.Cog):
                 settings["daily_key"] = daily_key
             if daily_limit > 0 and daily_count >= daily_limit:
                 raise commands.CommandError(
-                    f"This server has reached the daily limit of {daily_limit} reviews. The limit resets at midnight UTC+2.",
+                    f"This server has reached the daily limit of {daily_limit} "
+                    "reviews. The limit resets at midnight UTC+2.",
                 )
 
             review_id = int(settings.get("next_review_id") or 1)
@@ -1444,13 +1469,16 @@ class ReviewHub(commands.Cog):
             }
             records[self._review_key(review_id)] = record
             reviewer_stats = self._ensure_stats(stats, reviewer.id)
-            reviewer_stats["submitted"] = int(reviewer_stats.get("submitted") or 0) + 1
+            reviewer_stats["submitted"] = int(
+                reviewer_stats.get("submitted") or 0) + 1
             if target is not None:
                 target_stats = self._ensure_stats(stats, target.id)
-                target_stats["received"] = int(target_stats.get("received") or 0) + 1
+                target_stats["received"] = int(
+                    target_stats.get("received") or 0) + 1
             if request_message_id and str(request_message_id) in requests:
                 requests[str(request_message_id)]["active"] = False
-                requests[str(request_message_id)]["submitted_review_id"] = review_id
+                requests[str(request_message_id)
+                             ]["submitted_review_id"] = review_id
 
             await guild_conf.reviews.set(records)
             await guild_conf.stats.set(stats)
@@ -1490,7 +1518,8 @@ class ReviewHub(commands.Cog):
             key = self._resolve_review_key(review_id, records)
             record = records[key]
             if not record.get("active", True):
-                raise commands.BadArgument(f"Review `{review_id}` is already deleted.")
+                raise commands.BadArgument(
+                    f"Review `{review_id}` is already deleted.")
             record["active"] = False
             record["deleted_at"] = self._now_ts()
             record["deleted_by"] = moderator.id
@@ -1518,7 +1547,8 @@ class ReviewHub(commands.Cog):
             return
         try:
             message = await channel.fetch_message(int(message_id))
-            view = self._review_view(settings) if record.get("active", True) else None
+            view = self._review_view(settings) if record.get(
+                "active", True) else None
             await message.edit(
                 embed=self._review_embed(guild, record, settings),
                 view=view,
@@ -1533,7 +1563,8 @@ class ReviewHub(commands.Cog):
         message: discord.Message | None,
     ) -> None:
         display_id = str(
-            record.get("display_id") or self._display_review_id(record.get("id")),
+            record.get("display_id") or self._display_review_id(
+                record.get("id")),
         )
         if message is None:
             await interaction.followup.send(
@@ -1572,7 +1603,8 @@ class ReviewHub(commands.Cog):
                 ephemeral=True,
             )
             return
-        title = str(settings.get("rate_experience_title") or "Rate your experience")
+        title = str(settings.get("rate_experience_title")
+                    or "Rate your experience")
         await interaction.response.send_modal(
             ReviewSubmitModal(
                 self,
@@ -1596,7 +1628,8 @@ class ReviewHub(commands.Cog):
             )
             return
         settings = await self.config.guild(interaction.guild).all()
-        request = (settings.get("requests") or {}).get(str(interaction.message.id))
+        request = (settings.get("requests") or {}).get(
+            str(interaction.message.id))
         if not request or not request.get("active", True):
             await interaction.response.send_message(
                 "This review request is no longer active.",
@@ -1618,7 +1651,8 @@ class ReviewHub(commands.Cog):
                 ephemeral=True,
             )
             return
-        title = str(settings.get("rate_experience_title") or "Rate your experience")
+        title = str(settings.get("rate_experience_title")
+                    or "Rate your experience")
         await interaction.response.send_modal(
             ReviewSubmitModal(
                 self,
@@ -1749,9 +1783,11 @@ class ReviewHub(commands.Cog):
             return
 
         user_id = interaction.user.id
-        useful_user_ids = [int(value) for value in record.get("useful_user_ids", [])]
+        useful_user_ids = [int(value)
+                               for value in record.get("useful_user_ids", [])]
         if user_id in useful_user_ids:
-            useful_user_ids = [value for value in useful_user_ids if value != user_id]
+            useful_user_ids = [
+                value for value in useful_user_ids if value != user_id]
             response = "Removed your useful vote."
         else:
             useful_user_ids.append(user_id)
@@ -1813,7 +1849,8 @@ class ReviewHub(commands.Cog):
                     target_id=target.id if target else None,
                     mode_override=mode_override,
                     title=str(
-                        settings.get("rate_experience_title") or "Rate your experience",
+                        settings.get(
+                            "rate_experience_title") or "Rate your experience",
                     ),
                 ),
             )
@@ -1841,7 +1878,8 @@ class ReviewHub(commands.Cog):
             return
 
         display_id = str(
-            record.get("display_id") or self._display_review_id(record.get("id")),
+            record.get("display_id") or self._display_review_id(
+                record.get("id")),
         )
         if sent_message is None:
             await ctx.send(
@@ -2007,7 +2045,11 @@ class ReviewHub(commands.Cog):
             )[:5]
             if recent:
                 lines = [
-                    f"{record.get('display_id')} - {record.get('rating')}/5 - {self._format_ts(record.get('created_at'), 'R')}"
+                    "{} - {}/5 - {}".format(
+                        record.get("display_id"),
+                        record.get("rating"),
+                        self._format_ts(record.get("created_at"), "R"),
+                    )
                     for record in recent
                 ]
                 embed.add_field(

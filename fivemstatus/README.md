@@ -12,6 +12,10 @@ Live FiveM server status panels for Red-DiscordBot.
 [p]load fivemstatus
 ```
 
+## Dashboard
+
+This cog includes standalone Red-Web-Dashboard integration. Server managers can use the dashboard to view visible commands and the current server configuration when Red-Web-Dashboard is installed.
+
 ## Highlights
 
 - Posts one Discord embed that updates every minute.

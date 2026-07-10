@@ -13,6 +13,15 @@ try:
 except ImportError:
     HAS_PYTZ = False
 
+RECOVERABLE_EXCEPTIONS = (
+    OSError,
+    RuntimeError,
+    ValueError,
+    KeyError,
+    TypeError,
+    AttributeError,
+)
+
 
 def get_seasonal_ranges(month: int) -> tuple[int, int, list[tuple[str, float]]]:
     """Get temperature ranges and weighted conditions for the season."""
@@ -128,21 +137,28 @@ def get_condition_based_values(condition: str) -> tuple[int, float]:
         "Partly Cloudy 🌤️": (45, 8.0),  # Moderate humidity, good visibility
         "Cloudy ☁️": (60, 6.0),  # Higher humidity, reduced visibility
         "Rainy 🌧️": (85, 3.0),  # High humidity, low visibility
-        "Thunderstorm ⛈️": (90, 1.0),  # Very high humidity, very low visibility
+        # Very high humidity, very low visibility
+        "Thunderstorm ⛈️": (90, 1.0),
         "Light Snow ❄️": (70, 2.0),  # Moderate humidity, moderate visibility
         "Snowy 🌨️": (75, 0.5),  # High humidity, very low visibility
         "Windy 🌬️": (40, 7.0),  # Lower humidity, good visibility
         "Foggy 🌫️": (95, 0.25),  # Very high humidity, extremely low visibility
         # Extreme conditions
-        "Typhoon 🌀": (95, 0.1),  # Extremely high humidity, near-zero visibility
-        "Flash Flooding 🌊": (100, 0.2),  # Maximum humidity, very low visibility
+        # Extremely high humidity, near-zero visibility
+        "Typhoon 🌀": (95, 0.1),
+        # Maximum humidity, very low visibility
+        "Flash Flooding 🌊": (100, 0.2),
         "Acid Rain ☢️": (85, 0.5),  # High humidity, low visibility
-        "Hurricane 🌀": (98, 0.1),  # Extremely high humidity, near-zero visibility
-        "Tornado 🌪️": (70, 0.05),  # Variable humidity, extremely low visibility
+        # Extremely high humidity, near-zero visibility
+        "Hurricane 🌀": (98, 0.1),
+        # Variable humidity, extremely low visibility
+        "Tornado 🌪️": (70, 0.05),
         "Ice Storm 🧊": (75, 0.3),  # High humidity, very low visibility
         "Flash Freeze 🥶": (40, 0.4),  # Low humidity, moderate visibility
-        "Heavy Smog 🟣": (90, 0.2),  # Very high humidity, extremely low visibility
-        "Blood Fog 🔴": (95, 0.1),  # Extremely high humidity, near-zero visibility
+        # Very high humidity, extremely low visibility
+        "Heavy Smog 🟣": (90, 0.2),
+        # Extremely high humidity, near-zero visibility
+        "Blood Fog 🔴": (95, 0.1),
         "Lightning Storm ⚡": (80, 0.4),  # High humidity, very low visibility
         "Noxious Gas ☁️": (30, 0.2),  # Low humidity, extremely low visibility
     }
@@ -159,16 +175,17 @@ def get_condition_based_values(condition: str) -> tuple[int, float]:
 
 def generate_weather(time_zone: str) -> dict[str, str]:
     """Generate random weather data."""
-    current_time = datetime.datetime.now()
+    current_time = datetime.datetime.now(datetime.timezone.utc)
     if HAS_PYTZ and time_zone:
         try:
             tz = pytz.timezone(time_zone)
             current_time = datetime.datetime.now(tz)
-        except Exception:
-            pass  # Fall back to default time
+        except RECOVERABLE_EXCEPTIONS:
+            current_time = datetime.datetime.now(datetime.timezone.utc)
 
     # Get seasonal temperature ranges and weighted conditions
-    min_temp, max_temp, weighted_conditions = get_seasonal_ranges(current_time.month)
+    min_temp, max_temp, weighted_conditions = get_seasonal_ranges(
+        current_time.month)
 
     # Generate base temperature within seasonal range
     temp_f = random.randint(min_temp, max_temp)
@@ -205,7 +222,8 @@ def generate_weather(time_zone: str) -> dict[str, str]:
     ]:
         wind_speed = random.randint(20, 40)
     elif condition == "Flash Freeze 🥶":
-        wind_speed = random.randint(15, 35)  # Cold, biting wind with flash freeze
+        # Cold, biting wind with flash freeze
+        wind_speed = random.randint(15, 35)
     else:
         wind_speed = random.randint(0, 15)
 
@@ -249,26 +267,32 @@ def create_weather_embed(
     condition_icons = {
         # Normal weather conditions
         "Sunny ☀️": "https://cdn-icons-png.flaticon.com/512/869/869869.png",  # Sun icon
-        "Partly Cloudy 🌤️": "https://cdn-icons-png.flaticon.com/512/1163/1163661.png",  # Sun with cloud icon
+        # Sun with cloud icon
+        "Partly Cloudy 🌤️": "https://cdn-icons-png.flaticon.com/512/1163/1163661.png",
         "Cloudy ☁️": "https://cdn-icons-png.flaticon.com/512/414/414825.png",  # Cloud icon
         "Rainy 🌧️": "https://cdn-icons-png.flaticon.com/512/3351/3351979.png",  # Rain icon
         "Thunderstorm ⛈️": "https://cdn-icons-png.flaticon.com/512/1146/1146860.png",  # Thunder icon
-        "Light Snow ❄️": "https://cdn-icons-png.flaticon.com/512/2204/2204350.png",  # Light snow icon
+        # Light snow icon
+        "Light Snow ❄️": "https://cdn-icons-png.flaticon.com/512/2204/2204350.png",
         "Snowy 🌨️": "https://cdn-icons-png.flaticon.com/512/2315/2315309.png",  # Heavy snow icon
         "Windy 🌬️": "https://cdn-icons-png.flaticon.com/512/17640214/17640214.png",  # Wind icon
         "Foggy 🌫️": "https://cdn-icons-png.flaticon.com/512/4005/4005901.png",  # Fog icon
         # Extreme weather conditions - same icons as in create_extreme_weather_alert
-        "Typhoon 🌀": "https://cdn-icons-png.flaticon.com/512/7469/7469118.png",  # Typhoon/cyclone icon
+        # Typhoon/cyclone icon
+        "Typhoon 🌀": "https://cdn-icons-png.flaticon.com/512/7469/7469118.png",
         "Hurricane 🌀": "https://cdn-icons-png.flaticon.com/512/18370/18370248.png",  # Hurricane icon
         "Flash Flooding 🌊": "https://cdn-icons-png.flaticon.com/512/15788/15788723.png",  # Flood icon
         "Acid Rain ☢️": "https://cdn-icons-png.flaticon.com/512/13748/13748298.png",  # Acid rain icon
         "Tornado 🌪️": "https://cdn-icons-png.flaticon.com/512/4165/4165988.png",  # Tornado icon
         "Ice Storm 🧊": "https://cdn-icons-png.flaticon.com/512/13753/13753017.png",  # Ice storm icon
         "Flash Freeze 🥶": "https://cdn-icons-png.flaticon.com/512/13748/13748308.png",  # Freeze icon
-        "Heavy Smog 🟣": "https://cdn-icons-png.flaticon.com/512/5782/5782192.png",  # Smog/pollution icon
+        # Smog/pollution icon
+        "Heavy Smog 🟣": "https://cdn-icons-png.flaticon.com/512/5782/5782192.png",
         "Blood Fog 🔴": "https://cdn-icons-png.flaticon.com/512/13748/13748627.png",  # Red fog icon
-        "Lightning Storm ⚡": "https://cdn-icons-png.flaticon.com/512/3032/3032738.png",  # Lightning icon
-        "Noxious Gas ☁️": "https://cdn-icons-png.flaticon.com/512/13748/13748288.png",  # Toxic gas icon
+        # Lightning icon
+        "Lightning Storm ⚡": "https://cdn-icons-png.flaticon.com/512/3032/3032738.png",
+        # Toxic gas icon
+        "Noxious Gas ☁️": "https://cdn-icons-png.flaticon.com/512/13748/13748288.png",
     }
 
     embed = discord.Embed(
@@ -331,17 +355,21 @@ def create_extreme_weather_alert(
     # Define weather condition icons
     condition_icons = {
         # Extreme weather conditions with icons matching their names/effects
-        "Typhoon 🌀": "https://cdn-icons-png.flaticon.com/512/7469/7469118.png",  # Typhoon/cyclone icon
+        # Typhoon/cyclone icon
+        "Typhoon 🌀": "https://cdn-icons-png.flaticon.com/512/7469/7469118.png",
         "Hurricane 🌀": "https://cdn-icons-png.flaticon.com/512/18370/18370248.png",  # Hurricane icon
         "Flash Flooding 🌊": "https://cdn-icons-png.flaticon.com/512/15788/15788723.png",  # Flood icon
         "Acid Rain ☢️": "https://cdn-icons-png.flaticon.com/512/13748/13748298.png",  # Acid rain icon
         "Tornado 🌪️": "https://cdn-icons-png.flaticon.com/512/4165/4165988.png",  # Tornado icon
         "Ice Storm 🧊": "https://cdn-icons-png.flaticon.com/512/13753/13753017.png",  # Ice storm icon
         "Flash Freeze 🥶": "https://cdn-icons-png.flaticon.com/512/13748/13748308.png",  # Freeze icon
-        "Heavy Smog 🟣": "https://cdn-icons-png.flaticon.com/512/5782/5782192.png",  # Smog/pollution icon
+        # Smog/pollution icon
+        "Heavy Smog 🟣": "https://cdn-icons-png.flaticon.com/512/5782/5782192.png",
         "Blood Fog 🔴": "https://cdn-icons-png.flaticon.com/512/13748/13748627.png",  # Red fog icon
-        "Lightning Storm ⚡": "https://cdn-icons-png.flaticon.com/512/3032/3032738.png",  # Lightning icon
-        "Noxious Gas ☁️": "https://cdn-icons-png.flaticon.com/512/13748/13748288.png",  # Toxic gas icon
+        # Lightning icon
+        "Lightning Storm ⚡": "https://cdn-icons-png.flaticon.com/512/3032/3032738.png",
+        # Toxic gas icon
+        "Noxious Gas ☁️": "https://cdn-icons-png.flaticon.com/512/13748/13748288.png",
     }
 
     # Use the guild's configured embed color instead of condition-specific colors
@@ -354,7 +382,7 @@ def create_extreme_weather_alert(
     )
 
     # Add a timestamp for urgency
-    embed.timestamp = datetime.datetime.utcnow()
+    embed.timestamp = datetime.datetime.now(datetime.timezone.utc)
 
     # Set thumbnail based on condition
     if condition in condition_icons:
@@ -482,13 +510,13 @@ def generate_extreme_weather(time_zone: str) -> dict[str, str]:
     Dict[str, str]
         Weather data with a randomly selected extreme condition
     """
-    current_time = datetime.datetime.now()
+    current_time = datetime.datetime.now(datetime.timezone.utc)
     if HAS_PYTZ and time_zone:
         try:
             tz = pytz.timezone(time_zone)
             current_time = datetime.datetime.now(tz)
-        except Exception:
-            pass  # Fall back to default time
+        except RECOVERABLE_EXCEPTIONS:
+            current_time = datetime.datetime.now(datetime.timezone.utc)
 
     # List of all extreme weather conditions
     # These match exactly with the keys in condition_icons dictionary in create_extreme_weather_alert

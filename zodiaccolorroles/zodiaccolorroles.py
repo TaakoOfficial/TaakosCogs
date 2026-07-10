@@ -1,12 +1,14 @@
 import discord
 from redbot.core import commands
 
+from .dashboard_integration import DashboardIntegration
+
 __red_end_user_data_statement__ = (
     "This cog does not persistently store any end user data."
 )
 
 
-class ZodiacColorRoles(commands.Cog):
+class ZodiacColorRoles(DashboardIntegration, commands.Cog):
     """Cog for easy creation of zodiac and color roles."""
 
     PRONOUN_ROLES = [
@@ -203,7 +205,8 @@ class ZodiacColorRoles(commands.Cog):
                 role = discord.utils.get(guild.roles, name=role_name)
                 if not role:
                     try:
-                        discord_color = discord.Color(int(hex_code.lstrip("#"), 16))
+                        discord_color = discord.Color(
+                            int(hex_code.lstrip("#"), 16))
                         role = await self._create_role_safely(
                             guild,
                             role_name,

@@ -5,12 +5,14 @@ import random
 import discord
 from redbot.core import commands
 
+from .dashboard_integration import DashboardIntegration
+
 __red_end_user_data_statement__ = (
     "This cog does not persistently store any end user data."
 )
 
 
-class Flipper(commands.Cog):
+class Flipper(DashboardIntegration, commands.Cog):
     """Coin flip utility."""
 
     @commands.hybrid_command()

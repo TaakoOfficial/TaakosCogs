@@ -12,6 +12,10 @@ Copy custom emojis and stickers between Discord servers.
 [p]load emojiporter
 ```
 
+## Dashboard
+
+This cog includes standalone Red-Web-Dashboard integration. Server managers can use the dashboard to view visible commands and the current server configuration when Red-Web-Dashboard is installed.
+
 ## Highlights
 
 - Copy all emojis or selected emojis from another server.

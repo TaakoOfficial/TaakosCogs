@@ -12,6 +12,10 @@ Seasonal weather simulation for Red-DiscordBot servers.
 [p]load randomweather
 ```
 
+## Dashboard
+
+This cog includes standalone Red-Web-Dashboard integration. Server managers can use the dashboard to view visible commands and the current server configuration when Red-Web-Dashboard is installed.
+
 ## Highlights
 
 - Realistic seasonal weather generation.

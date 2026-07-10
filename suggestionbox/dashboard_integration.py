@@ -69,7 +69,8 @@ class DashboardIntegration:
                     form_data,
                 )
             except commands.CommandError as error:
-                notifications.append({"message": str(error), "category": "error"})
+                notifications.append(
+                    {"message": str(error), "category": "error"})
             except Exception as error:
                 log.exception("SuggestionBox dashboard action failed.")
                 notifications.append(
@@ -124,19 +125,77 @@ class DashboardIntegration:
 
     def _dashboard_tab_button(self, name: str, label: str, active: str) -> str:
         selected = name == active
-        return f'<button type="button" class="dash-tab{" active" if selected else ""}" data-tab="{self._h(name)}" role="tab" aria-selected="{str(selected).lower()}" tabindex="{0 if selected else -1}">{self._h(label)}</button>'
+        active_class = " active" if selected else ""
+        aria_selected = str(selected).lower()
+        tabindex = 0 if selected else -1
+        return (
+            f'<button type="button" class="dash-tab{active_class}" '
+            f'data-tab="{self._h(name)}" role="tab" '
+            f'aria-selected="{aria_selected}" tabindex="{tabindex}">'
+            f"{self._h(label)}</button>"
+        )
 
     @staticmethod
     def _dashboard_tabs_script() -> str:
         return """
 <script>
 (() => {
-  const root = document.currentScript.closest("[data-dashboard-tabs]"); if (!root) return;
-  const tabs = Array.from(root.querySelectorAll("[data-tab]")); const panels = Array.from(root.querySelectorAll("[data-tab-panel]")); const names = new Set(tabs.map((tab) => tab.dataset.tab));
-  const activate = (name, hash = false) => { if (!names.has(name)) return; tabs.forEach((tab) => { const on = tab.dataset.tab === name; tab.classList.toggle("active", on); tab.setAttribute("aria-selected", on ? "true" : "false"); tab.tabIndex = on ? 0 : -1; }); panels.forEach((panel) => { const on = panel.dataset.tabPanel === name; panel.classList.toggle("active", on); panel.hidden = !on; }); if (hash) history.replaceState(null, "", `#tab-${name}`); };
-  const fromHash = () => { const hash = location.hash.slice(1); if (hash.startsWith("tab-") && names.has(hash.slice(4))) return hash.slice(4); const section = document.getElementById(hash); const panel = section ? section.closest("[data-tab-panel]") : null; return panel ? panel.dataset.tabPanel : null; };
-  tabs.forEach((tab, index) => { tab.addEventListener("click", () => activate(tab.dataset.tab, true)); tab.addEventListener("keydown", (event) => { const move = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0; if (!move) return; event.preventDefault(); const next = tabs[(index + move + tabs.length) % tabs.length]; next.focus(); activate(next.dataset.tab, true); }); });
-  root.querySelectorAll("form").forEach((form) => form.addEventListener("submit", () => { let input = form.querySelector('input[name="active_tab"]'); if (!input) { input = document.createElement("input"); input.type = "hidden"; input.name = "active_tab"; form.appendChild(input); } input.value = root.querySelector("[data-tab].active").dataset.tab; }));
+  const root = document.currentScript.closest("[data-dashboard-tabs]");
+  if (!root) return;
+
+  const tabs = Array.from(root.querySelectorAll("[data-tab]"));
+  const panels = Array.from(root.querySelectorAll("[data-tab-panel]"));
+  const names = new Set(tabs.map((tab) => tab.dataset.tab));
+
+  const activate = (name, hash = false) => {
+    if (!names.has(name)) return;
+    tabs.forEach((tab) => {
+      const on = tab.dataset.tab === name;
+      tab.classList.toggle("active", on);
+      tab.setAttribute("aria-selected", on ? "true" : "false");
+      tab.tabIndex = on ? 0 : -1;
+    });
+    panels.forEach((panel) => {
+      const on = panel.dataset.tabPanel === name;
+      panel.classList.toggle("active", on);
+      panel.hidden = !on;
+    });
+    if (hash) history.replaceState(null, "", `#tab-${name}`);
+  };
+
+  const fromHash = () => {
+    const hash = location.hash.slice(1);
+    if (hash.startsWith("tab-") && names.has(hash.slice(4))) return hash.slice(4);
+    const section = document.getElementById(hash);
+    const panel = section ? section.closest("[data-tab-panel]") : null;
+    return panel ? panel.dataset.tabPanel : null;
+  };
+
+  tabs.forEach((tab, index) => {
+    tab.addEventListener("click", () => activate(tab.dataset.tab, true));
+    tab.addEventListener("keydown", (event) => {
+      const move = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
+      if (!move) return;
+      event.preventDefault();
+      const next = tabs[(index + move + tabs.length) % tabs.length];
+      next.focus();
+      activate(next.dataset.tab, true);
+    });
+  });
+
+  root.querySelectorAll("form").forEach((form) => {
+    form.addEventListener("submit", () => {
+      let input = form.querySelector('input[name="active_tab"]');
+      if (!input) {
+        input = document.createElement("input");
+        input.type = "hidden";
+        input.name = "active_tab";
+        form.appendChild(input);
+      }
+      input.value = root.querySelector("[data-tab].active").dataset.tab;
+    });
+  });
+
   activate(fromHash() || root.querySelector("[data-tab].active").dataset.tab);
 })();
 </script>
@@ -197,7 +256,8 @@ class DashboardIntegration:
         try:
             return int(value)
         except (TypeError, ValueError) as exc:
-            raise commands.BadArgument(f"`{key}` must be a Discord ID.") from exc
+            raise commands.BadArgument(
+                f"`{key}` must be a Discord ID.") from exc
 
     def _dash_csrf(self, kwargs: dict[str, typing.Any]) -> str:
         csrf_token = kwargs.get("csrf_token")
@@ -304,7 +364,8 @@ class DashboardIntegration:
             )
 
         elif action:
-            raise commands.BadArgument("Unknown SuggestionBox dashboard action.")
+            raise commands.BadArgument(
+                "Unknown SuggestionBox dashboard action.")
 
         return messages
 
@@ -318,24 +379,28 @@ class DashboardIntegration:
             "suggestion_channel_id",
         )
         suggestion_channel = (
-            guild.get_channel(suggestion_channel_id) if suggestion_channel_id else None
+            guild.get_channel(
+                suggestion_channel_id) if suggestion_channel_id else None
         )
         if suggestion_channel_id and not isinstance(
             suggestion_channel,
             discord.TextChannel,
         ):
-            raise commands.BadArgument("Suggestion channel must be a text channel.")
+            raise commands.BadArgument(
+                "Suggestion channel must be a text channel.")
         if self._dash_bool(form_data, "enabled") and suggestion_channel is None:
             raise commands.BadArgument(
                 "Choose a suggestion channel before enabling SuggestionBox.",
             )
 
-        review_channel_id = self._dash_optional_id(form_data, "review_channel_id")
+        review_channel_id = self._dash_optional_id(
+            form_data, "review_channel_id")
         review_channel = (
             guild.get_channel(review_channel_id) if review_channel_id else None
         )
         if review_channel_id and not isinstance(review_channel, discord.TextChannel):
-            raise commands.BadArgument("Review channel must be a text channel.")
+            raise commands.BadArgument(
+                "Review channel must be a text channel.")
 
         archive_minutes = self._dash_int(
             form_data,
@@ -384,7 +449,8 @@ class DashboardIntegration:
         if not text:
             raise commands.BadArgument("Suggestion text cannot be empty.")
         author_id = self._dash_optional_id(form_data, "suggestion_author_id")
-        author = guild.get_member(author_id) if author_id else guild.get_member(user.id)
+        author = guild.get_member(
+            author_id) if author_id else guild.get_member(user.id)
         if author is None:
             author = user
         return await self._submit_suggestion(guild, author, text)
@@ -396,7 +462,8 @@ class DashboardIntegration:
         member: discord.Member | None,
         form_data: typing.Any,
     ) -> tuple[int, str]:
-        suggestion_id = self._dash_int(form_data, "status_suggestion_id", minimum=1)
+        suggestion_id = self._dash_int(
+            form_data, "status_suggestion_id", minimum=1)
         status = self._normalise_status(
             self._dash_value(form_data, "suggestion_status", "open"),
         )
@@ -408,20 +475,19 @@ class DashboardIntegration:
         )
         actor = member or user
 
-        async with self._guild_lock(guild.id):
-            async with self.config.guild(guild).suggestions() as suggestions:
-                key = self._suggestion_key(suggestion_id)
-                record = suggestions.get(key)
-                if not record:
-                    raise commands.BadArgument(
-                        f"No suggestion with ID `{suggestion_id}` was found.",
-                    )
-                record["status"] = status
-                record["updated_at"] = self._now_ts()
-                record["decision_by"] = user.id
-                record["decision_reason"] = reason
-                record["decision_at"] = self._now_ts()
-                suggestions[key] = record
+        async with self._guild_lock(guild.id), self.config.guild(guild).suggestions() as suggestions:
+            key = self._suggestion_key(suggestion_id)
+            record = suggestions.get(key)
+            if not record:
+                raise commands.BadArgument(
+                    f"No suggestion with ID `{suggestion_id}` was found.",
+                )
+            record["status"] = status
+            record["updated_at"] = self._now_ts()
+            record["decision_by"] = user.id
+            record["decision_reason"] = reason
+            record["decision_at"] = self._now_ts()
+            suggestions[key] = record
 
         settings = await self.config.guild(guild).all()
         await self._sync_suggestion_message(guild, record, settings)
@@ -446,29 +512,29 @@ class DashboardIntegration:
         user: discord.User,
         form_data: typing.Any,
     ) -> int:
-        suggestion_id = self._dash_int(form_data, "comment_suggestion_id", minimum=1)
+        suggestion_id = self._dash_int(
+            form_data, "comment_suggestion_id", minimum=1)
         comment = self._clean_text(
             self._dash_value(form_data, "staff_comment"),
             self.MAX_COMMENT_LENGTH,
         )
 
-        async with self._guild_lock(guild.id):
-            async with self.config.guild(guild).suggestions() as suggestions:
-                key = self._suggestion_key(suggestion_id)
-                record = suggestions.get(key)
-                if not record:
-                    raise commands.BadArgument(
-                        f"No suggestion with ID `{suggestion_id}` was found.",
-                    )
-                record.setdefault("staff_notes", []).append(
-                    {
-                        "staff_id": user.id,
-                        "comment": comment,
-                        "created_at": self._now_ts(),
-                    },
+        async with self._guild_lock(guild.id), self.config.guild(guild).suggestions() as suggestions:
+            key = self._suggestion_key(suggestion_id)
+            record = suggestions.get(key)
+            if not record:
+                raise commands.BadArgument(
+                    f"No suggestion with ID `{suggestion_id}` was found.",
                 )
-                record["updated_at"] = self._now_ts()
-                suggestions[key] = record
+            record.setdefault("staff_notes", []).append(
+                {
+                    "staff_id": user.id,
+                    "comment": comment,
+                    "created_at": self._now_ts(),
+                },
+            )
+            record["updated_at"] = self._now_ts()
+            suggestions[key] = record
 
         settings = await self.config.guild(guild).all()
         await self._sync_suggestion_message(guild, record, settings)
@@ -485,7 +551,8 @@ class DashboardIntegration:
         guild: discord.Guild,
         form_data: typing.Any,
     ) -> tuple[int, discord.Thread]:
-        suggestion_id = self._dash_int(form_data, "thread_suggestion_id", minimum=1)
+        suggestion_id = self._dash_int(
+            form_data, "thread_suggestion_id", minimum=1)
         async with self._guild_lock(guild.id):
             settings = await self.config.guild(guild).all()
             suggestions = settings.get("suggestions") or {}
@@ -502,7 +569,8 @@ class DashboardIntegration:
 
             message = await self._fetch_suggestion_message(guild, record)
             if message is None:
-                raise commands.BadArgument("I could not find the suggestion message.")
+                raise commands.BadArgument(
+                    "I could not find the suggestion message.")
 
             thread = await self._create_suggestion_thread(
                 guild,
@@ -530,21 +598,21 @@ class DashboardIntegration:
         user: discord.User,
         form_data: typing.Any,
     ) -> int:
-        suggestion_id = self._dash_int(form_data, "delete_suggestion_id", minimum=1)
+        suggestion_id = self._dash_int(
+            form_data, "delete_suggestion_id", minimum=1)
         reason_text = self._dash_value(form_data, "delete_reason").strip()
         reason = (
             self._clean_text(reason_text, self.MAX_REASON_LENGTH)
             if reason_text
             else None
         )
-        async with self._guild_lock(guild.id):
-            async with self.config.guild(guild).suggestions() as suggestions:
-                key = self._suggestion_key(suggestion_id)
-                record = suggestions.pop(key, None)
-                if not record:
-                    raise commands.BadArgument(
-                        f"No suggestion with ID `{suggestion_id}` was found.",
-                    )
+        async with self._guild_lock(guild.id), self.config.guild(guild).suggestions() as suggestions:
+            key = self._suggestion_key(suggestion_id)
+            record = suggestions.pop(key, None)
+            if not record:
+                raise commands.BadArgument(
+                    f"No suggestion with ID `{suggestion_id}` was found.",
+                )
 
         message = await self._fetch_suggestion_message(guild, record)
         if message is not None:
@@ -614,8 +682,10 @@ class DashboardIntegration:
         <style>
             .sb-wrap {{ max-width: 1180px; margin: 0 auto; color: #e5e7eb; }}
             .sb-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }}
-            .sb-row {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-bottom: 12px; }}
-            .sb-card {{ background: #1f2937; border: 1px solid #374151; border-radius: 8px; padding: 16px; margin-bottom: 16px; }}
+            .sb-row {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px;
+            margin-bottom: 12px; }}
+            .sb-card {{ background: #1f2937; border: 1px solid #374151; border-radius: 8px; padding: 16px;
+            margin-bottom: 16px; }}
             .sb-card h2, .sb-card h3 {{ margin: 0 0 12px 0; color: #f9fafb; }}
             .sb-muted {{ color: #9ca3af; }}
             .sb-stat {{ font-size: 1.5rem; font-weight: 700; color: #f9fafb; }}
@@ -627,15 +697,20 @@ class DashboardIntegration:
             .sb-field textarea {{ min-height: 82px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }}
             .sb-check {{ display: flex; align-items: center; gap: 8px; margin: 6px 0; color: #d1d5db; }}
             .sb-check input {{ width: auto; }}
-            .sb-btn {{ background: #2563eb; color: white; border: 0; border-radius: 6px; padding: 9px 14px; cursor: pointer; font-weight: 700; }}
+            .sb-btn {{ background: #2563eb; color: white; border: 0; border-radius: 6px; padding: 9px 14px; cursor:
+            pointer; font-weight: 700; }}
             .sb-btn.secondary {{ background: #4b5563; }}
             .sb-btn.danger {{ background: #dc2626; }}
-            .dash-tabs {{ display: flex; gap: 4px; overflow-x: auto; position: sticky; top: 0; z-index: 10; margin: 0 0 16px; padding: 5px; background: #111827; border: 1px solid #374151; border-radius: 8px; }}
-            .dash-tab {{ flex: 0 0 auto; border: 0; border-radius: 6px; padding: 9px 13px; background: transparent; color: #9ca3af; cursor: pointer; font-weight: 700; white-space: nowrap; }}
-            .dash-tab:hover {{ background: #1f2937; color: #f9fafb; }} .dash-tab.active {{ background: #2563eb; color: white; }}
+            .dash-tabs {{ display: flex; gap: 4px; overflow-x: auto; position: sticky; top: 0; z-index: 10; margin: 0 0
+            16px; padding: 5px; background: #111827; border: 1px solid #374151; border-radius: 8px; }}
+            .dash-tab {{ flex: 0 0 auto; border: 0; border-radius: 6px; padding: 9px 13px; background: transparent;
+            color: #9ca3af; cursor: pointer; font-weight: 700; white-space: nowrap; }}
+            .dash-tab:hover {{ background: #1f2937; color: #f9fafb; }} .dash-tab.active {{ background: #2563eb; color:
+            white; }}
             .dash-panel {{ display: none; }} .dash-panel.active {{ display: block; }}
             .sb-table {{ width: 100%; border-collapse: collapse; font-size: 0.92rem; }}
-            .sb-table th, .sb-table td {{ border-bottom: 1px solid #374151; padding: 8px; text-align: left; vertical-align: top; }}
+            .sb-table th, .sb-table td {{ border-bottom: 1px solid #374151; padding: 8px; text-align: left;
+            vertical-align: top; }}
             .sb-table th {{ color: #d1d5db; }}
             .sb-inline {{ display: inline; }}
         </style>
@@ -643,11 +718,15 @@ class DashboardIntegration:
             <div class="sb-card">
                 <h2>SuggestionBox Dashboard</h2>
                 <div class="sb-grid">
-                    <div><div class="sb-muted">Total Suggestions</div><div class="sb-stat">{len(suggestions)}</div></div>
+                    <div><div class="sb-muted">Total Suggestions</div><div
+                    class="sb-stat">{len(suggestions)}</div></div>
                     <div><div class="sb-muted">Open</div><div class="sb-stat">{counts.get("open", 0)}</div></div>
-                    <div><div class="sb-muted">Approved</div><div class="sb-stat">{counts.get("approved", 0)}</div></div>
-                    <div><div class="sb-muted">Implemented</div><div class="sb-stat">{counts.get("implemented", 0)}</div></div>
-                    <div><div class="sb-muted">Top Score</div><div class="sb-stat">{self._score(top_record) if top_record else 0}</div></div>
+                    <div><div class="sb-muted">Approved</div><div class="sb-stat">{counts.get("approved",
+                    0)}</div></div>
+                    <div><div class="sb-muted">Implemented</div><div class="sb-stat">{counts.get("implemented",
+                    0)}</div></div>
+                    <div><div class="sb-muted">Top Score</div><div class="sb-stat">{self._score(top_record) if
+                    top_record else 0}</div></div>
                 </div>
             </div>
             <div class="dash-tabs" role="tablist" aria-label="SuggestionBox sections">
@@ -656,10 +735,14 @@ class DashboardIntegration:
                 {self._dashboard_tab_button("actions", "Actions", active_tab)}
                 {self._dashboard_tab_button("maintenance", "Maintenance", active_tab)}
             </div>
-            <section class="dash-panel{" active" if active_tab == "suggestions" else ""}" data-tab-panel="suggestions">{self._dashboard_suggestions_section(guild, suggestions)}</section>
-            <section class="dash-panel{" active" if active_tab == "settings" else ""}" data-tab-panel="settings">{self._dashboard_settings_section(guild, settings, csrf)}</section>
-            <section class="dash-panel{" active" if active_tab == "actions" else ""}" data-tab-panel="actions">{self._dashboard_actions_section(suggestions, csrf)}</section>
-            <section class="dash-panel{" active" if active_tab == "maintenance" else ""}" data-tab-panel="maintenance">{self._dashboard_maintenance_section(csrf)}</section>
+            <section class="dash-panel{" active" if active_tab == "suggestions" else ""}"
+            data-tab-panel="suggestions">{self._dashboard_suggestions_section(guild, suggestions)}</section>
+            <section class="dash-panel{" active" if active_tab == "settings" else ""}"
+            data-tab-panel="settings">{self._dashboard_settings_section(guild, settings, csrf)}</section>
+            <section class="dash-panel{" active" if active_tab == "actions" else ""}"
+            data-tab-panel="actions">{self._dashboard_actions_section(suggestions, csrf)}</section>
+            <section class="dash-panel{" active" if active_tab == "maintenance" else ""}"
+            data-tab-panel="maintenance">{self._dashboard_maintenance_section(csrf)}</section>
             {self._dashboard_tabs_script()}
         </div>
         """
@@ -678,18 +761,27 @@ class DashboardIntegration:
                 <input type="hidden" name="action" value="save_settings">
                 <div class="sb-grid">
                     <div>
-                        <label class="sb-check"><input type="checkbox" name="enabled" value="1" {self._checked(settings.get("enabled"))}> Enabled</label>
-                        <label class="sb-check"><input type="checkbox" name="anonymous" value="1" {self._checked(settings.get("anonymous"))}> Anonymous Public Authors</label>
-                        <label class="sb-check"><input type="checkbox" name="allow_downvotes" value="1" {self._checked(settings.get("allow_downvotes"))}> Allow Downvotes</label>
-                        <label class="sb-check"><input type="checkbox" name="allow_self_vote" value="1" {self._checked(settings.get("allow_self_vote"))}> Allow Self Voting</label>
-                        <label class="sb-check"><input type="checkbox" name="create_threads" value="1" {self._checked(settings.get("create_threads"))}> Create Discussion Threads</label>
+                        <label class="sb-check"><input type="checkbox" name="enabled" value="1"
+                        {self._checked(settings.get("enabled"))}> Enabled</label>
+                        <label class="sb-check"><input type="checkbox" name="anonymous" value="1"
+                        {self._checked(settings.get("anonymous"))}> Anonymous Public Authors</label>
+                        <label class="sb-check"><input type="checkbox" name="allow_downvotes" value="1"
+                        {self._checked(settings.get("allow_downvotes"))}> Allow Downvotes</label>
+                        <label class="sb-check"><input type="checkbox" name="allow_self_vote" value="1"
+                        {self._checked(settings.get("allow_self_vote"))}> Allow Self Voting</label>
+                        <label class="sb-check"><input type="checkbox" name="create_threads" value="1"
+                        {self._checked(settings.get("create_threads"))}> Create Discussion Threads</label>
                     </div>
                     <div class="sb-row">
-                        {self._channel_select(guild, "suggestion_channel_id", "Suggestion Channel", settings.get("suggestion_channel_id"), include_none=False)}
-                        {self._channel_select(guild, "review_channel_id", "Review Log Channel", settings.get("review_channel_id"))}
+                        {self._channel_select(guild, "suggestion_channel_id", "Suggestion Channel",
+                        settings.get("suggestion_channel_id"), include_none=False)}
+                        {self._channel_select(guild, "review_channel_id", "Review Log Channel",
+                        settings.get("review_channel_id"))}
                         {self._input("embed_color", "Open Embed Color", self._color_hex(settings.get("embed_color")))}
-                        {self._input("next_id", "Next Suggestion ID", settings.get("next_id") or 1, "number", min_value=1)}
-                        <div class="sb-field"><label>Thread Auto-Archive</label><select name="thread_auto_archive_duration">
+                        {self._input("next_id", "Next Suggestion ID", settings.get("next_id") or 1, "number",
+                        min_value=1)}
+                        <div class="sb-field"><label>Thread Auto-Archive</label><select
+                        name="thread_auto_archive_duration">
                             {self._option(60, "1 hour", settings.get("thread_auto_archive_duration"))}
                             {self._option(1440, "1 day", settings.get("thread_auto_archive_duration"))}
                             {self._option(4320, "3 days", settings.get("thread_auto_archive_duration"))}
@@ -765,8 +857,10 @@ class DashboardIntegration:
                     {csrf}
                     <input type="hidden" name="action" value="set_status">
                     <div class="sb-row">
-                        <div class="sb-field"><label>Suggestion</label><select name="status_suggestion_id">{options}</select></div>
-                        <div class="sb-field"><label>Status</label><select name="suggestion_status">{status_options}</select></div>
+                        <div class="sb-field"><label>Suggestion</label><select
+                        name="status_suggestion_id">{options}</select></div>
+                        <div class="sb-field"><label>Status</label><select
+                        name="suggestion_status">{status_options}</select></div>
                     </div>
                     {self._textarea("status_reason", "Reason", "", rows=3)}
                     <button class="sb-btn" type="submit">Set Status</button>
@@ -774,20 +868,23 @@ class DashboardIntegration:
                 <form method="POST">
                     {csrf}
                     <input type="hidden" name="action" value="add_comment">
-                    <div class="sb-field"><label>Suggestion</label><select name="comment_suggestion_id">{options}</select></div>
+                    <div class="sb-field"><label>Suggestion</label><select
+                    name="comment_suggestion_id">{options}</select></div>
                     {self._textarea("staff_comment", "Staff Comment", "", rows=3)}
                     <button class="sb-btn secondary" type="submit">Add Comment</button>
                 </form>
                 <form method="POST">
                     {csrf}
                     <input type="hidden" name="action" value="create_thread">
-                    <div class="sb-field"><label>Suggestion</label><select name="thread_suggestion_id">{options}</select></div>
+                    <div class="sb-field"><label>Suggestion</label><select
+                    name="thread_suggestion_id">{options}</select></div>
                     <button class="sb-btn secondary" type="submit">Create Thread</button>
                 </form>
                 <form method="POST">
                     {csrf}
                     <input type="hidden" name="action" value="delete_suggestion">
-                    <div class="sb-field"><label>Suggestion</label><select name="delete_suggestion_id">{options}</select></div>
+                    <div class="sb-field"><label>Suggestion</label><select
+                    name="delete_suggestion_id">{options}</select></div>
                     {self._textarea("delete_reason", "Reason", "", rows=3)}
                     <button class="sb-btn danger" type="submit">Delete Suggestion</button>
                 </form>

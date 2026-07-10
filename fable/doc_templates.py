@@ -66,7 +66,8 @@ class DocumentTemplates:
             )
         if data.get("languages"):
             traits_content.append(
-                "## Languages\n" + "\n".join(f"- {l}" for l in data["languages"]),
+                "## Languages\n"
+                + "\n".join(f"- {language}" for language in data["languages"]),
             )
         if traits_content:
             sections.append(

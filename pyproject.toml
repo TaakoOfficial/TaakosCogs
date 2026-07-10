@@ -1,5 +1,6 @@
 [tool.ruff]
 target-version = "py39"
+line-length = 130
 
 [tool.ruff.lint]
 extend-select = [

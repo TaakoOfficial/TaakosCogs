@@ -12,6 +12,10 @@ Living world and character tracker for roleplay-focused Red-DiscordBot servers.
 [p]load fable
 ```
 
+## Dashboard
+
+This cog includes standalone Red-Web-Dashboard integration. Server managers can use the dashboard to view visible commands and the current server configuration when Red-Web-Dashboard is installed.
+
 ## Highlights
 
 - Character profiles with rich fields and genre templates.

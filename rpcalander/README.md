@@ -12,6 +12,10 @@ Roleplay calendar, moon phase, and celestial event tracking for Red-DiscordBot.
 [p]load rpcalander
 ```
 
+## Dashboard
+
+This cog includes standalone Red-Web-Dashboard integration. Server managers can use the dashboard to view visible commands and the current server configuration when Red-Web-Dashboard is installed.
+
 ## Highlights
 
 - Daily in-world calendar updates.

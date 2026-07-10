@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Added standalone Red-Web-Dashboard integration for viewing visible commands and current server configuration.
+
+
 ## 1.1.4
 
 - Renamed the repository package folder from `Uppercase` to `uppercase` to match Red cog naming standards.

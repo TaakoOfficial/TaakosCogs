@@ -4,6 +4,16 @@ import typing
 import discord
 from redbot.core import commands
 
+RECOVERABLE_EXCEPTIONS = (
+    discord.DiscordException,
+    OSError,
+    RuntimeError,
+    ValueError,
+    KeyError,
+    TypeError,
+    AttributeError,
+)
+
 
 # Dashboard integration decorator - compatible with Red-Web-Dashboard
 def dashboard_page(*args, **kwargs):
@@ -60,7 +70,7 @@ class DashboardIntegration:
                 "webhook_name_filter": config.get("webhook_name_filter", []),
             }
 
-        except Exception:
+        except RECOVERABLE_EXCEPTIONS:
             return {}
 
     async def update_settings(
@@ -146,7 +156,7 @@ class DashboardIntegration:
             if hasattr(self, "_invalidate_settings_cache"):
                 self._invalidate_settings_cache(guild)
 
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             # Use bot logger if available, otherwise just pass
             if hasattr(self, "log") and self.log:
                 self.log.error(f"Error updating YALC settings: {e}")
@@ -228,10 +238,11 @@ class DashboardIntegration:
                 **clean_kwargs,
             )
 
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             # Enhanced error logging
             if hasattr(self, "log") and self.log:
-                self.log.error(f"Error in YALC dashboard page: {e}", exc_info=True)
+                self.log.error(
+                    f"Error in YALC dashboard page: {e}", exc_info=True)
 
             return {
                 "status": 1,
@@ -268,7 +279,8 @@ class DashboardIntegration:
             # Check for CSRF token (Red-Web-Dashboard should handle this automatically)
             if not form_data:
                 if hasattr(self, "log") and self.log:
-                    self.log.warning(f"YALC: Empty form data received from {user.name}")
+                    self.log.warning(
+                        f"YALC: Empty form data received from {user.name}")
                 return {
                     "status": 1,
                     "error_title": "Form Error",
@@ -311,7 +323,7 @@ class DashboardIntegration:
                     "redirect_url": kwargs.get("request_url", ""),
                 }
 
-            except Exception as settings_error:
+            except RECOVERABLE_EXCEPTIONS as settings_error:
                 # Log settings update error
                 if hasattr(self, "log") and self.log:
                     self.log.error(
@@ -331,7 +343,7 @@ class DashboardIntegration:
                     ],
                 }
 
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             # Log submission handling error
             if hasattr(self, "log") and self.log:
                 self.log.error(
@@ -402,7 +414,8 @@ class DashboardIntegration:
             )
 
         # Process event toggles
-        events = {event: f"event_{event}" in form_data for event in event_descriptions}
+        events = {
+            event: f"event_{event}" in form_data for event in event_descriptions}
         new_settings["events"] = events
 
         # Process channel configurations
@@ -415,7 +428,8 @@ class DashboardIntegration:
             if value is None:
                 continue
             try:
-                event_channels[event] = int(value) if str(value).strip() else None
+                event_channels[event] = int(
+                    value) if str(value).strip() else None
             except (TypeError, ValueError):
                 event_channels[event] = None
         new_settings["event_channels"] = event_channels
@@ -438,11 +452,12 @@ class DashboardIntegration:
                 self.log.debug(
                     f"YALC WTForms Debug: Form type: {type(kwargs.get('Form'))}",
                 )
-                self.log.debug(f"YALC WTForms Debug: Form value: {kwargs.get('Form')}")
+                self.log.debug(
+                    f"YALC WTForms Debug: Form value: {kwargs.get('Form')}")
 
             # Check if WTForms is available in kwargs (passed by Red-Web-Dashboard)
-            Form = kwargs.get("Form")
-            if not Form:
+            form_class = kwargs.get("Form")
+            if not form_class:
                 # Fallback to manual form with warning about CSRF
                 if hasattr(self, "log") and self.log:
                     self.log.warning(
@@ -457,7 +472,7 @@ class DashboardIntegration:
             # Create WTForms class with CSRF protection
             import wtforms
 
-            class YALCSettingsForm(Form):
+            class YALCSettingsForm(form_class):
                 def __init__(self, *args, **kwargs):
                     super().__init__(prefix="yalc_settings_", *args, **kwargs)
 
@@ -501,9 +516,9 @@ class DashboardIntegration:
             # Enhanced form debugging
             if hasattr(self, "log") and self.log:
                 self.log.debug(f"YALC: Created form instance: {type(form)}")
-                self.log.debug(f"YALC: Form instance details: {form}")
+                self.log.debug(f"YALC: form_class instance details: {form}")
                 self.log.debug(
-                    f"YALC: Form has include_thumbnails field: {hasattr(form, 'yalc_settings_include_thumbnails')}",
+                    f"YALC: form_class has include_thumbnails field: {hasattr(form, 'yalc_settings_include_thumbnails')}",
                 )
                 if hasattr(form, "yalc_settings_include_thumbnails"):
                     self.log.debug(
@@ -513,7 +528,8 @@ class DashboardIntegration:
             # Generate additional sections for events and channels
             event_sections = self._generate_event_sections(settings)
             channel_sections = self._generate_channel_sections(guild, settings)
-            csrf_hidden = str(form.hidden_tag()) if hasattr(form, "hidden_tag") else ""
+            csrf_hidden = str(form.hidden_tag()) if hasattr(
+                form, "hidden_tag") else ""
 
             # Generate the HTML template
             html_template = await self._generate_wtforms_html(
@@ -526,8 +542,10 @@ class DashboardIntegration:
 
             # Enhanced logging for template and form
             if hasattr(self, "log") and self.log:
-                self.log.debug(f"YALC: HTML template length: {len(html_template)}")
-                self.log.debug(f"YALC: About to return form type: {type(form)}")
+                self.log.debug(
+                    f"YALC: HTML template length: {len(html_template)}")
+                self.log.debug(
+                    f"YALC: About to return form type: {type(form)}")
 
             # Return template without form object to avoid Jinja2 template errors
             # The template now uses manual HTML forms with proper field names
@@ -544,11 +562,12 @@ class DashboardIntegration:
                 self.log.debug(
                     f"YALC: Final result web_content keys: {list(result['web_content'].keys())}",
                 )
-                self.log.debug("YALC: Template-based approach - no form object passed")
+                self.log.debug(
+                    "YALC: Template-based approach - no form object passed")
 
             return result
 
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             if hasattr(self, "log") and self.log:
                 self.log.error(
                     f"YALC: Error generating WTForms dashboard: {e}",
@@ -573,7 +592,8 @@ class DashboardIntegration:
 
             # Warning message about CSRF
             csrf_warning = """
-                <div style="margin-bottom: 2em; padding: 1.5em; background: #2d1f2d; border-radius: 8px; border-left: 4px solid #ff5722;">
+                <div style="margin-bottom: 2em; padding: 1.5em; background: #2d1f2d; border-radius: 8px; border-left:
+                4px solid #ff5722;">
                     <h4 style="margin: 0 0 0.5em 0; color: #ff5722;">⚠️ CSRF Protection Warning</h4>
                     <p style="margin: 0; color: #ffab91; line-height: 1.5;">
                         WTForms is not available - using fallback form without full CSRF protection.
@@ -602,11 +622,16 @@ class DashboardIntegration:
             }
 
             source = f"""
-            <div data-yalc-tabs="1" style="padding: 1em; max-width: 1200px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #1a1a1a; color: #e0e0e0; min-height: 100vh;">
-                <div style="background: linear-gradient(135deg, #2c5aa0 0%, #4a148c 100%); color: white; padding: 2em; border-radius: 10px; margin-bottom: 2em; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);">
+            <div data-yalc-tabs="1" style="padding: 1em; max-width: 1200px; font-family: -apple-system,
+            BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #1a1a1a; color: #e0e0e0; min-height:
+            100vh;">
+                <div style="background: linear-gradient(135deg, #2c5aa0 0%, #4a148c 100%); color: white; padding: 2em;
+                border-radius: 10px; margin-bottom: 2em; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);">
                     <h1 style="margin: 0; font-size: 2em; font-weight: 600;">⚙️ YALC Settings</h1>
-                    <p style="margin: 0.5em 0 0 0; opacity: 0.9; font-size: 1.1em;">Configure comprehensive logging for <strong>{guild_name}</strong></p>
-                    <p style="margin: 0.5em 0 0 0; opacity: 0.8; font-size: 0.9em;">Monitor 40+ event types across your Discord server</p>
+                    <p style="margin: 0.5em 0 0 0; opacity: 0.9; font-size: 1.1em;">Configure comprehensive logging for
+                    <strong>{guild_name}</strong></p>
+                    <p style="margin: 0.5em 0 0 0; opacity: 0.8; font-size: 0.9em;">Monitor 40+ event types across your
+                    Discord server</p>
                 </div>
 
                 {csrf_warning}
@@ -616,62 +641,83 @@ class DashboardIntegration:
                     {csrf_hidden}
                     <!-- Filter Settings Section -->
                     <section class="yalc-tab-panel active" data-yalc-panel="filters">
-                    <div style="margin-bottom: 2em; padding: 1.5em; background: #2d2d2d; border-radius: 8px; border-left: 4px solid #4caf50;">
-                        <h3 style="color: #4caf50; margin-top: 0; margin-bottom: 1em; font-size: 1.3em; font-weight: 600;">🔍 Filtering Options</h3>
-                        <p style="color: #b0b0b0; margin-bottom: 1.5em; font-size: 0.95em;">Configure what types of messages and events to include or exclude from logging.</p>
+                    <div style="margin-bottom: 2em; padding: 1.5em; background: #2d2d2d; border-radius: 8px;
+                    border-left: 4px solid #4caf50;">
+                        <h3 style="color: #4caf50; margin-top: 0; margin-bottom: 1em; font-size: 1.3em; font-weight:
+                        600;">🔍 Filtering Options</h3>
+                        <p style="color: #b0b0b0; margin-bottom: 1.5em; font-size: 0.95em;">Configure what types of
+                        messages and events to include or exclude from logging.</p>
 
-                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px;">
-                            <label style="display: flex; align-items: center; padding: 0.8em; background: #3a3a3a; border-radius: 6px; border: 1px solid #4a4a4a; cursor: pointer; transition: all 0.2s ease;">
-                                <input type="checkbox" name="include_thumbnails" value="1" {checkbox_values["include_thumbnails"]}
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap:
+                        20px;">
+                            <label style="display: flex; align-items: center; padding: 0.8em; background: #3a3a3a;
+                            border-radius: 6px; border: 1px solid #4a4a4a; cursor: pointer; transition: all 0.2s ease;">
+                                <input type="checkbox" name="include_thumbnails" value="1"
+                                {checkbox_values["include_thumbnails"]}
                                        style="margin-right: 12px; transform: scale(1.3); accent-color: #4caf50;">
                                 <div>
                                     <div style="font-weight: 500; color: #e0e0e0;">🖼️ Include user thumbnails</div>
-                                    <div style="font-size: 0.85em; color: #b0b0b0; margin-top: 2px;">Show user avatars in log embeds</div>
+                                    <div style="font-size: 0.85em; color: #b0b0b0; margin-top: 2px;">Show user avatars
+                                    in log embeds</div>
                                 </div>
                             </label>
 
-                            <label style="display: flex; align-items: center; padding: 0.8em; background: #3a3a3a; border-radius: 6px; border: 1px solid #4a4a4a; cursor: pointer; transition: all 0.2s ease;">
+                            <label style="display: flex; align-items: center; padding: 0.8em; background: #3a3a3a;
+                            border-radius: 6px; border: 1px solid #4a4a4a; cursor: pointer; transition: all 0.2s ease;">
                                 <input type="checkbox" name="ignore_bots" value="1" {checkbox_values["ignore_bots"]}
                                        style="margin-right: 12px; transform: scale(1.3); accent-color: #4caf50;">
                                 <div>
                                     <div style="font-weight: 500; color: #e0e0e0;">🤖 Ignore bot messages</div>
-                                    <div style="font-size: 0.85em; color: #b0b0b0; margin-top: 2px;">Skip logging events from bots</div>
+                                    <div style="font-size: 0.85em; color: #b0b0b0; margin-top: 2px;">Skip logging events
+                                     from bots</div>
                                 </div>
                             </label>
 
-                            <label style="display: flex; align-items: center; padding: 0.8em; background: #3a3a3a; border-radius: 6px; border: 1px solid #4a4a4a; cursor: pointer; transition: all 0.2s ease;">
-                                <input type="checkbox" name="ignore_webhooks" value="1" {checkbox_values["ignore_webhooks"]}
+                            <label style="display: flex; align-items: center; padding: 0.8em; background: #3a3a3a;
+                            border-radius: 6px; border: 1px solid #4a4a4a; cursor: pointer; transition: all 0.2s ease;">
+                                <input type="checkbox" name="ignore_webhooks" value="1"
+                                {checkbox_values["ignore_webhooks"]}
                                        style="margin-right: 12px; transform: scale(1.3); accent-color: #4caf50;">
                                 <div>
                                     <div style="font-weight: 500; color: #e0e0e0;">🪝 Ignore webhook messages</div>
-                                    <div style="font-size: 0.85em; color: #b0b0b0; margin-top: 2px;">Skip logging webhook events</div>
+                                    <div style="font-size: 0.85em; color: #b0b0b0; margin-top: 2px;">Skip logging
+                                    webhook events</div>
                                 </div>
                             </label>
 
-                            <label style="display: flex; align-items: center; padding: 0.8em; background: #3a3a3a; border-radius: 6px; border: 1px solid #4a4a4a; cursor: pointer; transition: all 0.2s ease;">
-                                <input type="checkbox" name="ignore_tupperbox" value="1" {checkbox_values["ignore_tupperbox"]}
+                            <label style="display: flex; align-items: center; padding: 0.8em; background: #3a3a3a;
+                            border-radius: 6px; border: 1px solid #4a4a4a; cursor: pointer; transition: all 0.2s ease;">
+                                <input type="checkbox" name="ignore_tupperbox" value="1"
+                                {checkbox_values["ignore_tupperbox"]}
                                        style="margin-right: 12px; transform: scale(1.3); accent-color: #4caf50;">
                                 <div>
-                                    <div style="font-weight: 500; color: #e0e0e0;">👥 Ignore Tupperbox/proxy messages</div>
-                                    <div style="font-size: 0.85em; color: #b0b0b0; margin-top: 2px;">Skip logging proxy bot messages</div>
+                                    <div style="font-weight: 500; color: #e0e0e0;">👥 Ignore Tupperbox/proxy
+                                    messages</div>
+                                    <div style="font-size: 0.85em; color: #b0b0b0; margin-top: 2px;">Skip logging proxy
+                                    bot messages</div>
                                 </div>
                             </label>
 
-                            <label style="display: flex; align-items: center; padding: 0.8em; background: #3a3a3a; border-radius: 6px; border: 1px solid #4a4a4a; cursor: pointer; transition: all 0.2s ease;">
+                            <label style="display: flex; align-items: center; padding: 0.8em; background: #3a3a3a;
+                            border-radius: 6px; border: 1px solid #4a4a4a; cursor: pointer; transition: all 0.2s ease;">
                                 <input type="checkbox" name="ignore_apps" value="1" {checkbox_values["ignore_apps"]}
                                        style="margin-right: 12px; transform: scale(1.3); accent-color: #4caf50;">
                                 <div>
                                     <div style="font-weight: 500; color: #e0e0e0;">📱 Ignore app messages</div>
-                                    <div style="font-size: 0.85em; color: #b0b0b0; margin-top: 2px;">Skip logging application events</div>
+                                    <div style="font-size: 0.85em; color: #b0b0b0; margin-top: 2px;">Skip logging
+                                    application events</div>
                                 </div>
                             </label>
 
-                            <label style="display: flex; align-items: center; padding: 0.8em; background: #3a3a3a; border-radius: 6px; border: 1px solid #4a4a4a; cursor: pointer; transition: all 0.2s ease;">
-                                <input type="checkbox" name="detect_proxy_deletes" value="1" {checkbox_values["detect_proxy_deletes"]}
+                            <label style="display: flex; align-items: center; padding: 0.8em; background: #3a3a3a;
+                            border-radius: 6px; border: 1px solid #4a4a4a; cursor: pointer; transition: all 0.2s ease;">
+                                <input type="checkbox" name="detect_proxy_deletes" value="1"
+                                {checkbox_values["detect_proxy_deletes"]}
                                        style="margin-right: 12px; transform: scale(1.3); accent-color: #4caf50;">
                                 <div>
                                     <div style="font-weight: 500; color: #e0e0e0;">🔍 Detect proxy deletes</div>
-                                    <div style="font-size: 0.85em; color: #b0b0b0; margin-top: 2px;">Log when proxy messages are deleted</div>
+                                    <div style="font-size: 0.85em; color: #b0b0b0; margin-top: 2px;">Log when proxy
+                                    messages are deleted</div>
                                 </div>
                             </label>
                         </div>
@@ -689,14 +735,18 @@ class DashboardIntegration:
                     <!-- Submit button -->
                     <div style="text-align: center; margin-top: 3em; padding-top: 2em; border-top: 2px solid #4a4a4a;">
                         <input type="submit" name="submit" value="💾 Save Configuration"
-                               style="background: linear-gradient(135deg, #4caf50 0%, #45a049 100%); color: white; border: none; padding: 1.2em 3em; border-radius: 8px; font-size: 1.1em; font-weight: 600; cursor: pointer; box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3); transition: all 0.3s ease;">
+                               style="background: linear-gradient(135deg, #4caf50 0%, #45a049 100%); color: white;
+                               border: none; padding: 1.2em 3em; border-radius: 8px; font-size: 1.1em; font-weight: 600;
+                                cursor: pointer; box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3); transition: all 0.3s
+                               ease;">
                         <p style="margin-top: 1em; color: #b0b0b0; font-size: 0.9em;">
                             Changes are applied immediately and saved to Red's configuration system
                         </p>
                     </div>
                 </form>
 
-                <div style="margin-top: 2em; padding: 1.5em; background: #2d2d2d; border-radius: 8px; border-left: 4px solid #00bcd4;">
+                <div style="margin-top: 2em; padding: 1.5em; background: #2d2d2d; border-radius: 8px; border-left: 4px
+                solid #00bcd4;">
                     <h4 style="margin: 0 0 0.5em 0; color: #00bcd4;">ℹ️ About YALC</h4>
                     <p style="margin: 0; color: #b0b0b0; line-height: 1.5;">
                         Yet Another Logging Cog provides comprehensive event logging for Discord servers.
@@ -746,7 +796,7 @@ class DashboardIntegration:
                 },
             }
 
-        except Exception as e:
+        except RECOVERABLE_EXCEPTIONS as e:
             if hasattr(self, "log") and self.log:
                 self.log.error(
                     f"YALC: Error generating fallback dashboard: {e}",
@@ -763,17 +813,22 @@ class DashboardIntegration:
     def _yalc_tabs_header() -> str:
         return """
         <style>
-            .yalc-tabs { display: flex; gap: 4px; overflow-x: auto; position: sticky; top: 0; z-index: 10; margin: 0 0 1.5em; padding: 5px; background: #202020; border: 1px solid #4a4a4a; border-radius: 8px; }
-            .yalc-tab { flex: 0 0 auto; border: 0; border-radius: 6px; padding: 10px 14px; background: transparent; color: #b0b0b0; cursor: pointer; font-weight: 700; white-space: nowrap; }
+            .yalc-tabs { display: flex; gap: 4px; overflow-x: auto; position: sticky; top: 0; z-index: 10; margin: 0 0
+            1.5em; padding: 5px; background: #202020; border: 1px solid #4a4a4a; border-radius: 8px; }
+            .yalc-tab { flex: 0 0 auto; border: 0; border-radius: 6px; padding: 10px 14px; background: transparent;
+            color: #b0b0b0; cursor: pointer; font-weight: 700; white-space: nowrap; }
             .yalc-tab:hover { background: #333; color: #fff; }
             .yalc-tab.active { background: #4caf50; color: #102014; }
             .yalc-tab-panel { display: none; }
             .yalc-tab-panel.active { display: block; }
         </style>
         <div class="yalc-tabs" role="tablist" aria-label="YALC sections">
-            <button type="button" class="yalc-tab active" data-yalc-tab="filters" role="tab" aria-selected="true" tabindex="0">Filtering</button>
-            <button type="button" class="yalc-tab" data-yalc-tab="events" role="tab" aria-selected="false" tabindex="-1">Events</button>
-            <button type="button" class="yalc-tab" data-yalc-tab="channels" role="tab" aria-selected="false" tabindex="-1">Log Channels</button>
+            <button type="button" class="yalc-tab active" data-yalc-tab="filters" role="tab" aria-selected="true"
+            tabindex="0">Filtering</button>
+            <button type="button" class="yalc-tab" data-yalc-tab="events" role="tab" aria-selected="false"
+            tabindex="-1">Events</button>
+            <button type="button" class="yalc-tab" data-yalc-tab="channels" role="tab" aria-selected="false"
+            tabindex="-1">Log Channels</button>
         </div>
         """
 
@@ -854,11 +909,15 @@ class DashboardIntegration:
         }
 
         return f"""
-        <div data-yalc-tabs="1" style="padding: 1em; max-width: 1200px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #1a1a1a; color: #e0e0e0; min-height: 100vh;">
-            <div style="background: linear-gradient(135deg, #2c5aa0 0%, #4a148c 100%); color: white; padding: 2em; border-radius: 10px; margin-bottom: 2em; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);">
+        <div data-yalc-tabs="1" style="padding: 1em; max-width: 1200px; font-family: -apple-system, BlinkMacSystemFont,
+        'Segoe UI', Roboto, sans-serif; background: #1a1a1a; color: #e0e0e0; min-height: 100vh;">
+            <div style="background: linear-gradient(135deg, #2c5aa0 0%, #4a148c 100%); color: white; padding: 2em;
+            border-radius: 10px; margin-bottom: 2em; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);">
                 <h1 style="margin: 0; font-size: 2em; font-weight: 600;">⚙️ YALC Settings</h1>
-                <p style="margin: 0.5em 0 0 0; opacity: 0.9; font-size: 1.1em;">Configure comprehensive logging for <strong>{guild_name}</strong></p>
-                <p style="margin: 0.5em 0 0 0; opacity: 0.8; font-size: 0.9em;">Monitor 40+ event types across your Discord server</p>
+                <p style="margin: 0.5em 0 0 0; opacity: 0.9; font-size: 1.1em;">Configure comprehensive logging for
+                <strong>{guild_name}</strong></p>
+                <p style="margin: 0.5em 0 0 0; opacity: 0.8; font-size: 0.9em;">Monitor 40+ event types across your
+                Discord server</p>
             </div>
             {self._yalc_tabs_header()}
 
@@ -867,62 +926,83 @@ class DashboardIntegration:
                 {csrf_hidden}
                 <!-- Filter Settings Section -->
                 <section class="yalc-tab-panel active" data-yalc-panel="filters">
-                <div style="margin-bottom: 2em; padding: 1.5em; background: #2d2d2d; border-radius: 8px; border-left: 4px solid #4caf50;">
-                    <h3 style="color: #4caf50; margin-top: 0; margin-bottom: 1em; font-size: 1.3em; font-weight: 600;">🔍 Filtering Options</h3>
-                    <p style="color: #b0b0b0; margin-bottom: 1.5em; font-size: 0.95em;">Configure what types of messages and events to include or exclude from logging.</p>
+                <div style="margin-bottom: 2em; padding: 1.5em; background: #2d2d2d; border-radius: 8px; border-left:
+                4px solid #4caf50;">
+                    <h3 style="color: #4caf50; margin-top: 0; margin-bottom: 1em; font-size: 1.3em; font-weight: 600;">🔍
+                     Filtering Options</h3>
+                    <p style="color: #b0b0b0; margin-bottom: 1.5em; font-size: 0.95em;">Configure what types of messages
+                     and events to include or exclude from logging.</p>
 
                     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px;">
-                        <label style="display: flex; align-items: center; padding: 0.8em; background: #3a3a3a; border-radius: 6px; border: 1px solid #4a4a4a; cursor: pointer; transition: all 0.2s ease;">
-                            <input type="checkbox" name="yalc_settings_include_thumbnails" value="1" {checkbox_values["include_thumbnails"]}
+                        <label style="display: flex; align-items: center; padding: 0.8em; background: #3a3a3a;
+                        border-radius: 6px; border: 1px solid #4a4a4a; cursor: pointer; transition: all 0.2s ease;">
+                            <input type="checkbox" name="yalc_settings_include_thumbnails" value="1"
+                            {checkbox_values["include_thumbnails"]}
                                    style="margin-right: 12px; transform: scale(1.3); accent-color: #4caf50;">
                             <div>
                                 <div style="font-weight: 500; color: #e0e0e0;">🖼️ Include user thumbnails</div>
-                                <div style="font-size: 0.85em; color: #b0b0b0; margin-top: 2px;">Show user avatars in log embeds</div>
+                                <div style="font-size: 0.85em; color: #b0b0b0; margin-top: 2px;">Show user avatars in
+                                log embeds</div>
                             </div>
                         </label>
 
-                        <label style="display: flex; align-items: center; padding: 0.8em; background: #3a3a3a; border-radius: 6px; border: 1px solid #4a4a4a; cursor: pointer; transition: all 0.2s ease;">
-                            <input type="checkbox" name="yalc_settings_ignore_bots" value="1" {checkbox_values["ignore_bots"]}
+                        <label style="display: flex; align-items: center; padding: 0.8em; background: #3a3a3a;
+                        border-radius: 6px; border: 1px solid #4a4a4a; cursor: pointer; transition: all 0.2s ease;">
+                            <input type="checkbox" name="yalc_settings_ignore_bots" value="1"
+                            {checkbox_values["ignore_bots"]}
                                    style="margin-right: 12px; transform: scale(1.3); accent-color: #4caf50;">
                             <div>
                                 <div style="font-weight: 500; color: #e0e0e0;">🤖 Ignore bot messages</div>
-                                <div style="font-size: 0.85em; color: #b0b0b0; margin-top: 2px;">Skip logging events from bots</div>
+                                <div style="font-size: 0.85em; color: #b0b0b0; margin-top: 2px;">Skip logging events
+                                from bots</div>
                             </div>
                         </label>
 
-                        <label style="display: flex; align-items: center; padding: 0.8em; background: #3a3a3a; border-radius: 6px; border: 1px solid #4a4a4a; cursor: pointer; transition: all 0.2s ease;">
-                            <input type="checkbox" name="yalc_settings_ignore_webhooks" value="1" {checkbox_values["ignore_webhooks"]}
+                        <label style="display: flex; align-items: center; padding: 0.8em; background: #3a3a3a;
+                        border-radius: 6px; border: 1px solid #4a4a4a; cursor: pointer; transition: all 0.2s ease;">
+                            <input type="checkbox" name="yalc_settings_ignore_webhooks" value="1"
+                            {checkbox_values["ignore_webhooks"]}
                                    style="margin-right: 12px; transform: scale(1.3); accent-color: #4caf50;">
                             <div>
                                 <div style="font-weight: 500; color: #e0e0e0;">🪝 Ignore webhook messages</div>
-                                <div style="font-size: 0.85em; color: #b0b0b0; margin-top: 2px;">Skip logging webhook events</div>
+                                <div style="font-size: 0.85em; color: #b0b0b0; margin-top: 2px;">Skip logging webhook
+                                events</div>
                             </div>
                         </label>
 
-                        <label style="display: flex; align-items: center; padding: 0.8em; background: #3a3a3a; border-radius: 6px; border: 1px solid #4a4a4a; cursor: pointer; transition: all 0.2s ease;">
-                            <input type="checkbox" name="yalc_settings_ignore_tupperbox" value="1" {checkbox_values["ignore_tupperbox"]}
+                        <label style="display: flex; align-items: center; padding: 0.8em; background: #3a3a3a;
+                        border-radius: 6px; border: 1px solid #4a4a4a; cursor: pointer; transition: all 0.2s ease;">
+                            <input type="checkbox" name="yalc_settings_ignore_tupperbox" value="1"
+                            {checkbox_values["ignore_tupperbox"]}
                                    style="margin-right: 12px; transform: scale(1.3); accent-color: #4caf50;">
                             <div>
                                 <div style="font-weight: 500; color: #e0e0e0;">👥 Ignore Tupperbox/proxy messages</div>
-                                <div style="font-size: 0.85em; color: #b0b0b0; margin-top: 2px;">Skip logging proxy bot messages</div>
+                                <div style="font-size: 0.85em; color: #b0b0b0; margin-top: 2px;">Skip logging proxy bot
+                                messages</div>
                             </div>
                         </label>
 
-                        <label style="display: flex; align-items: center; padding: 0.8em; background: #3a3a3a; border-radius: 6px; border: 1px solid #4a4a4a; cursor: pointer; transition: all 0.2s ease;">
-                            <input type="checkbox" name="yalc_settings_ignore_apps" value="1" {checkbox_values["ignore_apps"]}
+                        <label style="display: flex; align-items: center; padding: 0.8em; background: #3a3a3a;
+                        border-radius: 6px; border: 1px solid #4a4a4a; cursor: pointer; transition: all 0.2s ease;">
+                            <input type="checkbox" name="yalc_settings_ignore_apps" value="1"
+                            {checkbox_values["ignore_apps"]}
                                    style="margin-right: 12px; transform: scale(1.3); accent-color: #4caf50;">
                             <div>
                                 <div style="font-weight: 500; color: #e0e0e0;">📱 Ignore app messages</div>
-                                <div style="font-size: 0.85em; color: #b0b0b0; margin-top: 2px;">Skip logging application events</div>
+                                <div style="font-size: 0.85em; color: #b0b0b0; margin-top: 2px;">Skip logging
+                                application events</div>
                             </div>
                         </label>
 
-                        <label style="display: flex; align-items: center; padding: 0.8em; background: #3a3a3a; border-radius: 6px; border: 1px solid #4a4a4a; cursor: pointer; transition: all 0.2s ease;">
-                            <input type="checkbox" name="yalc_settings_detect_proxy_deletes" value="1" {checkbox_values["detect_proxy_deletes"]}
+                        <label style="display: flex; align-items: center; padding: 0.8em; background: #3a3a3a;
+                        border-radius: 6px; border: 1px solid #4a4a4a; cursor: pointer; transition: all 0.2s ease;">
+                            <input type="checkbox" name="yalc_settings_detect_proxy_deletes" value="1"
+                            {checkbox_values["detect_proxy_deletes"]}
                                    style="margin-right: 12px; transform: scale(1.3); accent-color: #4caf50;">
                             <div>
                                 <div style="font-weight: 500; color: #e0e0e0;">🔍 Detect proxy deletes</div>
-                                <div style="font-size: 0.85em; color: #b0b0b0; margin-top: 2px;">Log when proxy messages are deleted</div>
+                                <div style="font-size: 0.85em; color: #b0b0b0; margin-top: 2px;">Log when proxy messages
+                                 are deleted</div>
                             </div>
                         </label>
                     </div>
@@ -940,14 +1020,17 @@ class DashboardIntegration:
                 <!-- Submit button -->
                 <div style="text-align: center; margin-top: 3em; padding-top: 2em; border-top: 2px solid #4a4a4a;">
                     <input type="submit" name="submit" value="💾 Save Configuration"
-                           style="background: linear-gradient(135deg, #4caf50 0%, #45a049 100%); color: white; border: none; padding: 1.2em 3em; border-radius: 8px; font-size: 1.1em; font-weight: 600; cursor: pointer; box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3); transition: all 0.3s ease;">
+                           style="background: linear-gradient(135deg, #4caf50 0%, #45a049 100%); color: white; border:
+                           none; padding: 1.2em 3em; border-radius: 8px; font-size: 1.1em; font-weight: 600; cursor:
+                           pointer; box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3); transition: all 0.3s ease;">
                     <p style="margin-top: 1em; color: #b0b0b0; font-size: 0.9em;">
                         Changes are applied immediately and saved to Red's configuration system
                     </p>
                 </div>
             </form>
 
-            <div style="margin-top: 2em; padding: 1.5em; background: #2d2d2d; border-radius: 8px; border-left: 4px solid #00bcd4;">
+            <div style="margin-top: 2em; padding: 1.5em; background: #2d2d2d; border-radius: 8px; border-left: 4px solid
+             #00bcd4;">
                 <h4 style="margin: 0 0 0.5em 0; color: #00bcd4;">ℹ️ About YALC</h4>
                 <p style="margin: 0; color: #b0b0b0; line-height: 1.5;">
                     Yet Another Logging Cog provides comprehensive event logging for Discord servers.
@@ -1148,7 +1231,9 @@ class DashboardIntegration:
                 desc_html = html.escape(desc)
                 emoji_html = html.escape(emoji)
                 event_checkboxes.append(f"""
-                    <label style="display: flex; align-items: center; padding: 0.6em; background: #3a3a3a; border-radius: 6px; border: 1px solid #4a4a4a; cursor: pointer; transition: all 0.2s ease; margin-bottom: 8px; color: #e0e0e0;">
+                    <label style="display: flex; align-items: center; padding: 0.6em; background: #3a3a3a;
+                    border-radius: 6px; border: 1px solid #4a4a4a; cursor: pointer; transition: all 0.2s ease;
+                    margin-bottom: 8px; color: #e0e0e0;">
                         <input type="checkbox" name="event_{event_html}" value="1" {checked}
                                style="margin-right: 10px; transform: scale(1.3); accent-color: {color};">
                         <div style="flex: 1;">
@@ -1160,19 +1245,24 @@ class DashboardIntegration:
 
             if event_checkboxes:
                 status_badge = f"""
-                    <span style="background: {color}; color: white; padding: 0.3em 0.8em; border-radius: 12px; font-size: 0.85em; font-weight: 500;">
+                    <span style="background: {color}; color: white; padding: 0.3em 0.8em; border-radius: 12px;
+                    font-size: 0.85em; font-weight: 500;">
                         {enabled_count}/{len(events)} enabled
                     </span>
                 """
 
                 sections.append(f"""
-                    <div style="margin-bottom: 2em; padding: 1.5em; background: #2d2d2d; border-radius: 8px; border-left: 4px solid {color};">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1em;">
-                            <h3 style="color: {color}; margin: 0; font-size: 1.3em; font-weight: 600;">{category_name_html}</h3>
+                    <div style="margin-bottom: 2em; padding: 1.5em; background: #2d2d2d; border-radius: 8px;
+                    border-left: 4px solid {color};">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom:
+                        1em;">
+                            <h3 style="color: {color}; margin: 0; font-size: 1.3em; font-weight:
+                            600;">{category_name_html}</h3>
                             {status_badge}
                         </div>
                         <p style="color: #b0b0b0; margin-bottom: 1.5em; font-size: 0.95em;">{description}</p>
-                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px;">
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap:
+                        12px;">
                             {"".join(event_checkboxes)}
                         </div>
                     </div>
@@ -1212,7 +1302,8 @@ class DashboardIntegration:
             channel_config_html = ""
             for event in category_events:
                 emoji, desc = event_descriptions[event]
-                current_channel_id = settings.get("event_channels", {}).get(event)
+                current_channel_id = settings.get(
+                    "event_channels", {}).get(event)
                 if current_channel_id:
                     configured_count += 1
 
@@ -1228,7 +1319,8 @@ class DashboardIntegration:
                     ""
                     if is_enabled
                     else """
-                    <span style="display: inline-block; margin-left: 8px; padding: 0.15em 0.5em; border-radius: 10px; background: #555; color: #ddd; font-size: 0.75em;">disabled</span>
+                    <span style="display: inline-block; margin-left: 8px; padding: 0.15em 0.5em; border-radius: 10px;
+                    background: #555; color: #ddd; font-size: 0.75em;">disabled</span>
                 """
                 )
                 opacity = "1" if is_enabled else "0.72"
@@ -1237,13 +1329,18 @@ class DashboardIntegration:
                 emoji_html = html.escape(emoji)
 
                 channel_config_html += f"""
-                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.8em; background: #3a3a3a; border-radius: 6px; border: 1px solid #4a4a4a; margin-bottom: 8px; opacity: {opacity};">
-                        <label for="channel_{event_html}" style="flex: 1; margin-right: 1.5em; font-weight: 500; color: #e0e0e0;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.8em;
+                    background: #3a3a3a; border-radius: 6px; border: 1px solid #4a4a4a; margin-bottom: 8px; opacity:
+                    {opacity};">
+                        <label for="channel_{event_html}" style="flex: 1; margin-right: 1.5em; font-weight: 500; color:
+                        #e0e0e0;">
                             {emoji_html} {desc_html}{state_badge}
-                            <div style="font-size: 0.8em; color: #b0b0b0; margin-top: 2px; font-weight: normal;">Event: {event_html}</div>
+                            <div style="font-size: 0.8em; color: #b0b0b0; margin-top: 2px; font-weight: normal;">Event:
+                            {event_html}</div>
                         </label>
                         <select name="event_channels[{event_html}]" id="channel_{event_html}"
-                                style="flex: 0 0 250px; padding: 0.7em; border-radius: 6px; border: 1px solid #555; font-size: 0.9em; background: #2a2a2a; color: #e0e0e0;">
+                                style="flex: 0 0 250px; padding: 0.7em; border-radius: 6px; border: 1px solid #555;
+                                font-size: 0.9em; background: #2a2a2a; color: #e0e0e0;">
                             {options_with_selection}
                         </select>
                     </div>
@@ -1252,7 +1349,8 @@ class DashboardIntegration:
             if channel_config_html:
                 category_sections.append(f"""
                     <div style="margin-bottom: 1.5em;">
-                        <h4 style="color: #2196f3; margin: 0 0 0.8em 0; font-size: 1.1em; font-weight: 600; border-bottom: 1px solid #4a4a4a; padding-bottom: 0.5em;">
+                        <h4 style="color: #2196f3; margin: 0 0 0.8em 0; font-size: 1.1em; font-weight: 600;
+                        border-bottom: 1px solid #4a4a4a; padding-bottom: 0.5em;">
                             {html.escape(category_name)}
                         </h4>
                         {channel_config_html}
@@ -1271,16 +1369,19 @@ class DashboardIntegration:
         )
 
         return f"""
-            <div style="margin-bottom: 2em; padding: 1.5em; background: #2d2d2d; border-radius: 8px; border-left: 4px solid #00bcd4;">
+            <div style="margin-bottom: 2em; padding: 1.5em; background: #2d2d2d; border-radius: 8px; border-left: 4px
+            solid #00bcd4;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1em;">
                     <h3 style="color: #00bcd4; margin: 0; font-size: 1.3em; font-weight: 600;">📢 Event Log Channels</h3>
-                    <span style="background: {status_color}; color: white; padding: 0.3em 0.8em; border-radius: 12px; font-size: 0.85em; font-weight: 500;">
+                    <span style="background: {status_color}; color: white; padding: 0.3em 0.8em; border-radius: 12px;
+                    font-size: 0.85em; font-weight: 500;">
                         {status_text}
                     </span>
                 </div>
                 <p style="color: #b0b0b0; margin-bottom: 1.5em; font-size: 0.95em;">
                     Assign channels for events you enable above. Events without assigned channels won't be logged.
-                    <br><small style="color: #888;">💡 Tip: You can preselect channels for disabled events before enabling them.</small>
+                    <br><small style="color: #888;">💡 Tip: You can preselect channels for disabled events before
+                    enabling them.</small>
                 </p>
                 {"".join(category_sections)}
             </div>
@@ -1289,62 +1390,83 @@ class DashboardIntegration:
     def _generate_filter_sections(self, guild: discord.Guild, settings: dict) -> str:
         """Generate HTML for filtering options with dark mode styling."""
         return f"""
-            <div style="margin-bottom: 2em; padding: 1.5em; background: #2d2d2d; border-radius: 8px; border-left: 4px solid #4caf50;">
-                <h3 style="color: #4caf50; margin-top: 0; margin-bottom: 1em; font-size: 1.3em; font-weight: 600;">🔍 Filtering Options</h3>
-                <p style="color: #b0b0b0; margin-bottom: 1.5em; font-size: 0.95em;">Configure what types of messages and events to include or exclude from logging.</p>
+            <div style="margin-bottom: 2em; padding: 1.5em; background: #2d2d2d; border-radius: 8px; border-left: 4px
+            solid #4caf50;">
+                <h3 style="color: #4caf50; margin-top: 0; margin-bottom: 1em; font-size: 1.3em; font-weight: 600;">🔍
+                Filtering Options</h3>
+                <p style="color: #b0b0b0; margin-bottom: 1.5em; font-size: 0.95em;">Configure what types of messages and
+                 events to include or exclude from logging.</p>
 
                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px;">
-                    <label style="display: flex; align-items: center; padding: 0.8em; background: #3a3a3a; border-radius: 6px; border: 1px solid #4a4a4a; cursor: pointer; transition: all 0.2s ease;">
-                        <input type="checkbox" name="include_thumbnails" value="1" {"checked" if settings.get("include_thumbnails", True) else ""}
+                    <label style="display: flex; align-items: center; padding: 0.8em; background: #3a3a3a;
+                    border-radius: 6px; border: 1px solid #4a4a4a; cursor: pointer; transition: all 0.2s ease;">
+                        <input type="checkbox" name="include_thumbnails" value="1" {"checked" if
+                        settings.get("include_thumbnails", True) else ""}
                                style="margin-right: 12px; transform: scale(1.3); accent-color: #4caf50;">
                         <div>
                             <div style="font-weight: 500; color: #e0e0e0;">🖼️ Include user thumbnails</div>
-                            <div style="font-size: 0.85em; color: #b0b0b0; margin-top: 2px;">Show user avatars in log embeds</div>
+                            <div style="font-size: 0.85em; color: #b0b0b0; margin-top: 2px;">Show user avatars in log
+                            embeds</div>
                         </div>
                     </label>
 
-                    <label style="display: flex; align-items: center; padding: 0.8em; background: #3a3a3a; border-radius: 6px; border: 1px solid #4a4a4a; cursor: pointer; transition: all 0.2s ease;">
-                        <input type="checkbox" name="ignore_bots" value="1" {"checked" if settings.get("ignore_bots", False) else ""}
+                    <label style="display: flex; align-items: center; padding: 0.8em; background: #3a3a3a;
+                    border-radius: 6px; border: 1px solid #4a4a4a; cursor: pointer; transition: all 0.2s ease;">
+                        <input type="checkbox" name="ignore_bots" value="1" {"checked" if settings.get("ignore_bots",
+                        False) else ""}
                                style="margin-right: 12px; transform: scale(1.3); accent-color: #4caf50;">
                         <div>
                             <div style="font-weight: 500; color: #e0e0e0;">🤖 Ignore bot messages</div>
-                            <div style="font-size: 0.85em; color: #b0b0b0; margin-top: 2px;">Skip logging events from bots</div>
+                            <div style="font-size: 0.85em; color: #b0b0b0; margin-top: 2px;">Skip logging events from
+                            bots</div>
                         </div>
                     </label>
 
-                    <label style="display: flex; align-items: center; padding: 0.8em; background: #3a3a3a; border-radius: 6px; border: 1px solid #4a4a4a; cursor: pointer; transition: all 0.2s ease;">
-                        <input type="checkbox" name="ignore_webhooks" value="1" {"checked" if settings.get("ignore_webhooks", False) else ""}
+                    <label style="display: flex; align-items: center; padding: 0.8em; background: #3a3a3a;
+                    border-radius: 6px; border: 1px solid #4a4a4a; cursor: pointer; transition: all 0.2s ease;">
+                        <input type="checkbox" name="ignore_webhooks" value="1" {"checked" if
+                        settings.get("ignore_webhooks", False) else ""}
                                style="margin-right: 12px; transform: scale(1.3); accent-color: #4caf50;">
                         <div>
                             <div style="font-weight: 500; color: #e0e0e0;">🪝 Ignore webhook messages</div>
-                            <div style="font-size: 0.85em; color: #b0b0b0; margin-top: 2px;">Skip logging webhook events</div>
+                            <div style="font-size: 0.85em; color: #b0b0b0; margin-top: 2px;">Skip logging webhook
+                            events</div>
                         </div>
                     </label>
 
-                    <label style="display: flex; align-items: center; padding: 0.8em; background: #3a3a3a; border-radius: 6px; border: 1px solid #4a4a4a; cursor: pointer; transition: all 0.2s ease;">
-                        <input type="checkbox" name="ignore_tupperbox" value="1" {"checked" if settings.get("ignore_tupperbox", True) else ""}
+                    <label style="display: flex; align-items: center; padding: 0.8em; background: #3a3a3a;
+                    border-radius: 6px; border: 1px solid #4a4a4a; cursor: pointer; transition: all 0.2s ease;">
+                        <input type="checkbox" name="ignore_tupperbox" value="1" {"checked" if
+                        settings.get("ignore_tupperbox", True) else ""}
                                style="margin-right: 12px; transform: scale(1.3); accent-color: #4caf50;">
                         <div>
                             <div style="font-weight: 500; color: #e0e0e0;">👥 Ignore Tupperbox/proxy messages</div>
-                            <div style="font-size: 0.85em; color: #b0b0b0; margin-top: 2px;">Skip logging proxy bot messages</div>
+                            <div style="font-size: 0.85em; color: #b0b0b0; margin-top: 2px;">Skip logging proxy bot
+                            messages</div>
                         </div>
                     </label>
 
-                    <label style="display: flex; align-items: center; padding: 0.8em; background: #3a3a3a; border-radius: 6px; border: 1px solid #4a4a4a; cursor: pointer; transition: all 0.2s ease;">
-                        <input type="checkbox" name="ignore_apps" value="1" {"checked" if settings.get("ignore_apps", True) else ""}
+                    <label style="display: flex; align-items: center; padding: 0.8em; background: #3a3a3a;
+                    border-radius: 6px; border: 1px solid #4a4a4a; cursor: pointer; transition: all 0.2s ease;">
+                        <input type="checkbox" name="ignore_apps" value="1" {"checked" if settings.get("ignore_apps",
+                        True) else ""}
                                style="margin-right: 12px; transform: scale(1.3); accent-color: #4caf50;">
                         <div>
                             <div style="font-weight: 500; color: #e0e0e0;">📱 Ignore app messages</div>
-                            <div style="font-size: 0.85em; color: #b0b0b0; margin-top: 2px;">Skip logging application events</div>
+                            <div style="font-size: 0.85em; color: #b0b0b0; margin-top: 2px;">Skip logging application
+                            events</div>
                         </div>
                     </label>
 
-                    <label style="display: flex; align-items: center; padding: 0.8em; background: #3a3a3a; border-radius: 6px; border: 1px solid #4a4a4a; cursor: pointer; transition: all 0.2s ease;">
-                        <input type="checkbox" name="detect_proxy_deletes" value="1" {"checked" if settings.get("detect_proxy_deletes", True) else ""}
+                    <label style="display: flex; align-items: center; padding: 0.8em; background: #3a3a3a;
+                    border-radius: 6px; border: 1px solid #4a4a4a; cursor: pointer; transition: all 0.2s ease;">
+                        <input type="checkbox" name="detect_proxy_deletes" value="1" {"checked" if
+                        settings.get("detect_proxy_deletes", True) else ""}
                                style="margin-right: 12px; transform: scale(1.3); accent-color: #4caf50;">
                         <div>
                             <div style="font-weight: 500; color: #e0e0e0;">🔍 Detect proxy deletes</div>
-                            <div style="font-size: 0.85em; color: #b0b0b0; margin-top: 2px;">Log when proxy messages are deleted</div>
+                            <div style="font-size: 0.85em; color: #b0b0b0; margin-top: 2px;">Log when proxy messages are
+                             deleted</div>
                         </div>
                     </label>
                 </div>

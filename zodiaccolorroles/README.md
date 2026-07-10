@@ -12,6 +12,10 @@ Bulk role creation for zodiac, color, pronoun, and ping preference roles.
 [p]load zodiaccolorroles
 ```
 
+## Dashboard
+
+This cog includes standalone Red-Web-Dashboard integration. Server managers can use the dashboard to view visible commands and the current server configuration when Red-Web-Dashboard is installed.
+
 ## Highlights
 
 - Create zodiac sign roles.

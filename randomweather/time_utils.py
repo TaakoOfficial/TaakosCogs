@@ -67,10 +67,11 @@ def calculate_next_refresh_time(
 
     if refresh_interval:
         # For intervals, use now as the base if no last refresh
-        if last_refresh:
-            base_time = datetime.fromtimestamp(last_refresh).astimezone(tz)
-        else:
-            base_time = now
+        base_time = (
+            datetime.fromtimestamp(last_refresh).astimezone(tz)
+            if last_refresh
+            else now
+        )
 
         next_post_time = base_time + timedelta(seconds=refresh_interval)
         # If next post would be in the past, add intervals until it's in the future

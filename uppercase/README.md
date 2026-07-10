@@ -12,6 +12,10 @@ A small Red-DiscordBot utility cog for creating and renaming text channels with 
 [p]load uppercase
 ```
 
+## Dashboard
+
+This cog includes standalone Red-Web-Dashboard integration. Server managers can use the dashboard to view visible commands and the current server configuration when Red-Web-Dashboard is installed.
+
 ## Highlights
 
 - Creates text channels in the category you specify.

@@ -12,6 +12,11 @@ Role and user utility tools for larger Red-DiscordBot servers.
 [p]load toolz
 ```
 
+## Dashboard
+
+This cog includes standalone Red-Web-Dashboard integration. Server managers can use the dashboard to view visible commands and the current server configuration when Red-Web-Dashboard is installed.
+
+
 All public commands are hybrid commands. After Red syncs application commands, they work as both prefix commands and slash commands.
 
 ## Highlights

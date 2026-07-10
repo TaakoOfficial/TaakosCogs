@@ -12,6 +12,10 @@ A small Red-DiscordBot utility cog for flipping a coin.
 [p]load flipper
 ```
 
+## Dashboard
+
+This cog includes standalone Red-Web-Dashboard integration. Server managers can use the dashboard to view visible commands and the current server configuration when Red-Web-Dashboard is installed.
+
 ## Highlights
 
 - Simple `Heads` or `Tails` coin flip.

@@ -12,6 +12,8 @@ from typing import TYPE_CHECKING
 import discord
 from redbot.core import Config, commands
 
+from .dashboard_integration import DashboardIntegration
+
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
@@ -29,7 +31,7 @@ class SafeFormatDict(dict):
         return "{" + key + "}"
 
 
-class Toolz(commands.Cog):
+class Toolz(DashboardIntegration, commands.Cog):
     """Role and user utility tools for larger servers."""
 
     CONFIG_IDENTIFIER = 8273649150
@@ -265,8 +267,10 @@ class Toolz(commands.Cog):
         if not members:
             return "No cached members have this role."
 
-        members = sorted(members, key=lambda member: member.display_name.casefold())
-        lines = [f"{member.display_name} (`{member.id}`)" for member in members[:limit]]
+        members = sorted(
+            members, key=lambda member: member.display_name.casefold())
+        lines = [
+            f"{member.display_name} (`{member.id}`)" for member in members[:limit]]
 
         remaining = len(members) - len(lines)
         if remaining > 0:
@@ -353,7 +357,8 @@ class Toolz(commands.Cog):
         member: discord.Member,
         role: discord.Role,
     ) -> str:
-        message = template.format_map(self._role_message_placeholders(member, role))
+        message = template.format_map(
+            self._role_message_placeholders(member, role))
         if len(message) > 2000:
             return f"{message[:1997]}..."
         return message
@@ -365,7 +370,8 @@ class Toolz(commands.Cog):
         entry: dict,
     ) -> str:
         role = guild.get_role(int(role_id))
-        role_text = self._role_reference(role) if role else f"Deleted role `{role_id}`"
+        role_text = self._role_reference(
+            role) if role else f"Deleted role `{role_id}`"
         channel = guild.get_channel(entry.get("channel_id") or 0)
         channel_text = channel.mention if channel else "No channel set"
         messages = entry.get("messages", [])
@@ -467,7 +473,8 @@ class Toolz(commands.Cog):
                     field_name = "Messages" if index == 1 else "Messages continued"
                     embed.add_field(name=field_name, value=chunk, inline=False)
             else:
-                embed.add_field(name="Messages", value="No messages set.", inline=False)
+                embed.add_field(name="Messages",
+                                value="No messages set.", inline=False)
 
             await self._send_embed(ctx, embed)
             return
@@ -623,7 +630,8 @@ class Toolz(commands.Cog):
         """Show detailed information about a role."""
         cache_ready = await self._get_cache_status(ctx)
 
-        embed = self._base_role_embed(role, f"Role Info: {self._safe_role_name(role)}")
+        embed = self._base_role_embed(
+            role, f"Role Info: {self._safe_role_name(role)}")
         embed.add_field(
             name="Members",
             value=self._member_count_text(role),
@@ -637,7 +645,8 @@ class Toolz(commands.Cog):
             value=self._format_timestamp(role.created_at),
             inline=True,
         )
-        embed.add_field(name="Hierarchy", value=self._hierarchy_text(role), inline=True)
+        embed.add_field(name="Hierarchy",
+                        value=self._hierarchy_text(role), inline=True)
         embed.add_field(
             name="Display",
             value=self._display_flags_text(role),
@@ -668,15 +677,19 @@ class Toolz(commands.Cog):
         member = member or ctx.author
         roles = self._member_roles(member)
 
-        embed = self._base_member_embed(member, f"User Info: {member.display_name}")
-        embed.add_field(name="User ID", value=self._copy_block(member.id), inline=True)
+        embed = self._base_member_embed(
+            member, f"User Info: {member.display_name}")
+        embed.add_field(name="User ID", value=self._copy_block(
+            member.id), inline=True)
         embed.add_field(name="Username", value=f"`{member}`", inline=True)
 
         account_created = self._format_timestamp(member.created_at)
         joined_server = (
-            self._format_timestamp(member.joined_at) if member.joined_at else "Unknown"
+            self._format_timestamp(
+                member.joined_at) if member.joined_at else "Unknown"
         )
-        embed.add_field(name="Account Created", value=account_created, inline=True)
+        embed.add_field(name="Account Created",
+                        value=account_created, inline=True)
         embed.add_field(name="Joined Server", value=joined_server, inline=True)
 
         role_count = len(roles)
@@ -726,7 +739,8 @@ class Toolz(commands.Cog):
         limit = max(1, min(limit, 50))
         roles = self._member_roles(member)
 
-        embed = self._base_member_embed(member, f"Roles: {member.display_name}")
+        embed = self._base_member_embed(
+            member, f"Roles: {member.display_name}")
         embed.description = (
             f"{member.mention} has {self._count(len(roles))} roles. "
             f"Showing up to {self._count(min(limit, len(roles)))}."
@@ -747,7 +761,8 @@ class Toolz(commands.Cog):
         else:
             embed.add_field(name="Roles", value="No roles.", inline=False)
 
-        embed.add_field(name="User ID", value=self._copy_block(member.id), inline=False)
+        embed.add_field(name="User ID", value=self._copy_block(
+            member.id), inline=False)
         embed.set_footer(text=self._user_footer())
 
         await self._send_embed(ctx, embed)
@@ -776,9 +791,12 @@ class Toolz(commands.Cog):
             color=color,
         )
         embed.add_field(name="Member", value=member.mention, inline=True)
-        embed.add_field(name="Role", value=self._role_reference(role), inline=True)
-        embed.add_field(name="User ID", value=self._copy_block(member.id), inline=True)
-        embed.add_field(name="Role ID", value=self._inline_code(role.id), inline=True)
+        embed.add_field(
+            name="Role", value=self._role_reference(role), inline=True)
+        embed.add_field(name="User ID", value=self._copy_block(
+            member.id), inline=True)
+        embed.add_field(
+            name="Role ID", value=self._inline_code(role.id), inline=True)
 
         await self._send_embed(ctx, embed)
 
@@ -1274,7 +1292,8 @@ class Toolz(commands.Cog):
             (f"Only {self._safe_role_name(role_two)}", only_two_members),
         )
         for section_name, members in sections:
-            lines = self._member_summary_lines(members, limit) if members else ["None"]
+            lines = self._member_summary_lines(
+                members, limit) if members else ["None"]
             for index, chunk in enumerate(self._line_chunks(lines), start=1):
                 field_name = section_name if index == 1 else f"{section_name} continued"
                 embed.add_field(name=field_name, value=chunk, inline=False)
@@ -1301,10 +1320,13 @@ class Toolz(commands.Cog):
         lines = []
         for attr, label in self.IMPORTANT_PERMISSIONS:
             if getattr(permissions, attr, False):
-                lines.append(f"{label}: {self._permission_source_text(member, attr)}")
+                lines.append(
+                    f"{label}: {self._permission_source_text(member, attr)}")
 
-        embed = self._base_member_embed(member, f"Permissions: {member.display_name}")
-        embed.add_field(name="User ID", value=self._copy_block(member.id), inline=True)
+        embed = self._base_member_embed(
+            member, f"Permissions: {member.display_name}")
+        embed.add_field(name="User ID", value=self._copy_block(
+            member.id), inline=True)
         embed.add_field(
             name="Top Role",
             value=self._role_reference(member.top_role)
@@ -1431,7 +1453,8 @@ class Toolz(commands.Cog):
                 field_name = "Bots" if index == 1 else "Bots continued"
                 embed.add_field(name=field_name, value=chunk, inline=False)
         else:
-            embed.add_field(name="Bots", value="No bot accounts found.", inline=False)
+            embed.add_field(
+                name="Bots", value="No bot accounts found.", inline=False)
 
         embed.set_footer(text=self._cache_footer(cache_ready))
         await self._send_embed(ctx, embed)
@@ -1539,7 +1562,8 @@ class Toolz(commands.Cog):
             )
 
         if len(matches) > 20:
-            lines.append(f"...and {self._count(len(matches) - 20)} more matches")
+            lines.append(
+                f"...and {self._count(len(matches) - 20)} more matches")
 
         for index, chunk in enumerate(self._line_chunks(lines), start=1):
             field_name = (
@@ -1585,7 +1609,8 @@ class Toolz(commands.Cog):
         elif sort == "name":
             roles = sorted(roles, key=lambda role: role.name.casefold())
         elif sort == "color":
-            roles = sorted(roles, key=lambda role: role.color.value, reverse=True)
+            roles = sorted(
+                roles, key=lambda role: role.color.value, reverse=True)
 
         shown_roles = roles[:limit]
         lines = []
@@ -1639,7 +1664,8 @@ class Toolz(commands.Cog):
             key=lambda member: member.display_name.casefold(),
         )
 
-        embed = self._base_role_embed(role, f"Members: {self._safe_role_name(role)}")
+        embed = self._base_role_embed(
+            role, f"Members: {self._safe_role_name(role)}")
         embed.description = (
             f"{self._role_reference(role)} has {self._member_count_text(role)} members."
         )
@@ -1667,7 +1693,8 @@ class Toolz(commands.Cog):
                 )
                 embed.add_field(name=field_name, value=chunk, inline=False)
 
-        embed.add_field(name="Role ID", value=self._inline_code(role.id), inline=False)
+        embed.add_field(name="Role ID", value=self._inline_code(
+            role.id), inline=False)
         embed.set_footer(text=self._cache_footer(cache_ready))
 
         await self._send_embed(ctx, embed)
@@ -1692,7 +1719,8 @@ class Toolz(commands.Cog):
         writer = csv.writer(buffer)
         writer.writerow(("user_id", "username", "display_name", "is_bot"))
         for member in members:
-            writer.writerow((member.id, str(member), member.display_name, member.bot))
+            writer.writerow(
+                (member.id, str(member), member.display_name, member.bot))
 
         data = io.BytesIO(buffer.getvalue().encode("utf-8"))
         filename = self._export_filename(role)
@@ -1706,7 +1734,8 @@ class Toolz(commands.Cog):
             f"Exported {self._count(len(members))} cached members for "
             f"{self._role_reference(role)}."
         )
-        embed.add_field(name="Role ID", value=self._inline_code(role.id), inline=True)
+        embed.add_field(
+            name="Role ID", value=self._inline_code(role.id), inline=True)
         embed.add_field(name="File", value=f"`{filename}`", inline=True)
         embed.set_footer(text=self._cache_footer(cache_ready))
 
@@ -1715,7 +1744,8 @@ class Toolz(commands.Cog):
     @staticmethod
     def _export_filename(role: discord.Role) -> str:
         safe_name = "".join(
-            char if char.isascii() and (char.isalnum() or char in {"-", "_"}) else "_"
+            char if char.isascii() and (
+                char.isalnum() or char in {"-", "_"}) else "_"
             for char in role.name
         ).strip("_")
         safe_name = safe_name[:50] or "role"

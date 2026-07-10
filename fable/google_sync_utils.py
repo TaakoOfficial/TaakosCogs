@@ -69,7 +69,7 @@ def import_from_sheet(
     if values and values[0]:
         try:
             return json.loads(values[0][0])
-        except Exception:
+        except json.JSONDecodeError:
             return None
     return None
 
@@ -100,7 +100,8 @@ def get_character_template(char_data: dict) -> str:
     # Traits
     if char_data.get("traits"):
         content += (
-            "### Traits\n" + "\n".join(f"• {t}" for t in char_data["traits"]) + "\n\n"
+            "### Traits\n" + \
+                "\n".join(f"• {t}" for t in char_data["traits"]) + "\n\n"
         )
 
     return content
@@ -187,7 +188,7 @@ def import_from_doc(doc_id: str, api_key: str) -> dict[str, Any] | None:
                     text += elem["textRun"].get("content", "")
     try:
         return json.loads(text)
-    except Exception:
+    except json.JSONDecodeError:
         return None
 
 

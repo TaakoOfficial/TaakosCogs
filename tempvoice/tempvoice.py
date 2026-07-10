@@ -503,7 +503,8 @@ class TempVoice(DashboardIntegration, commands.Cog):
     async def _resolve_member(self, guild: discord.Guild, raw: str) -> discord.Member:
         match = self.USER_ID_RE.search(raw)
         if not match:
-            raise commands.BadArgument("Enter a member mention or Discord user ID.")
+            raise commands.BadArgument(
+                "Enter a member mention or Discord user ID.")
         member_id = int(match.group(1))
         member = guild.get_member(member_id)
         if member is not None:
@@ -573,7 +574,8 @@ class TempVoice(DashboardIntegration, commands.Cog):
             value=self._format_ts(record.get("created_at")),
             inline=True,
         )
-        embed.add_field(name="Channel ID", value=f"`{channel.id}`", inline=True)
+        embed.add_field(name="Channel ID",
+                        value=f"`{channel.id}`", inline=True)
         embed.set_footer(
             text="Owner controls are available while the owner is in the voice channel.",
         )
@@ -801,11 +803,13 @@ class TempVoice(DashboardIntegration, commands.Cog):
                 category = trigger.category
 
             name = self._render_channel_name(
-                str(settings.get("channel_name_template") or self.DEFAULT_TEMPLATE),
+                str(settings.get("channel_name_template")
+                    or self.DEFAULT_TEMPLATE),
                 member,
                 guild,
             )
-            user_limit = max(0, min(int(settings.get("default_user_limit") or 0), 99))
+            user_limit = max(
+                0, min(int(settings.get("default_user_limit") or 0), 99))
 
             overwrites = (
                 dict(trigger.overwrites)
@@ -816,7 +820,8 @@ class TempVoice(DashboardIntegration, commands.Cog):
                 guild.default_role,
                 discord.PermissionOverwrite(),
             )
-            owner_overwrite = overwrites.get(member, discord.PermissionOverwrite())
+            owner_overwrite = overwrites.get(
+                member, discord.PermissionOverwrite())
             owner_overwrite.view_channel = True
             owner_overwrite.connect = True
             overwrites[member] = owner_overwrite
@@ -1387,7 +1392,8 @@ class TempVoice(DashboardIntegration, commands.Cog):
     ) -> discord.Embed:
         embed = discord.Embed(
             title="TempVoice Settings",
-            color=self.SUCCESS_COLOR if settings.get("enabled") else self.ERROR_COLOR,
+            color=self.SUCCESS_COLOR if settings.get(
+                "enabled") else self.ERROR_COLOR,
         )
         embed.add_field(
             name="Enabled",
@@ -1700,9 +1706,11 @@ class TempVoice(DashboardIntegration, commands.Cog):
             title="Active TempVoice Channels",
             color=self.DEFAULT_COLOR,
         )
-        embed.description = "\n".join(lines[:20]) or "No active channels found."
+        embed.description = "\n".join(
+            lines[:20]) or "No active channels found."
         if len(lines) > 20:
-            embed.set_footer(text=f"Showing 20 of {len(lines)} active channels.")
+            embed.set_footer(
+                text=f"Showing 20 of {len(lines)} active channels.")
         elif stale:
             embed.set_footer(
                 text=f"{stale} stale record(s) can be removed with cleanup.",

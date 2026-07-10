@@ -68,7 +68,8 @@ class DashboardIntegration:
                     form_data,
                 )
             except commands.CommandError as error:
-                notifications.append({"message": str(error), "category": "error"})
+                notifications.append(
+                    {"message": str(error), "category": "error"})
             except Exception as error:
                 log.exception("TempVoice dashboard action failed.")
                 notifications.append(
@@ -123,19 +124,77 @@ class DashboardIntegration:
 
     def _dashboard_tab_button(self, name: str, label: str, active: str) -> str:
         selected = name == active
-        return f'<button type="button" class="dash-tab{" active" if selected else ""}" data-tab="{self._h(name)}" role="tab" aria-selected="{str(selected).lower()}" tabindex="{0 if selected else -1}">{self._h(label)}</button>'
+        active_class = " active" if selected else ""
+        aria_selected = str(selected).lower()
+        tabindex = 0 if selected else -1
+        return (
+            f'<button type="button" class="dash-tab{active_class}" '
+            f'data-tab="{self._h(name)}" role="tab" '
+            f'aria-selected="{aria_selected}" tabindex="{tabindex}">'
+            f"{self._h(label)}</button>"
+        )
 
     @staticmethod
     def _dashboard_tabs_script() -> str:
         return """
 <script>
 (() => {
-  const root = document.currentScript.closest("[data-dashboard-tabs]"); if (!root) return;
-  const tabs = Array.from(root.querySelectorAll("[data-tab]")); const panels = Array.from(root.querySelectorAll("[data-tab-panel]")); const names = new Set(tabs.map((tab) => tab.dataset.tab));
-  const activate = (name, hash = false) => { if (!names.has(name)) return; tabs.forEach((tab) => { const on = tab.dataset.tab === name; tab.classList.toggle("active", on); tab.setAttribute("aria-selected", on ? "true" : "false"); tab.tabIndex = on ? 0 : -1; }); panels.forEach((panel) => { const on = panel.dataset.tabPanel === name; panel.classList.toggle("active", on); panel.hidden = !on; }); if (hash) history.replaceState(null, "", `#tab-${name}`); };
-  const fromHash = () => { const hash = location.hash.slice(1); if (hash.startsWith("tab-") && names.has(hash.slice(4))) return hash.slice(4); const section = document.getElementById(hash); const panel = section ? section.closest("[data-tab-panel]") : null; return panel ? panel.dataset.tabPanel : null; };
-  tabs.forEach((tab, index) => { tab.addEventListener("click", () => activate(tab.dataset.tab, true)); tab.addEventListener("keydown", (event) => { const move = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0; if (!move) return; event.preventDefault(); const next = tabs[(index + move + tabs.length) % tabs.length]; next.focus(); activate(next.dataset.tab, true); }); });
-  root.querySelectorAll("form").forEach((form) => form.addEventListener("submit", () => { let input = form.querySelector('input[name="active_tab"]'); if (!input) { input = document.createElement("input"); input.type = "hidden"; input.name = "active_tab"; form.appendChild(input); } input.value = root.querySelector("[data-tab].active").dataset.tab; }));
+  const root = document.currentScript.closest("[data-dashboard-tabs]");
+  if (!root) return;
+
+  const tabs = Array.from(root.querySelectorAll("[data-tab]"));
+  const panels = Array.from(root.querySelectorAll("[data-tab-panel]"));
+  const names = new Set(tabs.map((tab) => tab.dataset.tab));
+
+  const activate = (name, hash = false) => {
+    if (!names.has(name)) return;
+    tabs.forEach((tab) => {
+      const on = tab.dataset.tab === name;
+      tab.classList.toggle("active", on);
+      tab.setAttribute("aria-selected", on ? "true" : "false");
+      tab.tabIndex = on ? 0 : -1;
+    });
+    panels.forEach((panel) => {
+      const on = panel.dataset.tabPanel === name;
+      panel.classList.toggle("active", on);
+      panel.hidden = !on;
+    });
+    if (hash) history.replaceState(null, "", `#tab-${name}`);
+  };
+
+  const fromHash = () => {
+    const hash = location.hash.slice(1);
+    if (hash.startsWith("tab-") && names.has(hash.slice(4))) return hash.slice(4);
+    const section = document.getElementById(hash);
+    const panel = section ? section.closest("[data-tab-panel]") : null;
+    return panel ? panel.dataset.tabPanel : null;
+  };
+
+  tabs.forEach((tab, index) => {
+    tab.addEventListener("click", () => activate(tab.dataset.tab, true));
+    tab.addEventListener("keydown", (event) => {
+      const move = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
+      if (!move) return;
+      event.preventDefault();
+      const next = tabs[(index + move + tabs.length) % tabs.length];
+      next.focus();
+      activate(next.dataset.tab, true);
+    });
+  });
+
+  root.querySelectorAll("form").forEach((form) => {
+    form.addEventListener("submit", () => {
+      let input = form.querySelector('input[name="active_tab"]');
+      if (!input) {
+        input = document.createElement("input");
+        input.type = "hidden";
+        input.name = "active_tab";
+        form.appendChild(input);
+      }
+      input.value = root.querySelector("[data-tab].active").dataset.tab;
+    });
+  });
+
   activate(fromHash() || root.querySelector("[data-tab].active").dataset.tab);
 })();
 </script>
@@ -196,7 +255,8 @@ class DashboardIntegration:
         try:
             return int(value)
         except (TypeError, ValueError) as exc:
-            raise commands.BadArgument(f"`{key}` must be a Discord ID.") from exc
+            raise commands.BadArgument(
+                f"`{key}` must be a Discord ID.") from exc
 
     def _dash_required_id(self, form_data: typing.Any, key: str) -> int:
         value = self._dash_optional_id(form_data, key)
@@ -266,7 +326,8 @@ class DashboardIntegration:
         enabled = self._dash_bool(form_data, "enabled")
         join_channel_id = self._dash_optional_id(form_data, "join_channel_id")
         category_id = self._dash_optional_id(form_data, "category_id")
-        panel_channel_id = self._dash_optional_id(form_data, "panel_channel_id")
+        panel_channel_id = self._dash_optional_id(
+            form_data, "panel_channel_id")
         default_limit = self._dash_int(
             form_data,
             "default_user_limit",
@@ -282,9 +343,11 @@ class DashboardIntegration:
             maximum=self.MAX_DELETE_DELAY,
         )
         template = self._clean_channel_name(
-            self._dash_value(form_data, "channel_name_template", self.DEFAULT_TEMPLATE),
+            self._dash_value(form_data, "channel_name_template",
+                             self.DEFAULT_TEMPLATE),
         )
-        clone_permissions = self._dash_bool(form_data, "clone_trigger_permissions")
+        clone_permissions = self._dash_bool(
+            form_data, "clone_trigger_permissions")
 
         if enabled and join_channel_id is None:
             raise commands.BadArgument(
@@ -312,7 +375,8 @@ class DashboardIntegration:
                 )
             me = guild.me
             if me is None:
-                raise commands.CommandError("I could not check my channel permissions.")
+                raise commands.CommandError(
+                    "I could not check my channel permissions.")
             permissions = panel_channel.permissions_for(me)
             if not permissions.send_messages or not permissions.embed_links:
                 raise commands.CommandError(
@@ -374,7 +438,8 @@ class DashboardIntegration:
         record = await self._get_temp_record(guild, channel_id)
         channel = guild.get_channel(channel_id)
         if not record or not isinstance(channel, discord.VoiceChannel):
-            raise commands.BadArgument("That is not an active TempVoice channel.")
+            raise commands.BadArgument(
+                "That is not an active TempVoice channel.")
         settings = await self.config.guild(guild).all()
         message = await self._send_control_panel(guild, channel, record, settings)
         if message is None:
@@ -396,13 +461,16 @@ class DashboardIntegration:
         form_data: typing.Any,
     ) -> int:
         channel_id = self._dash_required_id(form_data, "channel_id")
-        confirmation = self._dash_value(form_data, "delete_confirm").strip().lower()
+        confirmation = self._dash_value(
+            form_data, "delete_confirm").strip().lower()
         if confirmation != "delete":
-            raise commands.BadArgument("Type `delete` to confirm channel cleanup.")
+            raise commands.BadArgument(
+                "Type `delete` to confirm channel cleanup.")
 
         record = await self._get_temp_record(guild, channel_id)
         if not record:
-            raise commands.BadArgument("That channel is not tracked by TempVoice.")
+            raise commands.BadArgument(
+                "That channel is not tracked by TempVoice.")
         channel = guild.get_channel(channel_id)
         if not isinstance(channel, discord.VoiceChannel):
             await self._remove_temp_record(guild, channel_id)
@@ -473,42 +541,57 @@ class DashboardIntegration:
 }}
 .tv-actions button.danger {{ background: var(--danger); color: #210909; }}
 .tv-table {{ width: 100%; border-collapse: collapse; font-size: 14px; }}
-.tv-table th, .tv-table td {{ border-bottom: 1px solid var(--line); padding: 8px; text-align: left; vertical-align: top; }}
+.tv-table th, .tv-table td {{ border-bottom: 1px solid var(--line); padding: 8px; text-align: left; vertical-align: top;
+ }}
 .tv-table th {{ color: var(--muted); font-weight: 600; }}
-.dash-tabs {{ display: flex; gap: 4px; overflow-x: auto; position: sticky; top: 0; z-index: 10; padding: 5px; background: #0c0f14; border: 1px solid var(--line); border-radius: 8px; }}
-.dash-tab {{ flex: 0 0 auto; border: 0; border-radius: 6px; padding: 9px 13px; background: transparent; color: var(--muted); cursor: pointer; font-weight: 700; white-space: nowrap; }}
-.dash-tab:hover {{ background: var(--panel); color: var(--text); }} .dash-tab.active {{ background: var(--accent); color: #07111f; }}
+.dash-tabs {{ display: flex; gap: 4px; overflow-x: auto; position: sticky; top: 0; z-index: 10; padding: 5px;
+background: #0c0f14; border: 1px solid var(--line); border-radius: 8px; }}
+.dash-tab {{ flex: 0 0 auto; border: 0; border-radius: 6px; padding: 9px 13px; background: transparent; color:
+var(--muted); cursor: pointer; font-weight: 700; white-space: nowrap; }}
+.dash-tab:hover {{ background: var(--panel); color: var(--text); }} .dash-tab.active {{ background: var(--accent);
+color: #07111f; }}
 .dash-panel {{ display: none; }} .dash-panel.active {{ display: block; }}
 </style>
 <div class="tv-dash" data-dashboard-tabs="1">
   <div class="tv-stats">
-    <div class="tv-stat"><strong>{self._h("Enabled" if settings.get("enabled") else "Disabled")}</strong><span>Status</span></div>
+    <div class="tv-stat"><strong>{self._h("Enabled" if settings.get("enabled") else
+    "Disabled")}</strong><span>Status</span></div>
     <div class="tv-stat"><strong>{active_count}</strong><span>active records</span></div>
     <div class="tv-stat"><strong>{stale_count}</strong><span>stale records</span></div>
-    <div class="tv-stat"><strong>{self._h(settings.get("auto_delete_delay") or 0)}s</strong><span>empty cleanup delay</span></div>
+    <div class="tv-stat"><strong>{self._h(settings.get("auto_delete_delay") or 0)}s</strong><span>empty cleanup
+    delay</span></div>
   </div>
   <div class="dash-tabs" role="tablist" aria-label="TempVoice sections">
     {self._dashboard_tab_button("channels", "Active Channels", active_tab)}
     {self._dashboard_tab_button("settings", "Settings", active_tab)}
     {self._dashboard_tab_button("maintenance", "Maintenance", active_tab)}
   </div>
-  <section class="dash-panel{" active" if active_tab == "settings" else ""}" data-tab-panel="settings"><div class="tv-grid">
+  <section class="dash-panel{" active" if active_tab == "settings" else ""}" data-tab-panel="settings"><div
+  class="tv-grid">
     <form class="tv-card" method="post">
       {csrf}
       <input type="hidden" name="action" value="save_settings">
       <h2>Settings</h2>
       {self._checkbox("enabled", "Enable join-to-create", settings.get("enabled"))}
-      {self._select("join_channel_id", "Join-to-create voice channel", self._voice_options(guild), settings.get("join_channel_id"))}
-      {self._select("category_id", "Temporary channel category", self._category_options(guild), settings.get("category_id"), "Use trigger category")}
-      {self._select("panel_channel_id", "Control panel text channel", self._text_options(guild), settings.get("panel_channel_id"), "Use voice channel chat")}
-      {self._input("default_user_limit", "Default user limit", settings.get("default_user_limit") or 0, "number", 0, 99)}
-      {self._input("auto_delete_delay", "Auto delete delay seconds", settings.get("auto_delete_delay") or 0, "number", 0, self.MAX_DELETE_DELAY)}
-      {self._input("channel_name_template", "Channel name template", settings.get("channel_name_template") or self.DEFAULT_TEMPLATE)}
-      {self._checkbox("clone_trigger_permissions", "Clone trigger channel permissions", settings.get("clone_trigger_permissions", True))}
+      {self._select("join_channel_id", "Join-to-create voice channel", self._voice_options(guild),
+      settings.get("join_channel_id"))}
+      {self._select("category_id", "Temporary channel category", self._category_options(guild),
+      settings.get("category_id"), "Use trigger category")}
+      {self._select("panel_channel_id", "Control panel text channel", self._text_options(guild),
+      settings.get("panel_channel_id"), "Use voice channel chat")}
+      {self._input("default_user_limit", "Default user limit", settings.get("default_user_limit") or 0, "number", 0,
+      99)}
+      {self._input("auto_delete_delay", "Auto delete delay seconds", settings.get("auto_delete_delay") or 0, "number",
+      0, self.MAX_DELETE_DELAY)}
+      {self._input("channel_name_template", "Channel name template", settings.get("channel_name_template") or
+      self.DEFAULT_TEMPLATE)}
+      {self._checkbox("clone_trigger_permissions", "Clone trigger channel permissions",
+      settings.get("clone_trigger_permissions", True))}
       <div class="tv-actions"><button type="submit">Save settings</button></div>
     </form>
   </div></section>
-  <section class="dash-panel{" active" if active_tab == "maintenance" else ""}" data-tab-panel="maintenance"><div class="tv-grid">
+  <section class="dash-panel{" active" if active_tab == "maintenance" else ""}" data-tab-panel="maintenance"><div
+  class="tv-grid">
     <form class="tv-card" method="post">
       {csrf}
       <input type="hidden" name="action" value="cleanup_empty">
@@ -517,7 +600,8 @@ class DashboardIntegration:
       <div class="tv-actions"><button class="danger" type="submit">Clean up empty channels</button></div>
     </form>
   </div></section>
-  <section class="dash-panel{" active" if active_tab == "channels" else ""}" data-tab-panel="channels"><div class="tv-card" id="active-channels">
+  <section class="dash-panel{" active" if active_tab == "channels" else ""}" data-tab-panel="channels"><div
+  class="tv-card" id="active-channels">
     <h2>Active Temporary Channels</h2>
     {active_rows}
   </div></section>
@@ -552,7 +636,8 @@ class DashboardIntegration:
                 active += 1
                 channel_name = channel.name
                 members = str(len(self._human_members(channel)))
-            owner_id = record.get("owner_id") if isinstance(record, dict) else None
+            owner_id = record.get("owner_id") if isinstance(
+                record, dict) else None
             owner = self._member_label(guild, owner_id)
             created = self._format_dashboard_time(record.get("created_at"))
             locked = "Locked" if record.get("locked") else "Unlocked"

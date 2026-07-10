@@ -53,8 +53,15 @@ MOON_PHASES = {
 BLOOD_MOON = {
     "name": "Blood Moon 🔴",
     "emoji": "🔴",
-    "icon": "https://img.freepik.com/free-psd/red-planet-mars-surface-texture-space-exploration_84443-38546.jpg?semt=ais_hybrid&w=740",
-    "description": "A rare Blood Moon has appeared in the night sky! Such events are often associated with mystical occurrences and heightened magical energies.",
+    "icon": (
+        "https://img.freepik.com/free-psd/"
+        "red-planet-mars-surface-texture-space-exploration_84443-38546.jpg"
+        "?semt=ais_hybrid&w=740"
+    ),
+    "description": (
+        "A rare Blood Moon has appeared in the night sky! Such events are often "
+        "associated with mystical occurrences and heightened magical energies."
+    ),
 }
 
 
@@ -258,7 +265,10 @@ def get_blood_moon_settings_embed(guild_settings: dict) -> discord.Embed:
     if blood_moon_enabled:
         title = "🔴 Blood Moon Mode: ENABLED"
         color = discord.Color(0xA30000)  # Dark red for blood moon
-        description = "Blood Moon mode is currently active. During full moons, there is a chance the moon will turn blood red."
+        description = (
+            "Blood Moon mode is currently active. During full moons, there is a "
+            "chance the moon will turn blood red."
+        )
     else:
         title = "🌕 Blood Moon Mode: DISABLED"
         color = embed_color
@@ -272,7 +282,10 @@ def get_blood_moon_settings_embed(guild_settings: dict) -> discord.Embed:
 
     embed.add_field(
         name="About Blood Moons",
-        value="Blood Moons are rare occurrences that have approximately a 25% chance of appearing during a full moon when enabled.",
+        value=(
+            "Blood Moons are rare occurrences that have approximately a 25% "
+            "chance of appearing during a full moon when enabled."
+        ),
         inline=False,
     )
 

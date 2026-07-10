@@ -12,6 +12,10 @@ ReviewHub-style reviews, vouches, review requests, stats, leaderboards, reports,
 [p]load reviewhub
 ```
 
+## Dashboard
+
+This cog includes standalone Red-Web-Dashboard integration. Server managers can use the dashboard to view visible commands and the current server configuration when Red-Web-Dashboard is installed.
+
 ## Highlights
 
 - Mirrors the public ReviewHub command surface: `/review`, `/vouch`, `/rateme`, `/stats`, `/leaderboard`, `/help`, `/deletereview`, and `/config`.

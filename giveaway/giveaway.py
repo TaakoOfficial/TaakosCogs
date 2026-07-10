@@ -318,7 +318,8 @@ class GiveawaySlashGroup(app_commands.Group):
                 interaction.guild,
                 reference,
             )
-            target_winner_count = winner_count or int(record.get("winner_count", 1))
+            target_winner_count = winner_count or int(
+                record.get("winner_count", 1))
             self.cog._ensure_winner_count(target_winner_count)
             updated_record, winners = await self.cog._reroll_giveaway(
                 interaction.guild,
@@ -476,9 +477,11 @@ class Giveaway(DashboardIntegration, commands.Cog):
         )
 
         if total_seconds < cls.MIN_DURATION_SECONDS:
-            raise commands.BadArgument("Giveaways must run for at least 30 seconds.")
+            raise commands.BadArgument(
+                "Giveaways must run for at least 30 seconds.")
         if total_seconds > cls.MAX_DURATION_SECONDS:
-            raise commands.BadArgument("Giveaways cannot run longer than 1 year.")
+            raise commands.BadArgument(
+                "Giveaways cannot run longer than 1 year.")
 
         return total_seconds
 
@@ -558,9 +561,11 @@ class Giveaway(DashboardIntegration, commands.Cog):
                     f"React on the original message with {self.REACTION_EMOJI} to enter."
                 )
 
-        embed = discord.Embed(title=title, description=description, color=color)
+        embed = discord.Embed(
+            title=title, description=description, color=color)
 
-        end_time = datetime.fromtimestamp(float(record["ends_at"]), tz=timezone.utc)
+        end_time = datetime.fromtimestamp(
+            float(record["ends_at"]), tz=timezone.utc)
         embed.add_field(
             name="Ends",
             value=f"{discord.utils.format_dt(end_time, 'F')}\n{discord.utils.format_dt(end_time, 'R')}",
@@ -587,7 +592,8 @@ class Giveaway(DashboardIntegration, commands.Cog):
 
         entry_count = int(record.get("entry_count", 0))
         if status != "active":
-            embed.add_field(name="Entries", value=str(entry_count), inline=True)
+            embed.add_field(name="Entries", value=str(
+                entry_count), inline=True)
 
         winner_ids = [
             winner_id for winner_id in record.get("winner_ids", []) if winner_id
@@ -606,7 +612,8 @@ class Giveaway(DashboardIntegration, commands.Cog):
 
         ended_at = record.get("ended_at")
         if ended_at:
-            ended_time = datetime.fromtimestamp(float(ended_at), tz=timezone.utc)
+            ended_time = datetime.fromtimestamp(
+                float(ended_at), tz=timezone.utc)
             embed.add_field(
                 name="Closed",
                 value=f"{discord.utils.format_dt(ended_time, 'F')}\n{discord.utils.format_dt(ended_time, 'R')}",
@@ -867,7 +874,8 @@ class Giveaway(DashboardIntegration, commands.Cog):
         guild: discord.Guild,
         record: dict[str, Any],
     ) -> discord.Message | None:
-        status_message_id = int(record.get("status_message_id") or record["message_id"])
+        status_message_id = int(record.get(
+            "status_message_id") or record["message_id"])
         return await self._fetch_message(
             guild,
             int(record["channel_id"]),
@@ -875,7 +883,8 @@ class Giveaway(DashboardIntegration, commands.Cog):
         )
 
     async def _get_entrants(self, message: discord.Message) -> list[discord.Member]:
-        reaction = discord.utils.get(message.reactions, emoji=self.REACTION_EMOJI)
+        reaction = discord.utils.get(
+            message.reactions, emoji=self.REACTION_EMOJI)
         if reaction is None:
             return []
 
@@ -1005,7 +1014,8 @@ class Giveaway(DashboardIntegration, commands.Cog):
 
             message = await self._fetch_giveaway_message(guild, record)
             entrants = await self._get_entrants(message) if message is not None else []
-            winners = self._pick_winners(entrants, int(record.get("winner_count", 1)))
+            winners = self._pick_winners(
+                entrants, int(record.get("winner_count", 1)))
 
             record["status"] = "ended"
             record["ended_at"] = self._now_ts()
@@ -1052,7 +1062,8 @@ class Giveaway(DashboardIntegration, commands.Cog):
                     "No giveaway with that message ID was found in this server.",
                 )
             if record.get("status") != "active":
-                raise commands.CommandError("Only active giveaways can be cancelled.")
+                raise commands.CommandError(
+                    "Only active giveaways can be cancelled.")
 
             message = await self._fetch_giveaway_message(guild, record)
             entrants = await self._get_entrants(message) if message is not None else []
@@ -1084,7 +1095,8 @@ class Giveaway(DashboardIntegration, commands.Cog):
                     "No giveaway with that message ID was found in this server.",
                 )
             if record.get("status") != "ended":
-                raise commands.CommandError("Only ended giveaways can be rerolled.")
+                raise commands.CommandError(
+                    "Only ended giveaways can be rerolled.")
 
             message = await self._fetch_giveaway_message(guild, record)
             if message is None:
@@ -1149,13 +1161,15 @@ class Giveaway(DashboardIntegration, commands.Cog):
             channel_text = (
                 channel.mention if channel is not None else f"<#{record['channel_id']}>"
             )
-            end_time = datetime.fromtimestamp(float(record["ends_at"]), tz=timezone.utc)
+            end_time = datetime.fromtimestamp(
+                float(record["ends_at"]), tz=timezone.utc)
             jump_url = self._build_jump_url(
                 guild.id,
                 int(record["channel_id"]),
                 int(record["message_id"]),
             )
-            mode = "attached" if record.get("source") == "attached" else "native"
+            mode = "attached" if record.get(
+                "source") == "attached" else "native"
             lines.append(
                 f"`{record['message_id']}` | {mode} | {self._shorten(record['prize'], 80)} | "
                 f"{channel_text} | ends {discord.utils.format_dt(end_time, 'R')} | {jump_url}",
@@ -1248,7 +1262,8 @@ class Giveaway(DashboardIntegration, commands.Cog):
     ) -> None:
         """Attach a giveaway to an existing message or embed."""
         current_channel = (
-            ctx.channel if isinstance(ctx.channel, discord.TextChannel) else None
+            ctx.channel if isinstance(
+                ctx.channel, discord.TextChannel) else None
         )
         (
             record,

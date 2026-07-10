@@ -1,14 +1,17 @@
 # This file marks the Fable directory as a Python package for Red-DiscordBot.
 
+import importlib.util
 import subprocess
 import sys
 
+from .fable import Fable
+
 
 def ensure_google_deps():
-    try:
-        import google.oauth2.service_account
-        import googleapiclient.discovery
-    except ImportError:
+    if (
+        importlib.util.find_spec("google.oauth2.service_account") is None
+        or importlib.util.find_spec("googleapiclient.discovery") is None
+    ):
         subprocess.check_call(
             [
                 sys.executable,
@@ -22,8 +25,6 @@ def ensure_google_deps():
 
 
 ensure_google_deps()
-
-from .fable import Fable
 
 
 async def setup(bot):
