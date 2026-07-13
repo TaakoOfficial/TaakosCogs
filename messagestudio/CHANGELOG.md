@@ -1,5 +1,33 @@
 # Changelog
 
+## 1.6.0 - 2026-07-12
+
+### New Features
+
+- Added dashboard delivery through a managed webhook with a custom username and avatar URL.
+- Added a dashboard selector for normal bot delivery or webhook delivery.
+- Webhook messages support legacy embeds, classic components, Components V2, files, and persistent actions.
+
+### Improvements
+
+- Standardized legacy payload detection across commands, storage, editing, validation, dashboard sending, and webhook sending.
+- Correctly identify legacy messages that include classic Action Rows instead of labeling them as Components V2.
+- Require dashboard users and the bot to have the appropriate channel and webhook permissions before delivery.
+
+## 1.5.0 - 2026-07-12
+
+### New Features
+
+- Added a dedicated Legacy Embeds mode to the dashboard visual builder.
+- Added visual editing for message content, up to 10 embeds, titles, descriptions, colors, authors, images, thumbnails, fields, footers, and timestamps.
+- Added classic Action Row buttons and selects to legacy messages, including persistent MessageStudio actions.
+- Added legacy embed and classic-component previews, JSON import/export, stored-message loading, and direct dashboard sending.
+
+### Fixes
+
+- Dashboard legacy payloads now send as real Discord content, embeds, and classic components instead of being converted into Components V2.
+- Downloading a classic component message now retains its Action Rows.
+
 ## 1.4.0 - 2026-07-12
 
 ### New Features

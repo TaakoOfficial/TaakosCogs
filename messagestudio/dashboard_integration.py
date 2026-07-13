@@ -7,11 +7,12 @@ import json
 import logging
 from pathlib import Path
 from typing import Any, Callable
+from urllib.parse import urlparse
 
 import discord
 from redbot.core import commands
 
-from .components import ComponentsV2Error, load_payload, payload_to_files, payload_to_view
+from .components import ComponentsV2Error, load_payload
 
 log = logging.getLogger("red.taakoscogs.messagestudio.dashboard")
 
@@ -62,7 +63,7 @@ class DashboardIntegration:
 
     @dashboard_page(
         name="guild",
-        description="Build and send Components V2 messages to a server.",
+        description="Build and send legacy or Components V2 messages to a server.",
         methods=("GET", "POST"),
     )
     async def dashboard_guild(
@@ -91,8 +92,7 @@ class DashboardIntegration:
             action = self._dashboard_value(form, "dashboard_action", "send")
             try:
                 payload = load_payload(payload_text, "json")
-                view = payload_to_view(payload)
-                files = payload_to_files(payload)
+                send_kwargs = self._send_kwargs(payload)
                 if action == "store":
                     name = self._dashboard_value(form, "store_name").strip()
                     if not name or len(name) > 100:
@@ -125,11 +125,51 @@ class DashboardIntegration:
                     if not channel.permissions_for(guild.me).send_messages:
                         raise ComponentsV2Error("The bot cannot send messages in that channel.")
                     component_actions = await self._prepare_actions(payload, guild, member or user)
-                    message = await channel.send(
-                        view=view,
-                        files=files,
-                        allowed_mentions=discord.AllowedMentions.none(),
-                    )
+                    delivery_mode = self._dashboard_value(form, "delivery_mode", "bot")
+                    if delivery_mode == "webhook":
+                        if not isinstance(channel, discord.TextChannel):
+                            raise ComponentsV2Error("Dashboard webhooks require a standard text channel.")
+                        if (
+                            member is not None
+                            and not (is_owner or is_admin)
+                            and not channel.permissions_for(member).manage_webhooks
+                        ):
+                            raise ComponentsV2Error("You need Manage Webhooks in that channel.")
+                        if guild.me is None or not channel.permissions_for(guild.me).manage_webhooks:
+                            raise ComponentsV2Error("The bot needs Manage Webhooks in that channel.")
+                        username = self._dashboard_value(form, "webhook_username", "MessageStudio").strip()
+                        avatar_url = self._dashboard_value(form, "webhook_avatar_url").strip()
+                        if not 1 <= len(username) <= 80:
+                            raise ComponentsV2Error("Webhook usernames must contain 1 to 80 characters.")
+                        if avatar_url and urlparse(avatar_url).scheme not in {"http", "https"}:
+                            raise ComponentsV2Error("The webhook avatar must be an HTTP(S) URL.")
+                        hooks = await channel.webhooks()
+                        hook = next(
+                            (
+                                item
+                                for item in hooks
+                                if item.user == guild.me and item.name == "MessageStudio Dashboard"
+                            ),
+                            None,
+                        )
+                        if hook is None:
+                            hook = await channel.create_webhook(name="MessageStudio Dashboard")
+                        message = await hook.send(
+                            **send_kwargs,
+                            username=username,
+                            avatar_url=avatar_url or None,
+                            wait=True,
+                            allowed_mentions=discord.AllowedMentions.none(),
+                        )
+                        sent_label = "Webhook message"
+                    elif delivery_mode == "bot":
+                        message = await channel.send(
+                            **send_kwargs,
+                            allowed_mentions=discord.AllowedMentions.none(),
+                        )
+                        sent_label = "Message"
+                    else:
+                        raise ComponentsV2Error("Choose a valid dashboard delivery method.")
                     await self._register_message_actions(
                         message,
                         component_actions,
@@ -137,7 +177,7 @@ class DashboardIntegration:
                         guild=guild,
                     )
                     notifications.append(
-                        {"message": f"Components V2 message sent in #{channel.name}.", "category": "success"},
+                        {"message": f"{sent_label} sent in #{channel.name}.", "category": "success"},
                     )
             except (ComponentsV2Error, ValueError) as error:
                 notifications.append({"message": str(error), "category": "danger"})
@@ -146,7 +186,7 @@ class DashboardIntegration:
                     {"message": f"Discord rejected the message: {error}", "category": "danger"},
                 )
             except Exception as error:
-                log.exception("Components V2 dashboard send failed")
+                log.exception("MessageStudio dashboard operation failed")
                 notifications.append(
                     {"message": f"Could not send the message: {error}", "category": "danger"},
                 )

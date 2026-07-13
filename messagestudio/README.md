@@ -22,8 +22,26 @@ The builder provides:
 - Guild saved-message creation with optional moderator locking directly from the builder.
 - Every message-side Components V2 type: Action Rows, every button style, all five select families, Sections, Text Displays, Thumbnails, Media Galleries, uploaded Files, Separators, and Containers.
 - Persistent role, channel-post, and interaction-reply actions for custom buttons and selects.
+- A separate Legacy Embeds mode with content, up to 10 embeds, fields, authors, footers, media, timestamps, and classic Action Row controls.
+- Dashboard delivery as either the MessageStudio bot or a managed webhook with a custom username and avatar.
 
 The editor is self-contained. It does not load or communicate with message.style or Merlin's API.
+
+### Legacy Embed Mode
+
+Choose **Legacy embeds** from the message-type selector to build a traditional Discord message. Legacy mode sends real `content` and `embeds` and can also include classic Action Rows containing buttons or any supported select menu. Those custom-ID controls use the same persistent action system as V2 controls.
+
+Legacy JSON can use standard Discord `content`, `embed`, and `embeds` keys. When classic controls are included, place their Action Rows in `components`; MessageStudio detects the payload as legacy when it also contains content/embeds, or when `"legacy": true` is present for a components-only message.
+
+A ready-to-send example is available at [`examples/legacy_components_showcase.json`](./examples/legacy_components_showcase.json).
+
+### Dashboard Webhook Delivery
+
+Use the **Send as** selector below the editor to choose **Custom webhook identity**. Enter a username and optional HTTP(S) avatar URL, choose the destination channel, and send normally. The dashboard reuses a bot-owned MessageStudio webhook in that channel or creates one when needed.
+
+Webhook delivery requires the dashboard user and bot to have **Manage Webhooks** in the selected text channel. MessageStudio suppresses mentions and retains persistent button/select actions on the resulting webhook message.
+
+All command input paths—JSON, YAML, attached files, stored messages, message copying, editing, and webhook posting—accept traditional legacy embeds as well as Components V2 payloads.
 
 ## EmbedUtils-Compatible Commands
 

@@ -12,7 +12,14 @@ import discord
 from redbot.core import Config, commands
 from redbot.core.utils.chat_formatting import pagify, text_to_file
 
-from .components import ComponentsV2Error, load_payload, payload_to_files, payload_to_view, view_to_payload
+from .components import (
+    ComponentsV2Error,
+    load_payload,
+    payload_to_files,
+    payload_to_legacy_view,
+    payload_to_view,
+    view_to_payload,
+)
 from .dashboard_integration import DashboardIntegration
 
 FORMATS = Literal["json", "yaml", "jsonfile", "yamlfile", "pastebin", "message"]
@@ -198,7 +205,7 @@ class MessageStudio(DashboardIntegration, commands.Cog):
     async def embed_info(self, ctx, global_level: bool = False, *, name: str):
         """Show metadata for a stored message."""
         item = await self._stored(ctx, global_level, name, increment=False)
-        kind = "Components V2" if isinstance(item["payload"], dict) and "components" in item["payload"] else "Legacy embed"
+        kind = self._payload_kind(item["payload"])
         await ctx.send(
             embed=discord.Embed(
                 title=f"Stored message: {name}",
@@ -247,7 +254,13 @@ class MessageStudio(DashboardIntegration, commands.Cog):
             payload = (await self._stored(ctx, global_level, name))["payload"]
             actions = await self._prepare_actions(payload, ctx.guild, ctx.author)
             kwargs = self._send_kwargs(payload)
-            message = await hook.send(**kwargs, username=username, avatar_url=avatar_url, wait=True)
+            message = await hook.send(
+                **kwargs,
+                username=username,
+                avatar_url=avatar_url,
+                wait=True,
+                allowed_mentions=discord.AllowedMentions.none(),
+            )
             await self._register_message_actions(message, actions, ctx.author, guild=ctx.guild)
 
     @embed.command(name="dashboard")
@@ -315,7 +328,7 @@ class MessageStudio(DashboardIntegration, commands.Cog):
         """Validate a legacy embed or Components V2 payload."""
         payload = load_payload(data, conversion_type)
         self._validate(payload)
-        kind = "Components V2" if isinstance(payload, dict) and "components" in payload else "legacy message"
+        kind = self._payload_kind(payload)
         await ctx.send(f"Valid {kind} payload.")
 
     @commands.is_owner()
@@ -397,14 +410,54 @@ class MessageStudio(DashboardIntegration, commands.Cog):
 
     def _send_kwargs(self, payload):
         if isinstance(payload, dict) and "components" in payload:
+            if payload.get("legacy") is True or any(key in payload for key in ("content", "embed", "embeds")):
+                content, embeds = self._legacy_message_parts(payload)
+                return {"content": content, "embeds": embeds, "view": payload_to_legacy_view(payload)}
             return {"view": payload_to_view(payload), "files": payload_to_files(payload)}
-        content = payload.get("content") if isinstance(payload, dict) else None
-        raw = payload if isinstance(payload, list) else payload.get("embeds", payload.get("embed", payload))
-        raw = raw if isinstance(raw, list) else [raw]
-        embeds = [discord.Embed.from_dict(x) for x in raw if isinstance(x, dict) and x]
+        content, embeds = self._legacy_message_parts(payload)
         if not content and not embeds:
             raise commands.BadArgument("The payload contains no message content.")
         return {"content": content, "embeds": embeds}
+
+    @staticmethod
+    def _payload_kind(payload) -> str:
+        if isinstance(payload, dict) and "components" in payload and not (
+            payload.get("legacy") is True or any(key in payload for key in ("content", "embed", "embeds"))
+        ):
+            return "Components V2"
+        return "legacy message"
+
+    @staticmethod
+    def _legacy_message_parts(payload):
+        if not isinstance(payload, (dict, list)):
+            raise ComponentsV2Error("A legacy message payload must be an object or a list of embeds.")
+        content = payload.get("content") if isinstance(payload, dict) else None
+        if isinstance(payload, list):
+            raw = payload
+        elif "embeds" in payload:
+            raw = payload["embeds"]
+        elif "embed" in payload:
+            raw = payload["embed"]
+        elif "components" in payload:
+            raw = []
+        else:
+            embed_keys = {
+                "title",
+                "description",
+                "color",
+                "colour",
+                "fields",
+                "author",
+                "footer",
+                "image",
+                "thumbnail",
+                "timestamp",
+                "url",
+            }
+            raw = payload if embed_keys.intersection(payload) else []
+        raw = raw if isinstance(raw, list) else [raw]
+        embeds = [discord.Embed.from_dict(x) for x in raw if isinstance(x, dict) and x]
+        return content, embeds
 
     async def _send(self, ctx, payload, target=None):
         guild = target.guild if isinstance(target, discord.Message) else ctx.guild
@@ -414,11 +467,15 @@ class MessageStudio(DashboardIntegration, commands.Cog):
             if isinstance(target, discord.Message):
                 if target.author.id != ctx.me.id:
                     raise commands.UserFeedbackCheckFailure("I can only edit my own messages.")
-                if "view" in kwargs:
+                if "files" in kwargs:
                     files = kwargs.pop("files", [])
                     message = await target.edit(content=None, embeds=[], attachments=files, **kwargs)
                 else:
-                    message = await target.edit(content=kwargs["content"], embeds=kwargs["embeds"], view=None)
+                    message = await target.edit(
+                        content=kwargs["content"],
+                        embeds=kwargs["embeds"],
+                        view=kwargs.get("view"),
+                    )
             else:
                 message = await (target or ctx).send(**kwargs)
             await self._register_message_actions(message, actions, ctx.author, guild=guild)
@@ -723,6 +780,9 @@ class MessageStudio(DashboardIntegration, commands.Cog):
         result = {"embeds": embeds}
         if (include_content is True or (include_content is None and index is None)) and message.content:
             result["content"] = message.content
+        if message.components:
+            result["legacy"] = True
+            result["components"] = discord.ui.View.from_message(message, timeout=None).to_components()
         return result
 
     @staticmethod

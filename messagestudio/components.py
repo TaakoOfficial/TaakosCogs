@@ -77,6 +77,40 @@ def payload_to_view(payload: Any) -> discord.ui.LayoutView:
     return view
 
 
+def payload_to_legacy_view(payload: Any) -> discord.ui.View:
+    """Build classic message action rows for use beside content and embeds."""
+    if not isinstance(payload, dict) or not isinstance(payload.get("components"), list):
+        raise ComponentsV2Error("A legacy component payload requires a `components` list.")
+    rows = payload["components"]
+    if not 1 <= len(rows) <= 5:
+        raise ComponentsV2Error("Legacy messages support 1 to 5 Action Rows.")
+    view = discord.ui.View(timeout=None)
+    try:
+        for row_index, row in enumerate(rows):
+            if not isinstance(row, dict) or int(row.get("type", 0)) != 1:
+                raise ComponentsV2Error("Every top-level legacy component must be an Action Row (type 1).")
+            children = row.get("components")
+            if not isinstance(children, list) or not 1 <= len(children) <= 5:
+                raise ComponentsV2Error("A legacy Action Row requires 1 to 5 controls.")
+            for child in children:
+                if not isinstance(child, dict):
+                    raise ComponentsV2Error("Every legacy control must be an object.")
+                component_type = int(child.get("type", 0))
+                if component_type == 2:
+                    item = _build_button(child)
+                elif component_type in {3, 5, 6, 7, 8}:
+                    item = _build_select(child, component_type)
+                else:
+                    raise ComponentsV2Error("Legacy Action Rows support buttons and select menus only.")
+                item.row = row_index
+                view.add_item(item)
+    except ComponentsV2Error:
+        raise
+    except (TypeError, ValueError) as error:
+        raise ComponentsV2Error(f"Invalid legacy component layout: {error}") from error
+    return view
+
+
 def view_to_payload(view: discord.ui.LayoutView) -> dict[str, Any]:
     """Serialize a LayoutView as a Discord API message payload."""
     return {"flags": COMPONENTS_V2_FLAG, "components": view.to_components()}
