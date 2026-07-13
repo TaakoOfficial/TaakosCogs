@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.7.0 - 2026-07-12
+
+### Dashboard Redesign
+
+- Reduced visual clutter with calmer cards, clearer spacing, component descriptions, and progressive disclosure for advanced settings.
+- Added hover and keyboard-focus hints for component types, technical IDs, limits, colors, timestamps, actions, delivery, and storage options.
+- Collapsed persistent actions, legacy author/media/field/footer settings, and saved-message controls until they are needed.
+- Improved responsive layouts and visual hierarchy across the editor and utility pages.
+
+### Utility Tools
+
+- Redesigned the timestamp tool to preview all seven Discord timestamp styles side by side with click-to-copy markup.
+- Added a Discord snowflake creation-time decoder.
+- Added a live text, line, byte, and Discord-limit counter.
+- Expanded the JSON tool with validation, formatting, minification, payload type, and byte counts.
+- Added a live Discord-style Markdown preview.
+- Improved the color converter with a swatch and click-to-copy combined output.
+
 ## 1.6.0 - 2026-07-12
 
 ### New Features

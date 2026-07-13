@@ -55,6 +55,7 @@ class DashboardIntegration:
             send_enabled=False,
             stored_messages={},
             form_action="",
+            asset_context={"enabled": False, "server": {}},
         )
         return {
             "status": 0,
@@ -90,6 +91,8 @@ class DashboardIntegration:
 
         if kwargs.get("method", "GET") == "POST":
             action = self._dashboard_value(form, "dashboard_action", "send")
+            if action == "asset_lookup":
+                return await self._dashboard_asset_lookup(guild, form)
             try:
                 payload = load_payload(payload_text, "json")
                 send_kwargs = self._send_kwargs(payload)
@@ -211,6 +214,7 @@ class DashboardIntegration:
             send_enabled=True,
             stored_messages=await self.config.guild(guild).stored_messages(),
             form_action=kwargs.get("request_url", ""),
+            asset_context=self._guild_asset_context(guild),
         )
         return {
             "status": 0,
@@ -255,6 +259,82 @@ class DashboardIntegration:
         return "".join(options)
 
     @staticmethod
+    def _asset_url(asset: Any) -> str | None:
+        """Return a Discord CDN asset URL without assuming a concrete asset type."""
+        return str(asset.url) if asset is not None else None
+
+    @classmethod
+    def _guild_asset_context(cls, guild: discord.Guild) -> dict[str, Any]:
+        """Build the server asset data shown immediately in the dashboard tools."""
+        return {
+            "enabled": True,
+            "server": {
+                "name": guild.name,
+                "id": str(guild.id),
+                "icon": cls._asset_url(guild.icon),
+                "banner": cls._asset_url(guild.banner),
+                "splash": cls._asset_url(guild.splash),
+                "discovery_splash": cls._asset_url(guild.discovery_splash),
+            },
+        }
+
+    async def _dashboard_asset_lookup(self, guild: discord.Guild, form: Any) -> dict[str, Any]:
+        """Return public Discord profile assets for the dashboard asset toolbox."""
+        raw_user_id = self._dashboard_value(form, "asset_user_id").strip()
+        if not raw_user_id.isdigit() or not 17 <= len(raw_user_id) <= 20:
+            return {
+                "status": 0,
+                "data": {
+                    "ok": False,
+                    "message": "Enter a valid 17–20 digit Discord user ID.",
+                },
+            }
+
+        user_id = int(raw_user_id)
+        try:
+            target = await self.bot.fetch_user(user_id)
+        except discord.NotFound:
+            return {
+                "status": 0,
+                "data": {"ok": False, "message": "Discord could not find that user."},
+            }
+        except discord.HTTPException as error:
+            return {
+                "status": 0,
+                "data": {
+                    "ok": False,
+                    "message": f"Discord could not load that profile: {error}",
+                },
+            }
+
+        member = guild.get_member(user_id)
+        if member is None:
+            try:
+                member = await guild.fetch_member(user_id)
+            except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                member = None
+
+        accent = getattr(target, "accent_color", None) or getattr(target, "accent_colour", None)
+        return {
+            "status": 0,
+            "data": {
+                "ok": True,
+                "message": f"Loaded assets for {target}.",
+                "user": {
+                    "id": str(target.id),
+                    "name": str(target),
+                    "display_name": getattr(target, "display_name", target.name),
+                    "avatar": self._asset_url(target.avatar),
+                    "display_avatar": self._asset_url(target.display_avatar),
+                    "server_avatar": self._asset_url(member.avatar) if member else None,
+                    "banner": self._asset_url(target.banner),
+                    "accent_color": accent.value if accent is not None else None,
+                    "is_server_member": member is not None,
+                },
+            },
+        }
+
+    @staticmethod
     def _load_editor(
         *,
         csrf: str,
@@ -265,6 +345,7 @@ class DashboardIntegration:
         send_enabled: bool,
         stored_messages: dict[str, Any],
         form_action: str,
+        asset_context: dict[str, Any],
     ) -> str:
         source = Path(__file__).with_name("editor.html").read_text(encoding="utf-8")
         replacements = {
@@ -275,6 +356,7 @@ class DashboardIntegration:
             "%%GUILD_ID%%": str(guild_id),
             "%%SEND_HIDDEN%%": "" if send_enabled else "hidden",
             "%%STORED_MESSAGES%%": json.dumps(stored_messages).replace("<", "\\u003c"),
+            "%%ASSET_CONTEXT%%": json.dumps(asset_context).replace("<", "\\u003c"),
             "%%FORM_ACTION%%": html.escape(form_action, quote=True),
         }
         for marker, value in replacements.items():

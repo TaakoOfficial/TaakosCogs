@@ -24,6 +24,8 @@ The builder provides:
 - Persistent role, channel-post, and interaction-reply actions for custom buttons and selects.
 - A separate Legacy Embeds mode with content, up to 10 embeds, fields, authors, footers, media, timestamps, and classic Action Row controls.
 - Dashboard delivery as either the MessageStudio bot or a managed webhook with a custom username and avatar.
+- Progressive advanced sections and hover/focus hints that explain component types and technical fields without crowding the editor.
+- Utility cards for colors, all Discord timestamp styles, snowflake dates, text limits, JSON formatting, and Markdown previews.
 
 The editor is self-contained. It does not load or communicate with message.style or Merlin's API.
 
