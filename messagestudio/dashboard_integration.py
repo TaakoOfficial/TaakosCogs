@@ -261,7 +261,12 @@ class DashboardIntegration:
     @staticmethod
     def _asset_url(asset: Any) -> str | None:
         """Return a Discord CDN asset URL without assuming a concrete asset type."""
-        return str(asset.url) if asset is not None else None
+        if asset is None:
+            return None
+        try:
+            return str(asset.with_size(4096))
+        except (AttributeError, ValueError):
+            return str(asset.url)
 
     @classmethod
     def _guild_asset_context(cls, guild: discord.Guild) -> dict[str, Any]:

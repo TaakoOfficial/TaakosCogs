@@ -2,8 +2,8 @@
   "$schema": "https://raw.githubusercontent.com/Cog-Creators/Red-DiscordBot/V3/develop/schema/red_cog.schema.json",
   "name": "messagestudio",
   "author": ["Taako"],
-  "version": "1.7.0",
-  "description": "A standalone EmbedUtils-compatible rich-message studio with legacy embeds and classic components, Components V2, persistent actions, stored messages, dashboard webhook delivery, JSON/YAML imports, utilities, and a multi-page visual builder.",
+  "version": "1.8.0",
+  "description": "A standalone EmbedUtils-compatible rich-message studio with legacy embeds and classic components, Components V2, persistent actions, stored messages, dashboard webhook delivery, Discord asset tools, JSON/YAML imports, utilities, and a multi-page visual builder.",
   "install_msg": "MessageStudio loaded. EmbedUtils-style commands are available under `[p]embed`; use `[p]embed dashboard` for the visual Components V2 builder.",
   "short": "Create, store, send, edit, and visually build embeds and Components V2 messages.",
   "tags": [

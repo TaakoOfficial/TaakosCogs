@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.8.0 - 2026-07-12
+
+### Discord Asset Toolbox
+
+- Added dashboard previews and full-size CDN links for the current server icon, banner, invite splash, and discovery splash.
+- Added user-ID profile lookups for display avatars, global avatars, server-specific avatars, profile banners, and accent colors.
+- Added one-click Open, Copy URL, Copy ID, and Copy accent-color controls.
+- Kept profile lookups behind the existing guild dashboard permission checks and disabled them in the standalone editor.
+
 ## 1.7.0 - 2026-07-12
 
 ### Dashboard Redesign

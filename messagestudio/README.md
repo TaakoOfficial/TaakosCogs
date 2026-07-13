@@ -25,9 +25,15 @@ The builder provides:
 - A separate Legacy Embeds mode with content, up to 10 embeds, fields, authors, footers, media, timestamps, and classic Action Row controls.
 - Dashboard delivery as either the MessageStudio bot or a managed webhook with a custom username and avatar.
 - Progressive advanced sections and hover/focus hints that explain component types and technical fields without crowding the editor.
-- Utility cards for colors, all Discord timestamp styles, snowflake dates, text limits, JSON formatting, and Markdown previews.
+- Utility cards for profile/server image assets, colors, all Discord timestamp styles, snowflake dates, text limits, JSON formatting, and Markdown previews.
 
 The editor is self-contained. It does not load or communicate with message.style or Merlin's API.
+
+### Profile and Server Asset Tools
+
+The dashboard **Utility Tools** page shows the current server's icon, banner, invite splash, and discovery splash with full-size Open and Copy URL controls. Enter a Discord user ID to retrieve the latest display avatar, global avatar, server-specific avatar, profile banner, and accent color that Discord makes available to the bot.
+
+Profile lookups are available only from a server dashboard page and use the same Manage Server, Red admin, or bot-owner permission gate as the message builder. Missing optional assets are shown as **Not set** instead of falling back to a misleading image.
 
 ### Legacy Embed Mode
 
