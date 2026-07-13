@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.1.0 - 2026-07-12
+
+### New Features
+
+- Made Stored Messages, Commands, and Utility Tools functional dashboard sections.
+- Added loading stored Components V2 messages into the visual editor and copying stored JSON.
+- Added dashboard color conversion, timestamp generation, and JSON validation tools.
+- Added matching bot command-reference, color, timestamp, and validation commands.
+
 ## 1.0.0 - 2026-07-12
 
 ### New Features

@@ -52,6 +52,7 @@ class DashboardIntegration:
             guild_name="Standalone editor",
             guild_id="global",
             send_enabled=False,
+            stored_messages={},
         )
         return {
             "status": 0,
@@ -120,6 +121,7 @@ class DashboardIntegration:
             guild_name=guild.name,
             guild_id=guild.id,
             send_enabled=True,
+            stored_messages=await self.config.guild(guild).stored_messages(),
         )
         return {
             "status": 0,
@@ -172,6 +174,7 @@ class DashboardIntegration:
         guild_name: str,
         guild_id: int | str,
         send_enabled: bool,
+        stored_messages: dict[str, Any],
     ) -> str:
         source = Path(__file__).with_name("editor.html").read_text(encoding="utf-8")
         replacements = {
@@ -181,6 +184,7 @@ class DashboardIntegration:
             "%%GUILD_NAME%%": html.escape(guild_name),
             "%%GUILD_ID%%": str(guild_id),
             "%%SEND_HIDDEN%%": "" if send_enabled else "hidden",
+            "%%STORED_MESSAGES%%": json.dumps(stored_messages).replace("<", "\\u003c"),
         }
         for marker, value in replacements.items():
             source = source.replace(marker, value)

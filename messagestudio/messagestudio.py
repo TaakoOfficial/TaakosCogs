@@ -257,6 +257,62 @@ class MessageStudio(DashboardIntegration, commands.Cog):
         view.add_item(discord.ui.Button(label="Open MessageStudio", url=url))
         await ctx.send("Open the visual message builder:", view=view)
 
+    @embed.command(name="commands")
+    async def embed_commands(self, ctx):
+        """Show the MessageStudio command reference."""
+        lines = [
+            "`embed json|yaml [channel] <payload>` — send message data",
+            "`embed fromfile|yamlfile [channel]` — send an attached payload",
+            "`embed pastebin [channel] <url>` — send remote JSON",
+            "`embed message|download|edit ...` — copy, export, or edit messages",
+            "`embed store|unstore|list|info ...` — manage saved messages",
+            "`embed poststored|postwebhook ...` — post saved messages",
+            "`embed dashboard` — open the visual editor",
+            "`embed tools color|timestamp|validate ...` — message utilities",
+        ]
+        await ctx.send(
+            embed=discord.Embed(
+                title="MessageStudio Commands",
+                description="\n".join(lines),
+                color=await ctx.embed_color(),
+            ),
+        )
+
+    @embed.group(name="tools", invoke_without_command=True)
+    async def embed_tools(self, ctx):
+        """Color, timestamp, and payload validation utilities."""
+        await ctx.send_help()
+
+    @embed_tools.command(name="color")
+    async def embed_tools_color(self, ctx, color: discord.Color):
+        """Convert a Discord color to hex, decimal, and RGB."""
+        red, green, blue = color.to_rgb()
+        await ctx.send(
+            f"Hex: `#{color.value:06X}`\nDecimal: `{color.value}`\nRGB: `{red}, {green}, {blue}`",
+        )
+
+    @embed_tools.command(name="timestamp")
+    async def embed_tools_timestamp(self, ctx, unix: int | None = None):
+        """Generate Discord timestamp markup from a Unix timestamp."""
+        unix = unix if unix is not None else int(discord.utils.utcnow().timestamp())
+        await ctx.send(
+            f"`<t:{unix}:F>` → <t:{unix}:F>\n`<t:{unix}:R>` → <t:{unix}:R>\n`<t:{unix}:d>` → <t:{unix}:d>",
+        )
+
+    @embed_tools.command(name="validate")
+    async def embed_tools_validate(
+        self,
+        ctx,
+        conversion_type: Literal["json", "yaml"],
+        *,
+        data: str,
+    ):
+        """Validate a legacy embed or Components V2 payload."""
+        payload = load_payload(data, conversion_type)
+        self._validate(payload)
+        kind = "Components V2" if isinstance(payload, dict) and "components" in payload else "legacy message"
+        await ctx.send(f"Valid {kind} payload.")
+
     @commands.is_owner()
     @embed.command(name="migratefromphen", aliases=["migratefromembedutils"])
     async def migratefromphen(self, ctx):

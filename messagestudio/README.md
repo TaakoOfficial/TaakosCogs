@@ -33,6 +33,8 @@ The editor is self-contained. It does not load or communicate with message.style
 - `[p]embed edit <message> <json|yaml|jsonfile|yamlfile|pastebin|message> [data]`
 - `[p]embed store|unstore|list|info|downloadstored ...`
 - `[p]embed poststored ...` and `[p]embed postwebhook ...`
+- `[p]embed commands`
+- `[p]embed tools color|timestamp|validate ...`
 - `[p]embed dashboard` and `[p]embed migratefromphen`
 
 Original aliases such as `fromjson`, `fromyaml`, `gist`, `hastebin`, `storeembed`, `post`, and `webhook` are retained. The group is also available through `[p]embedutils`, `[p]messagestudio`, or `[p]cv2`.
