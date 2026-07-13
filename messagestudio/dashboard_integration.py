@@ -128,6 +128,7 @@ class DashboardIntegration:
                     if not channel.permissions_for(guild.me).send_messages:
                         raise ComponentsV2Error("The bot cannot send messages in that channel.")
                     component_actions = await self._prepare_actions(payload, guild, member or user)
+                    allowed_mentions = self._dashboard_allowed_mentions(form)
                     delivery_mode = self._dashboard_value(form, "delivery_mode", "bot")
                     if delivery_mode == "webhook":
                         if not isinstance(channel, discord.TextChannel):
@@ -162,13 +163,13 @@ class DashboardIntegration:
                             username=username,
                             avatar_url=avatar_url or None,
                             wait=True,
-                            allowed_mentions=discord.AllowedMentions.none(),
+                            allowed_mentions=allowed_mentions,
                         )
                         sent_label = "Webhook message"
                     elif delivery_mode == "bot":
                         message = await channel.send(
                             **send_kwargs,
-                            allowed_mentions=discord.AllowedMentions.none(),
+                            allowed_mentions=allowed_mentions,
                         )
                         sent_label = "Message"
                     else:
@@ -190,8 +191,9 @@ class DashboardIntegration:
                 )
             except Exception as error:
                 log.exception("MessageStudio dashboard operation failed")
+                operation = "save" if action == "store" else "send"
                 notifications.append(
-                    {"message": f"Could not send the message: {error}", "category": "danger"},
+                    {"message": f"Could not {operation} the message: {error}", "category": "danger"},
                 )
             if self._dashboard_value(form, "dashboard_ajax") == "1":
                 notification = notifications[-1]
@@ -257,6 +259,23 @@ class DashboardIntegration:
                     f'<option value="{channel.id}"{selected}>#{html.escape(channel.name)}</option>',
                 )
         return "".join(options)
+
+    @classmethod
+    def _dashboard_allowed_mentions(cls, form: Any) -> discord.AllowedMentions:
+        """Build the explicit mention policy selected in the dashboard."""
+        mode = cls._dashboard_value(form, "mention_mode", "users_roles")
+        if mode == "users_roles":
+            return discord.AllowedMentions(
+                everyone=False,
+                users=True,
+                roles=True,
+                replied_user=False,
+            )
+        if mode == "all":
+            return discord.AllowedMentions.all()
+        if mode == "none":
+            return discord.AllowedMentions.none()
+        raise ComponentsV2Error("Choose a valid mention setting.")
 
     @staticmethod
     def _asset_url(asset: Any) -> str | None:

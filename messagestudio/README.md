@@ -18,12 +18,13 @@ The builder provides:
 - A live Discord-style preview and component/text limit counters.
 - JSON import, editing, copying, and downloading.
 - Browser-local draft recovery without server-side storage.
-- Direct channel sending with mentions suppressed.
+- Direct channel sending with a clear mention policy selector.
 - Guild saved-message creation with optional moderator locking directly from the builder.
 - Every message-side Components V2 type: Action Rows, every button style, all five select families, Sections, Text Displays, Thumbnails, Media Galleries, uploaded Files, Separators, and Containers.
 - Persistent role, channel-post, and interaction-reply actions for custom buttons and selects.
 - A separate Legacy Embeds mode with content, up to 10 embeds, fields, authors, footers, media, timestamps, and classic Action Row controls.
 - Dashboard delivery as either the MessageStudio bot or a managed webhook with a custom username and avatar.
+- Compact, labeled message-type and component controls that wrap cleanly on smaller screens.
 - Progressive advanced sections and hover/focus hints that explain component types and technical fields without crowding the editor.
 - Utility cards for profile/server image assets, colors, all Discord timestamp styles, snowflake dates, text limits, JSON formatting, and Markdown previews.
 
@@ -47,7 +48,9 @@ A ready-to-send example is available at [`examples/legacy_components_showcase.js
 
 Use the **Send as** selector below the editor to choose **Custom webhook identity**. Enter a username and optional HTTP(S) avatar URL, choose the destination channel, and send normally. The dashboard reuses a bot-owned MessageStudio webhook in that channel or creates one when needed.
 
-Webhook delivery requires the dashboard user and bot to have **Manage Webhooks** in the selected text channel. MessageStudio suppresses mentions and retains persistent button/select actions on the resulting webhook message.
+Webhook delivery requires the dashboard user and bot to have **Manage Webhooks** in the selected text channel. The **Mentions** selector applies to both bot and webhook delivery, and persistent button/select actions are retained on the resulting message.
+
+The mention selector defaults to **Users and roles**, which allows normal member and role pings but blocks `@everyone` and `@here`. Choose **All mentions** when those broadcast mentions are intentional, or **No mentions** for a silent message.
 
 All command input paths—JSON, YAML, attached files, stored messages, message copying, editing, and webhook posting—accept traditional legacy embeds as well as Components V2 payloads.
 

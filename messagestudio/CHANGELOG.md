@@ -1,5 +1,28 @@
 # Changelog
 
+## 1.9.0 - 2026-07-13
+
+### Simpler Builder Controls
+
+- Replaced the oversized builder dropdowns with a compact, labeled, evenly aligned control bar.
+- Shortened **Add component** to **Add** and grouped it directly with the component-type selector.
+- Improved toolbar and delivery-control wrapping for narrow dashboard and mobile layouts.
+
+### Mention Controls
+
+- Added a clear dashboard mention selector for **Users and roles**, **All mentions**, or **No mentions**.
+- Allow user and role mentions by default while safely blocking `@everyone` and `@here` unless explicitly enabled.
+- Apply the selected mention behavior consistently to normal bot and custom webhook delivery.
+
+## 1.8.1 - 2026-07-13
+
+### Dashboard Reliability
+
+- Fixed dashboard saves, sends, and profile lookups displaying `Unexpected token '<'` when Red-Web-Dashboard returned an HTML session or CSRF error page.
+- Automatically refresh an expired dashboard security token once and retry the original operation safely.
+- Added clear login-expired, HTTP, malformed-response, and server-error messages while preserving browser-local drafts.
+- Corrected generic storage failures to say that the message could not be saved instead of sent.
+
 ## 1.8.0 - 2026-07-12
 
 ### Discord Asset Toolbox
