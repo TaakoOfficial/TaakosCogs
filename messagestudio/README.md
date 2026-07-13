@@ -21,6 +21,7 @@ The builder provides:
 - Direct channel sending with mentions suppressed.
 - Guild saved-message creation with optional moderator locking directly from the builder.
 - Every message-side Components V2 type: Action Rows, every button style, all five select families, Sections, Text Displays, Thumbnails, Media Galleries, uploaded Files, Separators, and Containers.
+- Persistent role, channel-post, and interaction-reply actions for custom buttons and selects.
 
 The editor is self-contained. It does not load or communicate with message.style or Merlin's API.
 
@@ -36,6 +37,7 @@ The editor is self-contained. It does not load or communicate with message.style
 - `[p]embed store|unstore|list|info|downloadstored ...`
 - `[p]embed poststored ...` and `[p]embed postwebhook ...`
 - `[p]embed commands`
+- `[p]embed actions [message]` and `[p]embed actions clear <message>`
 - `[p]embed tools color|timestamp|validate ...`
 - `[p]embed dashboard` and `[p]embed migratefromphen`
 
@@ -79,7 +81,37 @@ Discord permanently marks a message as Components V2. A V2 message cannot use le
 
 ## Supported Interactive Components
 
-MessageStudio supports link, premium, primary, secondary, success, and danger buttons plus string, user, role, mentionable, and channel selects. Custom-ID controls accept a configurable fallback response so users never receive an interaction failure.
+MessageStudio supports link, premium, primary, secondary, success, and danger buttons plus string, user, role, mentionable, and channel selects. Custom-ID controls can use persistent actions; controls without actions accept a configurable fallback response so users never receive an interaction failure.
+
+Add an `actions` array to a custom-ID button or select. The dashboard exposes the same settings as visual **Persistent actions** cards:
+
+```json
+{
+  "type": 2,
+  "style": 1,
+  "label": "Get announcements",
+  "custom_id": "toggle_announcements",
+  "actions": [
+    {"type": "toggle_role", "role_id": "123456789012345678"},
+    {
+      "type": "send_message",
+      "channel_id": "234567890123456789",
+      "content": "{user} updated their announcement role."
+    },
+    {"type": "reply", "content": "Your role was updated.", "ephemeral": true}
+  ]
+}
+```
+
+Available action types are:
+
+- `add_role`, `remove_role`, and `toggle_role`, each with a fixed `role_id`.
+- `send_message`, with a destination `channel_id` and `content`.
+- `reply`, with `content` and an optional `ephemeral` boolean (defaults to `true`).
+
+Any action may include `"values": ["option_1"]` so it only runs when a string-select value matches. Text supports `{user}`, `{user_id}`, `{server}`, `{channel}`, `{value}`, and `{values}` placeholders. Allowed mentions are disabled for action output.
+
+Role actions are self-role controls: the member clicking the component is the member changed. The moderator configuring the action must have Manage Roles and be above the configured role; MessageStudio also requires the bot to have Manage Roles and remain above that role when clicked. Managed roles and `@everyone` are rejected. Action bindings are stored against the sent message ID and restored from Red Config after restarts. Deleting the Discord message removes its binding; moderators can also disable it with `[p]embed actions clear <message>`.
 
 Discord's Label, File Upload input, Radio Group, Checkbox Group, and Checkbox components are modal-only. They cannot be included in a Components V2 message and are therefore outside the message builder.
 

@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.4.0 - 2026-07-12
+
+### New Features
+
+- Added persistent button and select actions keyed to the sent Discord message and component custom ID.
+- Added `add_role`, `remove_role`, `toggle_role`, `send_message`, and ephemeral/public `reply` actions.
+- Added optional select-value filters and action text placeholders.
+- Added visual persistent-action cards to custom buttons and selects in the dashboard builder.
+- Added `[p]embed actions` inspection and `[p]embed actions clear` management commands.
+
+### Safety and Reliability
+
+- Validate moderator role hierarchy and channel access when actions are configured.
+- Recheck bot permissions, managed roles, and bot role hierarchy every time an action runs.
+- Persist action bindings in Red Config so controls continue working after cog or bot restarts.
+- Remove stored bindings automatically when their Discord messages are deleted.
+
 ## 1.3.0 - 2026-07-12
 
 ### New Features

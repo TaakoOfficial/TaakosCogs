@@ -124,10 +124,17 @@ class DashboardIntegration:
                         raise ComponentsV2Error("You cannot send messages in that channel.")
                     if not channel.permissions_for(guild.me).send_messages:
                         raise ComponentsV2Error("The bot cannot send messages in that channel.")
-                    await channel.send(
+                    component_actions = await self._prepare_actions(payload, guild, member or user)
+                    message = await channel.send(
                         view=view,
                         files=files,
                         allowed_mentions=discord.AllowedMentions.none(),
+                    )
+                    await self._register_message_actions(
+                        message,
+                        component_actions,
+                        member or user,
+                        guild=guild,
                     )
                     notifications.append(
                         {"message": f"Components V2 message sent in #{channel.name}.", "category": "success"},

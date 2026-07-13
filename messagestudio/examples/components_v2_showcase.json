@@ -68,7 +68,7 @@
     },
     {
       "type": 10,
-      "content": "### Buttons\nPrimary, secondary, success, danger, and link buttons can share an Action Row. Custom buttons use safe ephemeral fallback responses."
+      "content": "### Buttons\nPrimary, secondary, success, danger, and link buttons can share an Action Row. Custom buttons support persistent actions or safe ephemeral fallback responses."
     },
     {
       "type": 1,
@@ -79,7 +79,13 @@
           "label": "Primary",
           "emoji": "🚀",
           "custom_id": "messagestudio_showcase_primary",
-          "response": "You clicked the primary showcase button!"
+          "actions": [
+            {
+              "type": "reply",
+              "content": "You clicked the persistent primary action, {user}!",
+              "ephemeral": true
+            }
+          ]
         },
         {
           "type": 2,
@@ -128,7 +134,13 @@
           "placeholder": "Choose one or two features",
           "min_values": 1,
           "max_values": 2,
-          "response": "Your showcase selection was received!",
+          "actions": [
+            {
+              "type": "reply",
+              "content": "Your showcase selection was received: {values}",
+              "ephemeral": true
+            }
+          ],
           "options": [
             {
               "label": "Containers",

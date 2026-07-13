@@ -170,7 +170,7 @@ def _build_button(data: dict[str, Any]) -> discord.ui.Button:
         emoji=_emoji(data.get("emoji")),
         id=_optional_id(data),
     )
-    if not disabled and url is None and sku_id is None:
+    if not disabled and url is None and sku_id is None and not data.get("actions"):
         _attach_fallback_callback(button, data)
     return button
 
@@ -247,7 +247,7 @@ def _build_select(data: dict[str, Any], component_type: int) -> discord.ui.Item:
                 raise ComponentsV2Error("Channel Select `channel_types` must be a list.")
             common["channel_types"] = [discord.ChannelType(int(value)) for value in channel_types]
         select = discord.ui.ChannelSelect(**common)
-    if not common["disabled"]:
+    if not common["disabled"] and not data.get("actions"):
         _attach_fallback_callback(select, data)
     return select
 

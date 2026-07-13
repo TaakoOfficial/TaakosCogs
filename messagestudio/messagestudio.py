@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import json
-from typing import Literal
+import logging
+from typing import Any, Literal
 from urllib.parse import urlparse
 
 import aiohttp
@@ -11,10 +12,11 @@ import discord
 from redbot.core import Config, commands
 from redbot.core.utils.chat_formatting import pagify, text_to_file
 
-from .components import load_payload, payload_to_files, payload_to_view, view_to_payload
+from .components import ComponentsV2Error, load_payload, payload_to_files, payload_to_view, view_to_payload
 from .dashboard_integration import DashboardIntegration
 
 FORMATS = Literal["json", "yaml", "jsonfile", "yamlfile", "pastebin", "message"]
+log = logging.getLogger("red.taakoscogs.messagestudio")
 
 
 class MessageableOrMessage(commands.Converter):
@@ -50,7 +52,7 @@ class MessageStudio(DashboardIntegration, commands.Cog):
         self.bot = bot
         self.config = Config.get_conf(self, identifier=self.CONFIG_IDENTIFIER, force_registration=True)
         self.config.register_global(stored_messages={})
-        self.config.register_guild(stored_messages={})
+        self.config.register_guild(stored_messages={}, component_actions={})
         self.session: aiohttp.ClientSession | None = None
 
     async def cog_load(self) -> None:
@@ -243,8 +245,10 @@ class MessageStudio(DashboardIntegration, commands.Cog):
         hook = next((h for h in hooks if h.user == ctx.me), None) or await channel.create_webhook(name="MessageStudio")
         for name in names or []:
             payload = (await self._stored(ctx, global_level, name))["payload"]
+            actions = await self._prepare_actions(payload, ctx.guild, ctx.author)
             kwargs = self._send_kwargs(payload)
-            await hook.send(**kwargs, username=username, avatar_url=avatar_url, wait=True)
+            message = await hook.send(**kwargs, username=username, avatar_url=avatar_url, wait=True)
+            await self._register_message_actions(message, actions, ctx.author, guild=ctx.guild)
 
     @embed.command(name="dashboard")
     async def dashboard(self, ctx):
@@ -268,6 +272,7 @@ class MessageStudio(DashboardIntegration, commands.Cog):
             "`embed store|unstore|list|info ...` — manage saved messages",
             "`embed poststored|postwebhook ...` — post saved messages",
             "`embed dashboard` — open the visual editor",
+            "`embed actions [message]` — inspect or clear persistent interactions",
             "`embed tools color|timestamp|validate ...` — message utilities",
         ]
         await ctx.send(
@@ -349,6 +354,33 @@ class MessageStudio(DashboardIntegration, commands.Cog):
                     count += 1
         await ctx.send(f"Migrated {count} stored embeds.")
 
+    @commands.mod_or_permissions(manage_guild=True)
+    @embed.group(name="actions", invoke_without_command=True)
+    async def embed_actions(self, ctx, message: discord.Message | None = None):
+        """Show persistent component actions attached to a message."""
+        message = message or self._referenced(ctx)
+        record = (await self.config.guild(ctx.guild).component_actions()).get(str(message.id))
+        if not record:
+            raise commands.UserFeedbackCheckFailure("That message has no registered component actions.")
+        controls = record.get("controls", {})
+        lines = [f"- `{custom_id}`: {', '.join(action['type'] for action in actions)}" for custom_id, actions in controls.items()]
+        await ctx.send(
+            embed=discord.Embed(
+                title="MessageStudio Actions",
+                description="\n".join(lines) or "No actions.",
+                color=await ctx.embed_color(),
+            ),
+        )
+
+    @commands.mod_or_permissions(manage_guild=True)
+    @embed_actions.command(name="clear")
+    async def embed_actions_clear(self, ctx, message: discord.Message):
+        """Disable all persistent component actions for a message."""
+        async with self.config.guild(ctx.guild).component_actions() as records:
+            if records.pop(str(message.id), None) is None:
+                raise commands.UserFeedbackCheckFailure("That message has no registered component actions.")
+        await ctx.tick()
+
     async def _conversion(self, ctx, kind, data):
         if kind in {"json", "fromjson", "fromdata"}:
             return load_payload(data, "json")
@@ -375,6 +407,8 @@ class MessageStudio(DashboardIntegration, commands.Cog):
         return {"content": content, "embeds": embeds}
 
     async def _send(self, ctx, payload, target=None):
+        guild = target.guild if isinstance(target, discord.Message) else ctx.guild
+        actions = await self._prepare_actions(payload, guild, ctx.author)
         kwargs = self._send_kwargs(payload)
         try:
             if isinstance(target, discord.Message):
@@ -382,13 +416,300 @@ class MessageStudio(DashboardIntegration, commands.Cog):
                     raise commands.UserFeedbackCheckFailure("I can only edit my own messages.")
                 if "view" in kwargs:
                     files = kwargs.pop("files", [])
-                    await target.edit(content=None, embeds=[], attachments=files, **kwargs)
+                    message = await target.edit(content=None, embeds=[], attachments=files, **kwargs)
                 else:
-                    await target.edit(content=kwargs["content"], embeds=kwargs["embeds"], view=None)
+                    message = await target.edit(content=kwargs["content"], embeds=kwargs["embeds"], view=None)
             else:
-                await (target or ctx).send(**kwargs)
+                message = await (target or ctx).send(**kwargs)
+            await self._register_message_actions(message, actions, ctx.author, guild=guild)
+            return message
         except discord.HTTPException as error:
             raise commands.UserFeedbackCheckFailure(f"Discord rejected the message: {error}") from error
+
+    async def _prepare_actions(
+        self,
+        payload: Any,
+        guild: discord.Guild,
+        actor: discord.Member | discord.User,
+    ) -> dict[str, list[dict[str, Any]]]:
+        controls = self._collect_component_actions(payload)
+        if not controls:
+            return controls
+        member = guild.get_member(actor.id)
+        if member is None:
+            raise ComponentsV2Error("The action configurator must be a member of this server.")
+        me = guild.me
+        is_owner = member.id == guild.owner_id or member.id in getattr(self.bot, "owner_ids", set())
+        for actions in controls.values():
+            for action in actions:
+                if action["type"] in {"add_role", "remove_role", "toggle_role"}:
+                    role = guild.get_role(int(action["role_id"]))
+                    if role is None:
+                        raise ComponentsV2Error(f"Role `{action['role_id']}` does not exist in this server.")
+                    if role.is_default() or role.managed:
+                        raise ComponentsV2Error(f"Role `{role.name}` cannot be managed by a component action.")
+                    if not is_owner and (not member.guild_permissions.manage_roles or role >= member.top_role):
+                        raise ComponentsV2Error(
+                            f"You need Manage Roles and a role above `{role.name}` to configure that action.",
+                        )
+                    if me is None or not me.guild_permissions.manage_roles or role >= me.top_role:
+                        raise ComponentsV2Error(
+                            f"I need Manage Roles and a role above `{role.name}` before that action can be sent.",
+                        )
+                elif action["type"] == "send_message":
+                    channel = guild.get_channel_or_thread(int(action["channel_id"]))
+                    if not isinstance(channel, (discord.TextChannel, discord.VoiceChannel, discord.Thread)):
+                        raise ComponentsV2Error(f"Channel `{action['channel_id']}` is not text-capable.")
+                    if not is_owner and not channel.permissions_for(member).send_messages:
+                        raise ComponentsV2Error(f"You cannot configure posts in #{channel.name}.")
+                    if me is None or not channel.permissions_for(me).send_messages:
+                        raise ComponentsV2Error(f"I cannot post in #{channel.name}.")
+        return controls
+
+    @staticmethod
+    def _collect_component_actions(payload: Any) -> dict[str, list[dict[str, Any]]]:
+        if not isinstance(payload, dict) or not isinstance(payload.get("components"), list):
+            return {}
+        result: dict[str, list[dict[str, Any]]] = {}
+        seen_custom_ids: set[str] = set()
+        duplicate_custom_ids: set[str] = set()
+        allowed = {"add_role", "remove_role", "toggle_role", "send_message", "reply"}
+
+        def walk(component: Any) -> None:
+            if not isinstance(component, dict):
+                return
+            try:
+                component_type = int(component.get("type"))
+                button_style = int(component.get("style", 2))
+            except (TypeError, ValueError):
+                component_type = 0
+                button_style = 0
+            custom_id = component.get("custom_id")
+            if component_type in {2, 3, 5, 6, 7, 8} and isinstance(custom_id, str) and custom_id:
+                if custom_id in seen_custom_ids:
+                    duplicate_custom_ids.add(custom_id)
+                seen_custom_ids.add(custom_id)
+            raw_actions = component.get("actions")
+            if raw_actions is not None:
+                if component_type not in {2, 3, 5, 6, 7, 8} or (
+                    component_type == 2 and button_style not in {1, 2, 3, 4}
+                ):
+                    raise ComponentsV2Error("Actions can only be attached to custom buttons and select menus.")
+                if not isinstance(custom_id, str) or not 1 <= len(custom_id) <= 100:
+                    raise ComponentsV2Error("A component with actions requires a 1 to 100 character `custom_id`.")
+                if custom_id in result:
+                    raise ComponentsV2Error(f"Action custom ID `{custom_id}` is duplicated in this message.")
+                if not isinstance(raw_actions, list) or not 1 <= len(raw_actions) <= 10:
+                    raise ComponentsV2Error("Component `actions` must contain 1 to 10 action objects.")
+                normalized = []
+                for raw in raw_actions:
+                    if not isinstance(raw, dict) or raw.get("type") not in allowed:
+                        raise ComponentsV2Error(
+                            "Actions support `add_role`, `remove_role`, `toggle_role`, `send_message`, and `reply`.",
+                        )
+                    action = dict(raw)
+                    action_type = action["type"]
+                    if action_type in {"add_role", "remove_role", "toggle_role"}:
+                        try:
+                            action["role_id"] = str(int(action["role_id"]))
+                        except (KeyError, TypeError, ValueError) as error:
+                            raise ComponentsV2Error(f"`{action_type}` requires a Discord `role_id`.") from error
+                        if int(action["role_id"]) <= 0:
+                            raise ComponentsV2Error(f"`{action_type}` requires a positive Discord `role_id`.")
+                    elif action_type == "send_message":
+                        try:
+                            action["channel_id"] = str(int(action["channel_id"]))
+                        except (KeyError, TypeError, ValueError) as error:
+                            raise ComponentsV2Error("`send_message` requires a Discord `channel_id`.") from error
+                        if int(action["channel_id"]) <= 0:
+                            raise ComponentsV2Error("`send_message` requires a positive Discord `channel_id`.")
+                        if not isinstance(action.get("content"), str) or not 1 <= len(action["content"]) <= 2000:
+                            raise ComponentsV2Error("`send_message` content must contain 1 to 2000 characters.")
+                    else:
+                        if not isinstance(action.get("content"), str) or not 1 <= len(action["content"]) <= 2000:
+                            raise ComponentsV2Error("`reply` content must contain 1 to 2000 characters.")
+                        if "ephemeral" in action and not isinstance(action["ephemeral"], bool):
+                            raise ComponentsV2Error("`reply` ephemeral must be true or false.")
+                        action["ephemeral"] = bool(action.get("ephemeral", True))
+                    if "values" in action and (
+                        not isinstance(action["values"], list)
+                        or not 1 <= len(action["values"]) <= 25
+                        or not all(isinstance(value, str) and 1 <= len(value) <= 100 for value in action["values"])
+                    ):
+                        raise ComponentsV2Error("Action `values` must contain 1 to 25 select option strings.")
+                    normalized.append(action)
+                result[custom_id] = normalized
+            for child in component.get("components", []) if isinstance(component.get("components"), list) else []:
+                walk(child)
+            if isinstance(component.get("accessory"), dict):
+                walk(component["accessory"])
+
+        for component in payload["components"]:
+            walk(component)
+        if result and duplicate_custom_ids:
+            duplicates = ", ".join(f"`{custom_id}`" for custom_id in sorted(duplicate_custom_ids))
+            raise ComponentsV2Error(
+                f"Every interactive custom ID must be unique when actions are used. Duplicates: {duplicates}.",
+            )
+        if len(result) > 40:
+            raise ComponentsV2Error("A message cannot register more than 40 interactive controls.")
+        return result
+
+    async def _register_message_actions(
+        self,
+        message: discord.Message,
+        controls: dict[str, list[dict[str, Any]]],
+        actor: discord.abc.User,
+        *,
+        guild: discord.Guild | None = None,
+    ) -> None:
+        guild = guild or message.guild
+        if guild is None:
+            return
+        async with self.config.guild(guild).component_actions() as records:
+            if controls:
+                records[str(message.id)] = {
+                    "channel_id": message.channel.id,
+                    "configured_by": actor.id,
+                    "controls": controls,
+                }
+            else:
+                records.pop(str(message.id), None)
+
+    @commands.Cog.listener()
+    async def on_interaction(self, interaction: discord.Interaction) -> None:
+        if interaction.type is not discord.InteractionType.component or interaction.guild is None or interaction.message is None:
+            return
+        record = (await self.config.guild(interaction.guild).component_actions()).get(str(interaction.message.id))
+        if not record or not isinstance(interaction.data, dict):
+            return
+        custom_id = interaction.data.get("custom_id")
+        actions = record.get("controls", {}).get(custom_id)
+        if not actions:
+            return
+        try:
+            await self._execute_component_actions(interaction, actions)
+        except (ComponentsV2Error, discord.HTTPException, discord.Forbidden) as error:
+            await self._interaction_reply(interaction, f"This action could not be completed: {error}", ephemeral=True)
+        except Exception:
+            log.exception("Unexpected MessageStudio component action failure")
+            await self._interaction_reply(
+                interaction,
+                "This action could not be completed because of an internal error.",
+                ephemeral=True,
+            )
+
+    async def _execute_component_actions(
+        self,
+        interaction: discord.Interaction,
+        actions: list[dict[str, Any]],
+    ) -> None:
+        guild = interaction.guild
+        member = interaction.user
+        if guild is None or not isinstance(member, discord.Member):
+            raise ComponentsV2Error("Component actions can only be used by server members.")
+        selected = [str(value) for value in interaction.data.get("values", [])]
+        if not interaction.response.is_done():
+            public_reply = any(action["type"] == "reply" and not action.get("ephemeral", True) for action in actions)
+            await interaction.response.defer(ephemeral=not public_reply)
+        summaries: list[str] = []
+        replies: list[tuple[str, bool]] = []
+        for action in actions:
+            required_values = action.get("values")
+            if required_values and not set(required_values).intersection(selected):
+                continue
+            action_type = action["type"]
+            if action_type in {"add_role", "remove_role", "toggle_role"}:
+                role = guild.get_role(int(action["role_id"]))
+                me = guild.me
+                if role is None:
+                    raise ComponentsV2Error("The configured role no longer exists.")
+                if (
+                    role.is_default()
+                    or role.managed
+                    or me is None
+                    or not me.guild_permissions.manage_roles
+                    or role >= me.top_role
+                ):
+                    raise ComponentsV2Error(
+                        f"I cannot manage the `{role.name}` role. Check my role hierarchy and Manage Roles permission.",
+                    )
+                has_role = role in member.roles
+                if action_type == "add_role" and not has_role:
+                    await member.add_roles(role, reason=f"MessageStudio component {interaction.message.id}")
+                    summaries.append(f"Added **{role.name}**.")
+                elif action_type == "remove_role" and has_role:
+                    await member.remove_roles(role, reason=f"MessageStudio component {interaction.message.id}")
+                    summaries.append(f"Removed **{role.name}**.")
+                elif action_type == "toggle_role":
+                    if has_role:
+                        await member.remove_roles(role, reason=f"MessageStudio component {interaction.message.id}")
+                        summaries.append(f"Removed **{role.name}**.")
+                    else:
+                        await member.add_roles(role, reason=f"MessageStudio component {interaction.message.id}")
+                        summaries.append(f"Added **{role.name}**.")
+                else:
+                    summaries.append(f"You already {'have' if has_role else 'do not have'} **{role.name}**.")
+            elif action_type == "send_message":
+                channel = guild.get_channel_or_thread(int(action["channel_id"]))
+                if not isinstance(channel, (discord.TextChannel, discord.VoiceChannel, discord.Thread)):
+                    raise ComponentsV2Error("The configured destination channel no longer exists.")
+                if guild.me is None or not channel.permissions_for(guild.me).send_messages:
+                    raise ComponentsV2Error(f"I cannot send messages in #{channel.name}.")
+                await channel.send(
+                    self._format_action_text(action["content"], interaction, selected),
+                    allowed_mentions=discord.AllowedMentions.none(),
+                )
+                summaries.append(f"Posted in {channel.mention}.")
+            else:
+                replies.append(
+                    (
+                        self._format_action_text(action["content"], interaction, selected),
+                        bool(action.get("ephemeral", True)),
+                    ),
+                )
+        if replies:
+            content = "\n".join(text for text, _ in replies)
+            await self._interaction_reply(interaction, content[:2000], ephemeral=all(ephemeral for _, ephemeral in replies))
+        else:
+            content = "\n".join(summaries) or "No configured action matched this selection."
+            await self._interaction_reply(interaction, content[:2000], ephemeral=True)
+
+    @staticmethod
+    def _format_action_text(text: str, interaction: discord.Interaction, values: list[str]) -> str:
+        replacements = {
+            "{user}": interaction.user.mention,
+            "{user_id}": str(interaction.user.id),
+            "{server}": interaction.guild.name if interaction.guild else "",
+            "{channel}": interaction.channel.mention if interaction.channel else "",
+            "{value}": values[0] if values else "",
+            "{values}": ", ".join(values),
+        }
+        for marker, value in replacements.items():
+            text = text.replace(marker, value)
+        return text
+
+    @staticmethod
+    async def _interaction_reply(interaction: discord.Interaction, content: str, *, ephemeral: bool) -> None:
+        if interaction.response.is_done():
+            await interaction.followup.send(content, ephemeral=ephemeral, allowed_mentions=discord.AllowedMentions.none())
+        else:
+            await interaction.response.send_message(content, ephemeral=ephemeral, allowed_mentions=discord.AllowedMentions.none())
+
+    @commands.Cog.listener()
+    async def on_raw_message_delete(self, payload: discord.RawMessageDeleteEvent) -> None:
+        if payload.guild_id is None:
+            return
+        async with self.config.guild_from_id(payload.guild_id).component_actions() as records:
+            records.pop(str(payload.message_id), None)
+
+    @commands.Cog.listener()
+    async def on_raw_bulk_message_delete(self, payload: discord.RawBulkMessageDeleteEvent) -> None:
+        if payload.guild_id is None:
+            return
+        async with self.config.guild_from_id(payload.guild_id).component_actions() as records:
+            for message_id in payload.message_ids:
+                records.pop(str(message_id), None)
 
     def _message_payload(self, message, index=None, include_content=None):
         if message.flags.components_v2:
