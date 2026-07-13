@@ -32,6 +32,7 @@ To update installed cogs:
 
 | Cog                                    | Best For                 | Highlights                                                                                                                                  |
 | -------------------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| [componentsv2bridge](./componentsv2bridge) | Components V2 messages | Native V2 JSON/YAML, EmbedUtils payload and stored-embed conversion, message editing/downloads, and a dashboard editor/sender.              |
 | [toolz](./toolz)                       | Role and user utilities  | Role/user info, role audits, role comparison, CSV exports, bot/no-role audits, role-triggered messages with `{user}` placeholders.          |
 | [rolemanager](./rolemanager)           | Role management          | Self roles, external role-change rules, policies, role panels, autoroles, sticky/temp roles, dashboard operations, imports, and bulk tools. |
 | [yalc](./yalc)                         | Server logging           | Message/member/channel/role logging, event filters, retention settings, ignore lists, Tupperbox/PluralKit-aware filtering.                  |
@@ -157,6 +158,7 @@ Some cogs have Python package requirements that Red's downloader installs automa
 
 | Cog           | Requirements     |
 | ------------- | ---------------- |
+| componentsv2bridge | `PyYAML>=6.0`, Red 3.5.21+, and AAA3A's EmbedUtils |
 | randomweather | `pytz`           |
 | rpcalander    | `pytz`           |
 | welcome       | `aiohttp`        |
@@ -179,7 +181,7 @@ Some features also need Discord privileged intents:
 
 Each cog includes its own data statement in `info.json`. In short:
 
-- `flipper`, `randomweather`, `emojiporter`, `zodiaccolorroles`, `uppercase`, and `slashlink` do not persistently store end user data.
+- `componentsv2bridge`, `flipper`, `randomweather`, `emojiporter`, `zodiaccolorroles`, `uppercase`, and `slashlink` do not persistently store end user data.
 - `toolz` stores per-guild role-message settings such as role IDs, channel IDs, and message templates.
 - `rolemanager` stores role configuration, role-policy and role-change-rule settings, role costs, reaction/button/select message/channel IDs, emoji keys, temporary-role expiry timestamps, and Discord user IDs for sticky and temporary role assignment.
 - `captcha` stores panel message/channel IDs, role IDs, and button labels; verification challenges are transient in memory.
@@ -200,6 +202,7 @@ No cog is intended to share stored data with external services unless the featur
 Start with each cog's README:
 
 - [toolz README](./toolz/README.md)
+- [componentsv2bridge README](./componentsv2bridge/README.md)
 - [rolemanager README](./rolemanager/README.md)
 - [yalc README](./yalc/README.md)
 - [applications README](./applications/README.md)
