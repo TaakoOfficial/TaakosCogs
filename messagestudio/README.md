@@ -1,12 +1,12 @@
-# ComponentsV2Builder
+# MessageStudio
 
-ComponentsV2Builder is a standalone visual builder and Discord command suite for Components V2 messages. It does not require EmbedUtils or any external web service.
+MessageStudio is a standalone EmbedUtils-compatible command suite for legacy embeds and Components V2 messages. It does not require EmbedUtils or any external web service.
 
 Red 3.5.21 or newer is required because that release moved to discord.py 2.6, which introduced `LayoutView` and Components V2 support.
 
 ## Visual Dashboard Builder
 
-Open the builder with `[p]cv2 dashboard`. Its interface is inspired by [Merlin Fuchs' Embed Generator](https://github.com/merlinfuchs/embed-generator) and runs entirely inside Red-Web-Dashboard.
+Open the builder with `[p]embed dashboard` (the `[p]cv2` alias also works). Its interface is inspired by [Merlin Fuchs' Embed Generator](https://github.com/merlinfuchs/embed-generator) and runs entirely inside Red-Web-Dashboard.
 
 The builder provides:
 
@@ -22,15 +22,22 @@ The builder provides:
 
 The editor is self-contained. It does not load or communicate with message.style or Merlin's API.
 
-## Discord Commands
+## EmbedUtils-Compatible Commands
 
-- `[p]cv2 json [channel] <payload>`
-- `[p]cv2 yaml [channel] <payload>`
-- `[p]cv2 edit <message> [json|yaml] <payload>`
-- `[p]cv2 download <message>`
-- `[p]cv2 dashboard`
+- `[p]embed [channel_or_message] [color] <title> <description>`
+- `[p]embed json|yaml [channel_or_message] [payload]`
+- `[p]embed fromfile|yamlfile [channel_or_message]`
+- `[p]embed pastebin [channel_or_message] <url>`
+- `[p]embed message [channel_or_message] [message] [index] [include_content]`
+- `[p]embed download [message] [index] [include_content]`
+- `[p]embed edit <message> <json|yaml|jsonfile|yamlfile|pastebin|message> [data]`
+- `[p]embed store|unstore|list|info|downloadstored ...`
+- `[p]embed poststored ...` and `[p]embed postwebhook ...`
+- `[p]embed dashboard` and `[p]embed migratefromphen`
 
-If a payload is omitted from the JSON or YAML commands, attach a UTF-8 `.json`, `.yaml`, `.yml`, or `.txt` file. Standard legacy Discord `content`, `embed`, and `embeds` payloads can also be converted without requiring another cog.
+Original aliases such as `fromjson`, `fromyaml`, `gist`, `hastebin`, `storeembed`, `post`, and `webhook` are retained. The group is also available through `[p]embedutils`, `[p]messagestudio`, or `[p]cv2`.
+
+If a payload is omitted from the JSON or YAML commands, attach a UTF-8 `.json`, `.yaml`, `.yml`, or `.txt` file. Native Components V2 and standard Discord `content`, `embed`, and `embeds` payloads are auto-detected.
 
 ## Native Example
 
@@ -62,7 +69,7 @@ If a payload is omitted from the JSON or YAML commands, attach a UTF-8 `.json`, 
 }
 ```
 
-Discord permanently marks a message as Components V2. A V2 message cannot use legacy `content` or `embeds`, so this cog converts legacy fields into Text Displays and Containers.
+Discord permanently marks a message as Components V2. A V2 message cannot use legacy `content` or `embeds`; MessageStudio preserves legacy behavior while using `LayoutView` for native V2 payloads.
 
 ## Supported Interactive Components
 

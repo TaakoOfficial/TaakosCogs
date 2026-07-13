@@ -32,7 +32,7 @@ To update installed cogs:
 
 | Cog                                    | Best For                 | Highlights                                                                                                                                  |
 | -------------------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| [componentsv2bridge](./componentsv2bridge) | Components V2 messages | Standalone visual V2 builder, live preview, JSON/YAML, import/export, message editing/downloads, and direct dashboard sending.               |
+| [messagestudio](./messagestudio)         | Rich message building   | EmbedUtils-compatible commands, embeds and Components V2, stored messages, webhooks, JSON/YAML, and a standalone visual dashboard builder. |
 | [toolz](./toolz)                       | Role and user utilities  | Role/user info, role audits, role comparison, CSV exports, bot/no-role audits, role-triggered messages with `{user}` placeholders.          |
 | [rolemanager](./rolemanager)           | Role management          | Self roles, external role-change rules, policies, role panels, autoroles, sticky/temp roles, dashboard operations, imports, and bulk tools. |
 | [yalc](./yalc)                         | Server logging           | Message/member/channel/role logging, event filters, retention settings, ignore lists, Tupperbox/PluralKit-aware filtering.                  |
@@ -158,7 +158,7 @@ Some cogs have Python package requirements that Red's downloader installs automa
 
 | Cog           | Requirements     |
 | ------------- | ---------------- |
-| componentsv2bridge | `PyYAML>=6.0` and Red 3.5.21+ |
+| messagestudio | `PyYAML>=6.0` and Red 3.5.21+ |
 | randomweather | `pytz`           |
 | rpcalander    | `pytz`           |
 | welcome       | `aiohttp`        |
@@ -181,7 +181,8 @@ Some features also need Discord privileged intents:
 
 Each cog includes its own data statement in `info.json`. In short:
 
-- `componentsv2bridge`, `flipper`, `randomweather`, `emojiporter`, `zodiaccolorroles`, `uppercase`, and `slashlink` do not persistently store end user data.
+- `flipper`, `randomweather`, `emojiporter`, `zodiaccolorroles`, `uppercase`, and `slashlink` do not persistently store end user data.
+- `messagestudio` stores saved message payloads, author IDs, lock settings, and usage counts when its storage commands are used.
 - `toolz` stores per-guild role-message settings such as role IDs, channel IDs, and message templates.
 - `rolemanager` stores role configuration, role-policy and role-change-rule settings, role costs, reaction/button/select message/channel IDs, emoji keys, temporary-role expiry timestamps, and Discord user IDs for sticky and temporary role assignment.
 - `captcha` stores panel message/channel IDs, role IDs, and button labels; verification challenges are transient in memory.
@@ -202,7 +203,7 @@ No cog is intended to share stored data with external services unless the featur
 Start with each cog's README:
 
 - [toolz README](./toolz/README.md)
-- [componentsv2bridge README](./componentsv2bridge/README.md)
+- [messagestudio README](./messagestudio/README.md)
 - [rolemanager README](./rolemanager/README.md)
 - [yalc README](./yalc/README.md)
 - [applications README](./applications/README.md)

@@ -1,0 +1,25 @@
+{
+  "$schema": "https://raw.githubusercontent.com/Cog-Creators/Red-DiscordBot/V3/develop/schema/red_cog.schema.json",
+  "name": "messagestudio",
+  "author": ["Taako"],
+  "version": "1.0.0",
+  "description": "A standalone EmbedUtils-compatible rich-message studio with legacy embeds, Components V2, stored messages, webhooks, JSON/YAML imports, and a visual dashboard builder.",
+  "install_msg": "MessageStudio loaded. EmbedUtils-style commands are available under `[p]embed`; use `[p]embed dashboard` for the visual Components V2 builder.",
+  "short": "Create, store, send, edit, and visually build embeds and Components V2 messages.",
+  "tags": [
+    "components v2",
+    "message studio",
+    "embeds",
+    "json",
+    "yaml",
+    "dashboard",
+    "utility"
+  ],
+  "requirements": ["PyYAML>=6.0"],
+  "min_bot_version": "3.5.21",
+  "min_python_version": [3, 10, 0],
+  "hidden": false,
+  "disabled": false,
+  "type": "COG",
+  "end_user_data_statement": "This cog stores saved message payloads, their author Discord user IDs, lock settings, and usage counts when moderators use the message storage commands."
+}

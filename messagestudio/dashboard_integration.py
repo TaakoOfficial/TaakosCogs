@@ -1,4 +1,4 @@
-"""Red-Web-Dashboard visual editor and sender for ComponentsV2Builder."""
+"""Red-Web-Dashboard visual editor and sender for MessageStudio."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from redbot.core import commands
 
 from .components import ComponentsV2Error, load_payload, payload_to_view
 
-log = logging.getLogger("red.taakoscogs.componentsv2builder.dashboard")
+log = logging.getLogger("red.taakoscogs.messagestudio.dashboard")
 
 
 def dashboard_page(*args, **kwargs):
@@ -40,10 +40,30 @@ class DashboardIntegration:
 
     @dashboard_page(
         name=None,
-        description="Visually build, preview, import, export, and send Components V2 messages.",
+        description="Open the standalone visual MessageStudio builder.",
+        methods=("GET",),
+    )
+    async def dashboard_editor(self, **kwargs: Any) -> dict[str, Any]:
+        """Render the dedicated editor page without guild sending controls."""
+        source = self._load_editor(
+            csrf="",
+            payload=self._example_payload(),
+            channel_options="",
+            guild_name="Standalone editor",
+            guild_id="global",
+            send_enabled=False,
+        )
+        return {
+            "status": 0,
+            "web_content": {"source": source, "standalone": True},
+        }
+
+    @dashboard_page(
+        name="guild",
+        description="Build and send Components V2 messages to a server.",
         methods=("GET", "POST"),
     )
-    async def dashboard_editor(
+    async def dashboard_guild(
         self,
         user: discord.User,
         guild: discord.Guild,
@@ -99,11 +119,12 @@ class DashboardIntegration:
             channel_options=self._channel_options(guild, selected_channel),
             guild_name=guild.name,
             guild_id=guild.id,
+            send_enabled=True,
         )
         return {
             "status": 0,
             "notifications": notifications,
-            "web_content": {"source": source, "expanded": True},
+            "web_content": {"source": source, "standalone": True},
         }
 
     @staticmethod
@@ -149,7 +170,8 @@ class DashboardIntegration:
         payload: str,
         channel_options: str,
         guild_name: str,
-        guild_id: int,
+        guild_id: int | str,
+        send_enabled: bool,
     ) -> str:
         source = Path(__file__).with_name("editor.html").read_text(encoding="utf-8")
         replacements = {
@@ -158,6 +180,7 @@ class DashboardIntegration:
             "%%CHANNEL_OPTIONS%%": channel_options,
             "%%GUILD_NAME%%": html.escape(guild_name),
             "%%GUILD_ID%%": str(guild_id),
+            "%%SEND_HIDDEN%%": "" if send_enabled else "hidden",
         }
         for marker, value in replacements.items():
             source = source.replace(marker, value)

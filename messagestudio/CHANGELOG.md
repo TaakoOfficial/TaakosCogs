@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.0 - 2026-07-12
+
+### New Features
+
+- Renamed the standalone cog to MessageStudio.
+- Added the complete EmbedUtils-compatible `[p]embed` command surface alongside Components V2.
+- Added legacy embeds, stored messages, webhook posting, message cloning, paste links, and migration support.
+
 ## 0.2.0 - 2026-07-12
 
 ### New Features

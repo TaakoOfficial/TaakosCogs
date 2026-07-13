@@ -18,7 +18,7 @@
 
 <div class="v2b" id="v2b-app" data-storage-key="taakos-cv2-builder:%%GUILD_ID%%">
   <div class="v2b-top">
-    <div><div class="v2b-title">Components V2 Builder</div><div class="v2b-sub">%%GUILD_NAME%% · visual editor and live Discord preview</div></div>
+    <div><div class="v2b-title">MessageStudio</div><div class="v2b-sub">%%GUILD_NAME%% · Components V2 editor and live Discord preview</div></div>
     <div class="v2b-actions"><button class="v2b-btn" type="button" data-top="import">Import JSON</button><button class="v2b-btn" type="button" data-top="copy">Copy JSON</button><button class="v2b-btn" type="button" data-top="download">Download</button><button class="v2b-btn danger" type="button" data-top="reset">Reset</button></div>
   </div>
   <div class="v2b-tabs"><button class="v2b-tab active" type="button" data-tab="visual">Visual builder</button><button class="v2b-tab" type="button" data-tab="json">JSON</button></div>
@@ -29,10 +29,10 @@
         <div id="v2b-components-editor"></div>
       </div>
       <div class="v2b-pane" data-pane="json" hidden><textarea class="v2b-textarea v2b-json" id="v2b-json" spellcheck="false"></textarea><div class="v2b-row" style="margin-top:10px"><button class="v2b-btn primary" type="button" data-top="apply-json">Apply JSON</button><span class="v2b-status" id="v2b-json-status"></span></div></div>
-      <form method="POST" class="v2b-send" id="v2b-send-form">%%CSRF%%<textarea name="payload" id="v2b-payload" hidden>%%PAYLOAD%%</textarea><div class="v2b-row"><select class="v2b-select" style="max-width:320px" name="channel_id" required><option value="">Choose a channel</option>%%CHANNEL_OPTIONS%%</select><button class="v2b-btn primary" type="submit">Send to Discord</button><span class="v2b-status">Dashboard sends suppress all mentions.</span></div></form>
+      <form method="POST" class="v2b-send" id="v2b-send-form" %%SEND_HIDDEN%%>%%CSRF%%<textarea name="payload" id="v2b-payload" hidden>%%PAYLOAD%%</textarea><div class="v2b-row"><select class="v2b-select" style="max-width:320px" name="channel_id" required><option value="">Choose a channel</option>%%CHANNEL_OPTIONS%%</select><button class="v2b-btn primary" type="submit">Send to Discord</button><span class="v2b-status">Dashboard sends suppress all mentions.</span></div></form>
       <div class="v2b-credit">Builder UX inspired by <a href="https://github.com/merlinfuchs/embed-generator" target="_blank" rel="noopener">Merlin Fuchs' Embed Generator</a> (MIT). This editor is self-contained and does not contact that service.</div>
     </section>
-    <aside class="v2b-preview-wrap"><div class="v2b-message"><div class="v2b-author"><div class="v2b-avatar"></div><div style="min-width:0;flex:1"><div class="v2b-name">Components V2 Builder <span style="background:#5865f2;border-radius:3px;padding:1px 4px;font-size:10px">APP</span> <span class="v2b-time">Today at 12:00 PM</span></div><div class="v2b-components" id="v2b-preview"></div></div></div></div></aside>
+    <aside class="v2b-preview-wrap"><div class="v2b-message"><div class="v2b-author"><div class="v2b-avatar"></div><div style="min-width:0;flex:1"><div class="v2b-name">MessageStudio <span style="background:#5865f2;border-radius:3px;padding:1px 4px;font-size:10px">APP</span> <span class="v2b-time">Today at 12:00 PM</span></div><div class="v2b-components" id="v2b-preview"></div></div></div></div></aside>
 </div>
 
 <script>
