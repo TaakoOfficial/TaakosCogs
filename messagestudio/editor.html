@@ -45,7 +45,7 @@
         <div id="v2b-components-editor"></div>
       </div>
       <div class="v2b-pane" data-pane="json" hidden><textarea class="v2b-textarea v2b-json" id="v2b-json" spellcheck="false"></textarea><div class="v2b-row" style="margin-top:10px"><button class="v2b-btn primary" type="button" data-top="apply-json">Apply JSON</button><span class="v2b-status" id="v2b-json-status"></span></div></div>
-      <form method="POST" class="v2b-send" id="v2b-send-form" %%SEND_HIDDEN%%>%%CSRF%%<textarea name="payload" id="v2b-payload" hidden>%%PAYLOAD%%</textarea><div class="v2b-row"><div class="v2b-channel-picker"><input class="v2b-input" id="v2b-channel-search" type="search" placeholder="Type to filter channels…" autocomplete="off" aria-label="Filter channels"><select class="v2b-select" id="v2b-channel-select" name="channel_id" required><option value="">Choose a channel</option>%%CHANNEL_OPTIONS%%</select></div><button class="v2b-btn primary" type="submit">Send to Discord</button><span class="v2b-status" id="v2b-channel-count">Dashboard sends suppress all mentions.</span></div></form>
+      <form method="POST" action="%%FORM_ACTION%%" class="v2b-send" id="v2b-send-form" %%SEND_HIDDEN%%>%%CSRF%%<input type="hidden" name="dashboard_ajax" value="1"><textarea name="payload" id="v2b-payload" hidden>%%PAYLOAD%%</textarea><div class="v2b-row"><div class="v2b-channel-picker"><input class="v2b-input" id="v2b-channel-search" type="search" placeholder="Type to filter channels…" autocomplete="off" aria-label="Filter channels"><select class="v2b-select" id="v2b-channel-select" name="channel_id" required><option value="">Choose a channel</option>%%CHANNEL_OPTIONS%%</select></div><button class="v2b-btn primary" id="v2b-send-button" type="submit">Send to Discord</button><span class="v2b-status" id="v2b-channel-count">Dashboard sends suppress all mentions.</span></div></form>
       <div class="v2b-credit">Builder UX inspired by <a href="https://github.com/merlinfuchs/embed-generator" target="_blank" rel="noopener">Merlin Fuchs' Embed Generator</a> (MIT). This editor is self-contained and does not contact that service.</div>
     </section>
     <aside class="v2b-preview-wrap"><div class="v2b-message"><div class="v2b-author"><div class="v2b-avatar"></div><div style="min-width:0;flex:1"><div class="v2b-name">MessageStudio <span style="background:#5865f2;border-radius:3px;padding:1px 4px;font-size:10px">APP</span> <span class="v2b-time">Today at 12:00 PM</span></div><div class="v2b-components" id="v2b-preview"></div></div></div></div></aside>
@@ -144,6 +144,18 @@
     if(matches.length===1)channelSelect.value=matches[0].value;
     channelCount.textContent=matches.length===1?'1 channel found':`${matches.length} channels found`;
   });
-  document.getElementById('v2b-send-form').addEventListener('submit',()=>sync(false));sync(true);
+  document.getElementById('v2b-send-form').addEventListener('submit',async event=>{
+    event.preventDefault();sync(false);
+    const form=event.currentTarget,button=document.getElementById('v2b-send-button');
+    if(!channelSelect.value){channelCount.textContent='Choose a channel before sending.';channelCount.classList.add('bad');return}
+    button.disabled=true;button.textContent='Sending…';channelCount.textContent='Sending message to Discord…';channelCount.classList.remove('bad');
+    try{
+      const response=await fetch(form.action||window.location.href,{method:'POST',body:new FormData(form),credentials:'same-origin',headers:{'X-Requested-With':'XMLHttpRequest'}});
+      const result=await response.json();
+      if(!response.ok||!result.ok)throw new Error(result.message||`Dashboard returned HTTP ${response.status}`);
+      channelCount.textContent=result.message;channelCount.classList.remove('bad');
+    }catch(error){channelCount.textContent=`Send failed: ${error.message}`;channelCount.classList.add('bad')}
+    finally{button.disabled=false;button.textContent='Send to Discord'}
+  });sync(true);
 })();
 </script>

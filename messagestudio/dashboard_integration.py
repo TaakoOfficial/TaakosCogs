@@ -53,6 +53,7 @@ class DashboardIntegration:
             guild_id="global",
             send_enabled=False,
             stored_messages={},
+            form_action="",
         )
         return {
             "status": 0,
@@ -114,6 +115,16 @@ class DashboardIntegration:
                     {"message": f"Components V2 message sent in #{channel.name}.", "category": "success"},
                 )
 
+            if self._dashboard_value(form, "dashboard_ajax") == "1":
+                notification = notifications[-1]
+                return {
+                    "status": 0,
+                    "data": {
+                        "ok": notification["category"] == "success",
+                        "message": notification["message"],
+                    },
+                }
+
         source = self._load_editor(
             csrf=self._dashboard_csrf(kwargs),
             payload=payload_text,
@@ -122,6 +133,7 @@ class DashboardIntegration:
             guild_id=guild.id,
             send_enabled=True,
             stored_messages=await self.config.guild(guild).stored_messages(),
+            form_action=kwargs.get("request_url", ""),
         )
         return {
             "status": 0,
@@ -175,6 +187,7 @@ class DashboardIntegration:
         guild_id: int | str,
         send_enabled: bool,
         stored_messages: dict[str, Any],
+        form_action: str,
     ) -> str:
         source = Path(__file__).with_name("editor.html").read_text(encoding="utf-8")
         replacements = {
@@ -185,6 +198,7 @@ class DashboardIntegration:
             "%%GUILD_ID%%": str(guild_id),
             "%%SEND_HIDDEN%%": "" if send_enabled else "hidden",
             "%%STORED_MESSAGES%%": json.dumps(stored_messages).replace("<", "\\u003c"),
+            "%%FORM_ACTION%%": html.escape(form_action, quote=True),
         }
         for marker, value in replacements.items():
             source = source.replace(marker, value)
