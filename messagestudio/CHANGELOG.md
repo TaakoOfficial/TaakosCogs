@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2.0 - 2026-07-12
+
+### New Features
+
+- Added saved-message naming, optional locking, and storage directly from the dashboard builder.
+- Newly saved Components V2 messages appear in the Stored Messages dashboard section immediately.
+
 ## 1.1.0 - 2026-07-12
 
 ### New Features

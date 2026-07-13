@@ -130,12 +130,7 @@ def _build_button(data: dict[str, Any]) -> discord.ui.Button:
     sku_id = data.get("sku_id")
     if style not in range(1, 7):
         raise ComponentsV2Error("Button `style` must be between 1 and 6.")
-    if not disabled and url is None and sku_id is None:
-        raise ComponentsV2Error(
-            "Enabled custom-ID buttons need application-specific callbacks. "
-            "Use a link button, premium button, or set `disabled` to true.",
-        )
-    return discord.ui.Button(
+    button = discord.ui.Button(
         style=discord.ButtonStyle(style),
         label=data.get("label"),
         disabled=disabled,
@@ -145,6 +140,67 @@ def _build_button(data: dict[str, Any]) -> discord.ui.Button:
         emoji=_emoji(data.get("emoji")),
         id=_optional_id(data),
     )
+    if not disabled and url is None and sku_id is None:
+        _attach_fallback_callback(button, data)
+    return button
+
+
+def _attach_fallback_callback(item: discord.ui.Item, data: dict[str, Any]) -> None:
+    """Give imported custom-ID controls a valid interaction response."""
+    response = str(
+        data.get("response") or "This control has no custom action configured in MessageStudio yet.",
+    )
+
+    async def callback(interaction: discord.Interaction) -> None:
+        await interaction.response.send_message(response[:2000], ephemeral=True)
+
+    item.callback = callback
+
+
+def _build_select(data: dict[str, Any], component_type: int) -> discord.ui.Item:
+    """Build any Discord message select supported by Action Rows."""
+    common = {
+        "custom_id": data.get("custom_id", discord.utils.MISSING),
+        "placeholder": data.get("placeholder"),
+        "min_values": int(data.get("min_values", 1)),
+        "max_values": int(data.get("max_values", 1)),
+        "disabled": bool(data.get("disabled", False)),
+        "id": _optional_id(data),
+    }
+    if component_type == 3:
+        options = data.get("options")
+        if not isinstance(options, list) or not 1 <= len(options) <= 25:
+            raise ComponentsV2Error("A String Select requires 1 to 25 options.")
+        common["options"] = [
+            discord.SelectOption(
+                label=str(option.get("label", "")),
+                value=str(option.get("value", option.get("label", ""))),
+                description=option.get("description"),
+                emoji=_emoji(option.get("emoji")),
+                default=bool(option.get("default", False)),
+            )
+            for option in options
+            if isinstance(option, dict)
+        ]
+        if len(common["options"]) != len(options):
+            raise ComponentsV2Error("Every String Select option must be an object.")
+        select = discord.ui.Select(**common)
+    elif component_type == 5:
+        select = discord.ui.UserSelect(**common)
+    elif component_type == 6:
+        select = discord.ui.RoleSelect(**common)
+    elif component_type == 7:
+        select = discord.ui.MentionableSelect(**common)
+    else:
+        channel_types = data.get("channel_types")
+        if channel_types is not None:
+            if not isinstance(channel_types, list):
+                raise ComponentsV2Error("Channel Select `channel_types` must be a list.")
+            common["channel_types"] = [discord.ChannelType(int(value)) for value in channel_types]
+        select = discord.ui.ChannelSelect(**common)
+    if not common["disabled"]:
+        _attach_fallback_callback(select, data)
+    return select
 
 
 def _build_component(data: Any, *, location: str) -> discord.ui.Item:
@@ -176,6 +232,11 @@ def _build_component(data: Any, *, location: str) -> discord.ui.Item:
         if location not in {"accessory", "action_row"}:
             raise ComponentsV2Error("A Button (type 2) must be in an Action Row or Section accessory.")
         return _build_button(data)
+
+    if component_type in {3, 5, 6, 7, 8}:
+        if location != "action_row":
+            raise ComponentsV2Error("Select menus must be inside an Action Row.")
+        return _build_select(data, component_type)
 
     if component_type == 9:
         children = data.get("components")
@@ -227,8 +288,11 @@ def _build_component(data: Any, *, location: str) -> discord.ui.Item:
         children = data.get("components")
         if not isinstance(children, list) or not 1 <= len(children) <= 5:
             raise ComponentsV2Error("An Action Row requires 1 to 5 child controls.")
-        if any(not isinstance(child, dict) or int(child.get("type", 0)) != 2 for child in children):
-            raise ComponentsV2Error("This builder supports Buttons only inside Action Rows.")
+        supported_controls = {2, 3, 5, 6, 7, 8}
+        if any(not isinstance(child, dict) or int(child.get("type", 0)) not in supported_controls for child in children):
+            raise ComponentsV2Error(
+                "Action Rows support Buttons and string, user, role, mentionable, or channel selects.",
+            )
         return discord.ui.ActionRow(
             *[_build_component(child, location="action_row") for child in children],
             id=component_id,
@@ -246,10 +310,6 @@ def _build_component(data: Any, *, location: str) -> discord.ui.Item:
             id=component_id,
         )
 
-    if component_type in {3, 5, 6, 7, 8}:
-        raise ComponentsV2Error(
-            "Select menus need application-specific callbacks and are not supported by this builder.",
-        )
     raise ComponentsV2Error(f"Unsupported message component type: {component_type}.")
 
 

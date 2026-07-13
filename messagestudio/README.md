@@ -19,6 +19,7 @@ The builder provides:
 - JSON import, editing, copying, and downloading.
 - Browser-local draft recovery without server-side storage.
 - Direct channel sending with mentions suppressed.
+- Guild saved-message creation with optional moderator locking directly from the builder.
 
 The editor is self-contained. It does not load or communicate with message.style or Merlin's API.
 

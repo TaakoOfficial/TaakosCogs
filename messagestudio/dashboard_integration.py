@@ -88,17 +88,45 @@ class DashboardIntegration:
         selected_channel = self._dashboard_value(form, "channel_id")
 
         if kwargs.get("method", "GET") == "POST":
+            action = self._dashboard_value(form, "dashboard_action", "send")
             try:
-                channel_id = int(selected_channel)
-                channel = guild.get_channel(channel_id)
-                if not isinstance(channel, (discord.TextChannel, discord.VoiceChannel, discord.Thread)):
-                    raise ComponentsV2Error("Choose a valid text-capable channel.")
-                if member is not None and not is_owner and not channel.permissions_for(member).send_messages:
-                    raise ComponentsV2Error("You cannot send messages in that channel.")
-                if not channel.permissions_for(guild.me).send_messages:
-                    raise ComponentsV2Error("The bot cannot send messages in that channel.")
-                view = payload_to_view(load_payload(payload_text, "json"))
-                await channel.send(view=view, allowed_mentions=discord.AllowedMentions.none())
+                payload = load_payload(payload_text, "json")
+                view = payload_to_view(payload)
+                if action == "store":
+                    name = self._dashboard_value(form, "store_name").strip()
+                    if not name or len(name) > 100:
+                        raise ComponentsV2Error("Saved-message names must contain 1 to 100 characters.")
+                    locked = self._dashboard_value(form, "store_locked").lower() in {
+                        "1",
+                        "true",
+                        "on",
+                        "yes",
+                    }
+                    async with self.config.guild(guild).stored_messages() as stored:
+                        if name not in stored and len(stored) >= 100:
+                            raise ComponentsV2Error("This server has reached the 100-message limit.")
+                        stored[name] = {
+                            "author": user.id,
+                            "payload": payload,
+                            "locked": locked,
+                            "uses": 0,
+                        }
+                    notifications.append(
+                        {"message": f"Saved `{name}` to Stored Messages.", "category": "success"},
+                    )
+                else:
+                    channel_id = int(selected_channel)
+                    channel = guild.get_channel(channel_id)
+                    if not isinstance(channel, (discord.TextChannel, discord.VoiceChannel, discord.Thread)):
+                        raise ComponentsV2Error("Choose a valid text-capable channel.")
+                    if member is not None and not is_owner and not channel.permissions_for(member).send_messages:
+                        raise ComponentsV2Error("You cannot send messages in that channel.")
+                    if not channel.permissions_for(guild.me).send_messages:
+                        raise ComponentsV2Error("The bot cannot send messages in that channel.")
+                    await channel.send(view=view, allowed_mentions=discord.AllowedMentions.none())
+                    notifications.append(
+                        {"message": f"Components V2 message sent in #{channel.name}.", "category": "success"},
+                    )
             except (ComponentsV2Error, ValueError) as error:
                 notifications.append({"message": str(error), "category": "danger"})
             except discord.HTTPException as error:
@@ -110,11 +138,6 @@ class DashboardIntegration:
                 notifications.append(
                     {"message": f"Could not send the message: {error}", "category": "danger"},
                 )
-            else:
-                notifications.append(
-                    {"message": f"Components V2 message sent in #{channel.name}.", "category": "success"},
-                )
-
             if self._dashboard_value(form, "dashboard_ajax") == "1":
                 notification = notifications[-1]
                 return {
@@ -122,6 +145,8 @@ class DashboardIntegration:
                     "data": {
                         "ok": notification["category"] == "success",
                         "message": notification["message"],
+                        "action": action,
+                        "name": self._dashboard_value(form, "store_name").strip(),
                     },
                 }
 
