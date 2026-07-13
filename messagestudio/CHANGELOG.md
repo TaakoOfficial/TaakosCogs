@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.3.0 - 2026-07-12
+
+### New Features
+
+- Added every Components V2 component supported in Discord messages.
+- Added all button styles and string, user, role, mentionable, and channel selects.
+- Added custom-ID fallback interaction responses.
+- Added real uploaded File components with multipart Discord sending.
+- Added visual editing for select options, selection limits, disabled controls, button emojis, SKU IDs, and Section custom-button accessories.
+
 ## 1.2.0 - 2026-07-12
 
 ### New Features

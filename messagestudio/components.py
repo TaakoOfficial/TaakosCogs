@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import base64
+import binascii
 import copy
+import io
 import json
 from datetime import datetime
 from typing import Any
@@ -77,6 +80,33 @@ def payload_to_view(payload: Any) -> discord.ui.LayoutView:
 def view_to_payload(view: discord.ui.LayoutView) -> dict[str, Any]:
     """Serialize a LayoutView as a Discord API message payload."""
     return {"flags": COMPONENTS_V2_FLAG, "components": view.to_components()}
+
+
+def payload_to_files(payload: Any) -> list[discord.File]:
+    """Decode optional dashboard-uploaded files from a message payload."""
+    if not isinstance(payload, dict) or "uploads" not in payload:
+        return []
+    uploads = payload.get("uploads")
+    if not isinstance(uploads, list) or len(uploads) > 10:
+        raise ComponentsV2Error("`uploads` must be a list containing no more than 10 files.")
+    files = []
+    total_size = 0
+    for upload in uploads:
+        if not isinstance(upload, dict):
+            raise ComponentsV2Error("Every upload must be an object.")
+        filename = str(upload.get("filename", "")).replace("/", "_").replace("\\", "_")
+        encoded = upload.get("data")
+        if not filename or not isinstance(encoded, str):
+            raise ComponentsV2Error("Every upload requires a filename and base64 data.")
+        try:
+            raw = base64.b64decode(encoded, validate=True)
+        except (ValueError, binascii.Error) as error:
+            raise ComponentsV2Error(f"Upload `{filename}` is not valid base64 data.") from error
+        total_size += len(raw)
+        if len(raw) > 10_000_000 or total_size > 25_000_000:
+            raise ComponentsV2Error("Uploads are limited to 10 MB each and 25 MB total.")
+        files.append(discord.File(io.BytesIO(raw), filename=filename, spoiler=bool(upload.get("spoiler"))))
+    return files
 
 
 def _require_components_v2() -> None:
@@ -167,6 +197,25 @@ def _build_select(data: dict[str, Any], component_type: int) -> discord.ui.Item:
         "disabled": bool(data.get("disabled", False)),
         "id": _optional_id(data),
     }
+    if component_type != 3 and data.get("default_values") is not None:
+        defaults = data["default_values"]
+        if not isinstance(defaults, list):
+            raise ComponentsV2Error("Select `default_values` must be a list.")
+        try:
+            common["default_values"] = [
+                discord.SelectDefaultValue(
+                    id=int(value["id"]),
+                    type=discord.SelectDefaultValueType(str(value["type"])),
+                )
+                for value in defaults
+                if isinstance(value, dict)
+            ]
+        except (KeyError, TypeError, ValueError) as error:
+            raise ComponentsV2Error(
+                "Select defaults require an `id` and a type of user, role, or channel.",
+            ) from error
+        if len(common["default_values"]) != len(defaults):
+            raise ComponentsV2Error("Every Select default value must be an object.")
     if component_type == 3:
         options = data.get("options")
         if not isinstance(options, list) or not 1 <= len(options) <= 25:
@@ -269,10 +318,10 @@ def _build_component(data: Any, *, location: str) -> discord.ui.Item:
         return discord.ui.MediaGallery(*gallery_items, id=component_id)
 
     if component_type == 13:
-        raise ComponentsV2Error(
-            "File components require a matching multipart upload, which is not supported by "
-            "this JSON builder. Use a Media Gallery URL instead.",
-        )
+        media = _media_url(data.get("file", data.get("media")), "file")
+        if not media.startswith("attachment://"):
+            raise ComponentsV2Error("File components must use an `attachment://filename` URL.")
+        return discord.ui.File(media, spoiler=bool(data.get("spoiler", False)), id=component_id)
 
     if component_type == 14:
         spacing = int(data.get("spacing", 1))

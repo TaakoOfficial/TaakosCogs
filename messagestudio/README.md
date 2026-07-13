@@ -20,6 +20,7 @@ The builder provides:
 - Browser-local draft recovery without server-side storage.
 - Direct channel sending with mentions suppressed.
 - Guild saved-message creation with optional moderator locking directly from the builder.
+- Every message-side Components V2 type: Action Rows, every button style, all five select families, Sections, Text Displays, Thumbnails, Media Galleries, uploaded Files, Separators, and Containers.
 
 The editor is self-contained. It does not load or communicate with message.style or Merlin's API.
 
@@ -76,7 +77,9 @@ Discord permanently marks a message as Components V2. A V2 message cannot use le
 
 ## Supported Interactive Components
 
-Link and premium buttons are safe because Discord handles their actions. Enabled custom-ID buttons and select menus require application-specific callbacks, so arbitrary versions are rejected rather than sending controls that fail when clicked.
+MessageStudio supports link, premium, primary, secondary, success, and danger buttons plus string, user, role, mentionable, and channel selects. Custom-ID controls accept a configurable fallback response so users never receive an interaction failure.
+
+Discord's Label, File Upload input, Radio Group, Checkbox Group, and Checkbox components are modal-only. They cannot be included in a Components V2 message and are therefore outside the message builder.
 
 ## Credits
 

@@ -11,7 +11,7 @@ import discord
 from redbot.core import Config, commands
 from redbot.core.utils.chat_formatting import pagify, text_to_file
 
-from .components import load_payload, payload_to_view, view_to_payload
+from .components import load_payload, payload_to_files, payload_to_view, view_to_payload
 from .dashboard_integration import DashboardIntegration
 
 FORMATS = Literal["json", "yaml", "jsonfile", "yamlfile", "pastebin", "message"]
@@ -365,7 +365,7 @@ class MessageStudio(DashboardIntegration, commands.Cog):
 
     def _send_kwargs(self, payload):
         if isinstance(payload, dict) and "components" in payload:
-            return {"view": payload_to_view(payload)}
+            return {"view": payload_to_view(payload), "files": payload_to_files(payload)}
         content = payload.get("content") if isinstance(payload, dict) else None
         raw = payload if isinstance(payload, list) else payload.get("embeds", payload.get("embed", payload))
         raw = raw if isinstance(raw, list) else [raw]
@@ -381,7 +381,8 @@ class MessageStudio(DashboardIntegration, commands.Cog):
                 if target.author.id != ctx.me.id:
                     raise commands.UserFeedbackCheckFailure("I can only edit my own messages.")
                 if "view" in kwargs:
-                    await target.edit(content=None, embeds=[], attachments=[], **kwargs)
+                    files = kwargs.pop("files", [])
+                    await target.edit(content=None, embeds=[], attachments=files, **kwargs)
                 else:
                     await target.edit(content=kwargs["content"], embeds=kwargs["embeds"], view=None)
             else:

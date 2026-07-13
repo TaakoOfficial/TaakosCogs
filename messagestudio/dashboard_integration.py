@@ -11,7 +11,7 @@ from typing import Any, Callable
 import discord
 from redbot.core import commands
 
-from .components import ComponentsV2Error, load_payload, payload_to_view
+from .components import ComponentsV2Error, load_payload, payload_to_files, payload_to_view
 
 log = logging.getLogger("red.taakoscogs.messagestudio.dashboard")
 
@@ -92,6 +92,7 @@ class DashboardIntegration:
             try:
                 payload = load_payload(payload_text, "json")
                 view = payload_to_view(payload)
+                files = payload_to_files(payload)
                 if action == "store":
                     name = self._dashboard_value(form, "store_name").strip()
                     if not name or len(name) > 100:
@@ -123,7 +124,11 @@ class DashboardIntegration:
                         raise ComponentsV2Error("You cannot send messages in that channel.")
                     if not channel.permissions_for(guild.me).send_messages:
                         raise ComponentsV2Error("The bot cannot send messages in that channel.")
-                    await channel.send(view=view, allowed_mentions=discord.AllowedMentions.none())
+                    await channel.send(
+                        view=view,
+                        files=files,
+                        allowed_mentions=discord.AllowedMentions.none(),
+                    )
                     notifications.append(
                         {"message": f"Components V2 message sent in #{channel.name}.", "category": "success"},
                     )
