@@ -32,7 +32,7 @@ To update installed cogs:
 
 | Cog                                    | Best For                 | Highlights                                                                                                                                  |
 | -------------------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| [componentsv2bridge](./componentsv2bridge) | Components V2 messages | Native V2 JSON/YAML, EmbedUtils payload and stored-embed conversion, message editing/downloads, and a dashboard editor/sender.              |
+| [componentsv2bridge](./componentsv2bridge) | Components V2 messages | Standalone visual V2 builder, live preview, JSON/YAML, import/export, message editing/downloads, and direct dashboard sending.               |
 | [toolz](./toolz)                       | Role and user utilities  | Role/user info, role audits, role comparison, CSV exports, bot/no-role audits, role-triggered messages with `{user}` placeholders.          |
 | [rolemanager](./rolemanager)           | Role management          | Self roles, external role-change rules, policies, role panels, autoroles, sticky/temp roles, dashboard operations, imports, and bulk tools. |
 | [yalc](./yalc)                         | Server logging           | Message/member/channel/role logging, event filters, retention settings, ignore lists, Tupperbox/PluralKit-aware filtering.                  |
@@ -158,7 +158,7 @@ Some cogs have Python package requirements that Red's downloader installs automa
 
 | Cog           | Requirements     |
 | ------------- | ---------------- |
-| componentsv2bridge | `PyYAML>=6.0`, Red 3.5.21+, and AAA3A's EmbedUtils |
+| componentsv2bridge | `PyYAML>=6.0` and Red 3.5.21+ |
 | randomweather | `pytz`           |
 | rpcalander    | `pytz`           |
 | welcome       | `aiohttp`        |

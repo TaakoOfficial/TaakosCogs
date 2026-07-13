@@ -1,4 +1,4 @@
-"""Components V2 payload parsing and EmbedUtils conversion."""
+"""Components V2 payload parsing and legacy Discord embed conversion."""
 
 from __future__ import annotations
 
@@ -36,18 +36,18 @@ def load_payload(argument: str, conversion_type: str = "json") -> Any:
 
 
 def payload_to_view(payload: Any) -> discord.ui.LayoutView:
-    """Convert native Components V2 or legacy EmbedUtils data to a LayoutView."""
+    """Convert native Components V2 or legacy Discord embed data to a LayoutView."""
     _require_components_v2()
     payload = copy.deepcopy(payload)
     if _is_native_payload(payload):
         if isinstance(payload, dict) and any(payload.get(key) for key in ("content", "embed", "embeds")):
             raise ComponentsV2Error(
                 "Native Components V2 cannot be combined with legacy `content` or `embeds`. "
-                "Remove `components` to have this bridge convert an EmbedUtils payload.",
+                "Remove `components` to have this builder convert a legacy embed payload.",
             )
         components = payload.get("components", []) if isinstance(payload, dict) else payload
     else:
-        components = embedutils_to_components(payload)
+        components = legacy_embeds_to_components(payload)
 
     if not isinstance(components, list) or not components:
         raise ComponentsV2Error("The payload must contain at least one component.")
@@ -210,7 +210,7 @@ def _build_component(data: Any, *, location: str) -> discord.ui.Item:
     if component_type == 13:
         raise ComponentsV2Error(
             "File components require a matching multipart upload, which is not supported by "
-            "this JSON bridge. Use a Media Gallery URL instead.",
+            "this JSON builder. Use a Media Gallery URL instead.",
         )
 
     if component_type == 14:
@@ -228,7 +228,7 @@ def _build_component(data: Any, *, location: str) -> discord.ui.Item:
         if not isinstance(children, list) or not 1 <= len(children) <= 5:
             raise ComponentsV2Error("An Action Row requires 1 to 5 child controls.")
         if any(not isinstance(child, dict) or int(child.get("type", 0)) != 2 for child in children):
-            raise ComponentsV2Error("This bridge supports Buttons only inside Action Rows.")
+            raise ComponentsV2Error("This builder supports Buttons only inside Action Rows.")
         return discord.ui.ActionRow(
             *[_build_component(child, location="action_row") for child in children],
             id=component_id,
@@ -236,8 +236,8 @@ def _build_component(data: Any, *, location: str) -> discord.ui.Item:
 
     if component_type == 17:
         children = data.get("components")
-        if not isinstance(children, list) or not children:
-            raise ComponentsV2Error("A Container requires a non-empty `components` list.")
+        if not isinstance(children, list) or not 1 <= len(children) <= 10:
+            raise ComponentsV2Error("A Container requires 1 to 10 child components.")
         accent = data.get("accent_color", data.get("accent_colour"))
         return discord.ui.Container(
             *[_build_component(child, location="container") for child in children],
@@ -248,13 +248,13 @@ def _build_component(data: Any, *, location: str) -> discord.ui.Item:
 
     if component_type in {3, 5, 6, 7, 8}:
         raise ComponentsV2Error(
-            "Select menus need application-specific callbacks and are not supported by this bridge.",
+            "Select menus need application-specific callbacks and are not supported by this builder.",
         )
     raise ComponentsV2Error(f"Unsupported message component type: {component_type}.")
 
 
-def embedutils_to_components(payload: Any) -> list[dict[str, Any]]:
-    """Translate EmbedUtils/Discord embed JSON into native Components V2 dictionaries."""
+def legacy_embeds_to_components(payload: Any) -> list[dict[str, Any]]:
+    """Translate legacy Discord embed JSON into native Components V2 dictionaries."""
     content: str | None = None
     embeds: list[dict[str, Any]]
     if isinstance(payload, list):
@@ -275,9 +275,9 @@ def embedutils_to_components(payload: Any) -> list[dict[str, Any]]:
             embeds = []
 
     if content is not None and not isinstance(content, str):
-        raise ComponentsV2Error("EmbedUtils `content` must be a string.")
+        raise ComponentsV2Error("Legacy message `content` must be a string.")
     if not isinstance(embeds, list) or any(not isinstance(embed, dict) for embed in embeds):
-        raise ComponentsV2Error("EmbedUtils `embeds` must be a list of objects.")
+        raise ComponentsV2Error("Legacy message `embeds` must be a list of objects.")
 
     components: list[dict[str, Any]] = []
     if content:
@@ -285,7 +285,7 @@ def embedutils_to_components(payload: Any) -> list[dict[str, Any]]:
     for embed in embeds:
         components.append(_embed_to_container(embed))
     if not components:
-        raise ComponentsV2Error("No Components V2 data or EmbedUtils content/embeds were found.")
+        raise ComponentsV2Error("No Components V2 data or legacy content/embeds were found.")
     return components
 
 

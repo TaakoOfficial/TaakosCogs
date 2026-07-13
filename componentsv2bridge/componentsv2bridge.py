@@ -1,4 +1,4 @@
-"""EmbedUtils companion bridge for Discord Components V2."""
+"""Standalone Discord Components V2 builder."""
 
 from __future__ import annotations
 
@@ -13,22 +13,22 @@ from .components import load_payload, payload_to_view, view_to_payload
 from .dashboard_integration import DashboardIntegration
 
 
-class ComponentsV2Bridge(DashboardIntegration, commands.Cog):
-    """Send native Components V2 or convert EmbedUtils payloads into V2 layouts."""
+class ComponentsV2Builder(DashboardIntegration, commands.Cog):
+    """Build and send Discord Components V2 layouts."""
 
     def __init__(self, bot):
         self.bot = bot
 
     async def cog_load(self) -> None:
         if not hasattr(discord.ui, "LayoutView"):
-            raise RuntimeError("ComponentsV2Bridge requires discord.py 2.6 or newer.")
+            raise RuntimeError("ComponentsV2Builder requires discord.py 2.6 or newer.")
 
     @commands.guild_only()
     @commands.mod_or_permissions(manage_messages=True)
     @commands.bot_has_permissions(send_messages=True)
     @commands.hybrid_group(name="componentsv2", aliases=["cv2", "embedv2"], invoke_without_command=True)
     async def components_v2(self, ctx: commands.Context) -> None:
-        """Bridge EmbedUtils and native JSON/YAML payloads to Discord Components V2."""
+        """Build and send Discord Components V2 messages."""
         await ctx.send_help()
 
     @components_v2.command(name="json")
@@ -40,7 +40,7 @@ class ComponentsV2Bridge(DashboardIntegration, commands.Cog):
         *,
         data: str = "",
     ) -> None:
-        """Send native Components V2 or converted EmbedUtils JSON."""
+        """Send Components V2 JSON or convert a legacy Discord embed payload."""
         if not data:
             data = await self._attachment_text(ctx, ("json", "txt"))
         await self._send_payload(ctx, load_payload(data, "json"), channel)
@@ -54,7 +54,7 @@ class ComponentsV2Bridge(DashboardIntegration, commands.Cog):
         *,
         data: str = "",
     ) -> None:
-        """Send native Components V2 or converted EmbedUtils YAML."""
+        """Send Components V2 YAML or convert a legacy Discord embed payload."""
         if not data:
             data = await self._attachment_text(ctx, ("yaml", "yml", "txt"))
         await self._send_payload(ctx, load_payload(data, "yaml"), channel)
@@ -107,32 +107,6 @@ class ComponentsV2Bridge(DashboardIntegration, commands.Cog):
         view = discord.ui.LayoutView.from_message(message, timeout=None)
         payload = json.dumps(view_to_payload(view), indent=2, ensure_ascii=False)
         await ctx.send(file=text_to_file(payload, filename="components-v2.json"))
-
-    @components_v2.command(name="stored")
-    @commands.cooldown(2, 5, commands.BucketType.user)
-    async def components_v2_stored(
-        self,
-        ctx: commands.Context,
-        name: str,
-        channel: discord.TextChannel | None = None,
-        global_level: bool = False,
-    ) -> None:
-        """Convert and post an existing EmbedUtils stored embed as Components V2."""
-        embedutils = self.bot.get_cog("EmbedUtils")
-        if embedutils is None or not hasattr(embedutils, "config"):
-            raise commands.UserFeedbackCheckFailure("Load AAA3A's EmbedUtils cog first.")
-        config = embedutils.config if global_level else embedutils.config.guild(ctx.guild)
-        async with config.stored_embeds() as stored_embeds:
-            if name not in stored_embeds:
-                raise commands.UserFeedbackCheckFailure("No EmbedUtils stored embed has that name.")
-            stored = stored_embeds[name]
-            if global_level and stored.get("locked") and ctx.author.id not in self.bot.owner_ids:
-                raise commands.UserFeedbackCheckFailure("That global stored embed is locked.")
-            if not global_level and stored.get("locked") and not await self.bot.is_mod(ctx.author):
-                raise commands.UserFeedbackCheckFailure("That stored embed is locked to moderators.")
-            payload = {"embed": stored["embed"]}
-            stored["uses"] = int(stored.get("uses", 0)) + 1
-        await self._send_payload(ctx, payload, channel)
 
     @components_v2.command(name="dashboard")
     async def components_v2_dashboard(self, ctx: commands.Context) -> None:

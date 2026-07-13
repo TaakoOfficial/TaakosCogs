@@ -2,13 +2,12 @@
   "$schema": "https://raw.githubusercontent.com/Cog-Creators/Red-DiscordBot/V3/develop/schema/red_cog.schema.json",
   "name": "componentsv2bridge",
   "author": ["Taako"],
-  "version": "0.1.0",
-  "description": "A companion bridge for AAA3A's EmbedUtils that converts existing embed payloads to Discord Components V2 and provides native Components V2 JSON/YAML commands and a Red-Web-Dashboard editor.",
-  "install_msg": "ComponentsV2Bridge loaded. Install and load AAA3A's EmbedUtils to post its stored embeds, then use `[p]cv2`, `[p]cv2 json`, `[p]cv2 stored`, or the Red-Web-Dashboard page.",
-  "short": "Bridge EmbedUtils payloads and stored embeds to Discord Components V2 from Discord or the dashboard.",
+  "version": "0.2.0",
+  "description": "A standalone Discord Components V2 builder with native JSON/YAML commands and a full visual Red-Web-Dashboard editor, live preview, import/export, and channel sender.",
+  "install_msg": "ComponentsV2Builder loaded. Use `[p]cv2 json`, `[p]cv2 yaml`, or `[p]cv2 dashboard` to open the visual builder. Red 3.5.21 or newer is required.",
+  "short": "Build, preview, import, export, send, edit, and download Discord Components V2 messages.",
   "tags": [
     "components v2",
-    "embedutils",
     "embeds",
     "json",
     "yaml",
@@ -16,9 +15,6 @@
     "utility"
   ],
   "requirements": ["PyYAML>=6.0"],
-  "required_cogs": {
-    "EmbedUtils": "https://github.com/AAA3A-AAA3A/AAA3A-cogs"
-  },
   "min_bot_version": "3.5.21",
   "min_python_version": [3, 10, 0],
   "hidden": false,

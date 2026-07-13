@@ -1,0 +1,105 @@
+<!--
+  Standalone Components V2 builder for Taako's Cogs.
+  Interface model inspired by Merlin Fuchs' MIT-licensed Embed Generator:
+  https://github.com/merlinfuchs/embed-generator
+-->
+<style>
+  .v2b{--bg:#1e1f22;--panel:#2b2d31;--panel2:#313338;--line:#3f4147;--text:#dbdee1;--muted:#949ba4;--brand:#5865f2;--danger:#da373c;color:var(--text);background:var(--bg);border-radius:10px;overflow:hidden;min-height:760px}
+  .v2b *{box-sizing:border-box}.v2b button,.v2b input,.v2b textarea,.v2b select{font:inherit}.v2b-top{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 18px;background:#111214;border-bottom:1px solid var(--line)}
+  .v2b-title{font-size:18px;font-weight:700}.v2b-sub{font-size:12px;color:var(--muted);margin-top:3px}.v2b-actions,.v2b-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .v2b-btn{border:0;border-radius:4px;background:#4e5058;color:#fff;padding:8px 11px;cursor:pointer;font-weight:600}.v2b-btn:hover{filter:brightness(1.12)}.v2b-btn.primary{background:var(--brand)}.v2b-btn.danger{background:var(--danger)}.v2b-btn.small{padding:4px 7px;font-size:12px}
+  .v2b-tabs{display:flex;background:#111214;padding:0 18px}.v2b-tab{border:0;border-bottom:2px solid transparent;background:none;color:var(--muted);padding:11px 15px;cursor:pointer}.v2b-tab.active{color:#fff;border-color:var(--brand)}
+  .v2b-work{display:grid;grid-template-columns:minmax(400px,1.1fr) minmax(340px,.9fr);min-height:680px}.v2b-editor{padding:16px;overflow:auto;max-height:calc(100vh - 220px);min-height:680px}.v2b-preview-wrap{background:var(--panel2);border-left:1px solid var(--line);padding:22px;overflow:auto;max-height:calc(100vh - 220px)}
+  .v2b-toolbar{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px}.v2b-select,.v2b-input,.v2b-textarea{width:100%;background:#1e1f22;color:var(--text);border:1px solid var(--line);border-radius:4px;padding:8px}.v2b-textarea{min-height:82px;resize:vertical;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}.v2b-json{min-height:560px}
+  .v2b-card{background:var(--panel);border:1px solid var(--line);border-radius:7px;margin:0 0 11px;overflow:hidden}.v2b-card.nested{margin:9px 0 0;background:#242529}.v2b-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 11px;border-bottom:1px solid var(--line)}.v2b-head strong{font-size:13px}.v2b-kind{color:#b5bac1;font-size:11px;text-transform:uppercase;letter-spacing:.08em}.v2b-body{padding:11px}.v2b-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.v2b-field{display:block;color:var(--muted);font-size:12px}.v2b-field>span{display:block;margin-bottom:5px}.v2b-check{display:flex;align-items:center;gap:7px;color:var(--text);font-size:13px}.v2b-nested{border-left:2px solid #4e5058;margin-top:10px;padding-left:10px}.v2b-empty{border:1px dashed #4e5058;border-radius:7px;text-align:center;padding:30px;color:var(--muted)}
+  .v2b-message{font-family:gg sans,Noto Sans,Helvetica Neue,Helvetica,Arial,sans-serif;max-width:680px}.v2b-author{display:flex;gap:10px}.v2b-avatar{width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,#5865f2,#eb459e)}.v2b-name{font-weight:600;color:#f2f3f5;font-size:14px}.v2b-time{font-size:12px;color:var(--muted);font-weight:400}.v2b-components{margin-top:6px;display:flex;flex-direction:column;gap:5px}.v2b-container{border:1px solid var(--line);border-left:4px solid transparent;border-radius:4px;padding:10px 12px;display:flex;flex-direction:column;gap:7px}.v2b-text{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.35}.v2b-text h2,.v2b-text h3{margin:0}.v2b-sep{height:1px;background:#4e5058;margin:7px 0}.v2b-gallery{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px}.v2b-gallery img{display:block;width:100%;max-height:300px;object-fit:cover;border-radius:4px}.v2b-buttons{display:flex;flex-wrap:wrap;gap:5px}.v2b-discord-btn{background:#4e5058;color:#fff;border-radius:3px;padding:7px 11px;font-weight:600;font-size:14px}.v2b-section{display:grid;grid-template-columns:1fr auto;gap:12px}.v2b-thumb{width:82px;height:82px;object-fit:cover;border-radius:4px}.v2b-status{font-size:12px;color:var(--muted)}.v2b-status.bad{color:#fa777c}.v2b-credit{color:var(--muted);font-size:11px;margin-top:18px}.v2b-credit a{color:#8ea1e1}.v2b-send{border-top:1px solid var(--line);margin-top:15px;padding-top:14px}.v2b-pane[hidden]{display:none!important}
+  @media(max-width:950px){.v2b-work{grid-template-columns:1fr}.v2b-preview-wrap{border-left:0;border-top:1px solid var(--line);max-height:none}.v2b-editor{max-height:none}.v2b-top{align-items:flex-start;flex-direction:column}.v2b-grid{grid-template-columns:1fr}}
+</style>
+
+<div class="v2b" id="v2b-app" data-storage-key="taakos-cv2-builder:%%GUILD_ID%%">
+  <div class="v2b-top">
+    <div><div class="v2b-title">Components V2 Builder</div><div class="v2b-sub">%%GUILD_NAME%% · visual editor and live Discord preview</div></div>
+    <div class="v2b-actions"><button class="v2b-btn" type="button" data-top="import">Import JSON</button><button class="v2b-btn" type="button" data-top="copy">Copy JSON</button><button class="v2b-btn" type="button" data-top="download">Download</button><button class="v2b-btn danger" type="button" data-top="reset">Reset</button></div>
+  </div>
+  <div class="v2b-tabs"><button class="v2b-tab active" type="button" data-tab="visual">Visual builder</button><button class="v2b-tab" type="button" data-tab="json">JSON</button></div>
+  <div class="v2b-work">
+    <section class="v2b-editor">
+      <div class="v2b-pane" data-pane="visual">
+        <div class="v2b-toolbar"><div class="v2b-row"><select class="v2b-select" id="v2b-add-type"><option value="10">Text Display</option><option value="17">Container</option><option value="9">Section</option><option value="12">Media Gallery</option><option value="14">Separator</option><option value="1">Action Row</option></select><button class="v2b-btn primary" type="button" data-top="add">Add component</button></div><span class="v2b-status" id="v2b-count"></span></div>
+        <div id="v2b-components-editor"></div>
+      </div>
+      <div class="v2b-pane" data-pane="json" hidden><textarea class="v2b-textarea v2b-json" id="v2b-json" spellcheck="false"></textarea><div class="v2b-row" style="margin-top:10px"><button class="v2b-btn primary" type="button" data-top="apply-json">Apply JSON</button><span class="v2b-status" id="v2b-json-status"></span></div></div>
+      <form method="POST" class="v2b-send" id="v2b-send-form">%%CSRF%%<textarea name="payload" id="v2b-payload" hidden>%%PAYLOAD%%</textarea><div class="v2b-row"><select class="v2b-select" style="max-width:320px" name="channel_id" required><option value="">Choose a channel</option>%%CHANNEL_OPTIONS%%</select><button class="v2b-btn primary" type="submit">Send to Discord</button><span class="v2b-status">Dashboard sends suppress all mentions.</span></div></form>
+      <div class="v2b-credit">Builder UX inspired by <a href="https://github.com/merlinfuchs/embed-generator" target="_blank" rel="noopener">Merlin Fuchs' Embed Generator</a> (MIT). This editor is self-contained and does not contact that service.</div>
+    </section>
+    <aside class="v2b-preview-wrap"><div class="v2b-message"><div class="v2b-author"><div class="v2b-avatar"></div><div style="min-width:0;flex:1"><div class="v2b-name">Components V2 Builder <span style="background:#5865f2;border-radius:3px;padding:1px 4px;font-size:10px">APP</span> <span class="v2b-time">Today at 12:00 PM</span></div><div class="v2b-components" id="v2b-preview"></div></div></div></div></aside>
+</div>
+
+<script>
+(() => {
+  const app=document.getElementById('v2b-app'); if(!app)return;
+  const seed=document.getElementById('v2b-payload');
+  const draftKey=app.dataset.storageKey;
+  const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const clone=v=>JSON.parse(JSON.stringify(v));
+  const defaults={
+    10:()=>({type:10,content:'New text display'}),
+    17:()=>({type:17,accent_color:5793266,spoiler:false,components:[{type:10,content:'## New container'},{type:10,content:'Add your message here.'}]}),
+    9:()=>({type:9,components:[{type:10,content:'## New section'},{type:10,content:'Section text'}],accessory:{type:11,media:{url:'https://cdn.discordapp.com/embed/avatars/0.png'},description:''}}),
+    12:()=>({type:12,items:[{media:{url:'https://cdn.discordapp.com/embed/avatars/0.png'},description:'',spoiler:false}]}),
+    14:()=>({type:14,divider:true,spacing:1}),
+    1:()=>({type:1,components:[{type:2,style:5,label:'Open link',url:'https://discord.com'}]})
+  };
+  let state;
+  try{state=JSON.parse(localStorage.getItem(draftKey)||seed.value)}catch(_){state={flags:32768,components:[defaults[17]()]}}
+  if(!state||!Array.isArray(state.components))state={flags:32768,components:[defaults[17]()]}; state.flags=32768;
+  const editor=document.getElementById('v2b-components-editor'),preview=document.getElementById('v2b-preview'),jsonBox=document.getElementById('v2b-json');
+  const parts=p=>p===''?[]:p.split('.').map(x=>/^\d+$/.test(x)?Number(x):x);
+  const get=p=>parts(p).reduce((o,k)=>o[k],state);
+  const set=(p,v)=>{const a=parts(p),k=a.pop();a.reduce((o,x)=>o[x],state)[k]=v;sync(false)};
+  const parentInfo=p=>{const a=parts(p),i=a.pop(),arr=a.reduce((o,x)=>o[x],state);return{arr,i,path:a.join('.')}};
+  function input(path,label,value,kind='text'){return `<label class="v2b-field"><span>${esc(label)}</span><input class="v2b-input" type="${kind}" data-path="${path}" value="${esc(value)}"></label>`}
+  function area(path,label,value){return `<label class="v2b-field"><span>${esc(label)}</span><textarea class="v2b-textarea" data-path="${path}">${esc(value)}</textarea></label>`}
+  function check(path,label,value){return `<label class="v2b-check"><input type="checkbox" data-path="${path}" ${value?'checked':''}> ${esc(label)}</label>`}
+  function controls(path){return `<div class="v2b-row"><button class="v2b-btn small" type="button" data-op="up" data-path="${path}">↑</button><button class="v2b-btn small" type="button" data-op="down" data-path="${path}">↓</button><button class="v2b-btn small" type="button" data-op="duplicate" data-path="${path}">Duplicate</button><button class="v2b-btn small danger" type="button" data-op="delete" data-path="${path}">Delete</button></div>`}
+  const names={1:'Action Row',2:'Link Button',9:'Section',10:'Text Display',11:'Thumbnail',12:'Media Gallery',14:'Separator',17:'Container'};
+  function card(c,path,nested=false){
+    let body='';
+    if(c.type===10)body=area(path+'.content','Markdown content',c.content||'');
+    if(c.type===14)body=`<div class="v2b-grid">${check(path+'.divider','Show divider',c.divider!==false)}<label class="v2b-field"><span>Spacing</span><select class="v2b-select" data-path="${path}.spacing"><option value="1" ${c.spacing!==2?'selected':''}>Small</option><option value="2" ${c.spacing===2?'selected':''}>Large</option></select></label></div>`;
+    if(c.type===12)body=gallery(c,path);
+    if(c.type===1)body=rowEditor(c,path);
+    if(c.type===9)body=section(c,path);
+    if(c.type===17){body=`<div class="v2b-grid">${input(path+'.accent_color','Accent color (decimal)',c.accent_color??5793266,'number')}${check(path+'.spoiler','Spoiler container',!!c.spoiler)}</div><div class="v2b-nested">${children(c.components||[],path+'.components',true)}${addMenu(path+'.components')}</div>`}
+    return `<article class="v2b-card ${nested?'nested':''}"><header class="v2b-head"><div><strong>${names[c.type]||'Component'}</strong> <span class="v2b-kind">type ${c.type}</span></div>${controls(path)}</header><div class="v2b-body">${body}</div></article>`;
+  }
+  function children(items,path,nested=false){return items.length?items.map((c,i)=>card(c,path+'.'+i,nested)).join(''):'<div class="v2b-empty">No components yet.</div>'}
+  function addMenu(path){return `<div class="v2b-row" style="margin-top:9px"><select class="v2b-select" style="max-width:190px" data-add-select="${path}"><option value="10">Text Display</option><option value="9">Section</option><option value="12">Media Gallery</option><option value="14">Separator</option><option value="1">Action Row</option></select><button class="v2b-btn small primary" type="button" data-op="add-child" data-path="${path}">Add inside</button></div>`}
+  function gallery(c,path){const items=c.items||[];return `${items.map((it,i)=>`<div class="v2b-card nested"><div class="v2b-body"><div class="v2b-grid">${input(`${path}.items.${i}.media.url`,'Image URL',it.media?.url||'')}${input(`${path}.items.${i}.description`,'Description',it.description||'')}</div><div class="v2b-row">${check(`${path}.items.${i}.spoiler`,'Spoiler',!!it.spoiler)}<button class="v2b-btn small danger" type="button" data-op="remove-gallery" data-path="${path}.items.${i}">Remove</button></div></div></div>`).join('')}<button class="v2b-btn small" type="button" data-op="add-gallery" data-path="${path}.items">Add image</button>`}
+  function rowEditor(c,path){const items=c.components||[];return `${items.map((b,i)=>`<div class="v2b-card nested"><div class="v2b-body"><div class="v2b-grid">${input(`${path}.components.${i}.label`,'Button label',b.label||'')}${input(`${path}.components.${i}.url`,'Link URL',b.url||'')}</div><button class="v2b-btn small danger" type="button" data-op="remove-button" data-path="${path}.components.${i}">Remove</button></div></div>`).join('')}<button class="v2b-btn small" type="button" data-op="add-button" data-path="${path}.components">Add link button</button>`}
+  function section(c,path){const texts=c.components||[];const a=c.accessory||{type:11,media:{url:''}};return `${texts.map((t,i)=>`<div class="v2b-row">${area(`${path}.components.${i}.content`,`Text ${i+1}`,t.content||'')}<button class="v2b-btn small danger" type="button" data-op="remove-section-text" data-path="${path}.components.${i}">Remove</button></div>`).join('')}<button class="v2b-btn small" type="button" data-op="add-section-text" data-path="${path}.components">Add text</button><hr style="border-color:#3f4147"><label class="v2b-field"><span>Accessory</span><select class="v2b-select" data-op="accessory" data-accessory-path="${path}.accessory"><option value="11" ${a.type===11?'selected':''}>Thumbnail</option><option value="2" ${a.type===2?'selected':''}>Link button</option></select></label>${a.type===11?`<div class="v2b-grid">${input(path+'.accessory.media.url','Thumbnail URL',a.media?.url||'')}${input(path+'.accessory.description','Description',a.description||'')}</div>`:`<div class="v2b-grid">${input(path+'.accessory.label','Button label',a.label||'')}${input(path+'.accessory.url','Link URL',a.url||'')}</div>`}`}
+  function safeUrl(v){try{const u=new URL(v);return ['http:','https:'].includes(u.protocol)?u.href:''}catch(_){return''}}
+  function markdown(v){let s=esc(v);s=s.replace(/^### (.*)$/gm,'<h3>$1</h3>').replace(/^## (.*)$/gm,'<h2>$1</h2>').replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/\[(.+?)\]\((.+?)\)/g,'<span style="color:#00a8fc">$1</span>');return s}
+  function renderPreview(items,root){for(const c of items||[]){let el;if(c.type===10){el=document.createElement('div');el.className='v2b-text';el.innerHTML=markdown(c.content||'')}else if(c.type===14){el=document.createElement('div');el.className='v2b-sep';if(c.divider===false)el.style.opacity='0'}else if(c.type===17){el=document.createElement('div');el.className='v2b-container';if(c.accent_color!=null)el.style.borderLeftColor='#'+Number(c.accent_color).toString(16).padStart(6,'0').slice(-6);renderPreview(c.components,el)}else if(c.type===12){el=document.createElement('div');el.className='v2b-gallery';for(const it of c.items||[]){const u=safeUrl(it.media?.url);if(u){const img=document.createElement('img');img.src=u;img.alt=it.description||'';el.appendChild(img)}}}else if(c.type===1){el=document.createElement('div');el.className='v2b-buttons';for(const b of c.components||[]){const x=document.createElement('span');x.className='v2b-discord-btn';x.textContent=(b.label||'Link')+' ↗';el.appendChild(x)}}else if(c.type===9){el=document.createElement('div');el.className='v2b-section';const texts=document.createElement('div');renderPreview(c.components,texts);el.appendChild(texts);if(c.accessory?.type===11){const u=safeUrl(c.accessory.media?.url);if(u){const img=document.createElement('img');img.className='v2b-thumb';img.src=u;el.appendChild(img)}}else{const x=document.createElement('span');x.className='v2b-discord-btn';x.textContent=c.accessory?.label||'Link';el.appendChild(x)}}if(el)root.appendChild(el)}}
+  function metrics(items){let count=0,chars=0;for(const c of items||[]){count++;if(c.type===10)chars+=(c.content||'').length;if(c.components){const m=metrics(c.components);count+=m.count;chars+=m.chars}if(c.type===9&&c.accessory)count++}return{count,chars}}
+  function sync(rerender=true){state.flags=32768;const raw=JSON.stringify(state,null,2);seed.value=raw;jsonBox.value=raw;localStorage.setItem(draftKey,raw);preview.innerHTML='';renderPreview(state.components,preview);const m=metrics(state.components),status=document.getElementById('v2b-count');status.textContent=`${m.count}/40 components · ${m.chars}/4000 text characters`;status.classList.toggle('bad',m.count>40||m.chars>4000);if(rerender)editor.innerHTML=children(state.components,'components')}
+  app.addEventListener('input',e=>{const p=e.target.dataset.path;if(p){let v=e.target.type==='checkbox'?e.target.checked:e.target.value;if(e.target.type==='number'||e.target.tagName==='SELECT'&&/^\d+$/.test(v))v=Number(v);set(p,v)}});
+  app.addEventListener('change',e=>{if(e.target.dataset.op==='accessory'){set(e.target.dataset.accessoryPath,e.target.value==='11'?{type:11,media:{url:'https://cdn.discordapp.com/embed/avatars/0.png'},description:''}:{type:2,style:5,label:'Open link',url:'https://discord.com'});sync(true)}});
+  app.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;const top=b.dataset.top,op=b.dataset.op,p=b.dataset.path;
+    if(top==='add'){state.components.push(defaults[Number(document.getElementById('v2b-add-type').value)]());sync(true)}
+    if(top==='reset'&&confirm('Reset the builder and discard the local draft?')){localStorage.removeItem(draftKey);state={flags:32768,components:[defaults[17]() ]};sync(true)}
+    if(top==='copy')navigator.clipboard.writeText(JSON.stringify(state,null,2));
+    if(top==='download'){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(state,null,2)],{type:'application/json'}));a.download='components-v2.json';a.click();URL.revokeObjectURL(a.href)}
+    if(top==='import'){document.querySelector('[data-tab="json"]').click();jsonBox.focus()}
+    if(top==='apply-json'){try{const x=JSON.parse(jsonBox.value);if(!Array.isArray(x.components))throw new Error('Payload needs a components array');state=x;state.flags=32768;document.getElementById('v2b-json-status').textContent='JSON applied.';sync(true)}catch(err){document.getElementById('v2b-json-status').textContent=err.message}}
+    if(op&&p){if(['up','down','duplicate','delete'].includes(op)){const q=parentInfo(p),idx=Number(q.i);if(op==='up'&&idx>0)[q.arr[idx-1],q.arr[idx]]=[q.arr[idx],q.arr[idx-1]];if(op==='down'&&idx<q.arr.length-1)[q.arr[idx+1],q.arr[idx]]=[q.arr[idx],q.arr[idx+1]];if(op==='duplicate')q.arr.splice(idx+1,0,clone(q.arr[idx]));if(op==='delete')q.arr.splice(idx,1)}
+      if(op==='add-child'){const sel=document.querySelector(`[data-add-select="${p}"]`);get(p).push(defaults[Number(sel.value)]())}
+      if(op==='add-gallery')get(p).push({media:{url:'https://cdn.discordapp.com/embed/avatars/0.png'},description:'',spoiler:false});
+      if(op==='add-button'&&get(p).length<5)get(p).push({type:2,style:5,label:'Open link',url:'https://discord.com'});
+      if(op==='add-section-text'&&get(p).length<3)get(p).push({type:10,content:'More section text'});
+      if(['remove-gallery','remove-button','remove-section-text'].includes(op)){const q=parentInfo(p);if(q.arr.length>1)q.arr.splice(Number(q.i),1)}sync(true)}
+  });
+  app.querySelectorAll('[data-tab]').forEach(t=>t.addEventListener('click',()=>{app.querySelectorAll('[data-tab]').forEach(x=>x.classList.toggle('active',x===t));app.querySelectorAll('[data-pane]').forEach(x=>x.hidden=x.dataset.pane!==t.dataset.tab);if(t.dataset.tab==='json')jsonBox.value=JSON.stringify(state,null,2)}));
+  document.getElementById('v2b-send-form').addEventListener('submit',()=>sync(false));sync(true);
+})();
+</script>
