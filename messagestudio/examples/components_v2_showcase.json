@@ -1,0 +1,271 @@
+{
+  "flags": 32768,
+  "components": [
+    {
+      "type": 10,
+      "content": "# MessageStudio Components V2 Showcase\nThis message demonstrates every message-side Components V2 layout and control supported by MessageStudio."
+    },
+    {
+      "type": 17,
+      "accent_color": 5793266,
+      "spoiler": false,
+      "components": [
+        {
+          "type": 9,
+          "components": [
+            {
+              "type": 10,
+              "content": "## Sections and Thumbnails"
+            },
+            {
+              "type": 10,
+              "content": "Sections place up to three Text Displays beside a thumbnail or button accessory."
+            }
+          ],
+          "accessory": {
+            "type": 11,
+            "media": {
+              "url": "https://cdn.discordapp.com/embed/avatars/0.png"
+            },
+            "description": "MessageStudio showcase thumbnail",
+            "spoiler": false
+          }
+        }
+      ]
+    },
+    {
+      "type": 14,
+      "divider": true,
+      "spacing": 2
+    },
+    {
+      "type": 10,
+      "content": "### Media Gallery\nGalleries support up to ten images, descriptions, and per-image spoilers."
+    },
+    {
+      "type": 12,
+      "items": [
+        {
+          "media": {
+            "url": "https://cdn.discordapp.com/embed/avatars/1.png"
+          },
+          "description": "Visible gallery image",
+          "spoiler": false
+        },
+        {
+          "media": {
+            "url": "https://cdn.discordapp.com/embed/avatars/2.png"
+          },
+          "description": "Spoilered gallery image",
+          "spoiler": true
+        }
+      ]
+    },
+    {
+      "type": 14,
+      "divider": true,
+      "spacing": 1
+    },
+    {
+      "type": 10,
+      "content": "### Buttons\nPrimary, secondary, success, danger, and link buttons can share an Action Row. Custom buttons use safe ephemeral fallback responses."
+    },
+    {
+      "type": 1,
+      "components": [
+        {
+          "type": 2,
+          "style": 1,
+          "label": "Primary",
+          "emoji": "🚀",
+          "custom_id": "messagestudio_showcase_primary",
+          "response": "You clicked the primary showcase button!"
+        },
+        {
+          "type": 2,
+          "style": 2,
+          "label": "Secondary",
+          "custom_id": "messagestudio_showcase_secondary",
+          "response": "You clicked the secondary showcase button!"
+        },
+        {
+          "type": 2,
+          "style": 3,
+          "label": "Success",
+          "custom_id": "messagestudio_showcase_success",
+          "response": "Success! MessageStudio handled this interaction."
+        },
+        {
+          "type": 2,
+          "style": 4,
+          "label": "Danger",
+          "custom_id": "messagestudio_showcase_danger",
+          "response": "This is only a showcase; nothing was deleted."
+        },
+        {
+          "type": 2,
+          "style": 5,
+          "label": "Discord Docs",
+          "url": "https://discord.com/developers/docs/components/reference"
+        }
+      ]
+    },
+    {
+      "type": 14,
+      "divider": true,
+      "spacing": 1
+    },
+    {
+      "type": 10,
+      "content": "### String Select\nString selects support up to 25 labeled options, descriptions, emojis, defaults, and selection limits."
+    },
+    {
+      "type": 1,
+      "components": [
+        {
+          "type": 3,
+          "custom_id": "messagestudio_showcase_string_select",
+          "placeholder": "Choose one or two features",
+          "min_values": 1,
+          "max_values": 2,
+          "response": "Your showcase selection was received!",
+          "options": [
+            {
+              "label": "Containers",
+              "value": "containers",
+              "description": "Group components with an accent color",
+              "emoji": "📦",
+              "default": true
+            },
+            {
+              "label": "Media Galleries",
+              "value": "galleries",
+              "description": "Display multiple images",
+              "emoji": "🖼️"
+            },
+            {
+              "label": "Interactive Controls",
+              "value": "controls",
+              "description": "Buttons and select menus",
+              "emoji": "🎛️"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": 10,
+      "content": "### Auto-Populated Selects\nDiscord can populate users, roles, mentionables, and channels automatically."
+    },
+    {
+      "type": 1,
+      "components": [
+        {
+          "type": 5,
+          "custom_id": "messagestudio_showcase_user_select",
+          "placeholder": "Select a user",
+          "min_values": 1,
+          "max_values": 1,
+          "response": "The selected user was received."
+        }
+      ]
+    },
+    {
+      "type": 1,
+      "components": [
+        {
+          "type": 6,
+          "custom_id": "messagestudio_showcase_role_select",
+          "placeholder": "Select a role",
+          "min_values": 1,
+          "max_values": 1,
+          "response": "The selected role was received."
+        }
+      ]
+    },
+    {
+      "type": 1,
+      "components": [
+        {
+          "type": 7,
+          "custom_id": "messagestudio_showcase_mentionable_select",
+          "placeholder": "Select a user or role",
+          "min_values": 1,
+          "max_values": 2,
+          "response": "The selected mentionables were received."
+        }
+      ]
+    },
+    {
+      "type": 1,
+      "components": [
+        {
+          "type": 8,
+          "custom_id": "messagestudio_showcase_channel_select",
+          "placeholder": "Select a text, voice, or forum channel",
+          "channel_types": [
+            0,
+            2,
+            5,
+            15
+          ],
+          "min_values": 1,
+          "max_values": 1,
+          "response": "The selected channel was received."
+        }
+      ]
+    },
+    {
+      "type": 14,
+      "divider": true,
+      "spacing": 2
+    },
+    {
+      "type": 9,
+      "components": [
+        {
+          "type": 10,
+          "content": "## Custom Section Button"
+        },
+        {
+          "type": 10,
+          "content": "A Section accessory may also be an interactive button."
+        }
+      ],
+      "accessory": {
+        "type": 2,
+        "style": 1,
+        "label": "Try it",
+        "custom_id": "messagestudio_showcase_section_button",
+        "response": "The Section accessory button works!"
+      }
+    },
+    {
+      "type": 14,
+      "divider": true,
+      "spacing": 1
+    },
+    {
+      "type": 10,
+      "content": "### Uploaded File\nFile components expose a matching multipart attachment inside a V2 layout."
+    },
+    {
+      "type": 13,
+      "file": {
+        "url": "attachment://messagestudio-showcase.txt"
+      },
+      "spoiler": false
+    },
+    {
+      "type": 10,
+      "content": "-# Premium buttons are supported too, but require a real SKU owned by your Discord application, so this portable example does not include one."
+    }
+  ],
+  "uploads": [
+    {
+      "filename": "messagestudio-showcase.txt",
+      "spoiler": false,
+      "data": "TWVzc2FnZVN0dWRpbyBDb21wb25lbnRzIFYyIFNob3djYXNlCgpUaGlzIGZpbGUgd2FzIHVwbG9hZGVkIGFuZCBkaXNwbGF5ZWQgdGhyb3VnaCBhIENvbXBvbmVudHMgVjIgRmlsZSBjb21wb25lbnQuCg=="
+    }
+  ]
+}

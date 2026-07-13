@@ -45,6 +45,8 @@ If a payload is omitted from the JSON or YAML commands, attach a UTF-8 `.json`, 
 
 ## Native Example
 
+A complete ready-to-send example is available at [`examples/components_v2_showcase.json`](./examples/components_v2_showcase.json). It demonstrates every portable message-side component, interactive controls, media, and a real uploaded file.
+
 ```json
 {
   "flags": 32768,

@@ -9,6 +9,7 @@
 - Added custom-ID fallback interaction responses.
 - Added real uploaded File components with multipart Discord sending.
 - Added visual editing for select options, selection limits, disabled controls, button emojis, SKU IDs, and Section custom-button accessories.
+- Added a ready-to-send Components V2 showcase JSON with interactive controls, media, layouts, and an uploaded file.
 
 ## 1.2.0 - 2026-07-12
 
