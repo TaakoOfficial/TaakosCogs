@@ -263,7 +263,8 @@ class DashboardIntegration:
   const submitDashboardForm = async (form) => {
     const formData = new FormData(form);
     formData.set("active_tab", "desk");
-    const response = await fetch(form.action || location.href, {
+    const endpoint = form.getAttribute("action") || location.href;
+    const response = await fetch(endpoint, {
       method: (form.method || "POST").toUpperCase(),
       body: formData,
       credentials: "same-origin",

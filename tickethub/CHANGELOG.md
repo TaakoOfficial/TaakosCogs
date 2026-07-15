@@ -1,7 +1,8 @@
 # Changelog
 
-## Unreleased
+## 1.17.0
 
+- Fixed live Ticket Desk refreshes and replies posting to an invalid `[object HTMLInputElement]` dashboard URL.
 - Delete the close-confirmation prompt when cancellation is selected instead of leaving a public "Close Cancelled" card in the ticket.
 - Live-update the Ticket Desk conversation every eight seconds while its dashboard tab is visible, preserve unsent replies and the reader's scroll position, and send replies without reloading the page.
 - Added a dashboard Ticket Desk for reading recent ticket conversations, sending attributed staff replies, managing members, and running ticket lifecycle actions without leaving the dashboard.
