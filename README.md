@@ -28,6 +28,10 @@ To update installed cogs:
 [p]cog update
 ```
 
+## Dashboard Support
+
+Every configurable cog includes its own purpose-built Red-Web-Dashboard page with labeled fields, Discord channel and role selectors, validation, and cog-specific actions. Stateless utilities use focused operation or live-status pages instead of showing an empty settings editor. No cog relies on the generic JSON configuration fallback.
+
 ## Cog Catalog
 
 | Cog                                    | Best For                 | Highlights                                                                                                                                  |

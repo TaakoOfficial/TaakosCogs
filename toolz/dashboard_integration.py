@@ -1,9 +1,9 @@
-"""Red-Web-Dashboard integration."""
+# ruff: noqa: E501
+"""Purpose-built dashboard for Toolz role messages."""
 
 from __future__ import annotations
 
 import html
-import json
 import logging
 from typing import TYPE_CHECKING, Any, Callable
 
@@ -16,8 +16,6 @@ log = logging.getLogger("red.taakoscogs.toolz.dashboard")
 
 
 def dashboard_page(*args, **kwargs):
-    """Dashboard page decorator compatible with Red-Web-Dashboard."""
-
     def decorator(func: Callable):
         func.__dashboard_decorator_params__ = (args, kwargs)
         return func
@@ -26,304 +24,157 @@ def dashboard_page(*args, **kwargs):
 
 
 class DashboardIntegration:
-    """Generic editable dashboard integration for guild configuration."""
-
-    _DASHBOARD_CONFIG_LIMIT = 1_000_000
+    """Role-triggered message editor and server utility overview."""
 
     @commands.Cog.listener()
     async def on_dashboard_cog_add(self, dashboard_cog: commands.Cog) -> None:
-        """Register the cog as a Red-Web-Dashboard third party."""
         handler = dashboard_cog.rpc.third_parties_handler
         try:
             handler.add_third_party(self, overwrite=True)
         except TypeError:
             handler.add_third_party(self)
 
-    @dashboard_page(
-        name=None,
-        description="View and edit this cog's server configuration.",
-        methods=("GET", "POST"),
-    )
-    async def dashboard_page(
-        self,
-        user: discord.User,
-        guild: discord.Guild,
-        **kwargs: Any,
-    ) -> dict[str, Any]:
-        """Render the dashboard page and persist validated configuration changes."""
-        if not await self._dashboard_can_manage(user, guild):
-            return {
-                "status": 1,
-                "error_title": "Insufficient Permissions",
-                "error_message": (
-                    "You need Manage Server, Red admin, or bot owner access."
-                ),
-            }
-
-        notifications: list[dict[str, str]] = []
-        editor_value: str | None = None
+    @dashboard_page(name=None, description="Create and manage role-triggered messages.", methods=("GET", "POST"))
+    async def dashboard_page(self, user: discord.User, guild: discord.Guild, **kwargs: Any):
+        if not await self._toolz_can_manage(user, guild):
+            return {"status": 1, "error_title": "Insufficient Permissions", "error_message": "Manage Roles is required."}
+        notices = []
+        selected = self._toolz_value(self._toolz_form(kwargs), "role_id")
         if kwargs.get("method", "GET").upper() == "POST":
-            editor_value = self._dashboard_value(
-                self._dashboard_form(kwargs),
-                "config_json",
-            )
+            form = self._toolz_form(kwargs)
+            action = self._toolz_value(form, "action", "save")
             try:
-                await self._dashboard_save_config(guild, kwargs)
-            except (json.JSONDecodeError, ValueError, TypeError) as error:
-                notifications.append({"message": str(error), "category": "error"})
-            except Exception as error:
-                log.exception("Dashboard save failed for %s.", self.qualified_name)
-                return {
-                    "status": 1,
-                    "error_title": "Dashboard Error",
-                    "error_message": f"Could not save server configuration: {error}",
-                }
+                if action == "load":
+                    selected = str(self._toolz_role(guild, form).id)
+                else:
+                    selected = await self._toolz_save(guild, form)
+            except (commands.CommandError, ValueError) as error:
+                notices.append({"message": str(error), "category": "error"})
+            except Exception:
+                log.exception("Toolz dashboard save failed in guild %s", guild.id)
+                notices.append({"message": "Role message settings could not be saved.", "category": "error"})
             else:
-                notifications.append(
+                if action == "load":
+                    message = "Loaded that role's saved message configuration."
+                elif action == "delete":
+                    message = "Role message configuration removed."
+                else:
+                    message = "Role message configuration saved."
+                notices.append(
                     {
-                        "message": "Server configuration saved.",
+                        "message": message,
                         "category": "success",
                     },
                 )
-                editor_value = None
-
-        try:
-            source = await self._dashboard_source(guild, kwargs, editor_value)
-        except Exception as error:
-            log.exception("Dashboard render failed for %s.", self.qualified_name)
-            return {
-                "status": 1,
-                "error_title": "Dashboard Error",
-                "error_message": f"Could not render dashboard page: {error}",
-            }
-
+        entries = await self.config.guild(guild).role_messages()
         return {
             "status": 0,
-            "notifications": notifications,
-            "web_content": {
-                "source": source,
-                "expanded": True,
-            },
+            "notifications": notices,
+            "web_content": {"source": self._toolz_source(guild, entries, selected, self._toolz_csrf(kwargs)), "expanded": True},
         }
 
-    async def _dashboard_can_manage(
-        self,
-        user: discord.User,
-        guild: discord.Guild,
-    ) -> bool:
-        member = guild.get_member(user.id)
-        is_owner = user.id in getattr(self.bot, "owner_ids", set())
-        is_admin = member is not None and await self.bot.is_admin(member)
-        return bool(
-            is_owner
-            or is_admin
-            or (member is not None and member.guild_permissions.manage_guild),
+    async def _toolz_save(self, guild, form):
+        role = self._toolz_role(guild, form)
+        key = str(role.id)
+        action = self._toolz_value(form, "action", "save")
+        async with self.config.guild(guild).role_messages() as entries:
+            if action == "delete":
+                if entries.pop(key, None) is None:
+                    raise commands.BadArgument("That role has no configured messages.")
+                return ""
+            channel = self._toolz_channel(guild, form)
+            mode = self._toolz_value(form, "mode", "all").lower()
+            if mode not in {"all", "random"}:
+                raise commands.BadArgument("Delivery mode must be all or random.")
+            messages = [line.strip() for line in self._toolz_value(form, "messages").splitlines() if line.strip()]
+            if not 1 <= len(messages) <= 10:
+                raise commands.BadArgument("Add 1–10 message templates, one per line.")
+            if any(len(message) > 1800 for message in messages):
+                raise commands.BadArgument("Each message template must be 1,800 characters or shorter.")
+            entries[key] = {
+                "channel_id": channel.id,
+                "messages": messages,
+                "enabled": self._toolz_checked(form, "enabled"),
+                "mode": mode,
+            }
+        return key
+
+    def _toolz_source(self, guild, entries, selected, csrf):
+        entry = entries.get(str(selected), {})
+        role_options = '<option value="">Choose a role…</option>' + "".join(
+            f'<option value="{role.id}"{" selected" if str(role.id) == str(selected) else ""}>{html.escape(role.name)}</option>'
+            for role in reversed(guild.roles)
+            if not role.is_default()
         )
-
-    async def _dashboard_source(
-        self,
-        guild: discord.Guild,
-        kwargs: dict[str, Any],
-        editor_value: str | None = None,
-    ) -> str:
-        cog_name = html.escape(self.qualified_name)
-        config = await self._dashboard_guild_config(guild)
-        commands_html = self._dashboard_commands_html()
-        config_html = self._dashboard_config_editor(config, kwargs, editor_value)
-
+        channel_options = '<option value="">Choose a channel…</option>' + "".join(
+            f'<option value="{channel.id}"{" selected" if channel.id == entry.get("channel_id") else ""}>#{html.escape(channel.name)}</option>'
+            for channel in guild.text_channels
+        )
+        messages = html.escape("\n".join(entry.get("messages", [])))
+        enabled = " checked" if entry.get("enabled", True) else ""
+        all_selected = " selected" if entry.get("mode", "all") == "all" else ""
+        random_selected = " selected" if entry.get("mode") == "random" else ""
+        configured = []
+        for role_id, item in entries.items():
+            role = guild.get_role(int(role_id)) if str(role_id).isdigit() else None
+            channel = guild.get_channel(item.get("channel_id") or 0)
+            configured.append(
+                f"<tr><td>{html.escape(role.name) if role else 'Deleted role'}</td><td>{'#' + html.escape(channel.name) if channel else 'Not set'}</td><td>{len(item.get('messages', []))}</td><td>{html.escape(str(item.get('mode', 'all')).title())}</td><td>{'On' if item.get('enabled', True) else 'Off'}</td></tr>",
+            )
+        rows = "".join(configured) or '<tr><td colspan="5">No role messages are configured yet.</td></tr>'
         return f"""
-<section class="third-party-dashboard cog-config-dashboard">
-  <style>
-    .cog-config-dashboard .config-editor {{
-      width: 100%; min-height: 28rem; resize: vertical;
-      padding: .8rem; border: 1px solid var(--gray, #6c757d); border-radius: .35rem;
-      background: var(--background, #202225); color: var(--text, #f8f9fa);
-      font: .9rem/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    }}
-    .cog-config-dashboard .config-actions {{
-      display: flex; align-items: center; gap: .75rem; margin-top: .75rem;
-    }}
-    .cog-config-dashboard .config-help {{ opacity: .8; }}
-  </style>
-  <h2>{cog_name}</h2>
-  <p>Manage this cog's configuration for <strong>{html.escape(guild.name)}</strong>.</p>
-  <h3>Server Settings</h3>
-  {config_html}
-  <details>
-    <summary>Available commands</summary>
-    {commands_html}
-  </details>
-</section>
-"""
+<section class="toolz-dash"><style>
+.toolz-dash .card{{border:1px solid rgba(127,127,127,.3);border-radius:.7rem;padding:1rem;margin-bottom:1rem}}.toolz-dash .grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1rem}}.toolz-dash label{{display:flex;flex-direction:column;gap:.3rem}}.toolz-dash .check{{flex-direction:row;align-items:center}}.toolz-dash input,.toolz-dash select,.toolz-dash textarea{{padding:.6rem;border:1px solid rgba(127,127,127,.35);border-radius:.4rem;background:var(--background,#202225);color:var(--text,#fff)}}.toolz-dash textarea{{min-height:12rem;resize:vertical}}.toolz-dash table{{width:100%;border-collapse:collapse}}.toolz-dash td,.toolz-dash th{{padding:.55rem;border-bottom:1px solid rgba(127,127,127,.25);text-align:left}}.toolz-dash .actions{{display:flex;gap:.6rem;flex-wrap:wrap}}
+</style><h2>Toolz Role Messages</h2><p>Welcome members when roles are assigned in <strong>{html.escape(guild.name)}</strong>.</p><div class="card"><h3>Configured roles</h3><div style="overflow:auto"><table><thead><tr><th>Role</th><th>Channel</th><th>Messages</th><th>Mode</th><th>Status</th></tr></thead><tbody>{rows}</tbody></table></div></div>
+<form method="POST" class="card">{csrf}<h3>Add or edit a role</h3><p>Choose a role and load it before editing an existing configuration.</p><div class="grid"><label>Role<select name="role_id" required>{role_options}</select></label><label>Destination channel<select name="channel_id" required>{channel_options}</select></label><label>Delivery mode<select name="mode"><option value="all"{all_selected}>Post every message</option><option value="random"{random_selected}>Post one at random</option></select></label><label class="check"><input type="checkbox" name="enabled"{enabled}> Enabled</label></div><label>Message templates <small>One message per line; up to 10. Placeholders: {{user}}, {{username}}, {{display_name}}, {{role}}, {{role_name}}, {{server}}.</small><textarea name="messages" maxlength="18010">{messages}</textarea></label><div class="actions"><button class="btn btn-secondary" name="action" value="load" formnovalidate>Load This Role</button><button class="btn btn-primary" name="action" value="save">Save Role Messages</button><button class="btn btn-danger" name="action" value="delete" formnovalidate>Delete This Role</button></div></form></section>"""
 
-    async def _dashboard_save_config(
-        self,
-        guild: discord.Guild,
-        kwargs: dict[str, Any],
-    ) -> None:
-        group = self._dashboard_guild_group(guild)
-        if group is None:
-            raise ValueError("This cog does not store per-server configuration.")
-
-        form = self._dashboard_form(kwargs)
-        raw_config = self._dashboard_value(form, "config_json")
-        if not raw_config.strip():
-            raise ValueError("Configuration JSON cannot be empty.")
-        if len(raw_config.encode("utf-8")) > self._DASHBOARD_CONFIG_LIMIT:
-            raise ValueError("Configuration JSON is too large to save from the dashboard.")
-
-        proposed = json.loads(
-            raw_config,
-            parse_constant=lambda value: self._dashboard_invalid_json_constant(value),
+    async def _toolz_can_manage(self, user, guild):
+        member = guild.get_member(user.id)
+        return bool(
+            user.id in getattr(self.bot, "owner_ids", set())
+            or (member and await self.bot.is_admin(member))
+            or (member and member.guild_permissions.manage_roles),
         )
-        current = await group.all()
-        defaults = self._dashboard_guild_defaults()
-        self._dashboard_validate_config(current, proposed, defaults)
-        await group.set(proposed)
-
-    def _dashboard_guild_group(self, guild: discord.Guild) -> Any | None:
-        config = getattr(self, "config", None) or getattr(self, "_config", None)
-        guild_config = getattr(config, "guild", None) if config is not None else None
-        return guild_config(guild) if guild_config is not None else None
-
-    def _dashboard_guild_defaults(self) -> dict[str, Any]:
-        config = getattr(self, "config", None) or getattr(self, "_config", None)
-        defaults = getattr(config, "_defaults", {}) if config is not None else {}
-        guild_defaults = defaults.get("GUILD", {}) if isinstance(defaults, dict) else {}
-        return guild_defaults if isinstance(guild_defaults, dict) else {}
-
-    async def _dashboard_guild_config(
-        self,
-        guild: discord.Guild,
-    ) -> dict[str, Any] | None:
-        group = self._dashboard_guild_group(guild)
-        return None if group is None else await group.all()
 
     @staticmethod
-    def _dashboard_form(kwargs: dict[str, Any]) -> Any:
+    def _toolz_form(kwargs):
         data = kwargs.get("data") or {}
-        if isinstance(data, dict) and ("form" in data or "json" in data):
-            return data.get("form") or data.get("json") or {}
-        return data
+        return (data.get("form") or data.get("json") or {}) if isinstance(data, dict) else data
 
     @staticmethod
-    def _dashboard_value(form: Any, key: str, default: str = "") -> str:
+    def _toolz_value(form, key, default=""):
         value = form.get(key, default) if hasattr(form, "get") else default
         if isinstance(value, (list, tuple)):
             value = value[0] if value else default
         return default if value is None else str(value)
 
+    @classmethod
+    def _toolz_checked(cls, form, key):
+        return cls._toolz_value(form, key).lower() in {"1", "true", "on", "yes"}
+
+    @classmethod
+    def _toolz_role(cls, guild, form):
+        try:
+            role = guild.get_role(int(cls._toolz_value(form, "role_id")))
+        except ValueError as error:
+            raise commands.BadArgument("Choose a valid role.") from error
+        if role is None or role.is_default():
+            raise commands.BadArgument("Choose a valid role.")
+        return role
+
+    @classmethod
+    def _toolz_channel(cls, guild, form):
+        try:
+            channel = guild.get_channel(int(cls._toolz_value(form, "channel_id")))
+        except ValueError as error:
+            raise commands.BadArgument("Choose a valid text channel.") from error
+        if channel not in guild.text_channels:
+            raise commands.BadArgument("Choose a valid text channel.")
+        return channel
+
     @staticmethod
-    def _dashboard_csrf(kwargs: dict[str, Any]) -> str:
+    def _toolz_csrf(kwargs):
         token = kwargs.get("csrf_token")
         if not isinstance(token, (tuple, list)) or len(token) != 2:
             return ""
-        return (
-            '<input type="hidden" name="csrf_token" value="'
-            f'{html.escape(str(token[1]), quote=True)}">'
-        )
-
-    @staticmethod
-    def _dashboard_invalid_json_constant(value: str) -> None:
-        raise ValueError(f"{value} is not valid configuration JSON.")
-
-    @classmethod
-    def _dashboard_validate_config(
-        cls,
-        current: dict[str, Any],
-        proposed: Any,
-        defaults: dict[str, Any] | None = None,
-    ) -> None:
-        if not isinstance(proposed, dict):
-            raise TypeError("Configuration must be a JSON object.")
-
-        missing = sorted(set(current) - set(proposed))
-        unknown = sorted(set(proposed) - set(current))
-        if missing:
-            raise ValueError(f"Missing configuration key(s): {', '.join(missing)}.")
-        if unknown:
-            raise ValueError(f"Unknown configuration key(s): {', '.join(unknown)}.")
-
-        for key, old_value in current.items():
-            new_value = proposed[key]
-            expected_value = (defaults or {}).get(key, old_value)
-            if expected_value is None and new_value is None:
-                continue
-            if expected_value is None:
-                expected_value = old_value
-            if expected_value is None:
-                if key.endswith("_id"):
-                    valid = isinstance(new_value, int) and not isinstance(new_value, bool)
-                    if not valid:
-                        raise TypeError(
-                            f'Configuration key "{key}" must be an integer or null.',
-                        )
-                continue
-            if isinstance(expected_value, bool):
-                valid = isinstance(new_value, bool)
-            elif isinstance(expected_value, int):
-                valid = isinstance(new_value, int) and not isinstance(new_value, bool)
-            elif isinstance(expected_value, float):
-                valid = (
-                    isinstance(new_value, (int, float))
-                    and not isinstance(new_value, bool)
-                )
-            else:
-                valid = isinstance(new_value, type(expected_value))
-            if not valid:
-                expected = cls._dashboard_type_name(expected_value)
-                raise TypeError(f'Configuration key "{key}" must be {expected}.')
-
-    @staticmethod
-    def _dashboard_type_name(value: Any) -> str:
-        names = {
-            bool: "a boolean",
-            int: "an integer",
-            float: "a number",
-            str: "a string",
-            list: "an array",
-            dict: "an object",
-        }
-        return names.get(type(value), type(value).__name__)
-
-    def _dashboard_commands_html(self) -> str:
-        commands_list = sorted(
-            command.qualified_name
-            for command in self.walk_commands()
-            if not command.hidden
-        )
-        if not commands_list:
-            return "<p>No visible commands were found for this cog.</p>"
-        items = "\n".join(
-            f"<li><code>{html.escape(command)}</code></li>" for command in commands_list
-        )
-        return f"<ul>{items}</ul>"
-
-    @classmethod
-    def _dashboard_config_editor(
-        cls,
-        config: dict[str, Any] | None,
-        kwargs: dict[str, Any],
-        editor_value: str | None = None,
-    ) -> str:
-        if config is None:
-            return "<p>This cog does not store per-server configuration.</p>"
-        dumped = (
-            editor_value
-            if editor_value is not None
-            else json.dumps(config, indent=2, sort_keys=True, default=str)
-        )
-        return f"""
-<form method="POST">
-  {cls._dashboard_csrf(kwargs)}
-  <label for="cog-config-json" class="config-help">
-    Edit values as JSON. Key names and value types are validated before saving.
-  </label>
-  <textarea id="cog-config-json" class="config-editor" name="config_json"
-            spellcheck="false" required>{html.escape(dumped)}</textarea>
-  <div class="config-actions">
-    <button type="submit" class="btn btn-primary">Save Settings</button>
-    <span class="config-help">Changes apply immediately to this server.</span>
-  </div>
-</form>
-"""
+        return f'<input type="hidden" name="csrf_token" value="{html.escape(str(token[1]), quote=True)}">'

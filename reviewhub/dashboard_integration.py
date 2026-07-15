@@ -1,9 +1,9 @@
-"""Red-Web-Dashboard integration."""
+# ruff: noqa: E501
+"""Purpose-built dashboard for ReviewHub."""
 
 from __future__ import annotations
 
 import html
-import json
 import logging
 from typing import TYPE_CHECKING, Any, Callable
 
@@ -16,8 +16,6 @@ log = logging.getLogger("red.taakoscogs.reviewhub.dashboard")
 
 
 def dashboard_page(*args, **kwargs):
-    """Dashboard page decorator compatible with Red-Web-Dashboard."""
-
     def decorator(func: Callable):
         func.__dashboard_decorator_params__ = (args, kwargs)
         return func
@@ -26,304 +24,204 @@ def dashboard_page(*args, **kwargs):
 
 
 class DashboardIntegration:
-    """Generic editable dashboard integration for guild configuration."""
-
-    _DASHBOARD_CONFIG_LIMIT = 1_000_000
+    """Review publishing, moderation, and presentation controls."""
 
     @commands.Cog.listener()
     async def on_dashboard_cog_add(self, dashboard_cog: commands.Cog) -> None:
-        """Register the cog as a Red-Web-Dashboard third party."""
         handler = dashboard_cog.rpc.third_parties_handler
         try:
             handler.add_third_party(self, overwrite=True)
         except TypeError:
             handler.add_third_party(self)
 
-    @dashboard_page(
-        name=None,
-        description="View and edit this cog's server configuration.",
-        methods=("GET", "POST"),
-    )
-    async def dashboard_page(
-        self,
-        user: discord.User,
-        guild: discord.Guild,
-        **kwargs: Any,
-    ) -> dict[str, Any]:
-        """Render the dashboard page and persist validated configuration changes."""
-        if not await self._dashboard_can_manage(user, guild):
-            return {
-                "status": 1,
-                "error_title": "Insufficient Permissions",
-                "error_message": (
-                    "You need Manage Server, Red admin, or bot owner access."
-                ),
-            }
-
-        notifications: list[dict[str, str]] = []
-        editor_value: str | None = None
+    @dashboard_page(name=None, description="Configure reviews, vouches, and moderation.", methods=("GET", "POST"))
+    async def dashboard_page(self, user: discord.User, guild: discord.Guild, **kwargs: Any):
+        if not await self._rh_can_manage(user, guild):
+            return {"status": 1, "error_title": "Insufficient Permissions", "error_message": "Manage Server is required."}
+        notices = []
         if kwargs.get("method", "GET").upper() == "POST":
-            editor_value = self._dashboard_value(
-                self._dashboard_form(kwargs),
-                "config_json",
-            )
             try:
-                await self._dashboard_save_config(guild, kwargs)
-            except (json.JSONDecodeError, ValueError, TypeError) as error:
-                notifications.append({"message": str(error), "category": "error"})
-            except Exception as error:
-                log.exception("Dashboard save failed for %s.", self.qualified_name)
-                return {
-                    "status": 1,
-                    "error_title": "Dashboard Error",
-                    "error_message": f"Could not save server configuration: {error}",
-                }
+                await self._rh_save(guild, self._rh_form(kwargs))
+            except (commands.CommandError, ValueError) as error:
+                notices.append({"message": str(error), "category": "error"})
+            except Exception:
+                log.exception("ReviewHub dashboard save failed in guild %s", guild.id)
+                notices.append({"message": "ReviewHub settings could not be saved.", "category": "error"})
             else:
-                notifications.append(
-                    {
-                        "message": "Server configuration saved.",
-                        "category": "success",
-                    },
-                )
-                editor_value = None
-
-        try:
-            source = await self._dashboard_source(guild, kwargs, editor_value)
-        except Exception as error:
-            log.exception("Dashboard render failed for %s.", self.qualified_name)
-            return {
-                "status": 1,
-                "error_title": "Dashboard Error",
-                "error_message": f"Could not render dashboard page: {error}",
-            }
-
+                notices.append({"message": "ReviewHub settings saved.", "category": "success"})
+        settings = await self.config.guild(guild).all()
         return {
             "status": 0,
-            "notifications": notifications,
-            "web_content": {
-                "source": source,
-                "expanded": True,
-            },
+            "notifications": notices,
+            "web_content": {"source": self._rh_source(guild, settings, self._rh_csrf(kwargs)), "expanded": True},
         }
 
-    async def _dashboard_can_manage(
-        self,
-        user: discord.User,
-        guild: discord.Guild,
-    ) -> bool:
-        member = guild.get_member(user.id)
-        is_owner = user.id in getattr(self.bot, "owner_ids", set())
-        is_admin = member is not None and await self.bot.is_admin(member)
-        return bool(
-            is_owner
-            or is_admin
-            or (member is not None and member.guild_permissions.manage_guild),
-        )
+    async def _rh_save(self, guild, form):
+        template = self._rh_value(form, "review_template", "classic").lower()
+        if template not in {"classic", "detailed"}:
+            raise commands.BadArgument("Review template must be classic or detailed.")
+        command_name = self._rh_value(form, "review_command_name", "review").strip().lower()
+        if not command_name or not command_name.replace("-", "").replace("_", "").isalnum() or len(command_name) > 32:
+            raise commands.BadArgument("Command name must be 1–32 letters, numbers, hyphens, or underscores.")
+        color_text = self._rh_value(form, "review_embed_color", "#5865F2").lstrip("#")
+        try:
+            color = int(color_text, 16)
+        except ValueError as error:
+            raise commands.BadArgument("Choose a valid embed color.") from error
+        if not 0 <= color <= 0xFFFFFF:
+            raise commands.BadArgument("Choose a valid embed color.")
+        daily_limit = self._rh_int(form, "daily_limit", 1, 100)
+        values = {
+            "review_channel_id": self._rh_channel(guild, form, "review_channel_id"),
+            "report_channel_id": self._rh_channel(guild, form, "report_channel_id"),
+            "rateme_role_id": self._rh_role(guild, form, "rateme_role_id"),
+            "review_command_role_id": self._rh_role(guild, form, "review_command_role_id"),
+            "review_template": template,
+            "review_embed_color": color,
+            "daily_limit": daily_limit,
+            "review_command_name": command_name,
+        }
+        for key in (
+            "review_title",
+            "thread_title",
+            "rateme_message",
+            "review_request_title",
+            "rate_experience_title",
+            "review_button_label",
+            "review_author_text",
+            "star_emoji",
+            "report_button_emoji",
+            "submit_review_emoji",
+            "useful_button_emoji",
+        ):
+            value = self._rh_value(form, key).strip()
+            if not value:
+                raise commands.BadArgument(f"{key.replace('_', ' ').title()} cannot be empty.")
+            values[key] = value[:1000]
+        for key in (
+            "review_button_show",
+            "report_button_show",
+            "useful_button_show",
+            "auto_thread",
+            "review_command_enabled",
+            "delete_review_requests",
+            "vouch_mode",
+            "review_targets_enabled",
+        ):
+            values[key] = self._rh_checked(form, key)
+        conf = self.config.guild(guild)
+        for key, value in values.items():
+            await getattr(conf, key).set(value)
 
-    async def _dashboard_source(
-        self,
-        guild: discord.Guild,
-        kwargs: dict[str, Any],
-        editor_value: str | None = None,
-    ) -> str:
-        cog_name = html.escape(self.qualified_name)
-        config = await self._dashboard_guild_config(guild)
-        commands_html = self._dashboard_commands_html()
-        config_html = self._dashboard_config_editor(config, kwargs, editor_value)
+    def _rh_source(self, guild, settings, csrf):
+        reviews = settings.get("reviews", {})
+        requests = settings.get("requests", {})
+        active = sum(1 for record in reviews.values() if record.get("active", True))
+        pending = sum(1 for request in requests.values() if request.get("status", "pending") == "pending")
+        channel_options = self._rh_channel_options(guild, settings.get("review_channel_id"))
+        report_options = self._rh_channel_options(guild, settings.get("report_channel_id"))
+        rate_roles = self._rh_role_options(guild, settings.get("rateme_role_id"))
+        command_roles = self._rh_role_options(guild, settings.get("review_command_role_id"))
 
+        def value(key, default=""):
+            return html.escape(str(settings.get(key, default)), quote=True)
+
+        def check(key):
+            return " checked" if settings.get(key) else ""
+
+        def selected(option):
+            return " selected" if settings.get("review_template", "classic") == option else ""
+
+        color = f"#{int(settings.get('review_embed_color', 0x5865F2)):06X}"
         return f"""
-<section class="third-party-dashboard cog-config-dashboard">
-  <style>
-    .cog-config-dashboard .config-editor {{
-      width: 100%; min-height: 28rem; resize: vertical;
-      padding: .8rem; border: 1px solid var(--gray, #6c757d); border-radius: .35rem;
-      background: var(--background, #202225); color: var(--text, #f8f9fa);
-      font: .9rem/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    }}
-    .cog-config-dashboard .config-actions {{
-      display: flex; align-items: center; gap: .75rem; margin-top: .75rem;
-    }}
-    .cog-config-dashboard .config-help {{ opacity: .8; }}
-  </style>
-  <h2>{cog_name}</h2>
-  <p>Manage this cog's configuration for <strong>{html.escape(guild.name)}</strong>.</p>
-  <h3>Server Settings</h3>
-  {config_html}
-  <details>
-    <summary>Available commands</summary>
-    {commands_html}
-  </details>
-</section>
-"""
+<section class="rh-dash"><style>
+.rh-dash .card{{border:1px solid rgba(127,127,127,.3);border-radius:.7rem;padding:1rem;margin-bottom:1rem}}.rh-dash .grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:1rem}}.rh-dash label{{display:flex;flex-direction:column;gap:.3rem}}.rh-dash .check{{flex-direction:row;align-items:center}}.rh-dash input,.rh-dash select{{padding:.55rem;border:1px solid rgba(127,127,127,.35);border-radius:.35rem;background:var(--background,#202225);color:var(--text,#fff)}}.rh-dash .stat{{font-size:1.5rem;font-weight:700}}
+</style><h2>ReviewHub</h2><p>Run reviews or vouches for <strong>{html.escape(guild.name)}</strong>.</p>
+<div class="grid"><div class="card"><span class="stat">{active:,}</span><br>active reviews</div><div class="card"><span class="stat">{pending:,}</span><br>pending requests</div><div class="card"><span class="stat">{int(settings.get("daily_count", 0))}</span><br>submitted today</div></div>
+<form method="POST">{csrf}<div class="card"><h3>Destinations & access</h3><div class="grid">
+<label>Review channel<select name="review_channel_id">{channel_options}</select></label><label>Report channel<select name="report_channel_id">{report_options}</select></label><label>/rateme role<select name="rateme_role_id">{rate_roles}</select></label><label>Review command role<select name="review_command_role_id">{command_roles}</select></label><label>Daily review limit<input type="number" name="daily_limit" min="1" max="100" value="{value("daily_limit", 5)}"></label><label>Command name<input name="review_command_name" maxlength="32" value="{value("review_command_name", "review")}"></label>
+<label class="check"><input type="checkbox" name="review_command_enabled"{check("review_command_enabled")}> Enable review command</label><label class="check"><input type="checkbox" name="delete_review_requests"{check("delete_review_requests")}> Delete completed request messages</label></div></div>
+<div class="card"><h3>Experience</h3><div class="grid"><label>Mode<select name="review_template"><option value="classic"{selected("classic")}>Classic</option><option value="detailed"{selected("detailed")}>Detailed</option></select></label><label>Embed color<input type="color" name="review_embed_color" value="{color}"></label><label>Review title<input name="review_title" value="{value("review_title", "New Review")}"></label><label>Button label<input name="review_button_label" value="{value("review_button_label", "Submit Review")}"></label><label>Request title<input name="review_request_title" value="{value("review_request_title", "Review Request")}"></label><label>Rating title<input name="rate_experience_title" value="{value("rate_experience_title", "Rate your experience")}"></label><label>Thread title<input name="thread_title" value="{value("thread_title", "Review {id} discussion")}"></label><label>Author text<input name="review_author_text" value="{value("review_author_text", "{user} submitted a review")}"></label><label>Request message<input name="rateme_message" value="{value("rateme_message", "{reviewer}, {requester} requested a review from you.")}"></label><label>Star emoji<input name="star_emoji" value="{value("star_emoji", "⭐")}"></label><label>Report emoji<input name="report_button_emoji" value="{value("report_button_emoji", "⚠️")}"></label><label>Submit emoji<input name="submit_review_emoji" value="{value("submit_review_emoji", "📝")}"></label><label>Useful emoji<input name="useful_button_emoji" value="{value("useful_button_emoji", "👍")}"></label></div>
+<div class="grid"><label class="check"><input type="checkbox" name="review_button_show"{check("review_button_show")}> Show review button</label><label class="check"><input type="checkbox" name="report_button_show"{check("report_button_show")}> Show report button</label><label class="check"><input type="checkbox" name="useful_button_show"{check("useful_button_show")}> Show useful button</label><label class="check"><input type="checkbox" name="auto_thread"{check("auto_thread")}> Create discussion threads</label><label class="check"><input type="checkbox" name="vouch_mode"{check("vouch_mode")}> Use vouch mode</label><label class="check"><input type="checkbox" name="review_targets_enabled"{check("review_targets_enabled")}> Allow review targets</label></div></div><button class="btn btn-primary">Save ReviewHub Settings</button></form></section>"""
 
-    async def _dashboard_save_config(
-        self,
-        guild: discord.Guild,
-        kwargs: dict[str, Any],
-    ) -> None:
-        group = self._dashboard_guild_group(guild)
-        if group is None:
-            raise ValueError("This cog does not store per-server configuration.")
-
-        form = self._dashboard_form(kwargs)
-        raw_config = self._dashboard_value(form, "config_json")
-        if not raw_config.strip():
-            raise ValueError("Configuration JSON cannot be empty.")
-        if len(raw_config.encode("utf-8")) > self._DASHBOARD_CONFIG_LIMIT:
-            raise ValueError("Configuration JSON is too large to save from the dashboard.")
-
-        proposed = json.loads(
-            raw_config,
-            parse_constant=lambda value: self._dashboard_invalid_json_constant(value),
+    async def _rh_can_manage(self, user, guild):
+        member = guild.get_member(user.id)
+        return bool(
+            user.id in getattr(self.bot, "owner_ids", set())
+            or (member and await self.bot.is_admin(member))
+            or (member and member.guild_permissions.manage_guild),
         )
-        current = await group.all()
-        defaults = self._dashboard_guild_defaults()
-        self._dashboard_validate_config(current, proposed, defaults)
-        await group.set(proposed)
-
-    def _dashboard_guild_group(self, guild: discord.Guild) -> Any | None:
-        config = getattr(self, "config", None) or getattr(self, "_config", None)
-        guild_config = getattr(config, "guild", None) if config is not None else None
-        return guild_config(guild) if guild_config is not None else None
-
-    def _dashboard_guild_defaults(self) -> dict[str, Any]:
-        config = getattr(self, "config", None) or getattr(self, "_config", None)
-        defaults = getattr(config, "_defaults", {}) if config is not None else {}
-        guild_defaults = defaults.get("GUILD", {}) if isinstance(defaults, dict) else {}
-        return guild_defaults if isinstance(guild_defaults, dict) else {}
-
-    async def _dashboard_guild_config(
-        self,
-        guild: discord.Guild,
-    ) -> dict[str, Any] | None:
-        group = self._dashboard_guild_group(guild)
-        return None if group is None else await group.all()
 
     @staticmethod
-    def _dashboard_form(kwargs: dict[str, Any]) -> Any:
+    def _rh_form(kwargs):
         data = kwargs.get("data") or {}
-        if isinstance(data, dict) and ("form" in data or "json" in data):
-            return data.get("form") or data.get("json") or {}
-        return data
+        return (data.get("form") or data.get("json") or {}) if isinstance(data, dict) else data
 
     @staticmethod
-    def _dashboard_value(form: Any, key: str, default: str = "") -> str:
+    def _rh_value(form, key, default=""):
         value = form.get(key, default) if hasattr(form, "get") else default
         if isinstance(value, (list, tuple)):
             value = value[0] if value else default
         return default if value is None else str(value)
 
+    @classmethod
+    def _rh_checked(cls, form, key):
+        return cls._rh_value(form, key).lower() in {"1", "true", "on", "yes"}
+
+    @classmethod
+    def _rh_int(cls, form, key, minimum, maximum):
+        try:
+            value = int(cls._rh_value(form, key))
+        except ValueError as error:
+            raise commands.BadArgument(f"{key.replace('_', ' ')} must be a number.") from error
+        if not minimum <= value <= maximum:
+            raise commands.BadArgument(f"{key.replace('_', ' ')} must be {minimum}–{maximum}.")
+        return value
+
+    @classmethod
+    def _rh_channel(cls, guild, form, key):
+        raw = cls._rh_value(form, key)
+        if not raw:
+            return None
+        try:
+            channel = guild.get_channel(int(raw))
+        except ValueError as error:
+            raise commands.BadArgument("Choose a valid text channel.") from error
+        if channel not in guild.text_channels:
+            raise commands.BadArgument("Choose a valid text channel.")
+        return channel.id
+
+    @classmethod
+    def _rh_role(cls, guild, form, key):
+        raw = cls._rh_value(form, key)
+        if not raw:
+            return None
+        try:
+            role = guild.get_role(int(raw))
+        except ValueError as error:
+            raise commands.BadArgument("Choose a valid role.") from error
+        if role is None or role.is_default():
+            raise commands.BadArgument("Choose a valid role.")
+        return role.id
+
     @staticmethod
-    def _dashboard_csrf(kwargs: dict[str, Any]) -> str:
+    def _rh_channel_options(guild, selected):
+        return '<option value="">Not configured</option>' + "".join(
+            f'<option value="{channel.id}"{" selected" if channel.id == selected else ""}>#{html.escape(channel.name)}</option>'
+            for channel in guild.text_channels
+        )
+
+    @staticmethod
+    def _rh_role_options(guild, selected):
+        return '<option value="">Everyone / unrestricted</option>' + "".join(
+            f'<option value="{role.id}"{" selected" if role.id == selected else ""}>{html.escape(role.name)}</option>'
+            for role in reversed(guild.roles)
+            if not role.is_default()
+        )
+
+    @staticmethod
+    def _rh_csrf(kwargs):
         token = kwargs.get("csrf_token")
         if not isinstance(token, (tuple, list)) or len(token) != 2:
             return ""
-        return (
-            '<input type="hidden" name="csrf_token" value="'
-            f'{html.escape(str(token[1]), quote=True)}">'
-        )
-
-    @staticmethod
-    def _dashboard_invalid_json_constant(value: str) -> None:
-        raise ValueError(f"{value} is not valid configuration JSON.")
-
-    @classmethod
-    def _dashboard_validate_config(
-        cls,
-        current: dict[str, Any],
-        proposed: Any,
-        defaults: dict[str, Any] | None = None,
-    ) -> None:
-        if not isinstance(proposed, dict):
-            raise TypeError("Configuration must be a JSON object.")
-
-        missing = sorted(set(current) - set(proposed))
-        unknown = sorted(set(proposed) - set(current))
-        if missing:
-            raise ValueError(f"Missing configuration key(s): {', '.join(missing)}.")
-        if unknown:
-            raise ValueError(f"Unknown configuration key(s): {', '.join(unknown)}.")
-
-        for key, old_value in current.items():
-            new_value = proposed[key]
-            expected_value = (defaults or {}).get(key, old_value)
-            if expected_value is None and new_value is None:
-                continue
-            if expected_value is None:
-                expected_value = old_value
-            if expected_value is None:
-                if key.endswith("_id"):
-                    valid = isinstance(new_value, int) and not isinstance(new_value, bool)
-                    if not valid:
-                        raise TypeError(
-                            f'Configuration key "{key}" must be an integer or null.',
-                        )
-                continue
-            if isinstance(expected_value, bool):
-                valid = isinstance(new_value, bool)
-            elif isinstance(expected_value, int):
-                valid = isinstance(new_value, int) and not isinstance(new_value, bool)
-            elif isinstance(expected_value, float):
-                valid = (
-                    isinstance(new_value, (int, float))
-                    and not isinstance(new_value, bool)
-                )
-            else:
-                valid = isinstance(new_value, type(expected_value))
-            if not valid:
-                expected = cls._dashboard_type_name(expected_value)
-                raise TypeError(f'Configuration key "{key}" must be {expected}.')
-
-    @staticmethod
-    def _dashboard_type_name(value: Any) -> str:
-        names = {
-            bool: "a boolean",
-            int: "an integer",
-            float: "a number",
-            str: "a string",
-            list: "an array",
-            dict: "an object",
-        }
-        return names.get(type(value), type(value).__name__)
-
-    def _dashboard_commands_html(self) -> str:
-        commands_list = sorted(
-            command.qualified_name
-            for command in self.walk_commands()
-            if not command.hidden
-        )
-        if not commands_list:
-            return "<p>No visible commands were found for this cog.</p>"
-        items = "\n".join(
-            f"<li><code>{html.escape(command)}</code></li>" for command in commands_list
-        )
-        return f"<ul>{items}</ul>"
-
-    @classmethod
-    def _dashboard_config_editor(
-        cls,
-        config: dict[str, Any] | None,
-        kwargs: dict[str, Any],
-        editor_value: str | None = None,
-    ) -> str:
-        if config is None:
-            return "<p>This cog does not store per-server configuration.</p>"
-        dumped = (
-            editor_value
-            if editor_value is not None
-            else json.dumps(config, indent=2, sort_keys=True, default=str)
-        )
-        return f"""
-<form method="POST">
-  {cls._dashboard_csrf(kwargs)}
-  <label for="cog-config-json" class="config-help">
-    Edit values as JSON. Key names and value types are validated before saving.
-  </label>
-  <textarea id="cog-config-json" class="config-editor" name="config_json"
-            spellcheck="false" required>{html.escape(dumped)}</textarea>
-  <div class="config-actions">
-    <button type="submit" class="btn btn-primary">Save Settings</button>
-    <span class="config-help">Changes apply immediately to this server.</span>
-  </div>
-</form>
-"""
+        return f'<input type="hidden" name="csrf_token" value="{html.escape(str(token[1]), quote=True)}">'

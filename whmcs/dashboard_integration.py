@@ -1,11 +1,12 @@
-"""Red-Web-Dashboard integration."""
+# ruff: noqa: E501
+"""Purpose-built dashboard for WHMCS."""
 
 from __future__ import annotations
 
 import html
-import json
 import logging
 from typing import TYPE_CHECKING, Any, Callable
+from urllib.parse import urlparse
 
 from redbot.core import commands
 
@@ -16,8 +17,6 @@ log = logging.getLogger("red.taakoscogs.whmcs.dashboard")
 
 
 def dashboard_page(*args, **kwargs):
-    """Dashboard page decorator compatible with Red-Web-Dashboard."""
-
     def decorator(func: Callable):
         func.__dashboard_decorator_params__ = (args, kwargs)
         return func
@@ -26,304 +25,211 @@ def dashboard_page(*args, **kwargs):
 
 
 class DashboardIntegration:
-    """Generic editable dashboard integration for guild configuration."""
-
-    _DASHBOARD_CONFIG_LIMIT = 1_000_000
+    """WHMCS API, access policy, and ticket-channel controls."""
 
     @commands.Cog.listener()
     async def on_dashboard_cog_add(self, dashboard_cog: commands.Cog) -> None:
-        """Register the cog as a Red-Web-Dashboard third party."""
         handler = dashboard_cog.rpc.third_parties_handler
         try:
             handler.add_third_party(self, overwrite=True)
         except TypeError:
             handler.add_third_party(self)
 
-    @dashboard_page(
-        name=None,
-        description="View and edit this cog's server configuration.",
-        methods=("GET", "POST"),
-    )
-    async def dashboard_page(
-        self,
-        user: discord.User,
-        guild: discord.Guild,
-        **kwargs: Any,
-    ) -> dict[str, Any]:
-        """Render the dashboard page and persist validated configuration changes."""
-        if not await self._dashboard_can_manage(user, guild):
-            return {
-                "status": 1,
-                "error_title": "Insufficient Permissions",
-                "error_message": (
-                    "You need Manage Server, Red admin, or bot owner access."
-                ),
-            }
-
-        notifications: list[dict[str, str]] = []
-        editor_value: str | None = None
+    @dashboard_page(name=None, description="Configure WHMCS API access and ticket channels.", methods=("GET", "POST"))
+    async def dashboard_page(self, user: discord.User, guild: discord.Guild, **kwargs: Any):
+        if not await self._whmcs_can_manage(user, guild):
+            return {"status": 1, "error_title": "Insufficient Permissions", "error_message": "Manage Server is required."}
+        notices = []
         if kwargs.get("method", "GET").upper() == "POST":
-            editor_value = self._dashboard_value(
-                self._dashboard_form(kwargs),
-                "config_json",
-            )
             try:
-                await self._dashboard_save_config(guild, kwargs)
-            except (json.JSONDecodeError, ValueError, TypeError) as error:
-                notifications.append({"message": str(error), "category": "error"})
-            except Exception as error:
-                log.exception("Dashboard save failed for %s.", self.qualified_name)
-                return {
-                    "status": 1,
-                    "error_title": "Dashboard Error",
-                    "error_message": f"Could not save server configuration: {error}",
-                }
+                await self._whmcs_save(guild, self._whmcs_form(kwargs))
+            except (commands.CommandError, ValueError) as error:
+                notices.append({"message": str(error), "category": "error"})
+            except Exception:
+                log.exception("WHMCS dashboard save failed in guild %s", guild.id)
+                notices.append({"message": "WHMCS settings could not be saved.", "category": "error"})
             else:
-                notifications.append(
+                notices.append(
                     {
-                        "message": "Server configuration saved.",
+                        "message": "WHMCS settings saved. Blank secret fields retained their previous values.",
                         "category": "success",
                     },
                 )
-                editor_value = None
-
-        try:
-            source = await self._dashboard_source(guild, kwargs, editor_value)
-        except Exception as error:
-            log.exception("Dashboard render failed for %s.", self.qualified_name)
-            return {
-                "status": 1,
-                "error_title": "Dashboard Error",
-                "error_message": f"Could not render dashboard page: {error}",
-            }
-
+        data = await self.config.guild(guild).all()
         return {
             "status": 0,
-            "notifications": notifications,
-            "web_content": {
-                "source": source,
-                "expanded": True,
-            },
+            "notifications": notices,
+            "web_content": {"source": self._whmcs_source(guild, data, self._whmcs_csrf(kwargs)), "expanded": True},
         }
 
-    async def _dashboard_can_manage(
-        self,
-        user: discord.User,
-        guild: discord.Guild,
-    ) -> bool:
-        member = guild.get_member(user.id)
-        is_owner = user.id in getattr(self.bot, "owner_ids", set())
-        is_admin = member is not None and await self.bot.is_admin(member)
-        return bool(
-            is_owner
-            or is_admin
-            or (member is not None and member.guild_permissions.manage_guild),
-        )
+    async def _whmcs_save(self, guild, form):
+        current_api = await self.config.guild(guild).api_config()
+        url = self._whmcs_value(form, "url").strip().rstrip("/")
+        if url:
+            parsed = urlparse(url)
+            if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+                raise commands.BadArgument("WHMCS URL must be a complete http:// or https:// address.")
+        identifier = self._whmcs_value(form, "identifier").strip()
+        secret = self._whmcs_value(form, "secret").strip()
+        access_key = self._whmcs_value(form, "access_key").strip()
+        api = {
+            "url": url or None,
+            "identifier": identifier or None,
+            "secret": secret or current_api.get("secret"),
+            "access_key": access_key or current_api.get("access_key"),
+        }
+        rate_limit = self._whmcs_int(form, "rate_limit", 1, 1000)
+        color_text = self._whmcs_value(form, "embed_color", "#7289DA").lstrip("#")
+        try:
+            color = int(color_text, 16)
+        except ValueError as error:
+            raise commands.BadArgument("Choose a valid embed color.") from error
+        prefix = self._whmcs_value(form, "channel_prefix", "whmcs-ticket-").strip().lower()
+        if (
+            not prefix
+            or len(prefix) > 40
+            or any(character not in "abcdefghijklmnopqrstuvwxyz0123456789-_" for character in prefix)
+        ):
+            raise commands.BadArgument("Channel prefix may contain lowercase letters, numbers, hyphens, and underscores only.")
+        permissions = {}
+        for key in ("admin_roles", "billing_roles", "support_roles", "readonly_roles"):
+            permissions[key] = self._whmcs_roles(guild, form, key)
+        settings = {
+            "rate_limit": rate_limit,
+            "embed_color": color,
+            "show_sensitive": self._whmcs_checked(form, "show_sensitive"),
+            "auto_sync": self._whmcs_checked(form, "auto_sync"),
+        }
+        ticket_channels = {
+            "enabled": self._whmcs_checked(form, "ticket_enabled"),
+            "category_id": self._whmcs_category(guild, form, "category_id"),
+            "archive_category_id": self._whmcs_category(guild, form, "archive_category_id"),
+            "channel_prefix": prefix,
+            "auto_archive": self._whmcs_checked(form, "auto_archive"),
+        }
+        conf = self.config.guild(guild)
+        await conf.api_config.set(api)
+        await conf.permissions.set(permissions)
+        await conf.settings.set(settings)
+        await conf.ticket_channels.set(ticket_channels)
 
-    async def _dashboard_source(
-        self,
-        guild: discord.Guild,
-        kwargs: dict[str, Any],
-        editor_value: str | None = None,
-    ) -> str:
-        cog_name = html.escape(self.qualified_name)
-        config = await self._dashboard_guild_config(guild)
-        commands_html = self._dashboard_commands_html()
-        config_html = self._dashboard_config_editor(config, kwargs, editor_value)
+    def _whmcs_source(self, guild, data, csrf):
+        api = data.get("api_config", {})
+        permissions = data.get("permissions", {})
+        settings = data.get("settings", {})
+        tickets = data.get("ticket_channels", {})
+        mappings = data.get("ticket_mappings", {})
 
+        def value(raw):
+            return html.escape(str(raw or ""), quote=True)
+
+        def checked(raw):
+            return " checked" if raw else ""
+
+        def role_select(name):
+            return self._whmcs_role_options(guild, permissions.get(name, []))
+
+        categories = self._whmcs_category_options(guild, tickets.get("category_id"))
+        archive_categories = self._whmcs_category_options(guild, tickets.get("archive_category_id"))
+        configured = bool(api.get("url") and api.get("identifier") and api.get("secret"))
         return f"""
-<section class="third-party-dashboard cog-config-dashboard">
-  <style>
-    .cog-config-dashboard .config-editor {{
-      width: 100%; min-height: 28rem; resize: vertical;
-      padding: .8rem; border: 1px solid var(--gray, #6c757d); border-radius: .35rem;
-      background: var(--background, #202225); color: var(--text, #f8f9fa);
-      font: .9rem/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    }}
-    .cog-config-dashboard .config-actions {{
-      display: flex; align-items: center; gap: .75rem; margin-top: .75rem;
-    }}
-    .cog-config-dashboard .config-help {{ opacity: .8; }}
-  </style>
-  <h2>{cog_name}</h2>
-  <p>Manage this cog's configuration for <strong>{html.escape(guild.name)}</strong>.</p>
-  <h3>Server Settings</h3>
-  {config_html}
-  <details>
-    <summary>Available commands</summary>
-    {commands_html}
-  </details>
-</section>
-"""
+<section class="whmcs-dash"><style>
+.whmcs-dash .card{{border:1px solid rgba(127,127,127,.3);border-radius:.7rem;padding:1rem;margin-bottom:1rem}}.whmcs-dash .grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:1rem}}.whmcs-dash label{{display:flex;flex-direction:column;gap:.3rem}}.whmcs-dash .check{{flex-direction:row;align-items:center}}.whmcs-dash input,.whmcs-dash select{{padding:.58rem;border:1px solid rgba(127,127,127,.35);border-radius:.4rem;background:var(--background,#202225);color:var(--text,#fff)}}.whmcs-dash select[multiple]{{min-height:10rem}}.whmcs-dash .status{{font-weight:700;color:{"#3ba55c" if configured else "#faa61a"}}}.whmcs-dash small{{opacity:.75}}
+</style><h2>WHMCS Integration</h2><p>Connection status: <span class="status">{"Configured" if configured else "Needs credentials"}</span> · {len(mappings):,} ticket channel mappings.</p><form method="POST">{csrf}
+<div class="card"><h3>API connection</h3><div class="grid"><label>WHMCS URL<input type="url" name="url" placeholder="https://billing.example.com" value="{value(api.get("url"))}"></label><label>API identifier<input name="identifier" autocomplete="off" value="{value(api.get("identifier"))}"></label><label>API secret <small>Leave blank to keep the current secret ({"set" if api.get("secret") else "not set"}).</small><input type="password" name="secret" autocomplete="new-password"></label><label>Access key <small>Leave blank to keep the current key ({"set" if api.get("access_key") else "not set"}).</small><input type="password" name="access_key" autocomplete="new-password"></label></div></div>
+<div class="card"><h3>Access roles</h3><p>Use Ctrl/Cmd-click to select more than one role. Bot owners and the server owner retain access.</p><div class="grid"><label>Administrators<select name="admin_roles" multiple>{role_select("admin_roles")}</select></label><label>Billing staff<select name="billing_roles" multiple>{role_select("billing_roles")}</select></label><label>Support staff<select name="support_roles" multiple>{role_select("support_roles")}</select></label><label>Read-only staff<select name="readonly_roles" multiple>{role_select("readonly_roles")}</select></label></div></div>
+<div class="card"><h3>API behavior</h3><div class="grid"><label>Requests per minute<input type="number" name="rate_limit" min="1" max="1000" value="{int(settings.get("rate_limit", 60))}"></label><label>Embed color<input type="color" name="embed_color" value="#{int(settings.get("embed_color", 0x7289DA)):06X}"></label><label class="check"><input type="checkbox" name="show_sensitive"{checked(settings.get("show_sensitive"))}> Show sensitive fields in command results</label><label class="check"><input type="checkbox" name="auto_sync"{checked(settings.get("auto_sync"))}> Enable automatic synchronization</label></div></div>
+<div class="card"><h3>Discord ticket channels</h3><div class="grid"><label class="check"><input type="checkbox" name="ticket_enabled"{checked(tickets.get("enabled"))}> Create ticket channels</label><label>Open-ticket category<select name="category_id">{categories}</select></label><label>Archive category<select name="archive_category_id">{archive_categories}</select></label><label>Channel prefix<input name="channel_prefix" maxlength="40" value="{value(tickets.get("channel_prefix", "whmcs-ticket-"))}"></label><label class="check"><input type="checkbox" name="auto_archive"{checked(tickets.get("auto_archive", True))}> Archive channels when tickets close</label></div></div><button class="btn btn-primary">Save WHMCS Settings</button></form></section>"""
 
-    async def _dashboard_save_config(
-        self,
-        guild: discord.Guild,
-        kwargs: dict[str, Any],
-    ) -> None:
-        group = self._dashboard_guild_group(guild)
-        if group is None:
-            raise ValueError("This cog does not store per-server configuration.")
-
-        form = self._dashboard_form(kwargs)
-        raw_config = self._dashboard_value(form, "config_json")
-        if not raw_config.strip():
-            raise ValueError("Configuration JSON cannot be empty.")
-        if len(raw_config.encode("utf-8")) > self._DASHBOARD_CONFIG_LIMIT:
-            raise ValueError("Configuration JSON is too large to save from the dashboard.")
-
-        proposed = json.loads(
-            raw_config,
-            parse_constant=lambda value: self._dashboard_invalid_json_constant(value),
+    async def _whmcs_can_manage(self, user, guild):
+        member = guild.get_member(user.id)
+        return bool(
+            user.id in getattr(self.bot, "owner_ids", set())
+            or user.id == guild.owner_id
+            or (member and await self.bot.is_admin(member))
+            or (member and member.guild_permissions.manage_guild),
         )
-        current = await group.all()
-        defaults = self._dashboard_guild_defaults()
-        self._dashboard_validate_config(current, proposed, defaults)
-        await group.set(proposed)
-
-    def _dashboard_guild_group(self, guild: discord.Guild) -> Any | None:
-        config = getattr(self, "config", None) or getattr(self, "_config", None)
-        guild_config = getattr(config, "guild", None) if config is not None else None
-        return guild_config(guild) if guild_config is not None else None
-
-    def _dashboard_guild_defaults(self) -> dict[str, Any]:
-        config = getattr(self, "config", None) or getattr(self, "_config", None)
-        defaults = getattr(config, "_defaults", {}) if config is not None else {}
-        guild_defaults = defaults.get("GUILD", {}) if isinstance(defaults, dict) else {}
-        return guild_defaults if isinstance(guild_defaults, dict) else {}
-
-    async def _dashboard_guild_config(
-        self,
-        guild: discord.Guild,
-    ) -> dict[str, Any] | None:
-        group = self._dashboard_guild_group(guild)
-        return None if group is None else await group.all()
 
     @staticmethod
-    def _dashboard_form(kwargs: dict[str, Any]) -> Any:
+    def _whmcs_form(kwargs):
         data = kwargs.get("data") or {}
-        if isinstance(data, dict) and ("form" in data or "json" in data):
-            return data.get("form") or data.get("json") or {}
-        return data
+        return (data.get("form") or data.get("json") or {}) if isinstance(data, dict) else data
 
     @staticmethod
-    def _dashboard_value(form: Any, key: str, default: str = "") -> str:
+    def _whmcs_value(form, key, default=""):
         value = form.get(key, default) if hasattr(form, "get") else default
         if isinstance(value, (list, tuple)):
             value = value[0] if value else default
         return default if value is None else str(value)
 
+    @classmethod
+    def _whmcs_values(cls, form, key):
+        if hasattr(form, "getlist"):
+            return [str(value) for value in form.getlist(key)]
+        value = form.get(key, []) if hasattr(form, "get") else []
+        if isinstance(value, (list, tuple)):
+            return [str(item) for item in value]
+        return [str(value)] if value not in {None, ""} else []
+
+    @classmethod
+    def _whmcs_checked(cls, form, key):
+        return cls._whmcs_value(form, key).lower() in {"1", "true", "on", "yes"}
+
+    @classmethod
+    def _whmcs_int(cls, form, key, minimum, maximum):
+        try:
+            value = int(cls._whmcs_value(form, key))
+        except ValueError as error:
+            raise commands.BadArgument("Rate limit must be a number.") from error
+        if not minimum <= value <= maximum:
+            raise commands.BadArgument(f"Rate limit must be {minimum}–{maximum}.")
+        return value
+
+    @classmethod
+    def _whmcs_roles(cls, guild, form, key):
+        roles = []
+        for raw in cls._whmcs_values(form, key):
+            try:
+                role = guild.get_role(int(raw))
+            except ValueError as error:
+                raise commands.BadArgument("Choose valid access roles.") from error
+            if role is None or role.is_default():
+                raise commands.BadArgument("Choose valid access roles.")
+            roles.append(role.id)
+        return list(dict.fromkeys(roles))
+
+    @classmethod
+    def _whmcs_category(cls, guild, form, key):
+        raw = cls._whmcs_value(form, key)
+        if not raw:
+            return None
+        try:
+            category = guild.get_channel(int(raw))
+        except ValueError as error:
+            raise commands.BadArgument("Choose a valid category.") from error
+        if category not in guild.categories:
+            raise commands.BadArgument("Choose a valid category.")
+        return category.id
+
     @staticmethod
-    def _dashboard_csrf(kwargs: dict[str, Any]) -> str:
+    def _whmcs_role_options(guild, selected):
+        chosen = {int(role_id) for role_id in selected}
+        return "".join(
+            f'<option value="{role.id}"{" selected" if role.id in chosen else ""}>{html.escape(role.name)}</option>'
+            for role in reversed(guild.roles)
+            if not role.is_default()
+        )
+
+    @staticmethod
+    def _whmcs_category_options(guild, selected):
+        return '<option value="">Not configured</option>' + "".join(
+            f'<option value="{category.id}"{" selected" if category.id == selected else ""}>{html.escape(category.name)}</option>'
+            for category in guild.categories
+        )
+
+    @staticmethod
+    def _whmcs_csrf(kwargs):
         token = kwargs.get("csrf_token")
         if not isinstance(token, (tuple, list)) or len(token) != 2:
             return ""
-        return (
-            '<input type="hidden" name="csrf_token" value="'
-            f'{html.escape(str(token[1]), quote=True)}">'
-        )
-
-    @staticmethod
-    def _dashboard_invalid_json_constant(value: str) -> None:
-        raise ValueError(f"{value} is not valid configuration JSON.")
-
-    @classmethod
-    def _dashboard_validate_config(
-        cls,
-        current: dict[str, Any],
-        proposed: Any,
-        defaults: dict[str, Any] | None = None,
-    ) -> None:
-        if not isinstance(proposed, dict):
-            raise TypeError("Configuration must be a JSON object.")
-
-        missing = sorted(set(current) - set(proposed))
-        unknown = sorted(set(proposed) - set(current))
-        if missing:
-            raise ValueError(f"Missing configuration key(s): {', '.join(missing)}.")
-        if unknown:
-            raise ValueError(f"Unknown configuration key(s): {', '.join(unknown)}.")
-
-        for key, old_value in current.items():
-            new_value = proposed[key]
-            expected_value = (defaults or {}).get(key, old_value)
-            if expected_value is None and new_value is None:
-                continue
-            if expected_value is None:
-                expected_value = old_value
-            if expected_value is None:
-                if key.endswith("_id"):
-                    valid = isinstance(new_value, int) and not isinstance(new_value, bool)
-                    if not valid:
-                        raise TypeError(
-                            f'Configuration key "{key}" must be an integer or null.',
-                        )
-                continue
-            if isinstance(expected_value, bool):
-                valid = isinstance(new_value, bool)
-            elif isinstance(expected_value, int):
-                valid = isinstance(new_value, int) and not isinstance(new_value, bool)
-            elif isinstance(expected_value, float):
-                valid = (
-                    isinstance(new_value, (int, float))
-                    and not isinstance(new_value, bool)
-                )
-            else:
-                valid = isinstance(new_value, type(expected_value))
-            if not valid:
-                expected = cls._dashboard_type_name(expected_value)
-                raise TypeError(f'Configuration key "{key}" must be {expected}.')
-
-    @staticmethod
-    def _dashboard_type_name(value: Any) -> str:
-        names = {
-            bool: "a boolean",
-            int: "an integer",
-            float: "a number",
-            str: "a string",
-            list: "an array",
-            dict: "an object",
-        }
-        return names.get(type(value), type(value).__name__)
-
-    def _dashboard_commands_html(self) -> str:
-        commands_list = sorted(
-            command.qualified_name
-            for command in self.walk_commands()
-            if not command.hidden
-        )
-        if not commands_list:
-            return "<p>No visible commands were found for this cog.</p>"
-        items = "\n".join(
-            f"<li><code>{html.escape(command)}</code></li>" for command in commands_list
-        )
-        return f"<ul>{items}</ul>"
-
-    @classmethod
-    def _dashboard_config_editor(
-        cls,
-        config: dict[str, Any] | None,
-        kwargs: dict[str, Any],
-        editor_value: str | None = None,
-    ) -> str:
-        if config is None:
-            return "<p>This cog does not store per-server configuration.</p>"
-        dumped = (
-            editor_value
-            if editor_value is not None
-            else json.dumps(config, indent=2, sort_keys=True, default=str)
-        )
-        return f"""
-<form method="POST">
-  {cls._dashboard_csrf(kwargs)}
-  <label for="cog-config-json" class="config-help">
-    Edit values as JSON. Key names and value types are validated before saving.
-  </label>
-  <textarea id="cog-config-json" class="config-editor" name="config_json"
-            spellcheck="false" required>{html.escape(dumped)}</textarea>
-  <div class="config-actions">
-    <button type="submit" class="btn btn-primary">Save Settings</button>
-    <span class="config-help">Changes apply immediately to this server.</span>
-  </div>
-</form>
-"""
+        return f'<input type="hidden" name="csrf_token" value="{html.escape(str(token[1]), quote=True)}">'
