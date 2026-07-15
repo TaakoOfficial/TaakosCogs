@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Re-register imported AAA3A panel handlers after the AAA3A Tickets cog unloads, preventing existing panel buttons and dropdowns from returning "Interaction failed" after migration.
 - Reorganized the dashboard into responsive Tickets, Profile Setup, Modal, Panels, and AAA3A Imports tabs that remain selected after form submissions.
 
 ## 1.16.1

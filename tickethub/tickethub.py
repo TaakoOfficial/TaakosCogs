@@ -1211,6 +1211,17 @@ class TicketHub(DashboardIntegration, commands.Cog):
             self._refresh_ticket_control_messages(),
         )
 
+    @commands.Cog.listener()
+    async def on_cog_remove(self, cog: commands.Cog) -> None:
+        """Restore imported panel handlers after AAA3A Tickets unloads."""
+        if cog.qualified_name != "Tickets":
+            return
+        # AAA3A and TicketHub intentionally use the same message/component IDs.
+        # discord.py removes those shared dispatch keys when AAA3A's views stop,
+        # so register fresh TicketHub views after its unload has completed.
+        await self._restore_aaa3a_panel_views()
+        log.info("Restored imported AAA3A Tickets panel handlers after cog unload.")
+
     def cog_unload(self) -> None:
         if self._control_refresh_task is not None:
             self._control_refresh_task.cancel()
