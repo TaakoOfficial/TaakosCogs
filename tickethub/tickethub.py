@@ -4176,16 +4176,6 @@ class TicketHub(DashboardIntegration, commands.Cog):
         timeout_minutes: int | None = None,
     ) -> discord.Embed:
         reason = reason.strip()[:1000] or "No reason provided."
-        if state == "cancelled":
-            return discord.Embed(
-                title="Close Cancelled",
-                description=(
-                    "This ticket will remain open.\n\n"
-                    f"**Close reason provided:**\n{reason}"
-                ),
-                color=self.OPEN_COLOR,
-                timestamp=self._now(),
-            )
         if state == "closed":
             return discord.Embed(
                 title="Ticket Closed",
@@ -4500,13 +4490,13 @@ class TicketHub(DashboardIntegration, commands.Cog):
             return
         if not confirmed:
             if interaction.message is not None:
-                with contextlib.suppress(discord.HTTPException):
-                    await interaction.message.edit(
-                        content=f"Close request cancelled by {interaction.user}.",
-                        embed=self._close_confirmation_embed(
-                            reason, state="cancelled"),
-                        view=None,
-                    )
+                try:
+                    await interaction.message.delete()
+                except discord.HTTPException:
+                    # At minimum remove the now-invalid controls if Discord does
+                    # not allow the confirmation message to be deleted.
+                    with contextlib.suppress(discord.HTTPException):
+                        await interaction.message.edit(view=None)
             await interaction.followup.send(
                 "Close cancelled. The ticket will remain open.",
                 ephemeral=True,

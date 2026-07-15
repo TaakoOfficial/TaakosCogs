@@ -203,6 +203,8 @@ class DashboardIntegration:
   });
 
   activate(fromHash() || root.querySelector("[data-tab].active").dataset.tab);
+  const conversation = root.querySelector("[data-ticket-conversation]");
+  if (conversation) conversation.scrollTop = conversation.scrollHeight;
 })();
 </script>
 """
@@ -472,6 +474,30 @@ class DashboardIntegration:
                     "You must be in this server to manage tickets.",
                 )
             message = await self._dashboard_ticket_action(guild, member, form_data)
+            messages.append({"message": message, "category": "success"})
+
+        elif action == "select_ticket":
+            ticket_id = self._dash_int(
+                form_data,
+                "workspace_ticket_id",
+                minimum=1,
+            )
+            await self._get_ticket_record_by_id(guild, ticket_id)
+
+        elif action == "workspace_ticket_action":
+            if member is None:
+                raise commands.BadArgument(
+                    "You must be in this server to manage tickets.",
+                )
+            message = await self._dashboard_ticket_action(guild, member, form_data)
+            messages.append({"message": message, "category": "success"})
+
+        elif action == "ticket_reply":
+            if member is None:
+                raise commands.BadArgument(
+                    "You must be in this server to reply to tickets.",
+                )
+            message = await self._dashboard_ticket_reply(guild, member, form_data)
             messages.append({"message": message, "category": "success"})
 
         elif action == "create_ticket":
@@ -1095,7 +1121,12 @@ class DashboardIntegration:
         member: discord.Member,
         form_data: typing.Any,
     ) -> str:
-        ticket_id = self._dash_int(form_data, "ticket_id", minimum=1)
+        ticket_field = (
+            "workspace_ticket_id"
+            if self._dash_value(form_data, "workspace_ticket_id").strip()
+            else "ticket_id"
+        )
+        ticket_id = self._dash_int(form_data, ticket_field, minimum=1)
         action = self._dash_value(form_data, "ticket_action")
         record = await self._get_ticket_record_by_id(guild, ticket_id)
         reason = self._dash_value(form_data, "ticket_reason").strip() or None
@@ -1140,6 +1171,76 @@ class DashboardIntegration:
         else:
             raise commands.BadArgument("Choose a valid ticket action.")
         return f"Ticket #{ticket_id} {action.replace('_', ' ')} completed."
+
+    async def _dashboard_ticket_reply(
+        self,
+        guild: discord.Guild,
+        member: discord.Member,
+        form_data: typing.Any,
+    ) -> str:
+        """Send an attributed staff reply into an open ticket channel."""
+        ticket_id = self._dash_int(
+            form_data,
+            "workspace_ticket_id",
+            minimum=1,
+        )
+        record = await self._get_ticket_record_by_id(guild, ticket_id)
+        if record.get("status") != "open":
+            raise commands.CommandError("Reopen this ticket before replying.")
+        profile = await self._get_profile(
+            guild,
+            str(record.get("profile") or "main"),
+        )
+        if not self._can_speak_in_ticket(member, profile):
+            raise commands.CommandError(
+                "You do not have permission to reply to this ticket.",
+            )
+        content = self._dash_value(form_data, "ticket_reply_content").strip()
+        if not content:
+            raise commands.BadArgument("Write a reply before sending.")
+        if len(content) > 1800:
+            raise commands.BadArgument(
+                "Dashboard replies cannot be longer than 1,800 characters.",
+            )
+        channel = await self._fetch_ticket_channel(guild, record)
+        if channel is None:
+            raise commands.CommandError("This ticket's channel is unavailable.")
+        if isinstance(channel, discord.Thread) and channel.archived:
+            try:
+                await channel.edit(
+                    archived=False,
+                    reason=f"TicketHub dashboard reply to ticket #{ticket_id}",
+                )
+            except discord.HTTPException as exc:
+                raise commands.CommandError(
+                    "I could not reopen this ticket thread to send the reply.",
+                ) from exc
+        actor = discord.utils.escape_markdown(member.display_name)
+        try:
+            sent = await channel.send(
+                f"**Dashboard reply from {actor}:**\n{content}",
+                allowed_mentions=discord.AllowedMentions(
+                    users=True,
+                    roles=False,
+                    everyone=False,
+                    replied_user=False,
+                ),
+            )
+        except discord.HTTPException as exc:
+            raise commands.CommandError(
+                "I could not send that reply to the ticket channel.",
+            ) from exc
+        reply_event = {
+            "type": "dashboard_reply",
+            "actor_id": member.id,
+            "message_id": sent.id,
+            "at": self._now_ts(),
+        }
+        async with self.config.guild(guild).tickets() as tickets:
+            saved_record = tickets.get(str(record["id"]), record)
+            saved_record.setdefault("events", []).append(reply_event)
+            tickets[str(record["id"])] = saved_record
+        return f"Reply sent to ticket #{ticket_id}: {sent.jump_url}"
 
     async def _dashboard_create_ticket(
         self,
@@ -1261,6 +1362,35 @@ class DashboardIntegration:
             for record in tickets.values()
             if record.get("status") == "open" and record.get("claimed_by")
         )
+        form_data = self._dashboard_form_data(kwargs)
+        selected_ticket_value = (
+            self._dash_value(form_data, "workspace_ticket_id").strip()
+            or self._dash_value(form_data, "ticket_id").strip()
+        )
+        selected_ticket_id = None
+        if selected_ticket_value:
+            try:
+                candidate_id = int(selected_ticket_value)
+            except (TypeError, ValueError):
+                candidate_id = 0
+            if str(candidate_id) in tickets:
+                selected_ticket_id = candidate_id
+        if selected_ticket_id is None and tickets:
+            ordered_records = sorted(
+                tickets.values(),
+                key=lambda item: (
+                    item.get("status") == "open",
+                    int(item.get("id") or 0),
+                ),
+                reverse=True,
+            )
+            selected_ticket_id = int(ordered_records[0].get("id") or 0) or None
+        workspace = await self._dashboard_workspace_section(
+            guild,
+            tickets,
+            selected_ticket_id,
+            csrf,
+        )
         active_tab = self._dashboard_active_tab(
             kwargs,
             {
@@ -1280,6 +1410,9 @@ class DashboardIntegration:
                 "save_multi_panel": "panels",
                 "clear_multi_panel": "panels",
                 "ticket_action": "tickets",
+                "select_ticket": "desk",
+                "workspace_ticket_action": "desk",
+                "ticket_reply": "desk",
                 "create_ticket": "tickets",
                 "recover_ticket": "tickets",
                 "import_aaa3a_panels": "imports",
@@ -1323,6 +1456,28 @@ class DashboardIntegration:
             vertical-align: top; }}
             .th-table th {{ color: #d1d5db; }}
             .th-inline {{ display: inline; }}
+            .th-desk-head {{ display: flex; flex-wrap: wrap; justify-content: space-between; align-items: end;
+            gap: 12px; }}
+            .th-desk-head form {{ flex: 1 1 320px; }}
+            .th-ticket-meta {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px;
+            margin: 14px 0; }}
+            .th-ticket-meta > div {{ padding: 10px 12px; background: #111827; border: 1px solid #374151;
+            border-radius: 6px; }}
+            .th-ticket-meta strong {{ display: block; margin-top: 3px; color: #f9fafb; overflow-wrap: anywhere; }}
+            .th-conversation {{ max-height: 620px; overflow-y: auto; margin: 14px 0; padding: 8px 14px;
+            background: #111827; border: 1px solid #374151; border-radius: 8px; }}
+            .th-message {{ padding: 12px 0; border-bottom: 1px solid #293241; }}
+            .th-message:last-child {{ border-bottom: 0; }}
+            .th-message-head {{ display: flex; flex-wrap: wrap; align-items: baseline; gap: 7px; margin-bottom: 4px; }}
+            .th-message-author {{ color: #f3f4f6; font-weight: 700; }}
+            .th-message-time, .th-badge {{ color: #7f8998; font-size: .75rem; }}
+            .th-badge {{ padding: 1px 5px; border: 1px solid #4b5563; border-radius: 4px; text-transform: uppercase; }}
+            .th-message-body {{ color: #d1d5db; line-height: 1.5; overflow-wrap: anywhere; }}
+            .th-attachments {{ display: flex; flex-wrap: wrap; gap: 6px; margin-top: 7px; }}
+            .th-attachments a {{ color: #93c5fd; }}
+            .th-actions {{ display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }}
+            .th-actions form {{ margin: 0; }}
+            .th-reply textarea {{ min-height: 120px; }}
         </style>
         <div class="th-wrap" data-dashboard-tabs="1">
             <div class="th-card">
@@ -1336,6 +1491,7 @@ class DashboardIntegration:
             </div>
             <div class="dash-tabs" role="tablist" aria-label="TicketHub sections">
                 {self._dashboard_tab_button("tickets", "Tickets", active_tab)}
+                {self._dashboard_tab_button("desk", "Ticket Desk", active_tab)}
                 {self._dashboard_tab_button("setup", "Profile Setup", active_tab)}
                 {self._dashboard_tab_button("modal", "Modal", active_tab)}
                 {self._dashboard_tab_button("panels", "Panels", active_tab)}
@@ -1344,6 +1500,8 @@ class DashboardIntegration:
             <section class="dash-panel{" active" if active_tab == "tickets" else ""}"
             data-tab-panel="tickets">{self._dashboard_tickets_section(guild, profiles, tickets, selected_profile,
             csrf)}</section>
+            <section class="dash-panel{" active" if active_tab == "desk" else ""}"
+            data-tab-panel="desk">{workspace}</section>
             <section class="dash-panel{" active" if active_tab == "setup" else ""}"
             data-tab-panel="setup">{self._dashboard_global_section(enabled, next_ticket_id,
             csrf)}{self._dashboard_profile_selector(profiles, selected_profile,
@@ -1735,6 +1893,205 @@ class DashboardIntegration:
                 </div>
                 <button class="th-btn danger" type="submit">Clear Multi-Panel</button>
             </form>
+        </div>
+        """
+
+    async def _dashboard_workspace_messages(
+        self,
+        channel: discord.TextChannel | discord.Thread,
+    ) -> str:
+        """Render the latest ticket messages for the dashboard workspace."""
+        try:
+            messages = [message async for message in channel.history(limit=50)]
+        except (discord.Forbidden, discord.HTTPException):
+            return (
+                '<div class="th-muted">I could not read this ticket channel\'s '
+                "message history.</div>"
+            )
+        if not messages:
+            return '<div class="th-muted">No messages have been sent in this ticket yet.</div>'
+
+        rendered = []
+        for message in reversed(messages):
+            author_name = getattr(message.author, "display_name", str(message.author))
+            timestamp = message.created_at.strftime("%b %d, %Y %H:%M UTC")
+            badge = '<span class="th-badge">Bot</span>' if message.author.bot else ""
+            content = (message.clean_content or "").strip()
+            if not content and message.embeds:
+                embed = message.embeds[0]
+                content = str(embed.title or embed.description or "Embedded message")[:500]
+                content = f"[Embed] {content}"
+            if not content:
+                content = "[Message without text]"
+            body = self._h(content).replace("\n", "<br>")
+            attachment_links = "".join(
+                f'<a href="{html.escape(attachment.url, quote=True)}" target="_blank" '
+                f'rel="noopener noreferrer">{self._h(attachment.filename)}</a>'
+                for attachment in message.attachments
+            )
+            attachments = (
+                f'<div class="th-attachments">{attachment_links}</div>'
+                if attachment_links
+                else ""
+            )
+            rendered.append(
+                '<article class="th-message">'
+                '<div class="th-message-head">'
+                f'<span class="th-message-author">{self._h(author_name)}</span>'
+                f"{badge}"
+                f'<a class="th-message-time" href="{html.escape(message.jump_url, quote=True)}" '
+                f'target="_blank" rel="noopener noreferrer">{self._h(timestamp)}</a>'
+                "</div>"
+                f'<div class="th-message-body">{body}</div>{attachments}'
+                "</article>",
+            )
+        return "".join(rendered)
+
+    async def _dashboard_workspace_section(
+        self,
+        guild: discord.Guild,
+        tickets: dict[str, dict[str, typing.Any]],
+        selected_ticket_id: int | None,
+        csrf: str,
+    ) -> str:
+        """Render a Discord-like ticket workspace for dashboard staff."""
+        ordered = sorted(
+            tickets.values(),
+            key=lambda item: int(item.get("id") or 0),
+            reverse=True,
+        )[:200]
+        ticket_options = "".join(
+            '<option value="{ticket_id}" {selected}>#{ticket_id} · {status} · {profile}</option>'.format(
+                ticket_id=self._h(record.get("id")),
+                selected=self._selected(record.get("id"), selected_ticket_id),
+                status=self._h(record.get("status") or "open"),
+                profile=self._h(record.get("profile") or "main"),
+            )
+            for record in ordered
+        )
+        if selected_ticket_id is None:
+            return """
+            <div class="th-card">
+                <h3>Ticket Desk</h3>
+                <p class="th-muted">There are no tracked tickets to manage.</p>
+            </div>
+            """
+
+        record = tickets[str(selected_ticket_id)]
+        channel = await self._fetch_ticket_channel(guild, record)
+        owner = guild.get_member(int(record.get("owner_id") or 0))
+        claimed_by = guild.get_member(int(record.get("claimed_by") or 0))
+        participants = [
+            guild.get_member(int(member_id))
+            for member_id in (record.get("participants") or [])
+        ]
+        participant_text = ", ".join(
+            str(member) for member in participants if member is not None
+        ) or "None"
+        channel_link = (
+            f'<a href="{html.escape(channel.jump_url, quote=True)}" target="_blank" '
+            f'rel="noopener noreferrer">Open in Discord</a>'
+            if channel is not None
+            else "Channel unavailable"
+        )
+        conversation = (
+            await self._dashboard_workspace_messages(channel)
+            if channel is not None
+            else '<div class="th-muted">This ticket channel is unavailable.</div>'
+        )
+        status = str(record.get("status") or "open")
+        lifecycle_buttons = []
+        if status == "open":
+            lifecycle_buttons.append(
+                ("unclaim" if record.get("claimed_by") else "claim").capitalize(),
+            )
+            lifecycle_buttons.append(
+                ("unlock" if record.get("locked") else "lock").capitalize(),
+            )
+            lifecycle_buttons.append("Close")
+        else:
+            lifecycle_buttons.append("Reopen")
+        lifecycle_buttons.extend(("Transcript", "Delete"))
+        action_buttons = "".join(
+            '<button class="th-btn{danger}" type="submit" name="ticket_action" value="{action}"{confirm}>'
+            "{label}</button>".format(
+                danger=" danger" if label == "Delete" else " secondary",
+                action=label.lower(),
+                confirm=(
+                    ' onclick="return confirm(\'Permanently delete this ticket channel?\')"'
+                    if label == "Delete"
+                    else ""
+                ),
+                label=label,
+            )
+            for label in lifecycle_buttons
+        )
+        reply_disabled = " disabled" if status != "open" or channel is None else ""
+        owner_text = self._h(owner or record.get("owner_id") or "Unknown")
+        reopen_notice = (
+            '<span class="th-muted"> Reopen the ticket before replying.</span>'
+            if status != "open"
+            else ""
+        )
+
+        return f"""
+        <div id="ticket-desk" class="th-card">
+            <div class="th-desk-head">
+                <div><h3>Ticket Desk</h3><div class="th-muted">Read and manage a ticket without leaving the
+                dashboard.</div></div>
+                <form method="POST">
+                    {csrf}
+                    <input type="hidden" name="action" value="select_ticket">
+                    <div class="th-field"><label>Selected ticket</label><select name="workspace_ticket_id"
+                    onchange="this.form.submit()">{ticket_options}</select></div>
+                    <button class="th-btn secondary" type="submit">Refresh conversation</button>
+                </form>
+            </div>
+            <div class="th-ticket-meta">
+                <div><span class="th-muted">Status</span><strong>{self._h(status.title())}</strong></div>
+                <div><span class="th-muted">Profile</span><strong>{self._h(record.get("profile") or "main")}</strong></div>
+                <div><span class="th-muted">Owner</span><strong>{owner_text}</strong></div>
+                <div><span class="th-muted">Claimed by</span><strong>{self._h(claimed_by or "Nobody")}</strong></div>
+                <div><span class="th-muted">Locked</span><strong>{"Yes" if record.get("locked") else "No"}</strong></div>
+                <div><span class="th-muted">Location</span><strong>{channel_link}</strong></div>
+            </div>
+            <div><span class="th-muted">Participants:</span> {self._h(participant_text)}</div>
+            <div class="th-conversation" data-ticket-conversation>{conversation}</div>
+            <form class="th-reply" method="POST">
+                {csrf}
+                <input type="hidden" name="action" value="ticket_reply">
+                <input type="hidden" name="workspace_ticket_id" value="{selected_ticket_id}">
+                {self._textarea("ticket_reply_content", "Reply", "", rows=5)}
+                <button class="th-btn" type="submit"{reply_disabled}>Send Reply</button>
+                {reopen_notice}
+            </form>
+        </div>
+        <div class="th-grid">
+            <div class="th-card">
+                <h3>Ticket controls</h3>
+                <form method="POST">
+                    {csrf}
+                    <input type="hidden" name="action" value="workspace_ticket_action">
+                    <input type="hidden" name="workspace_ticket_id" value="{selected_ticket_id}">
+                    {self._textarea("ticket_reason", "Close, reopen, or delete reason", "", rows=3)}
+                    <div class="th-actions">{action_buttons}</div>
+                </form>
+            </div>
+            <div class="th-card">
+                <h3>Members</h3>
+                <form method="POST">
+                    {csrf}
+                    <input type="hidden" name="action" value="workspace_ticket_action">
+                    <input type="hidden" name="workspace_ticket_id" value="{selected_ticket_id}">
+                    {self._input("ticket_member_id", "Member ID", "", "number", min_value=1)}
+                    <div class="th-actions">
+                        <button class="th-btn secondary" type="submit" name="ticket_action"
+                        value="add_member">Add member</button>
+                        <button class="th-btn secondary" type="submit" name="ticket_action"
+                        value="remove_member">Remove member</button>
+                    </div>
+                </form>
+            </div>
         </div>
         """
 
