@@ -529,7 +529,8 @@ class DashboardIntegration:
 .tv-field {{ display: grid; gap: 6px; margin-bottom: 10px; }}
 .tv-field label {{ color: var(--muted); font-size: 13px; }}
 .tv-field input, .tv-field select {{
-  width: 100%; background: #0c0f14; color: var(--text); border: 1px solid var(--line);
+  width: 100%; min-width: 0; max-width: 100%; box-sizing: border-box; background: #0c0f14; color: var(--text);
+  border: 1px solid var(--line);
   border-radius: 6px; padding: 9px 10px;
 }}
 .tv-check {{ display: flex; align-items: center; gap: 8px; margin-bottom: 10px; color: var(--muted); }}

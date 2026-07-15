@@ -622,17 +622,11 @@ class DashboardIntegration:
             }
 
             source = f"""
-            <div data-yalc-tabs="1" style="padding: 1em; max-width: 1200px; font-family: -apple-system,
-            BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #1a1a1a; color: #e0e0e0; min-height:
-            100vh;">
-                <div style="background: linear-gradient(135deg, #2c5aa0 0%, #4a148c 100%); color: white; padding: 2em;
-                border-radius: 10px; margin-bottom: 2em; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);">
-                    <h1 style="margin: 0; font-size: 2em; font-weight: 600;">⚙️ YALC Settings</h1>
-                    <p style="margin: 0.5em 0 0 0; opacity: 0.9; font-size: 1.1em;">Configure comprehensive logging for
-                    <strong>{guild_name}</strong></p>
-                    <p style="margin: 0.5em 0 0 0; opacity: 0.8; font-size: 0.9em;">Monitor 40+ event types across your
-                    Discord server</p>
-                </div>
+            <div data-yalc-tabs="1" class="yalc-shell">
+                <header class="yalc-hero">
+                    <h1>YALC logging</h1>
+                    <p>Choose what gets logged and where for <strong>{guild_name}</strong>.</p>
+                </header>
 
                 {csrf_warning}
                 {self._yalc_tabs_header()}
@@ -733,43 +727,19 @@ class DashboardIntegration:
                     </section>
 
                     <!-- Submit button -->
-                    <div style="text-align: center; margin-top: 3em; padding-top: 2em; border-top: 2px solid #4a4a4a;">
-                        <input type="submit" name="submit" value="💾 Save Configuration"
-                               style="background: linear-gradient(135deg, #4caf50 0%, #45a049 100%); color: white;
-                               border: none; padding: 1.2em 3em; border-radius: 8px; font-size: 1.1em; font-weight: 600;
-                                cursor: pointer; box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3); transition: all 0.3s
-                               ease;">
-                        <p style="margin-top: 1em; color: #b0b0b0; font-size: 0.9em;">
-                            Changes are applied immediately and saved to Red's configuration system
-                        </p>
+                    <div class="yalc-save">
+                        <p class="yalc-note">Changes take effect as soon as they are saved.</p>
+                        <input type="submit" name="submit" value="Save configuration" class="yalc-submit">
                     </div>
                 </form>
 
-                <div style="margin-top: 2em; padding: 1.5em; background: #2d2d2d; border-radius: 8px; border-left: 4px
-                solid #00bcd4;">
-                    <h4 style="margin: 0 0 0.5em 0; color: #00bcd4;">ℹ️ About YALC</h4>
-                    <p style="margin: 0; color: #b0b0b0; line-height: 1.5;">
-                        Yet Another Logging Cog provides comprehensive event logging for Discord servers.
-                        Configure which events to log, assign specific channels for different event types,
-                        and customize filtering options to suit your server's needs.
-                    </p>
+                <div class="yalc-about">
+                    <strong>About YALC</strong>
+                    Configure event logging, destination channels, and message filters for this server.
                 </div>
 
                 <script>
                     document.addEventListener('DOMContentLoaded', function() {{
-                        // Add interactive enhancements
-                        const labels = document.querySelectorAll('label');
-                        labels.forEach(label => {{
-                            label.addEventListener('mouseenter', function() {{
-                                this.style.transform = 'translateY(-1px)';
-                                this.style.boxShadow = '0 4px 8px rgba(255, 255, 255, 0.1)';
-                            }});
-                            label.addEventListener('mouseleave', function() {{
-                                this.style.transform = 'translateY(0)';
-                                this.style.boxShadow = '0 1px 3px rgba(255, 255, 255, 0.05)';
-                            }});
-                        }});
-
                         // Add form submission feedback without disabling native submission.
                         const submitButton = document.querySelector('input[type="submit"]');
                         if (submitButton) {{
@@ -813,14 +783,78 @@ class DashboardIntegration:
     def _yalc_tabs_header() -> str:
         return """
         <style>
-            .yalc-tabs { display: flex; gap: 4px; overflow-x: auto; position: sticky; top: 0; z-index: 10; margin: 0 0
-            1.5em; padding: 5px; background: #202020; border: 1px solid #4a4a4a; border-radius: 8px; }
-            .yalc-tab { flex: 0 0 auto; border: 0; border-radius: 6px; padding: 10px 14px; background: transparent;
-            color: #b0b0b0; cursor: pointer; font-weight: 700; white-space: nowrap; }
-            .yalc-tab:hover { background: #333; color: #fff; }
-            .yalc-tab.active { background: #4caf50; color: #102014; }
+            .yalc-shell, .yalc-shell * { box-sizing: border-box; }
+            .yalc-shell { width: 100%; max-width: 1120px; margin: 0 auto; padding: 20px; color: #e5e7eb;
+            font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+            .yalc-hero { margin-bottom: 20px; padding: 4px 2px 18px; border-bottom: 1px solid #374151; }
+            .yalc-hero h1 { margin: 0; color: #f9fafb; font-size: clamp(1.55rem, 4vw, 2rem); line-height: 1.2;
+            letter-spacing: -0.025em; }
+            .yalc-hero p { margin: 7px 0 0; color: #9ca3af; }
+            .yalc-tabs { display: flex; gap: 6px; overflow-x: auto; position: sticky; top: 0; z-index: 10; margin: 0 0
+            20px; padding: 5px; background: #171b22; border: 1px solid #374151; border-radius: 8px; }
+            .yalc-tab { flex: 0 0 auto; border: 0; border-radius: 5px; padding: 9px 13px; background: transparent;
+            color: #9ca3af; cursor: pointer; font-weight: 650; white-space: nowrap; }
+            .yalc-tab:hover { background: #252b35; color: #f9fafb; }
+            .yalc-tab.active { background: #374151; color: #fff; }
             .yalc-tab-panel { display: none; }
             .yalc-tab-panel.active { display: block; }
+            .yalc-section { margin-bottom: 16px; padding: 18px; background: #20252d; border: 1px solid #374151;
+            border-radius: 8px; }
+            .yalc-section-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+            gap: 10px 16px; margin-bottom: 4px; }
+            .yalc-section h3, .yalc-section h4 { margin: 0; color: #f3f4f6; font-size: 1rem; }
+            .yalc-section-copy { margin: 6px 0 16px; color: #9ca3af; font-size: .9rem; line-height: 1.5; }
+            .yalc-event-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr));
+            gap: 8px; }
+            .yalc-event { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 11px 12px;
+            background: #191e25; border: 1px solid #303743; border-radius: 6px; cursor: pointer; }
+            .yalc-event:hover { border-color: #4b5563; background: #1d232b; }
+            .yalc-event input { flex: 0 0 auto; width: 16px; height: 16px; margin: 0; accent-color: #60a5fa; }
+            .yalc-event-name { color: #e5e7eb; font-weight: 550; }
+            .yalc-event-key { margin-top: 2px; color: #7f8998; font: .75rem ui-monospace, SFMono-Regular, Menlo,
+            monospace; overflow-wrap: anywhere; }
+            .yalc-count { flex: 0 0 auto; color: #9ca3af; font-size: .8rem; font-weight: 650; }
+            .yalc-button { border: 1px solid #4b5563; border-radius: 5px; padding: 7px 10px; background: #252b35;
+            color: #e5e7eb; font: inherit; font-size: .82rem; font-weight: 650; cursor: pointer; }
+            .yalc-button:hover { background: #303743; border-color: #6b7280; }
+            .yalc-event-toolbar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center;
+            gap: 12px; margin-bottom: 12px; }
+            .yalc-channel-group + .yalc-channel-group { margin-top: 22px; }
+            .yalc-channel-group h4 { margin: 0 0 8px; padding-bottom: 8px; border-bottom: 1px solid #374151; }
+            .yalc-channel-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(190px, 280px);
+            align-items: center; gap: 12px 20px; padding: 10px 0; border-bottom: 1px solid #303743; }
+            .yalc-channel-row:last-child { border-bottom: 0; }
+            .yalc-channel-label { min-width: 0; color: #e5e7eb; font-weight: 550; }
+            .yalc-channel-select { display: block; width: 100%; min-width: 0; max-width: 100%; height: 40px;
+            padding: 7px 34px 7px 10px; border: 1px solid #4b5563; border-radius: 6px; background: #111827;
+            color: #f3f4f6; font: inherit; font-size: .9rem; white-space: nowrap; }
+            .yalc-channel-select option { white-space: normal; }
+            .yalc-disabled { display: inline-block; margin-left: 6px; padding: 2px 6px; border-radius: 999px;
+            background: #374151; color: #cbd5e1; font-size: .7rem; font-weight: 650; }
+            [data-yalc-panel="filters"] > div { margin-bottom: 16px !important; padding: 18px !important;
+            background: #20252d !important; border: 1px solid #374151 !important; border-radius: 8px !important; }
+            [data-yalc-panel="filters"] > div > h3 { margin: 0 0 6px !important; color: #f3f4f6 !important;
+            font-size: 1rem !important; }
+            [data-yalc-panel="filters"] > div > p { margin: 0 0 16px !important; color: #9ca3af !important; }
+            [data-yalc-panel="filters"] > div > div { grid-template-columns:
+            repeat(auto-fit, minmax(min(240px, 100%), 1fr)) !important; gap: 8px !important; }
+            [data-yalc-panel="filters"] label { padding: 11px 12px !important; background: #191e25 !important;
+            border-color: #303743 !important; border-radius: 6px !important; box-shadow: none !important; }
+            .yalc-save { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px;
+            margin-top: 20px; padding-top: 18px; border-top: 1px solid #374151; }
+            .yalc-submit { border: 0; border-radius: 6px; padding: 10px 16px; background: #2563eb; color: #fff;
+            font: inherit; font-weight: 700; cursor: pointer; }
+            .yalc-submit:hover { background: #1d4ed8; }
+            .yalc-note { margin: 0; color: #9ca3af; font-size: .82rem; }
+            .yalc-about { margin-top: 20px; padding: 14px 16px; color: #9ca3af; background: #191e25;
+            border: 1px solid #303743; border-radius: 7px; font-size: .88rem; line-height: 1.5; }
+            .yalc-about strong { display: block; margin-bottom: 3px; color: #d1d5db; }
+            @media (max-width: 620px) {
+                .yalc-shell { padding: 12px; }
+                .yalc-section { padding: 14px; }
+                .yalc-channel-row { grid-template-columns: minmax(0, 1fr); gap: 7px; }
+                .yalc-channel-select { width: 100%; }
+            }
         </style>
         <div class="yalc-tabs" role="tablist" aria-label="YALC sections">
             <button type="button" class="yalc-tab active" data-yalc-tab="filters" role="tab" aria-selected="true"
@@ -870,6 +904,42 @@ class DashboardIntegration:
                     activate(next.dataset.yalcTab, true);
                 });
             });
+            const eventInputs = () => Array.from(root.querySelectorAll("[data-yalc-event]"));
+            const updateEventControls = () => {
+                const allInputs = eventInputs();
+                root.querySelectorAll("[data-yalc-event-group]").forEach((group) => {
+                    const inputs = Array.from(group.querySelectorAll("[data-yalc-event]"));
+                    const enabled = inputs.filter((input) => input.checked).length;
+                    const count = group.querySelector("[data-yalc-count]");
+                    const button = group.querySelector("[data-yalc-toggle-group]");
+                    if (count) count.textContent = `${enabled}/${inputs.length} enabled`;
+                    if (button) button.textContent = enabled === inputs.length ? "Disable category" : "Enable category";
+                });
+                const enabled = allInputs.filter((input) => input.checked).length;
+                const count = root.querySelector("[data-yalc-total-count]");
+                const button = root.querySelector("[data-yalc-toggle-all]");
+                if (count) count.textContent = `${enabled}/${allInputs.length} events enabled`;
+                if (button) button.textContent = enabled === allInputs.length ? "Disable all events" : "Enable all events";
+            };
+            root.querySelectorAll("[data-yalc-toggle-group]").forEach((button) => {
+                button.addEventListener("click", () => {
+                    const inputs = Array.from(button.closest("[data-yalc-event-group]").querySelectorAll(
+                        "[data-yalc-event]",
+                    ));
+                    const enable = inputs.some((input) => !input.checked);
+                    inputs.forEach((input) => { input.checked = enable; });
+                    updateEventControls();
+                });
+            });
+            const toggleAll = root.querySelector("[data-yalc-toggle-all]");
+            if (toggleAll) toggleAll.addEventListener("click", () => {
+                const inputs = eventInputs();
+                const enable = inputs.some((input) => !input.checked);
+                inputs.forEach((input) => { input.checked = enable; });
+                updateEventControls();
+            });
+            eventInputs().forEach((input) => input.addEventListener("change", updateEventControls));
+            updateEventControls();
             const hash = location.hash.startsWith("#tab-") ? location.hash.slice(5) : "";
             activate(names.has(hash) ? hash : sessionStorage.getItem(storageKey) || "filters");
         })();
@@ -909,16 +979,11 @@ class DashboardIntegration:
         }
 
         return f"""
-        <div data-yalc-tabs="1" style="padding: 1em; max-width: 1200px; font-family: -apple-system, BlinkMacSystemFont,
-        'Segoe UI', Roboto, sans-serif; background: #1a1a1a; color: #e0e0e0; min-height: 100vh;">
-            <div style="background: linear-gradient(135deg, #2c5aa0 0%, #4a148c 100%); color: white; padding: 2em;
-            border-radius: 10px; margin-bottom: 2em; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);">
-                <h1 style="margin: 0; font-size: 2em; font-weight: 600;">⚙️ YALC Settings</h1>
-                <p style="margin: 0.5em 0 0 0; opacity: 0.9; font-size: 1.1em;">Configure comprehensive logging for
-                <strong>{guild_name}</strong></p>
-                <p style="margin: 0.5em 0 0 0; opacity: 0.8; font-size: 0.9em;">Monitor 40+ event types across your
-                Discord server</p>
-            </div>
+        <div data-yalc-tabs="1" class="yalc-shell">
+            <header class="yalc-hero">
+                <h1>YALC logging</h1>
+                <p>Choose what gets logged and where for <strong>{guild_name}</strong>.</p>
+            </header>
             {self._yalc_tabs_header()}
 
             <!-- Manual form since WTForms template access is problematic -->
@@ -1018,42 +1083,19 @@ class DashboardIntegration:
                 </section>
 
                 <!-- Submit button -->
-                <div style="text-align: center; margin-top: 3em; padding-top: 2em; border-top: 2px solid #4a4a4a;">
-                    <input type="submit" name="submit" value="💾 Save Configuration"
-                           style="background: linear-gradient(135deg, #4caf50 0%, #45a049 100%); color: white; border:
-                           none; padding: 1.2em 3em; border-radius: 8px; font-size: 1.1em; font-weight: 600; cursor:
-                           pointer; box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3); transition: all 0.3s ease;">
-                    <p style="margin-top: 1em; color: #b0b0b0; font-size: 0.9em;">
-                        Changes are applied immediately and saved to Red's configuration system
-                    </p>
+                <div class="yalc-save">
+                    <p class="yalc-note">Changes take effect as soon as they are saved.</p>
+                    <input type="submit" name="submit" value="Save configuration" class="yalc-submit">
                 </div>
             </form>
 
-            <div style="margin-top: 2em; padding: 1.5em; background: #2d2d2d; border-radius: 8px; border-left: 4px solid
-             #00bcd4;">
-                <h4 style="margin: 0 0 0.5em 0; color: #00bcd4;">ℹ️ About YALC</h4>
-                <p style="margin: 0; color: #b0b0b0; line-height: 1.5;">
-                    Yet Another Logging Cog provides comprehensive event logging for Discord servers.
-                    Configure which events to log, assign specific channels for different event types,
-                    and customize filtering options to suit your server's needs.
-                </p>
+            <div class="yalc-about">
+                <strong>About YALC</strong>
+                Configure event logging, destination channels, and message filters for this server.
             </div>
 
             <script>
                 document.addEventListener('DOMContentLoaded', function() {{
-                    // Add interactive enhancements
-                    const labels = document.querySelectorAll('label');
-                    labels.forEach(label => {{
-                        label.addEventListener('mouseenter', function() {{
-                            this.style.transform = 'translateY(-1px)';
-                            this.style.boxShadow = '0 4px 8px rgba(255, 255, 255, 0.1)';
-                        }});
-                        label.addEventListener('mouseleave', function() {{
-                            this.style.transform = 'translateY(0)';
-                            this.style.boxShadow = '0 1px 3px rgba(255, 255, 255, 0.05)';
-                        }});
-                    }});
-
                     // Add form submission feedback without disabling native submission.
                     const submitButton = document.querySelector('input[type="submit"]');
                     if (submitButton) {{
@@ -1197,15 +1239,14 @@ class DashboardIntegration:
         }
 
     def _generate_event_sections(self, settings: dict) -> str:
-        """Generate HTML for event toggle sections with dark mode styling."""
-        # Get event descriptions from the main cog
+        """Generate responsive event controls with global and category toggles."""
         event_descriptions = getattr(self, "event_descriptions", {})
-
         categories = self._get_event_categories()
-
         sections = []
+        total_events = 0
+        total_enabled = 0
 
-        for category_name, category_info in categories.items():
+        for category_index, (category_name, category_info) in enumerate(categories.items()):
             events = [
                 event
                 for event in category_info["events"]
@@ -1213,10 +1254,8 @@ class DashboardIntegration:
             ]
             if not events:
                 continue
-            color = category_info["color"]
             description = html.escape(category_info["description"])
             category_name_html = html.escape(category_name)
-
             event_checkboxes = []
             enabled_count = 0
 
@@ -1225,50 +1264,49 @@ class DashboardIntegration:
                 is_checked = settings.get("events", {}).get(event, False)
                 if is_checked:
                     enabled_count += 1
-
                 checked = "checked" if is_checked else ""
                 event_html = html.escape(event)
                 desc_html = html.escape(desc)
                 emoji_html = html.escape(emoji)
                 event_checkboxes.append(f"""
-                    <label style="display: flex; align-items: center; padding: 0.6em; background: #3a3a3a;
-                    border-radius: 6px; border: 1px solid #4a4a4a; cursor: pointer; transition: all 0.2s ease;
-                    margin-bottom: 8px; color: #e0e0e0;">
-                        <input type="checkbox" name="event_{event_html}" value="1" {checked}
-                               style="margin-right: 10px; transform: scale(1.3); accent-color: {color};">
-                        <div style="flex: 1;">
-                            <div style="font-weight: 500; color: #e0e0e0;">{emoji_html} {desc_html}</div>
-                            <div style="font-size: 0.8em; color: #b0b0b0; margin-top: 2px;">Event: {event_html}</div>
+                    <label class="yalc-event">
+                        <input type="checkbox" name="event_{event_html}" value="1" {checked} data-yalc-event>
+                        <div>
+                            <div class="yalc-event-name">{emoji_html} {desc_html}</div>
+                            <div class="yalc-event-key">{event_html}</div>
                         </div>
                     </label>
                 """)
 
             if event_checkboxes:
-                status_badge = f"""
-                    <span style="background: {color}; color: white; padding: 0.3em 0.8em; border-radius: 12px;
-                    font-size: 0.85em; font-weight: 500;">
-                        {enabled_count}/{len(events)} enabled
-                    </span>
-                """
-
+                total_events += len(events)
+                total_enabled += enabled_count
+                group_id = f"events-{category_index}"
+                toggle_label = "Disable category" if enabled_count == len(events) else "Enable category"
                 sections.append(f"""
-                    <div style="margin-bottom: 2em; padding: 1.5em; background: #2d2d2d; border-radius: 8px;
-                    border-left: 4px solid {color};">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom:
-                        1em;">
-                            <h3 style="color: {color}; margin: 0; font-size: 1.3em; font-weight:
-                            600;">{category_name_html}</h3>
-                            {status_badge}
+                    <section class="yalc-section" data-yalc-event-group id="{group_id}">
+                        <div class="yalc-section-head">
+                            <h3>{category_name_html}</h3>
+                            <div>
+                                <span class="yalc-count" data-yalc-count>{enabled_count}/{len(events)} enabled</span>
+                                <button type="button" class="yalc-button" data-yalc-toggle-group>{toggle_label}</button>
+                            </div>
                         </div>
-                        <p style="color: #b0b0b0; margin-bottom: 1.5em; font-size: 0.95em;">{description}</p>
-                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap:
-                        12px;">
+                        <p class="yalc-section-copy">{description}</p>
+                        <div class="yalc-event-grid">
                             {"".join(event_checkboxes)}
                         </div>
-                    </div>
+                    </section>
                 """)
 
-        return "".join(sections)
+        global_label = "Disable all events" if total_events and total_enabled == total_events else "Enable all events"
+        return f"""
+            <div class="yalc-event-toolbar">
+                <span class="yalc-count" data-yalc-total-count>{total_enabled}/{total_events} events enabled</span>
+                <button type="button" class="yalc-button" data-yalc-toggle-all>{global_label}</button>
+            </div>
+            {"".join(sections)}
+        """
 
     def _generate_channel_sections(self, guild: discord.Guild, settings: dict) -> str:
         """Generate HTML for channel configuration sections with dark mode styling."""
@@ -1288,7 +1326,12 @@ class DashboardIntegration:
 
         category_sections = []
         configured_count = 0
-        total_events = len(event_descriptions)
+        total_events = sum(
+            1
+            for category_info in categories.values()
+            for event in category_info["events"]
+            if event in event_descriptions
+        )
 
         for category_name, category_info in categories.items():
             category_events = [
@@ -1315,32 +1358,20 @@ class DashboardIntegration:
                     )
 
                 is_enabled = settings.get("events", {}).get(event, False)
-                state_badge = (
-                    ""
-                    if is_enabled
-                    else """
-                    <span style="display: inline-block; margin-left: 8px; padding: 0.15em 0.5em; border-radius: 10px;
-                    background: #555; color: #ddd; font-size: 0.75em;">disabled</span>
-                """
-                )
+                state_badge = "" if is_enabled else '<span class="yalc-disabled">disabled</span>'
                 opacity = "1" if is_enabled else "0.72"
                 event_html = html.escape(event)
                 desc_html = html.escape(desc)
                 emoji_html = html.escape(emoji)
 
                 channel_config_html += f"""
-                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.8em;
-                    background: #3a3a3a; border-radius: 6px; border: 1px solid #4a4a4a; margin-bottom: 8px; opacity:
-                    {opacity};">
-                        <label for="channel_{event_html}" style="flex: 1; margin-right: 1.5em; font-weight: 500; color:
-                        #e0e0e0;">
+                    <div class="yalc-channel-row" style="opacity: {opacity};">
+                        <label for="channel_{event_html}" class="yalc-channel-label">
                             {emoji_html} {desc_html}{state_badge}
-                            <div style="font-size: 0.8em; color: #b0b0b0; margin-top: 2px; font-weight: normal;">Event:
-                            {event_html}</div>
+                            <div class="yalc-event-key">{event_html}</div>
                         </label>
                         <select name="event_channels[{event_html}]" id="channel_{event_html}"
-                                style="flex: 0 0 250px; padding: 0.7em; border-radius: 6px; border: 1px solid #555;
-                                font-size: 0.9em; background: #2a2a2a; color: #e0e0e0;">
+                                class="yalc-channel-select">
                             {options_with_selection}
                         </select>
                     </div>
@@ -1348,13 +1379,10 @@ class DashboardIntegration:
 
             if channel_config_html:
                 category_sections.append(f"""
-                    <div style="margin-bottom: 1.5em;">
-                        <h4 style="color: #2196f3; margin: 0 0 0.8em 0; font-size: 1.1em; font-weight: 600;
-                        border-bottom: 1px solid #4a4a4a; padding-bottom: 0.5em;">
-                            {html.escape(category_name)}
-                        </h4>
+                    <section class="yalc-channel-group">
+                        <h4>{html.escape(category_name)}</h4>
                         {channel_config_html}
-                    </div>
+                    </section>
                 """)
 
         status_text = (
@@ -1369,19 +1397,16 @@ class DashboardIntegration:
         )
 
         return f"""
-            <div style="margin-bottom: 2em; padding: 1.5em; background: #2d2d2d; border-radius: 8px; border-left: 4px
-            solid #00bcd4;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1em;">
-                    <h3 style="color: #00bcd4; margin: 0; font-size: 1.3em; font-weight: 600;">📢 Event Log Channels</h3>
-                    <span style="background: {status_color}; color: white; padding: 0.3em 0.8em; border-radius: 12px;
-                    font-size: 0.85em; font-weight: 500;">
+            <div class="yalc-section">
+                <div class="yalc-section-head">
+                    <h3>Event log channels</h3>
+                    <span class="yalc-count" style="color: {status_color};">
                         {status_text}
                     </span>
                 </div>
-                <p style="color: #b0b0b0; margin-bottom: 1.5em; font-size: 0.95em;">
+                <p class="yalc-section-copy">
                     Assign channels for events you enable above. Events without assigned channels won't be logged.
-                    <br><small style="color: #888;">💡 Tip: You can preselect channels for disabled events before
-                    enabling them.</small>
+                    You can set a channel before enabling its event.
                 </p>
                 {"".join(category_sections)}
             </div>

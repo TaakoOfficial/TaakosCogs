@@ -483,7 +483,7 @@ class DashboardIntegration:
             .wel-stat {{ font-size: 1.5rem; font-weight: 700; color: #f9fafb; }}
             .wel-field label {{ display: block; font-weight: 600; margin-bottom: 4px; color: #d1d5db; }}
             .wel-field input, .wel-field select, .wel-field textarea {{
-                width: 100%; box-sizing: border-box; border: 1px solid #4b5563; border-radius: 6px;
+                width: 100%; min-width: 0; max-width: 100%; box-sizing: border-box; border: 1px solid #4b5563; border-radius: 6px;
                 background: #111827; color: #f9fafb; padding: 8px; min-height: 38px;
             }}
             .wel-field textarea {{ min-height: 120px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }}
