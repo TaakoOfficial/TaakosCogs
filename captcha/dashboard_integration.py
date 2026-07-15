@@ -430,7 +430,8 @@ class DashboardIntegration:
 .captcha-field {{ display: grid; gap: 6px; margin-bottom: 10px; }}
 .captcha-field label {{ color: var(--muted); font-size: 13px; }}
 .captcha-field input, .captcha-field select {{
-  width: 100%; background: #0c0f14; color: var(--text); border: 1px solid var(--line);
+  width: 100%; min-width: 0; max-width: 100%; box-sizing: border-box; background: #0c0f14; color: var(--text);
+  border: 1px solid var(--line);
   border-radius: 6px; padding: 9px 10px;
 }}
 .captcha-field select[multiple] {{ min-height: 145px; }}

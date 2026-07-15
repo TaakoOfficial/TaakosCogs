@@ -52,7 +52,7 @@ standard `[p]ticket` and `[p]ticketset` prefix commands.
 
 TicketHub registers a Red-Web-Dashboard third-party page when the AAA3A `Dashboard` cog is loaded. The page appears under the guild dashboard's Third Parties tab for users with Manage Server, Red admin, or bot owner access.
 
-The dashboard can manage TicketHub's global enabled state, profiles, categories, channels, roles, lifecycle behavior, control emojis, modal questions, single panels, multi-panels, imported AAA3A panel mappings, ticket creation, ticket recovery, transcripts, and ticket lifecycle actions.
+The dashboard can manage TicketHub's global enabled state, profiles, categories, channels, roles, lifecycle behavior, control emojis, modal questions, single panels, multi-panels, imported AAA3A panel mappings, ticket creation, ticket recovery, and transcripts. Its Ticket Desk can also display recent ticket conversations, live-update the chat without clearing an unsent reply, send attributed staff replies without reloading the page, manage ticket members, and run lifecycle actions without leaving the dashboard.
 
 ## How Transcripts Work
 

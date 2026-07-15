@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Fixed log-channel dropdowns collapsing into unreadable vertical text on narrow dashboard panels.
+- Added enable/disable controls for all events and for each event category.
+- Refined the dashboard's spacing, hierarchy, controls, and responsive layout.
 - Reorganized both dashboard renderers into responsive Filtering, Events, and Log Channels tabs that preserve the selected tab while editing settings.
 
 ## [v3.2.1] - 2026-07-09
