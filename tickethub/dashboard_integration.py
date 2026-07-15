@@ -1350,10 +1350,25 @@ class DashboardIntegration:
                 raise commands.CommandError(
                     "I could not reopen this ticket thread to send the reply.",
                 ) from exc
-        actor = discord.utils.escape_markdown(member.display_name)
+        reply_embed = discord.Embed(
+            description=content,
+            color=(
+                member.color
+                if member.color.value
+                else discord.Color.blurple()
+            ),
+            timestamp=discord.utils.utcnow(),
+        )
+        reply_embed.set_author(
+            name=member.display_name,
+            icon_url=member.display_avatar.url,
+        )
+        reply_embed.set_footer(
+            text=f"TicketHub Dashboard • Ticket #{ticket_id}",
+        )
         try:
             sent = await channel.send(
-                f"**Dashboard reply from {actor}:**\n{content}",
+                embed=reply_embed,
                 allowed_mentions=discord.AllowedMentions(
                     users=True,
                     roles=False,
@@ -1621,6 +1636,9 @@ class DashboardIntegration:
             .th-message-body {{ color: #d1d5db; line-height: 1.5; overflow-wrap: anywhere; }}
             .th-attachments {{ display: flex; flex-wrap: wrap; gap: 6px; margin-top: 7px; }}
             .th-attachments a {{ color: #93c5fd; }}
+            .th-image-attachment {{ display: block; width: fit-content; max-width: min(100%, 520px); }}
+            .th-image-attachment img {{ display: block; max-width: 100%; max-height: 380px; object-fit: contain;
+            border: 1px solid #374151; border-radius: 8px; background: #0b1220; }}
             .th-actions {{ display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }}
             .th-actions form {{ margin: 0; }}
             .th-reply textarea {{ min-height: 120px; }}
@@ -2065,18 +2083,42 @@ class DashboardIntegration:
             content = (message.clean_content or "").strip()
             if not content and message.embeds:
                 embed = message.embeds[0]
+                footer_text = str(embed.footer.text or "")
+                is_dashboard_reply = footer_text.startswith("TicketHub Dashboard • Ticket #")
+                if is_dashboard_reply and embed.author.name:
+                    author_name = embed.author.name
+                    badge = '<span class="th-badge">Dashboard</span>'
                 content = str(embed.title or embed.description or "Embedded message")[:500]
-                content = f"[Embed] {content}"
-            if not content:
+                if not is_dashboard_reply:
+                    content = f"[Embed] {content}"
+            if not content and not message.attachments:
                 content = "[Message without text]"
-            body = self._h(content).replace("\n", "<br>")
-            attachment_links = "".join(
-                f'<a href="{html.escape(attachment.url, quote=True)}" target="_blank" '
-                f'rel="noopener noreferrer">{self._h(attachment.filename)}</a>'
-                for attachment in message.attachments
+            body = (
+                f'<div class="th-message-body">{self._h(content).replace(chr(10), "<br>")}</div>'
+                if content
+                else ""
             )
+            attachment_links = []
+            for attachment in message.attachments:
+                attachment_url = html.escape(attachment.url, quote=True)
+                filename = self._h(attachment.filename)
+                content_type = str(attachment.content_type or "").lower()
+                is_image = content_type.startswith("image/") or attachment.filename.lower().endswith(
+                    (".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".avif"),
+                )
+                if is_image:
+                    attachment_links.append(
+                        f'<a class="th-image-attachment" href="{attachment_url}" target="_blank" '
+                        f'rel="noopener noreferrer" aria-label="Open {filename} full size">'
+                        f'<img src="{attachment_url}" alt="{filename}" loading="lazy"></a>',
+                    )
+                else:
+                    attachment_links.append(
+                        f'<a href="{attachment_url}" target="_blank" '
+                        f'rel="noopener noreferrer">{filename}</a>',
+                    )
             attachments = (
-                f'<div class="th-attachments">{attachment_links}</div>'
+                f'<div class="th-attachments">{"".join(attachment_links)}</div>'
                 if attachment_links
                 else ""
             )
@@ -2088,7 +2130,7 @@ class DashboardIntegration:
                 f'<a class="th-message-time" href="{html.escape(message.jump_url, quote=True)}" '
                 f'target="_blank" rel="noopener noreferrer">{self._h(timestamp)}</a>'
                 "</div>"
-                f'<div class="th-message-body">{body}</div>{attachments}'
+                f"{body}{attachments}"
                 "</article>",
             )
         return "".join(rendered)

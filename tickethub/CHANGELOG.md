@@ -2,6 +2,7 @@
 
 ## 1.17.0
 
+- Restyled dashboard replies in Discord with the staff member's name, avatar, and clear TicketHub attribution, and added inline image previews to Ticket Desk conversations.
 - Fixed live Ticket Desk refreshes and replies posting to an invalid `[object HTMLInputElement]` dashboard URL.
 - Delete the close-confirmation prompt when cancellation is selected instead of leaving a public "Close Cancelled" card in the ticket.
 - Live-update the Ticket Desk conversation every eight seconds while its dashboard tab is visible, preserve unsent replies and the reader's scroll position, and send replies without reloading the page.
