@@ -49,7 +49,7 @@ To update installed cogs:
 | [giveaway](./giveaway)                 | Community events         | Timed giveaways, reaction entry, rerolls, cancellation, attached giveaways, prefix/slash commands, and dashboard controls.                  |
 | [uppercase](./uppercase)               | Channel setup            | Create and rename text channels with uppercase-style names using `/create-channel` and `/rename-channel`.                                  |
 | [emojiporter](./emojiporter)           | Server migration         | Copy emojis and stickers between servers, list emoji/sticker inventory, skip duplicates automatically.                                      |
-| [zodiaccolorroles](./zodiaccolorroles) | Role setup               | Bulk-create zodiac, color, pronoun, and ping preference roles with hybrid command support.                                                  |
+| [rolekit](./rolekit)                   | Community roles & levels | Curated identity/interest role packs, cooldown-limited activity XP, rank cards, leaderboards, milestone roles, and dashboard setup.         |
 | [fivemstatus](./fivemstatus)           | FiveM communities        | Live server status panel with player counts, Join Server button, restart countdowns, uptime tracking, images, and link buttons.             |
 | [cfxstatus](./cfxstatus)               | Cfx.re service checks    | Auto-updating panel that checks the official Cfx.re Statuspage API, with Rockstar's service-status page as a fallback.                     |
 | [randomweather](./randomweather)       | RP atmosphere            | Seasonal weather simulation, extreme weather events, automatic updates, role notifications, timezone-aware generation.                      |
@@ -103,11 +103,11 @@ Install these for immersive RP communities:
 Install these when building or moving a server:
 
 ```text
-[p]cog install taakoscogs emojiporter zodiaccolorroles toolz rolemanager uppercase tempvoice
+[p]cog install taakoscogs emojiporter rolekit toolz rolemanager uppercase tempvoice
 ```
 
 - `emojiporter` copies emojis and stickers from another server the bot can access.
-- `zodiaccolorroles` creates common self-role sets quickly.
+- `rolekit` creates curated community role packs and can run lightweight activity ranks with automatic milestone roles.
 - `toolz` helps audit role counts, hierarchy, empty roles, bots, and permissions.
 - `rolemanager` turns those roles into self roles, reaction/button/select roles, autoroles, sticky roles, temporary roles, or policy-linked role sets.
 - `uppercase` creates and renames text channels with uppercase-style names.
@@ -181,7 +181,8 @@ Some features also need Discord privileged intents:
 
 Each cog includes its own data statement in `info.json`. In short:
 
-- `flipper`, `randomweather`, `emojiporter`, `zodiaccolorroles`, `uppercase`, and `slashlink` do not persistently store end user data.
+- `flipper`, `randomweather`, `emojiporter`, `uppercase`, and `slashlink` do not persistently store end user data.
+- `rolekit` stores per-server XP and counted-message totals when activity leveling is enabled; it never stores message content.
 - `messagestudio` stores saved message payloads, author IDs, lock settings, and usage counts when its storage commands are used.
 - `toolz` stores per-guild role-message settings such as role IDs, channel IDs, and message templates.
 - `rolemanager` stores role configuration, role-policy and role-change-rule settings, role costs, reaction/button/select message/channel IDs, emoji keys, temporary-role expiry timestamps, and Discord user IDs for sticky and temporary role assignment.
@@ -218,7 +219,7 @@ Start with each cog's README:
 - [giveaway README](./giveaway/README.md)
 - [uppercase README](./uppercase/README.md)
 - [emojiporter README](./emojiporter/README.md)
-- [zodiaccolorroles README](./zodiaccolorroles/README.md)
+- [rolekit README](./rolekit/README.md)
 - [fivemstatus README](./fivemstatus/README.md)
 - [cfxstatus README](./cfxstatus/README.md)
 - [randomweather README](./randomweather/README.md)

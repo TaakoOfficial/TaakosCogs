@@ -1,0 +1,32 @@
+{
+    "$schema": "https://raw.githubusercontent.com/Cog-Creators/Red-DiscordBot/V3/develop/schema/red_cog.schema.json",
+    "name": "rolekit",
+    "author": [
+        "Taako"
+    ],
+    "description": "Community role packs and optional activity leveling. Creates zodiac, color, pronoun, notification, platform, region, interest, and milestone roles; awards cooldown-limited message XP, rank cards, leaderboards, and automatic level rewards.",
+    "install_msg": "RoleKit loaded. Use `[p]rolepack list`, `[p]leveling`, `[p]rank`, or the Red-Web-Dashboard page to get started. Leveling is disabled by default.",
+    "short": "Community role packs, activity XP, ranks, leaderboards, and level rewards.",
+    "tags": [
+        "roles",
+        "zodiac",
+        "color",
+        "pronouns",
+        "ping",
+        "leveling",
+        "xp",
+        "leaderboard",
+        "community",
+        "hybrid",
+        "management",
+        "bulk"
+    ],
+    "min_bot_version": "3.5.0",
+    "min_python_version": [3, 9, 0],
+    "version": "2.0.0",
+    "requirements": [],
+    "end_user_data_statement": "When leveling is enabled, this cog stores each member's per-server XP total and counted-message total. It does not store message content, and member data is deleted when the member leaves or through Red's data-deletion API.",
+    "hidden": false,
+    "disabled": false,
+    "type": "COG"
+}

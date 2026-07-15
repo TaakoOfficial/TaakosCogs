@@ -2,7 +2,13 @@
 
 ## [Unreleased]
 
-- Added standalone Red-Web-Dashboard integration for viewing visible commands and current server configuration.
+- Renamed the package and cog from `zodiaccolorroles` / `ZodiacColorRoles` to `rolekit` / `RoleKit`.
+- Preserved the legacy Config namespace and identifier so existing leveling settings and XP survive the rename.
+- Rebuilt the cog as RoleKit while retaining every original command.
+- Added platform, region, interest, and activity-level role packs alongside zodiac, color, pronoun, and notification packs.
+- Added optional cooldown-limited message XP, rank cards, a server leaderboard, milestone role assignment, ignored channels, configurable announcements, and member XP resets.
+- Added a purpose-built dashboard for creating packs and managing all leveling and reward settings.
+- Added member-data deletion and leave cleanup for stored XP records.
 
 
 ## [1.1.1] - 2026-07-09
@@ -10,7 +16,7 @@
 - Renamed the repository package folder from `ZodiacColorRoles` to `zodiaccolorroles` to match Red cog naming standards.
 - New installs should use `[p]cog install taakoscogs zodiaccolorroles` and `[p]load zodiaccolorroles`.
 - Existing ZodiacColorRoles settings are preserved because the cog's Config identifier did not change.
-All notable changes to the ZodiacColorRoles cog will be documented in this file.
+All notable changes to RoleKit will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
