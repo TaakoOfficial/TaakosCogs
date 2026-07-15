@@ -3,6 +3,7 @@
 ## Unreleased
 
 - Delete the close-confirmation prompt when cancellation is selected instead of leaving a public "Close Cancelled" card in the ticket.
+- Live-update the Ticket Desk conversation every eight seconds while its dashboard tab is visible, preserve unsent replies and the reader's scroll position, and send replies without reloading the page.
 - Added a dashboard Ticket Desk for reading recent ticket conversations, sending attributed staff replies, managing members, and running ticket lifecycle actions without leaving the dashboard.
 - Re-register imported AAA3A panel handlers after the AAA3A Tickets cog unloads, preventing existing panel buttons and dropdowns from returning "Interaction failed" after migration.
 - Reorganized the dashboard into responsive Tickets, Profile Setup, Modal, Panels, and AAA3A Imports tabs that remain selected after form submissions.

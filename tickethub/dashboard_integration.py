@@ -204,7 +204,141 @@ class DashboardIntegration:
 
   activate(fromHash() || root.querySelector("[data-tab].active").dataset.tab);
   const conversation = root.querySelector("[data-ticket-conversation]");
+  const refreshForm = root.querySelector("[data-ticket-refresh]");
+  const replyForm = root.querySelector("[data-ticket-reply]");
+  const replyFeedback = root.querySelector("[data-ticket-reply-feedback]");
+  const liveStatus = root.querySelector("[data-ticket-live-status]");
+  let refreshPending = false;
+  let replyPending = false;
+
+  const setLiveStatus = (label, state) => {
+    if (!liveStatus) return;
+    liveStatus.dataset.state = state;
+    const text = liveStatus.querySelector("[data-ticket-live-text]");
+    if (text) text.textContent = label;
+  };
+
+  const responseData = (text) => {
+    try {
+      const payload = JSON.parse(text);
+      const candidates = [
+        payload?.web_content?.source,
+        payload?.data?.web_content?.source,
+        payload?.result?.web_content?.source,
+        payload?.data?.source,
+        payload?.result?.source,
+      ];
+      const notifications =
+        payload?.notifications || payload?.data?.notifications || payload?.result?.notifications || [];
+      return {
+        markup: candidates.find((candidate) => typeof candidate === "string") || "",
+        notifications: Array.isArray(notifications) ? notifications : [],
+      };
+    } catch (_error) {
+      return {markup: text, notifications: []};
+    }
+  };
+
+  const updateConversation = (markup, forceLatest = false) => {
+    const documentCopy = new DOMParser().parseFromString(markup, "text/html");
+    const updated = documentCopy.querySelector("[data-ticket-conversation]");
+    if (!updated) throw new Error("Conversation was missing from the dashboard response");
+
+    const newCsrf = documentCopy.querySelector('input[name="csrf_token"]');
+    if (newCsrf) {
+      root.querySelectorAll('input[name="csrf_token"]').forEach((input) => {
+        input.value = newCsrf.value;
+      });
+    }
+
+    const distanceFromBottom = conversation.scrollHeight - conversation.scrollTop - conversation.clientHeight;
+    const followLatest = forceLatest || distanceFromBottom < 96;
+    const previousScrollTop = conversation.scrollTop;
+    if (conversation.innerHTML !== updated.innerHTML) {
+      conversation.innerHTML = updated.innerHTML;
+      conversation.scrollTop = followLatest ? conversation.scrollHeight : previousScrollTop;
+    }
+  };
+
+  const submitDashboardForm = async (form) => {
+    const formData = new FormData(form);
+    formData.set("active_tab", "desk");
+    const response = await fetch(form.action || location.href, {
+      method: (form.method || "POST").toUpperCase(),
+      body: formData,
+      credentials: "same-origin",
+      headers: {"X-Requested-With": "XMLHttpRequest"},
+    });
+    if (!response.ok) throw new Error(`Dashboard request failed (${response.status})`);
+    return responseData(await response.text());
+  };
+
+  const refreshConversation = async () => {
+    const deskTab = root.querySelector('[data-tab="desk"]');
+    if (!conversation || !refreshForm || refreshPending) return;
+    if (document.hidden || !deskTab?.classList.contains("active")) {
+      setLiveStatus("Paused", "paused");
+      return;
+    }
+
+    refreshPending = true;
+    setLiveStatus("Updating...", "loading");
+    try {
+      const result = await submitDashboardForm(refreshForm);
+      updateConversation(result.markup);
+      setLiveStatus("Live", "live");
+    } catch (_error) {
+      setLiveStatus("Reconnect", "error");
+    } finally {
+      refreshPending = false;
+    }
+  };
+
   if (conversation) conversation.scrollTop = conversation.scrollHeight;
+  if (conversation && replyForm) {
+    replyForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      if (replyPending) return;
+
+      const textarea = replyForm.querySelector('textarea[name="ticket_reply_content"]');
+      const button = replyForm.querySelector('button[type="submit"]');
+      if (!textarea?.value.trim()) return;
+
+      replyPending = true;
+      if (button) button.disabled = true;
+      if (replyFeedback) replyFeedback.textContent = "Sending...";
+      try {
+        const result = await submitDashboardForm(replyForm);
+        const error = result.notifications.find((item) => item?.category === "error");
+        if (error) throw new Error(error.message || "The reply could not be sent.");
+        updateConversation(result.markup, true);
+        textarea.value = "";
+        if (replyFeedback) replyFeedback.textContent = "";
+        setLiveStatus("Live", "live");
+      } catch (error) {
+        if (replyFeedback) {
+          replyFeedback.textContent = error?.message || "The reply could not be sent. Please try again.";
+        }
+        setLiveStatus("Send failed", "error");
+      } finally {
+        replyPending = false;
+        if (button) button.disabled = false;
+      }
+    });
+  }
+  if (conversation && refreshForm) {
+    window.setInterval(refreshConversation, 8000);
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) setLiveStatus("Paused", "paused");
+      else refreshConversation();
+    });
+    tabs.forEach((tab) => {
+      tab.addEventListener("click", () => {
+        if (tab.dataset.tab === "desk") refreshConversation();
+        else setLiveStatus("Paused", "paused");
+      });
+    });
+  }
 })();
 </script>
 """
@@ -1466,6 +1600,17 @@ class DashboardIntegration:
             .th-ticket-meta strong {{ display: block; margin-top: 3px; color: #f9fafb; overflow-wrap: anywhere; }}
             .th-conversation {{ max-height: 620px; overflow-y: auto; margin: 14px 0; padding: 8px 14px;
             background: #111827; border: 1px solid #374151; border-radius: 8px; }}
+            .th-live-status {{ display: inline-flex; align-items: center; gap: 6px; margin-top: 6px; color: #86efac;
+            font-size: .78rem; font-weight: 700; }}
+            .th-live-dot {{ width: 7px; height: 7px; border-radius: 50%; background: #22c55e;
+            box-shadow: 0 0 0 3px rgba(34, 197, 94, .13); }}
+            .th-live-status[data-state="loading"] {{ color: #bfdbfe; }}
+            .th-live-status[data-state="loading"] .th-live-dot {{ background: #60a5fa; }}
+            .th-live-status[data-state="paused"] {{ color: #9ca3af; }}
+            .th-live-status[data-state="paused"] .th-live-dot {{ background: #6b7280; box-shadow: none; }}
+            .th-live-status[data-state="error"] {{ color: #fbbf24; }}
+            .th-live-status[data-state="error"] .th-live-dot {{ background: #f59e0b; }}
+            .th-reply-feedback {{ min-height: 1.25rem; color: #fca5a5; font-size: .82rem; }}
             .th-message {{ padding: 12px 0; border-bottom: 1px solid #293241; }}
             .th-message:last-child {{ border-bottom: 0; }}
             .th-message-head {{ display: flex; flex-wrap: wrap; align-items: baseline; gap: 7px; margin-bottom: 4px; }}
@@ -2038,8 +2183,9 @@ class DashboardIntegration:
         <div id="ticket-desk" class="th-card">
             <div class="th-desk-head">
                 <div><h3>Ticket Desk</h3><div class="th-muted">Read and manage a ticket without leaving the
-                dashboard.</div></div>
-                <form method="POST">
+                dashboard.</div><div class="th-live-status" data-ticket-live-status data-state="live" role="status"
+                aria-live="polite"><span class="th-live-dot"></span><span data-ticket-live-text>Live</span></div></div>
+                <form method="POST" data-ticket-refresh>
                     {csrf}
                     <input type="hidden" name="action" value="select_ticket">
                     <div class="th-field"><label>Selected ticket</label><select name="workspace_ticket_id"
@@ -2057,11 +2203,12 @@ class DashboardIntegration:
             </div>
             <div><span class="th-muted">Participants:</span> {self._h(participant_text)}</div>
             <div class="th-conversation" data-ticket-conversation>{conversation}</div>
-            <form class="th-reply" method="POST">
+            <form class="th-reply" method="POST" data-ticket-reply>
                 {csrf}
                 <input type="hidden" name="action" value="ticket_reply">
                 <input type="hidden" name="workspace_ticket_id" value="{selected_ticket_id}">
                 {self._textarea("ticket_reply_content", "Reply", "", rows=5)}
+                <div class="th-reply-feedback" data-ticket-reply-feedback role="status" aria-live="polite"></div>
                 <button class="th-btn" type="submit"{reply_disabled}>Send Reply</button>
                 {reopen_notice}
             </form>
