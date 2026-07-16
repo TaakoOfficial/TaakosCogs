@@ -51,6 +51,7 @@ Every configurable cog includes its own purpose-built Red-Web-Dashboard page wit
 | [slashlink](./slashlink)               | Prefix/slash compatibility | Red-managed application-command gateways for loaded prefix-only cogs, with permission-aware autocomplete and normal `[p]slash` controls. |
 | [tempvoice](./tempvoice)               | Voice channel automation | Join-to-create temporary voice channels, embedded owner controls, rename/lock/limit/transfer buttons, claiming, cleanup, and dashboard setup. |
 | [giveaway](./giveaway)                 | Community events         | Timed giveaways, reaction entry, rerolls, cancellation, attached giveaways, prefix/slash commands, and dashboard controls.                  |
+| [spinwheel](./spinwheel)               | Decisions and party games | Animated secure-random wheels, saved presets, themed/custom colors, optional winner removal, slash commands, and a visual dashboard.       |
 | [uppercase](./uppercase)               | Channel setup            | Create and rename text channels with uppercase-style names using `/create-channel` and `/rename-channel`.                                  |
 | [emojiporter](./emojiporter)           | Server migration         | Copy emojis and stickers between servers, list emoji/sticker inventory, skip duplicates automatically.                                      |
 | [rolekit](./rolekit)                   | Community roles & levels | Curated identity/interest role packs, cooldown-limited activity XP, rank cards, leaderboards, milestone roles, and dashboard setup.         |
@@ -70,7 +71,7 @@ Every configurable cog includes its own purpose-built Red-Web-Dashboard page wit
 Install these if you want better moderation visibility, invite attribution, feedback workflows, community reputation, support tickets, and role operations:
 
 ```text
-[p]cog install taakoscogs toolz rolemanager yalc applications welcome captcha invitetracker suggestionbox repboard reviewhub tickethub tempvoice giveaway
+[p]cog install taakoscogs toolz rolemanager yalc applications welcome captcha invitetracker suggestionbox repboard reviewhub tickethub tempvoice giveaway spinwheel
 ```
 
 - `toolz` gives staff role/user lookup, audit, export, and role-triggered message tools.
@@ -86,6 +87,7 @@ Install these if you want better moderation visibility, invite attribution, feed
 - `tickethub` handles support tickets with panels, private channels, staff controls, imports, and transcripts.
 - `tempvoice` gives members self-managed temporary voice channels with embedded controls.
 - `giveaway` supports events and community rewards.
+- `spinwheel` turns choices, drawings, and party-game prompts into colorful animated wheels.
 
 ### Roleplay Servers
 
@@ -170,6 +172,7 @@ Some cogs have Python package requirements that Red's downloader installs automa
 | fivemstatus   | `aiohttp`        |
 | cfxstatus     | `aiohttp`        |
 | whmcs         | `aiohttp>=3.8.0` |
+| spinwheel     | `Pillow>=10.0.0` |
 
 Some features also need Discord privileged intents:
 
@@ -192,7 +195,8 @@ Each cog includes its own data statement in `info.json`. In short:
 - `rolemanager` stores role configuration, role-policy and role-change-rule settings, role costs, reaction/button/select message/channel IDs, emoji keys, temporary-role expiry timestamps, and Discord user IDs for sticky and temporary role assignment.
 - `captcha` stores panel message/channel IDs, role IDs, and button labels; verification challenges are transient in memory.
 - `yalc` stores logging settings, routes, filters, ignore-rule user IDs, and limited voice history. Its optional retained event journal stores event metadata and only stores message content when explicitly enabled.
-- `applications`, `welcome`, `invitetracker`, `suggestionbox`, `repboard`, `reviewhub`, `tickethub`, `tempvoice`, `giveaway`, `fivemstatus`, `fable`, `paranoia`, `rpcalander`, and `whmcs` store the settings or records needed for their features.
+- `applications`, `welcome`, `invitetracker`, `suggestionbox`, `repboard`, `reviewhub`, `tickethub`, `tempvoice`, `giveaway`, `spinwheel`, `fivemstatus`, `fable`, `paranoia`, `rpcalander`, and `whmcs` store the settings or records needed for their features.
+- `spinwheel` stores server-created wheel names, entry labels, colors, winner-removal preferences, last winners, and aggregate spin counts; it does not store Discord user IDs.
 - `invitetracker` stores invite cache metadata, inviter stats, tracked member join-source records, Discord user IDs, invite codes, timestamps, fake-join flags, and unknown join counts.
 - `suggestionbox` stores suggestion text, author IDs, voter IDs, staff reviewer IDs, message/channel/thread IDs, votes, statuses, staff notes, review reasons, and timestamps.
 - `repboard` stores reputation settings, giver/receiver/moderator IDs, reasons, message/channel IDs, timestamps, active/removed state, cooldown metadata, daily limit metadata, and aggregate reputation statistics.
@@ -222,6 +226,7 @@ Start with each cog's README:
 - [tickethub README](./tickethub/README.md)
 - [slashlink README](./slashlink/README.md)
 - [giveaway README](./giveaway/README.md)
+- [spinwheel README](./spinwheel/README.md)
 - [uppercase README](./uppercase/README.md)
 - [emojiporter README](./emojiporter/README.md)
 - [rolekit README](./rolekit/README.md)

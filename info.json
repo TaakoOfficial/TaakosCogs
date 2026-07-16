@@ -2,10 +2,10 @@
   "$schema": "https://raw.githubusercontent.com/Cog-Creators/Red-DiscordBot/V3/develop/schema/red_repo.schema.json",
   "name": "Taako's Cogs",
   "author": ["Taako"],
-  "description": "A collection of high-quality cogs for Red-DiscordBot, including captcha verification, invite tracking, suggestions, reputation, reviews, support tickets, prefix/slash compatibility, role management, temporary voice channels, roleplay tools, admin utilities, and RandomWeather.",
+  "description": "A collection of high-quality cogs for Red-DiscordBot, including captcha verification, invite tracking, suggestions, reputation, reviews, support tickets, animated decision wheels, prefix/slash compatibility, role management, temporary voice channels, roleplay tools, admin utilities, and RandomWeather.",
   "install_msg": "Thank you for adding Taako's Cogs! Use `[p]repo list` to see available cogs.",
   "short": "High-quality cogs for Red-DiscordBot.",
-  "tags": ["cogs", "utility", "slash", "captcha", "verification", "roles", "weather", "invites", "suggestions", "reputation", "reviews", "tickets", "transcripts", "voice", "roleplay"],
+  "tags": ["cogs", "utility", "slash", "captcha", "verification", "roles", "weather", "invites", "suggestions", "reputation", "reviews", "tickets", "transcripts", "voice", "roleplay", "wheel", "games"],
   "hidden": false,
   "disabled": false,
   "type": "REPO"
