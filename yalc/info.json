@@ -2,7 +2,7 @@
   "$schema": "https://raw.githubusercontent.com/Cog-Creators/Red-DiscordBot/V3/develop/schema/red_cog.schema.json",
   "author": ["Taako"],
   "name": "yalc",
-  "version": "4.0.1",
+  "version": "4.0.2",
   "install_msg": "Thanks for installing YALC! Use `[p]yalc setup`, then open YALC in Red-Web-Dashboard for complete event routing, privacy, audit, and journal controls.",
   "short": "Audit-aware server logging with complete dashboard control.",
   "description": "A comprehensive Discord logger with strict audit attribution, cached and raw gateway coverage, fail-closed delivery, per-event routes and colors, advanced filters, and an optional searchable local journal.",

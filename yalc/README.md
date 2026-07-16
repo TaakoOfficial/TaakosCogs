@@ -64,6 +64,12 @@ Give the bot `View Audit Log` to attribute moderation and administrative actions
 
 Enable the Guild Moderation intent for the live audit-entry stream, bans, and related moderation events. Enable Message Content if deleted or edited text should be available while Discord still has the message cached. Uncached gateway events contain IDs and any partial data Discord supplied, but cannot recover content Discord did not send.
 
+## Proxy Filtering
+
+`Ignore known/configured proxy messages` recognizes the official Tupperbox and PluralKit applications automatically. Additional proxy application or bot IDs can be entered in the dashboard. YALC normalizes those IDs, checks message application metadata, and attributes webhook ownership without relying on the proxy persona's display name. Recently observed proxy message IDs are retained for one hour so their raw edits and deletions remain filtered if Discord later evicts the full message from cache.
+
+Discord supplies no author, webhook, application, or content metadata for a completely uncached raw delete. YALC can filter those deletes only if it observed and identified the message after startup. `Suppress likely proxy source-message deletes` separately handles quick deletion of original proxy commands using configured prefixes; because proxy brackets and autoproxy behavior are customizable, that control is intentionally heuristic.
+
 ## Optional Event Journal
 
 The local journal is disabled by default. When enabled, it records delivered-event metadata in YALC's cog data directory only. Message content remains excluded unless `Include message content in journal` is explicitly enabled in the dashboard. Retention is enforced automatically each day and can also be applied immediately. Administrators can search, export, prune, or permanently clear the journal with the commands above.

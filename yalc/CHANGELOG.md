@@ -1,5 +1,13 @@
 # 📝 YALC Changelog
 
+## [v4.0.2] - 2026-07-15
+
+- Rebuilt Tupperbox/proxy filtering around normalized application IDs and webhook attribution instead of proxy persona names or message-content guesses.
+- Added automatic recognition for the official Tupperbox and PluralKit applications while retaining configurable proxy application IDs.
+- Added bounded webhook and message caches so known proxy messages remain filtered from uncached raw edit, delete, and bulk-delete events.
+- Removed the false-positive heuristic that treated unrelated bot messages containing pipe characters as proxies.
+- Clarified the proxy filtering controls and added focused detection tests.
+
 ## [v4.0.1] - 2026-07-15
 
 - Fixed the dashboard smart-route renderer referencing the removed `EVENT_TO_SETUP_GROUP` attribute.

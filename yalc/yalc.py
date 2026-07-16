@@ -23,6 +23,10 @@ from redbot.core.utils.chat_formatting import pagify
 from .audit import AuditCorrelator
 from .dashboard_integration import DashboardIntegration
 from .models import LogEvent
+from .proxy_detection import (
+    KNOWN_PROXY_APPLICATION_IDS,
+    proxy_metadata_matches,
+)
 from .storage import EventJournal
 
 if TYPE_CHECKING:
@@ -171,6 +175,8 @@ class YALC(DashboardIntegration, commands.Cog):
         self._recent_role_event_logs = {}
         self._audit_correlator = AuditCorrelator()
         self._raw_event_ids: dict[tuple[str, int], float] = {}
+        self._proxy_message_ids: dict[int, float] = {}
+        self._proxy_webhook_cache: dict[int, tuple[bool, float]] = {}
         self._embed_event_types: dict[int, str] = {}
         self._journal: EventJournal | None = None
         self._journal_cleanup_task: asyncio.Task | None = None
@@ -289,8 +295,9 @@ class YALC(DashboardIntegration, commands.Cog):
             "ignore_webhooks": False,
             "ignore_tupperbox": True,
             "ignore_apps": True,
-            # Default Tupperbox bot ID
-            "tupperbox_ids": ["239232811662311425"],
+            # Official Tupperbox and PluralKit application IDs. Additional
+            # proxy systems can be configured from the dashboard.
+            "tupperbox_ids": [str(item) for item in sorted(KNOWN_PROXY_APPLICATION_IDS)],
             "include_thumbnails": True,
             "detect_proxy_deletes": True,
             "raw_message_events": True,
@@ -868,7 +875,7 @@ class YALC(DashboardIntegration, commands.Cog):
                 if settings.get("ignore_tupperbox", True):
                     tupperbox_ids = settings.get(
                         "tupperbox_ids",
-                        ["239232811662311425"],
+                        [],
                     )
                     if await self.is_tupperbox_message(message, tupperbox_ids):
                         self.log.debug(
@@ -3094,6 +3101,38 @@ class YALC(DashboardIntegration, commands.Cog):
         self._raw_event_ids[key] = now
         return True
 
+    def _remember_proxy_message(self, message_id: int) -> None:
+        """Remember a proxy message long enough to filter uncached raw events."""
+        now = time.monotonic()
+        self._proxy_message_ids[int(message_id)] = now
+        if len(self._proxy_message_ids) > 10_000:
+            cutoff = now - 3_600
+            self._proxy_message_ids = {
+                item_id: seen_at for item_id, seen_at in self._proxy_message_ids.items() if seen_at >= cutoff
+            }
+
+    def _is_known_proxy_message(self, message_id: int) -> bool:
+        """Return whether a recently observed message was sent by a proxy."""
+        seen_at = self._proxy_message_ids.get(int(message_id))
+        if seen_at is None:
+            return False
+        if time.monotonic() - seen_at > 3_600:
+            self._proxy_message_ids.pop(int(message_id), None)
+            return False
+        return True
+
+    @commands.Cog.listener()
+    async def on_message(self, message: discord.Message) -> None:
+        """Track proxy messages so later raw edit/delete events can be ignored."""
+        if message.guild is None:
+            return
+        settings = await self._get_cached_settings(message.guild)
+        if not settings.get("ignore_tupperbox", True):
+            return
+        proxy_ids = settings.get("tupperbox_ids", [])
+        if await self.is_tupperbox_message(message, proxy_ids):
+            self._remember_proxy_message(message.id)
+
     @commands.Cog.listener()
     async def on_raw_message_delete(self, payload: discord.RawMessageDeleteEvent) -> None:
         """Log uncached deletions so message IDs never disappear silently."""
@@ -3104,6 +3143,10 @@ class YALC(DashboardIntegration, commands.Cog):
             return
         settings = await self._get_cached_settings(guild)
         if not settings.get("raw_message_events", True):
+            return
+        if settings.get("ignore_tupperbox", True) and self._is_known_proxy_message(
+            payload.message_id,
+        ):
             return
         source_channel = guild.get_channel_or_thread(payload.channel_id)
         if source_channel is None or not await self.should_log_event(
@@ -3160,6 +3203,10 @@ class YALC(DashboardIntegration, commands.Cog):
         settings = await self._get_cached_settings(guild)
         if not settings.get("raw_message_events", True):
             return
+        if settings.get("ignore_tupperbox", True):
+            uncached_ids = {message_id for message_id in uncached_ids if not self._is_known_proxy_message(message_id)}
+            if not uncached_ids:
+                return
         source_channel = guild.get_channel_or_thread(payload.channel_id)
         if source_channel is None or not await self.should_log_event(
             guild,
@@ -3210,6 +3257,20 @@ class YALC(DashboardIntegration, commands.Cog):
         settings = await self._get_cached_settings(guild)
         if not settings.get("raw_message_events", True):
             return
+        data = payload.data or {}
+        if settings.get("ignore_tupperbox", True):
+            author_data = data.get("author") or {}
+            proxy_ids = settings.get("tupperbox_ids", [])
+            if self._is_known_proxy_message(payload.message_id) or proxy_metadata_matches(
+                configured_ids=proxy_ids,
+                webhook_id=data.get("webhook_id"),
+                application_id=data.get("application_id"),
+                author_id=author_data.get("id"),
+                author_is_bot=bool(author_data.get("bot")),
+                author_name=str(author_data.get("username") or ""),
+            ):
+                self._remember_proxy_message(payload.message_id)
+                return
         source_channel = guild.get_channel_or_thread(payload.channel_id)
         if source_channel is None or not await self.should_log_event(
             guild,
@@ -3220,7 +3281,6 @@ class YALC(DashboardIntegration, commands.Cog):
         log_channel = await self.get_log_channel(guild, "message_edit")
         if log_channel is None:
             return
-        data = payload.data or {}
         author_data = data.get("author") or {}
         author_id = author_data.get("id")
         content = data.get("content")
@@ -3266,7 +3326,7 @@ class YALC(DashboardIntegration, commands.Cog):
                 return
 
             # 2. Enhanced Tupperbox message detection
-            tupperbox_ids = settings.get("tupperbox_ids", ["239232811662311425"])
+            tupperbox_ids = settings.get("tupperbox_ids", [])
             ignore_tupperbox = settings.get("ignore_tupperbox", True)
 
             if ignore_tupperbox:
@@ -3789,7 +3849,7 @@ class YALC(DashboardIntegration, commands.Cog):
                 return
 
             # 2. Enhanced Tupperbot filtering
-            tupperbox_ids = settings.get("tupperbox_ids", ["239232811662311425"])
+            tupperbox_ids = settings.get("tupperbox_ids", [])
             ignore_tupperbox = settings.get("ignore_tupperbox", True)
 
             if ignore_tupperbox:
@@ -4175,7 +4235,7 @@ class YALC(DashboardIntegration, commands.Cog):
 
             # Filter out Tupperbot messages if configured
             if settings.get("ignore_tupperbox", True):
-                tupperbox_ids = settings.get("tupperbox_ids", ["239232811662311425"])
+                tupperbox_ids = settings.get("tupperbox_ids", [])
 
                 original_count = len(filtered_messages)
 
@@ -10398,36 +10458,49 @@ class YALC(DashboardIntegration, commands.Cog):
         bool
             True if the message is from Tupperbox, Tupperhook, or a proxy bot, False otherwise
         """
-        # Webhook name detection for Tupperbox/Tupperhook
-        if getattr(message, "webhook_id", None):
-            webhook_name = getattr(message.author, "name", "") or ""
-            if "tupperbox" in webhook_name.lower() or "tupperhook" in webhook_name.lower():
-                return True
+        author = getattr(message, "author", None)
+        webhook_id = getattr(message, "webhook_id", None)
+        metadata = {
+            "configured_ids": tupperbox_ids,
+            "webhook_id": webhook_id,
+            "application_id": getattr(message, "application_id", None)
+            or getattr(getattr(message, "application", None), "id", None),
+            "author_id": getattr(author, "id", None),
+            "author_is_bot": bool(getattr(author, "bot", False)),
+            "author_name": str(getattr(author, "name", "") or ""),
+        }
+        if proxy_metadata_matches(**metadata):
+            self._remember_proxy_message(message.id)
+            return True
+        if not webhook_id:
+            return False
 
-        if message.author.bot:
-            # Check if the bot is in the configured Tupperbox IDs
-            if message.author.id in tupperbox_ids:
-                return True
+        now = time.monotonic()
+        cached = self._proxy_webhook_cache.get(int(webhook_id))
+        if cached is not None and now - cached[1] <= (3_600 if cached[0] else 300):
+            if cached[0]:
+                self._remember_proxy_message(message.id)
+            return cached[0]
 
-            # Check for common proxy patterns in the message content
-            content = message.content or ""
-            if any(pattern in content for pattern in ["|", "‖", "⧸", "⧹"]):
-                return True
-
-            # Check if the message is a reply to a Tupperbox message
-            if message.reference and message.reference.message_id:
-                try:
-                    referenced_message = await message.channel.fetch_message(
-                        message.reference.message_id,
-                    )
-                    if referenced_message and referenced_message.author.id in tupperbox_ids:
-                        return True
-                except discord.NotFound:
-                    pass  # Referenced message not found, ignore
-                except RECOVERABLE_EXCEPTIONS as e:
-                    self.log.debug(f"Error checking referenced message: {e}")
-
-        return False
+        matched = False
+        try:
+            webhook = await self.bot.fetch_webhook(int(webhook_id))
+            owner = getattr(webhook, "user", None)
+            matched = proxy_metadata_matches(
+                **metadata,
+                webhook_owner_id=getattr(owner, "id", None),
+                webhook_name=str(getattr(webhook, "name", "") or ""),
+            )
+        except RECOVERABLE_EXCEPTIONS as error:
+            self.log.debug(
+                "Could not inspect webhook %s while checking proxy attribution: %s",
+                webhook_id,
+                error,
+            )
+        self._proxy_webhook_cache[int(webhook_id)] = (matched, now)
+        if matched:
+            self._remember_proxy_message(message.id)
+        return matched
 
     async def safe_send(
         self,

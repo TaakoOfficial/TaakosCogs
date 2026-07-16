@@ -26,6 +26,7 @@ def load_module(name: str, relative_path: str):
 audit = load_module("yalc_audit_test", "yalc/audit.py")
 models = load_module("yalc_models_test", "yalc/models.py")
 storage = load_module("yalc_storage_test", "yalc/storage.py")
+proxy_detection = load_module("yalc_proxy_detection_test", "yalc/proxy_detection.py")
 
 
 class FakeEntry:
@@ -126,6 +127,44 @@ class DashboardRoutingRegressionTests(unittest.TestCase):
         for relative_path in ("yalc/dashboard_integration.py", "yalc/yalc.py"):
             source = (ROOT / relative_path).read_text(encoding="utf-8")
             self.assertNotIn("EVENT_TO_SETUP_GROUP", source, relative_path)
+
+
+class ProxyDetectionTests(unittest.TestCase):
+    def test_proxy_ids_are_normalized_across_config_types(self):
+        self.assertEqual(
+            proxy_detection.normalize_proxy_ids(["431544605209788416", 466378653216014359, "bad"]),
+            {431544605209788416, 466378653216014359},
+        )
+
+    def test_tupperbox_application_metadata_is_detected(self):
+        self.assertTrue(
+            proxy_detection.proxy_metadata_matches(
+                configured_ids=[],
+                webhook_id=123,
+                application_id=431544605209788416,
+                author_name="Arbitrary persona name",
+            ),
+        )
+
+    def test_webhook_owner_identifies_proxy_with_arbitrary_persona(self):
+        self.assertTrue(
+            proxy_detection.proxy_metadata_matches(
+                configured_ids=["999"],
+                webhook_id=123,
+                webhook_owner_id="999",
+                author_name="Character Name",
+            ),
+        )
+
+    def test_unrelated_bot_content_is_not_treated_as_proxy(self):
+        self.assertFalse(
+            proxy_detection.proxy_metadata_matches(
+                configured_ids=[],
+                author_id=123,
+                author_is_bot=True,
+                author_name="Status Bot",
+            ),
+        )
 
 
 if __name__ == "__main__":
