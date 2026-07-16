@@ -56,7 +56,7 @@ Yet Another Logging Cog: configurable server logging for Red-DiscordBot.
 
 YALC registers a standalone Red-Web-Dashboard third-party page when the AAA3A `Dashboard` cog is loaded. The page appears under the guild dashboard's Third Parties tab for users with Manage Server, Red admin, or bot owner access.
 
-The dashboard controls core behavior and privacy, explicit fallback delivery, command-log policy, local journal retention/content policy, every event toggle, every event channel, every event color, broad ignore filters, precise ignore rules, audit readiness, journal statistics, and test deliveries. It does not use the repository's reusable dashboard form component.
+The dashboard controls core behavior and privacy, explicit fallback delivery, command-log policy, local journal retention/content policy, every event toggle, every event channel, every event color, broad ignore filters, precise ignore rules, audit readiness, journal statistics, and test deliveries. One-click controls enable or disable every event, while smart routing previews the best matching existing `log`, `logs`, or `logging` channel for each unset route and can apply those suggestions without overwriting configured routes. It does not use the repository's reusable dashboard form component.
 
 ## Audit Attribution and Coverage
 

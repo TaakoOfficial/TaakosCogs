@@ -6,6 +6,7 @@ from __future__ import annotations
 import datetime
 import html
 import logging
+import re
 from typing import TYPE_CHECKING, Any, Callable
 
 from redbot.core import commands
@@ -69,6 +70,31 @@ class DashboardIntegration:
         if action == "save_events":
             await self._yd_save_events(guild, form)
             return "Event routes, toggles, and colors saved."
+        if action == "enable_all_events":
+            async with self.config.guild(guild).events() as events:
+                for event_type in self.event_descriptions:
+                    events[event_type] = True
+            self._invalidate_settings_cache(guild)
+            return f"Enabled all {len(self.event_descriptions)} YALC events."
+        if action == "disable_all_events":
+            async with self.config.guild(guild).events() as events:
+                for event_type in self.event_descriptions:
+                    events[event_type] = False
+            self._invalidate_settings_cache(guild)
+            return f"Disabled all {len(self.event_descriptions)} YALC events."
+        if action == "smart_route_unset":
+            suggestions = self._yd_smart_route_suggestions(guild)
+            routed = []
+            async with self.config.guild(guild).event_channels() as event_channels:
+                for event_type, channel in suggestions.items():
+                    if not event_channels.get(event_type):
+                        event_channels[event_type] = channel.id
+                        routed.append(event_type)
+            self._invalidate_settings_cache(guild)
+            if not routed:
+                return "No unset event routes had a usable logging-channel suggestion."
+            used_channels = {suggestions[event].id for event in routed}
+            return f"Smart-routed {len(routed)} unset events across {len(used_channels)} existing log channels."
         if action == "save_filters":
             await self._yd_save_filters(guild, form)
             return "Ignore and proxy filters saved."
@@ -236,7 +262,8 @@ class DashboardIntegration:
         health = "Healthy" if view_audit and moderation_intent else "Needs attention"
         health_class = "ok" if health == "Healthy" else "warn"
         core = self._yd_core_form(guild, settings, csrf)
-        events = self._yd_event_form(guild, settings, csrf)
+        route_suggestions = self._yd_smart_route_suggestions(guild)
+        events = self._yd_event_form(guild, settings, csrf, route_suggestions)
         filters = self._yd_filter_form(guild, settings, csrf)
         rules = self._yd_rules(guild, settings, csrf)
         journal_count = int(journal_stats.get("count") or 0)
@@ -274,6 +301,8 @@ class DashboardIntegration:
 .yd .events{{max-height:48rem;overflow:auto;border:1px solid #4e5058;border-radius:.5rem}}
 .yd .ok{{color:#57f287!important}}.yd .warn{{color:#fee75c!important}}
 .yd .actions{{display:flex;gap:.5rem;flex-wrap:wrap;align-items:end}}
+.yd .bulk-actions{{margin-bottom:.75rem}}
+.yd .suggestion{{display:inline-block;margin-top:.3rem;color:#57f287!important}}
 .yd small{{opacity:.82;font-weight:400}}
 .yd hr{{border-color:#4e5058}}
 </style><h2>YALC Logging Control Center</h2><p>Configure delivery, audit attribution, privacy, filtering, and searchable history for <strong>{html.escape(guild.name)}</strong>.</p>
@@ -294,7 +323,7 @@ class DashboardIntegration:
 
         return f"""<form method="POST" class="card">{csrf}<input type="hidden" name="action" value="save_core"><h3>Core behavior & privacy</h3><div class="grid"><label class="check"><input type="checkbox" name="include_thumbnails"{check("include_thumbnails", True)}> Include user thumbnails</label><label class="check"><input type="checkbox" name="raw_message_events"{check("raw_message_events", True)}> Log uncached message events</label><label class="check"><input type="checkbox" name="audit_only_events"{check("audit_only_events", True)}> Log audit-only events</label><label class="check"><input type="checkbox" name="ignore_bots"{check("ignore_bots")}> Ignore bots</label><label class="check"><input type="checkbox" name="ignore_webhooks"{check("ignore_webhooks")}> Ignore webhooks</label><label class="check"><input type="checkbox" name="ignore_tupperbox"{check("ignore_tupperbox", True)}> Ignore Tupperbox/proxies</label><label class="check"><input type="checkbox" name="ignore_apps"{check("ignore_apps", True)}> Ignore application messages</label><label class="check"><input type="checkbox" name="detect_proxy_deletes"{check("detect_proxy_deletes", True)}> Detect proxy command deletes</label><label>Explicit fallback channel<select name="fallback_channel_id">{fallback}</select><small>YALC never falls back to an arbitrary public channel.</small></label><label>Command logging<select name="command_log_mode"><option value="all"{selected("all")}>All commands</option><option value="staff"{selected("staff")}>Staff commands only</option><option value="none"{selected("none")}>Disabled by policy</option></select></label></div><h4>Optional local journal</h4><div class="grid"><label class="check"><input type="checkbox" name="journal_enabled"{check("journal_enabled")}> Store searchable event metadata</label><label class="check"><input type="checkbox" name="journal_include_message_content"{check("journal_include_message_content")}> Include message content in journal</label><label>Retention days<input type="number" name="log_retention_days" min="1" max="3650" value="{int(settings.get("log_retention_days", 7))}"></label></div><button class="btn btn-primary">Save Core Settings</button></form>"""
 
-    def _yd_event_form(self, guild, settings, csrf):
+    def _yd_event_form(self, guild, settings, csrf, suggestions):
         rows = []
         channels = settings.get("event_channels", {})
         enabled = settings.get("events", {})
@@ -302,14 +331,22 @@ class DashboardIntegration:
         for event, (emoji, description) in self.event_descriptions.items():
             route = self._yd_channel_options(guild, channels.get(event), "Not routed")
             color = int(colors.get(event, self._get_event_color(event)))
+            suggestion = suggestions.get(event) if not channels.get(event) else None
+            suggestion_note = (
+                f'<br><small class="suggestion">Suggested: #{html.escape(suggestion.name)}</small>'
+                if suggestion is not None
+                else ""
+            )
             rows.append(
-                f'<tr><td><label class="check"><input type="checkbox" name="event__{event}"{" checked" if enabled.get(event) else ""}> {emoji} <code>{event}</code><br><small>{html.escape(description)}</small></label></td><td><select name="channel__{event}">{route}</select></td><td><input type="color" name="color__{event}" value="#{color:06x}" aria-label="{event} color"></td></tr>',
+                f'<tr><td><label class="check"><input type="checkbox" name="event__{event}"{" checked" if enabled.get(event) else ""}> {emoji} <code>{event}</code><br><small>{html.escape(description)}</small></label></td><td><select name="channel__{event}">{route}</select>{suggestion_note}</td><td><input type="color" name="color__{event}" value="#{color:06x}" aria-label="{event} color"></td></tr>',
             )
         event_options = "".join(
             f'<option value="{event}">{html.escape(description)}</option>'
             for event, (_emoji, description) in self.event_descriptions.items()
         )
-        return f"""<div class="card"><h3>Event routing & presentation</h3><form method="POST">{csrf}<input type="hidden" name="action" value="save_events"><div class="events"><table><thead><tr><th>Event</th><th>Destination</th><th>Color</th></tr></thead><tbody>{"".join(rows)}</tbody></table></div><button class="btn btn-primary">Save Event Matrix</button></form><hr><form method="POST" class="actions">{csrf}<input type="hidden" name="action" value="test_event"><select name="test_event_type">{event_options}</select><button class="btn btn-secondary">Send Test Event</button></form></div>"""
+        unset_count = sum(not channels.get(event) for event in self.event_descriptions)
+        suggested_count = sum(event in suggestions and not channels.get(event) for event in self.event_descriptions)
+        return f"""<div class="card"><h3>Event routing & presentation</h3><p><strong>{unset_count}</strong> routes are unset; YALC found sensible existing log-channel suggestions for <strong>{suggested_count}</strong> of them. Smart routing never overwrites a route you already chose.</p><div class="actions bulk-actions"><form method="POST">{csrf}<input type="hidden" name="action" value="enable_all_events"><button class="btn btn-success">Enable All Events</button></form><form method="POST">{csrf}<input type="hidden" name="action" value="disable_all_events"><button class="btn btn-danger">Disable All Events</button></form><form method="POST">{csrf}<input type="hidden" name="action" value="smart_route_unset"><button class="btn btn-secondary">Smart Route Unset Events</button></form></div><hr><form method="POST">{csrf}<input type="hidden" name="action" value="save_events"><div class="events"><table><thead><tr><th>Event</th><th>Destination</th><th>Color</th></tr></thead><tbody>{"".join(rows)}</tbody></table></div><button class="btn btn-primary">Save Event Matrix</button></form><hr><form method="POST" class="actions">{csrf}<input type="hidden" name="action" value="test_event"><select name="test_event_type">{event_options}</select><button class="btn btn-secondary">Send Test Event</button></form></div>"""
 
     def _yd_filter_form(self, guild, settings, csrf):
         role_options = self._yd_multi_options(
@@ -436,6 +473,100 @@ class DashboardIntegration:
                 raise commands.BadArgument(f"Choose valid {kind}s.")
             selected.append(item_id)
         return list(dict.fromkeys(selected))
+
+    def _yd_smart_route_suggestions(self, guild):
+        """Choose the best existing logging channel for each event without mutating config."""
+        group_terms = {
+            "application": {"application", "applications", "app", "apps", "bot", "command", "commands"},
+            "channel": {"channel", "channels", "permission", "permissions", "overwrite", "overwrites"},
+            "discord_automod": {"automod", "auto-mod", "safety"},
+            "emoji": {"emoji", "emojis"},
+            "event": {"event", "events", "scheduled"},
+            "invite": {"invite", "invites"},
+            "message": {"message", "messages", "chat"},
+            "moderation": {"mod", "mods", "moderation", "audit", "staff"},
+            "role": {"role", "roles"},
+            "server": {"server", "guild"},
+            "soundboard": {"sound", "sounds", "soundboard"},
+            "stage": {"stage", "stages"},
+            "sticker": {"sticker", "stickers"},
+            "thread": {"thread", "threads", "forum", "forums"},
+            "user": {"member", "members", "user", "users"},
+            "voice": {"voice", "voices", "vc"},
+            "webhook": {"webhook", "webhooks", "hook", "hooks"},
+        }
+        known_terms = {term for terms in group_terms.values() for term in terms}
+        log_words = {"log", "logs", "logger", "logging"}
+        general_words = {"all", "general", "everything"}
+        action_words = {
+            "action",
+            "add",
+            "clear",
+            "create",
+            "delete",
+            "deletion",
+            "join",
+            "leave",
+            "remove",
+            "update",
+        }
+        candidates = []
+        for channel in guild.text_channels:
+            bot_member = guild.me
+            if bot_member is None:
+                continue
+            permissions = channel.permissions_for(bot_member)
+            if not permissions.send_messages or not permissions.embed_links:
+                continue
+
+            raw_tokens = set(re.findall(r"[a-z0-9]+", channel.name.lower()))
+            tokens = set(raw_tokens)
+            has_log_word = bool(raw_tokens & log_words)
+            for token in raw_tokens:
+                for suffix in ("logging", "logger", "logs", "log"):
+                    if not token.endswith(suffix) or token == suffix:
+                        continue
+                    stem = token[: -len(suffix)]
+                    if stem in known_terms or stem in general_words:
+                        tokens.add(stem)
+                        has_log_word = True
+                    break
+            if {"auto", "mod"} <= tokens:
+                tokens.discard("mod")
+                tokens.add("automod")
+            if not has_log_word:
+                continue
+
+            matched_groups = {group for group, terms in group_terms.items() if terms & tokens}
+            is_general = bool(tokens & general_words) or not matched_groups
+            is_private = not channel.permissions_for(guild.default_role).view_channel
+            candidates.append((channel, tokens, matched_groups, is_general, is_private))
+
+        suggestions = {}
+        for event_type in self.event_descriptions:
+            group = self.EVENT_TO_SETUP_GROUP.get(event_type, event_type.split("_", 1)[0])
+            meaningful_terms = set(event_type.split("_")) - action_words
+            normalized_event = event_type.replace("_", "-")
+            choices = []
+            for channel, tokens, matched_groups, is_general, is_private in candidates:
+                keyword_matches = meaningful_terms & tokens
+                if group not in matched_groups and not keyword_matches and not is_general:
+                    continue
+                normalized_channel = channel.name.lower().replace("_", "-")
+                score = 10
+                if normalized_event in normalized_channel:
+                    score += 100
+                if group in matched_groups:
+                    score += 50
+                score += len(keyword_matches) * 12
+                if is_general:
+                    score += 5
+                if is_private:
+                    score += 2
+                choices.append((score, -channel.position, -channel.id, channel))
+            if choices:
+                suggestions[event_type] = max(choices, key=lambda item: item[:3])[3]
+        return suggestions
 
     @staticmethod
     def _yd_channel_options(guild, selected, empty):
