@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.2
+
+- Reconnected existing imported reaction-role panels with explicit add/remove event listeners.
+- Made saved dashboard/config records authoritative so a stale in-memory message cache can no longer block role updates.
+- Added live repair when an older imported emoji binding is encountered during a reaction event.
+
 ## 0.3.1
 
 - Fixed RoleTools/RoleUtils reaction-role imports so existing messages update members when they react or remove a reaction.

@@ -3647,13 +3647,29 @@ class RoleManager(DashboardIntegration, commands.Cog):
             check_cost=False,
         )
 
-    @commands.Cog.listener("on_raw_reaction_add")
-    @commands.Cog.listener("on_raw_reaction_remove")
-    async def on_raw_reaction_event(
+    @commands.Cog.listener()
+    async def on_raw_reaction_add(
         self,
         payload: discord.RawReactionActionEvent,
     ) -> None:
-        if payload.guild_id is None or payload.message_id not in self._reaction_message_cache:
+        """Handle a reaction added to a configured role panel."""
+        await self._handle_raw_reaction_event(payload, adding=True)
+
+    @commands.Cog.listener()
+    async def on_raw_reaction_remove(
+        self,
+        payload: discord.RawReactionActionEvent,
+    ) -> None:
+        """Handle a reaction removed from a configured role panel."""
+        await self._handle_raw_reaction_event(payload, adding=False)
+
+    async def _handle_raw_reaction_event(
+        self,
+        payload: discord.RawReactionActionEvent,
+        *,
+        adding: bool,
+    ) -> None:
+        if payload.guild_id is None:
             return
         if await self.bot.cog_disabled_in_guild_raw(
             self.qualified_name,
@@ -3663,7 +3679,34 @@ class RoleManager(DashboardIntegration, commands.Cog):
         guild = self.bot.get_guild(payload.guild_id)
         if guild is None:
             return
-        member = payload.member if payload.event_type == "REACTION_ADD" else guild.get_member(payload.user_id)
+
+        # Config is authoritative. The cache is only an optimization and may be
+        # briefly stale after imports, dashboard writes, or a failed startup
+        # repair. Looking up the record here reconnects existing panels without
+        # requiring their messages or reactions to be recreated.
+        data = await self.config.guild(guild).react_roles()
+        message_data = data.get(str(payload.message_id))
+        if not message_data:
+            self._reaction_message_cache.discard(payload.message_id)
+            return
+        self._reaction_message_cache.add(payload.message_id)
+
+        emoji_key = self._emoji_key(payload.emoji)
+        bind = message_data.get("binds", {}).get(emoji_key)
+        if not bind:
+            normalized, changes = normalize_reaction_bindings(
+                message_data.get("binds", {}),
+            )
+            bind = normalized.get(emoji_key)
+            if changes:
+                async with self.config.guild(guild).react_roles() as react_roles:
+                    configured = react_roles.get(str(payload.message_id))
+                    if configured is not None:
+                        configured["binds"] = normalized
+            if not bind:
+                return
+
+        member = payload.member if adding else guild.get_member(payload.user_id)
         if member is None:
             try:
                 member = await guild.fetch_member(payload.user_id)
@@ -3676,21 +3719,12 @@ class RoleManager(DashboardIntegration, commands.Cog):
                 return
         if member.bot:
             return
-
-        data = await self.config.guild(guild).react_roles()
-        message_data = data.get(str(payload.message_id))
-        if not message_data:
-            self._reaction_message_cache.discard(payload.message_id)
-            return
-        bind = message_data.get("binds", {}).get(self._emoji_key(payload.emoji))
-        if not bind:
-            return
         role = guild.get_role(int(bind.get("role_id", 0)))
         if role is None:
             async with self.config.guild(guild).react_roles() as react_roles:
                 configured = react_roles.get(str(payload.message_id), {})
                 binds = configured.get("binds", {})
-                binds.pop(self._emoji_key(payload.emoji), None)
+                binds.pop(emoji_key, None)
                 if not binds:
                     react_roles.pop(str(payload.message_id), None)
                     self._reaction_message_cache.discard(payload.message_id)
@@ -3699,7 +3733,7 @@ class RoleManager(DashboardIntegration, commands.Cog):
             return
 
         try:
-            if payload.event_type == "REACTION_ADD" and role not in member.roles:
+            if adding and role not in member.roles:
                 wait = await self._check_guild_verification(member, guild)
                 if wait or getattr(member, "pending", False):
                     return
@@ -3715,7 +3749,7 @@ class RoleManager(DashboardIntegration, commands.Cog):
                         member.id,
                         "; ".join(item.reason for item in failures),
                     )
-            elif payload.event_type == "REACTION_REMOVE" and bind.get("remove_on_unreact", True) and role in member.roles:
+            elif not adding and bind.get("remove_on_unreact", True) and role in member.roles:
                 failures, removed = await self._remove_roles(
                     member,
                     [role],

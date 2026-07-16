@@ -2,7 +2,7 @@
   "$schema": "https://raw.githubusercontent.com/Cog-Creators/Red-DiscordBot/V3/develop/schema/red_cog.schema.json",
   "name": "rolemanager",
   "author": ["Taako"],
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "A combined role management cog inspired by RoleUtils and RoleTools, with self roles, external role-change rules, policy enforcement, reaction roles, button roles, select-menu roles, autoroles, sticky roles, temporary roles, bulk role operations, migration helpers, and full Red-Web-Dashboard support.",
   "install_msg": "rolemanager loaded. Use `[p]rolemanager` or `[p]rm` for setup, `[p]rm selfrole <role>` for member self roles, `[p]rm rule` for automatic role-change rules, and the Red-Web-Dashboard page for visual configuration and operations.",
   "short": "Complete role management with automatic rules, self roles, policies, role panels, autoroles, sticky/temp roles, dashboard operations, and bulk tools.",
