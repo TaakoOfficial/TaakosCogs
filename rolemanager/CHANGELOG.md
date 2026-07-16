@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.1
+
+- Fixed RoleTools/RoleUtils reaction-role imports so existing messages update members when they react or remove a reaction.
+- Made a configured reaction binding authorize its own role assignment/removal instead of incorrectly requiring the separate self-role flags used by the `selfrole` command.
+- Added automatic startup repair for previously imported emoji keys, including custom emoji IDs and Unicode variation selectors.
+- Added an API member-fetch fallback for reaction removals when the member is not cached.
+
 ## 0.3.0
 
 - Added persistent role-change rules with add/remove triggers and chained add/remove actions.

@@ -24,6 +24,7 @@ Combined role management tools for Red-DiscordBot.
 - Temporary roles with explicit durations or a per-role default duration.
 - Bulk role add/remove tools for members, roles, channels, humans, bots, online members, or everyone.
 - Dry-run previews, cleanup commands, and RoleTools/RoleUtils import helpers.
+- Existing RoleTools/RoleUtils reaction-role messages remain usable after import; RoleManager repairs legacy emoji keys and handles their reactions directly.
 - Full Red-Web-Dashboard support for policies, role rules, role/member operations, autoroles, sticky and temporary roles, reaction roles, components, cleanup, and imports.
 
 ## Commands

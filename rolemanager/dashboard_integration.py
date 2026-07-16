@@ -71,8 +71,7 @@ class DashboardIntegration:
                     selected_role_id,
                 )
             except commands.CommandError as error:
-                notifications.append(
-                    {"message": str(error), "category": "error"})
+                notifications.append({"message": str(error), "category": "error"})
             except Exception as error:
                 log.exception("RoleManager dashboard action failed.")
                 notifications.append(
@@ -102,11 +101,7 @@ class DashboardIntegration:
         member = guild.get_member(user.id)
         is_owner = user.id in getattr(self.bot, "owner_ids", set())
         is_admin = member is not None and await self.bot.is_admin(member)
-        can_manage = (
-            is_owner
-            or is_admin
-            or (member is not None and member.guild_permissions.manage_guild)
-        )
+        can_manage = is_owner or is_admin or (member is not None and member.guild_permissions.manage_guild)
         return member, can_manage
 
     def _dashboard_form_data(self, kwargs: dict[str, typing.Any]) -> typing.Any:
@@ -116,10 +111,7 @@ class DashboardIntegration:
         return data
 
     def _dashboard_selected_role_id(self, form_data: typing.Any) -> int | None:
-        value = (
-            self._dash_value(form_data, "selected_role_id")
-            or self._dash_value(form_data, "role_id")
-        ).strip()
+        value = (self._dash_value(form_data, "selected_role_id") or self._dash_value(form_data, "role_id")).strip()
         if not value:
             return None
         try:
@@ -207,8 +199,7 @@ class DashboardIntegration:
         try:
             return int(value)
         except (TypeError, ValueError) as exc:
-            raise commands.BadArgument(
-                f"`{key}` must be a Discord ID.") from exc
+            raise commands.BadArgument(f"`{key}` must be a Discord ID.") from exc
 
     def _dash_required_id(self, form_data: typing.Any, key: str) -> int:
         value = self._dash_optional_id(form_data, key)
@@ -220,10 +211,7 @@ class DashboardIntegration:
         csrf_token = kwargs.get("csrf_token")
         if not isinstance(csrf_token, (tuple, list)) or len(csrf_token) != 2:
             return ""
-        return (
-            '<input type="hidden" name="csrf_token" value="'
-            f'{html.escape(str(csrf_token[1]), quote=True)}">'
-        )
+        return f'<input type="hidden" name="csrf_token" value="{html.escape(str(csrf_token[1]), quote=True)}">'
 
     async def _dashboard_handle_action(
         self,
@@ -505,8 +493,7 @@ class DashboardIntegration:
         member: discord.Member | None,
     ) -> None:
         if role.is_default():
-            raise commands.BadArgument(
-                "The everyone role cannot be managed here.")
+            raise commands.BadArgument("The everyone role cannot be managed here.")
         if role.managed:
             raise commands.BadArgument(
                 "Integration-managed roles cannot be managed here.",
@@ -525,8 +512,7 @@ class DashboardIntegration:
             and not member.guild_permissions.administrator
             and role >= member.top_role
         ):
-            raise commands.BadArgument(
-                f"Your top role must be above `{role.name}`.")
+            raise commands.BadArgument(f"Your top role must be above `{role.name}`.")
 
     def _dashboard_check_trigger_role(
         self,
@@ -535,8 +521,7 @@ class DashboardIntegration:
         member: discord.Member | None,
     ) -> None:
         if role.is_default():
-            raise commands.BadArgument(
-                "The everyone role cannot be a rule trigger.")
+            raise commands.BadArgument("The everyone role cannot be a rule trigger.")
         if (
             member is not None
             and member.id not in getattr(self.bot, "owner_ids", set())
@@ -544,8 +529,7 @@ class DashboardIntegration:
             and not member.guild_permissions.administrator
             and role >= member.top_role
         ):
-            raise commands.BadArgument(
-                "Your top role must be above the trigger role.")
+            raise commands.BadArgument("Your top role must be above the trigger role.")
 
     @staticmethod
     def _dashboard_color(value: str) -> discord.Color:
@@ -556,10 +540,7 @@ class DashboardIntegration:
             value = value[2:]
         if not value:
             return discord.Color.default()
-        if (
-            not all(character in "0123456789abcdef" for character in value)
-            or len(value) > 6
-        ):
+        if not all(character in "0123456789abcdef" for character in value) or len(value) > 6:
             raise commands.BadArgument(
                 "Role color must be a hex value such as `5865F2`.",
             )
@@ -600,8 +581,7 @@ class DashboardIntegration:
             raise commands.BadArgument(
                 "Role name must contain between 1 and 100 characters.",
             )
-        color = self._dashboard_color(
-            self._dash_value(form_data, "new_role_color"))
+        color = self._dashboard_color(self._dash_value(form_data, "new_role_color"))
         return await guild.create_role(
             name=name,
             color=color,
@@ -621,13 +601,10 @@ class DashboardIntegration:
         if policy not in {"inclusive", "exclusive"}:
             raise commands.BadArgument("Unknown mutual policy type.")
         field = f"{policy}_roles"
-        conflict_field = (
-            "exclusive_roles" if policy == "inclusive" else "inclusive_roles"
-        )
+        conflict_field = "exclusive_roles" if policy == "inclusive" else "inclusive_roles"
         config_key = "inclusive_with" if policy == "inclusive" else "exclusive_to"
         conflict_key = "exclusive_to" if policy == "inclusive" else "inclusive_with"
-        role_ids = self._dashboard_valid_role_ids(
-            guild, member, form_data, field)
+        role_ids = self._dashboard_valid_role_ids(guild, member, form_data, field)
         role_ids = [role_id for role_id in role_ids if role_id != role.id]
         if not role_ids:
             raise commands.BadArgument(f"Select at least one {policy} role.")
@@ -649,10 +626,7 @@ class DashboardIntegration:
             other = guild.get_role(role_id)
             if other is None:
                 continue
-            other_conflicts = {
-                int(item)
-                for item in await getattr(self.config.role(other), conflict_key)()
-            }
+            other_conflicts = {int(item) for item in await getattr(self.config.role(other), conflict_key)()}
             if role.id in other_conflicts:
                 raise commands.BadArgument(
                     f"{other.name} already has {role.name} configured as a conflicting policy.",
@@ -674,10 +648,8 @@ class DashboardIntegration:
         member: discord.Member | None,
         form_data: typing.Any,
     ) -> str:
-        name = self._normalise_rule_name(
-            self._dash_value(form_data, "rule_name"))
-        trigger_event = self._dash_value(
-            form_data, "rule_event", "add").lower()
+        name = self._normalise_rule_name(self._dash_value(form_data, "rule_name"))
+        trigger_event = self._dash_value(form_data, "rule_event", "add").lower()
         if trigger_event not in {"add", "remove"}:
             raise commands.BadArgument("Rule event must be add or remove.")
         trigger = self._dashboard_role_from_form(
@@ -709,8 +681,7 @@ class DashboardIntegration:
         overlap = set(add_ids) & set(remove_ids)
         if overlap:
             raise commands.BadArgument(
-                "A rule cannot add and remove the same role: "
-                f"{self._dashboard_role_names(guild, overlap)}.",
+                f"A rule cannot add and remove the same role: {self._dashboard_role_names(guild, overlap)}.",
             )
         async with self.config.guild(guild).role_rules() as rules:
             rules[name] = {
@@ -727,12 +698,10 @@ class DashboardIntegration:
         guild: discord.Guild,
         form_data: typing.Any,
     ) -> str:
-        name = self._normalise_rule_name(
-            self._dash_value(form_data, "rule_name"))
+        name = self._normalise_rule_name(self._dash_value(form_data, "rule_name"))
         async with self.config.guild(guild).role_rules() as rules:
             if rules.pop(name, None) is None:
-                raise commands.BadArgument(
-                    f"Role rule `{name}` was not found.")
+                raise commands.BadArgument(f"Role rule `{name}` was not found.")
         return name
 
     async def _dashboard_save_role_flags(
@@ -747,8 +716,7 @@ class DashboardIntegration:
             raise commands.BadArgument(
                 "Role name must contain between 1 and 100 characters.",
             )
-        color = self._dashboard_color(
-            self._dash_value(form_data, "role_color"))
+        color = self._dashboard_color(self._dash_value(form_data, "role_color"))
         duration = self._dash_value(form_data, "temp_duration").strip()
         temp_duration = self._parse_duration(duration) if duration else None
         cost_value = self._dash_value(form_data, "cost").strip()
@@ -758,8 +726,7 @@ class DashboardIntegration:
             raise commands.BadArgument("Cost must be a whole number.") from exc
         cost = max(0, cost)
         current_cost = int(await self.config.role(role).cost() or 0)
-        is_owner = member is None or member.id in getattr(
-            self.bot, "owner_ids", set())
+        is_owner = member is None or member.id in getattr(self.bot, "owner_ids", set())
         if cost != current_cost and await bank.is_global() and not is_owner:
             raise commands.BadArgument(
                 "Only bot owners can change role costs while the bank is global.",
@@ -796,8 +763,7 @@ class DashboardIntegration:
         overlap = set(inclusive_ids) & set(exclusive_ids)
         if overlap:
             raise commands.BadArgument(
-                "A role cannot be both inclusive and exclusive: "
-                f"{self._dashboard_role_names(guild, overlap)}.",
+                f"A role cannot be both inclusive and exclusive: {self._dashboard_role_names(guild, overlap)}.",
             )
 
         await role.edit(
@@ -856,10 +822,8 @@ class DashboardIntegration:
         actor: discord.Member | None,
         form_data: typing.Any,
     ) -> str:
-        operation = self._dash_value(
-            form_data, "sticky_operation", "add").lower()
-        role = self._dashboard_role_from_form(
-            guild, form_data, "sticky_role_id")
+        operation = self._dash_value(form_data, "sticky_operation", "add").lower()
+        role = self._dashboard_role_from_form(guild, form_data, "sticky_role_id")
         self._dashboard_check_role_manageable(guild, role, actor)
         user_id = self._dash_required_id(form_data, "sticky_member_id")
         if operation == "forget":
@@ -907,8 +871,7 @@ class DashboardIntegration:
                 if responses and role not in removed:
                     raise commands.BadArgument(self._response_text(responses))
             return f"{role.name} is no longer forced sticky for {target}."
-        raise commands.BadArgument(
-            "Sticky operation must be add, remove, or forget.")
+        raise commands.BadArgument("Sticky operation must be add, remove, or forget.")
 
     async def _dashboard_give_temp_role(
         self,
@@ -949,10 +912,8 @@ class DashboardIntegration:
             raise commands.BadArgument("Role operation must be add or remove.")
         dry_run = self._dash_bool(form_data, "operation_dry_run")
         if not dry_run and not self._dash_bool(form_data, "confirm_role_operation"):
-            raise commands.BadArgument(
-                "Confirm the role operation before applying it.")
-        role = self._dashboard_role_from_form(
-            guild, form_data, "operation_role_id")
+            raise commands.BadArgument("Confirm the role operation before applying it.")
+        role = self._dashboard_role_from_form(guild, form_data, "operation_role_id")
         self._dashboard_check_role_manageable(guild, role, actor)
         target_type = self._dash_value(
             form_data,
@@ -976,8 +937,7 @@ class DashboardIntegration:
         elif target_type == "channel":
             channel = guild.get_channel(target_id or 0)
             if not isinstance(channel, discord.TextChannel):
-                raise commands.BadArgument(
-                    "Target text channel was not found.")
+                raise commands.BadArgument("Target text channel was not found.")
             members = list(channel.members)
         elif target_type == "everyone":
             members = list(guild.members)
@@ -1041,10 +1001,7 @@ class DashboardIntegration:
                 ),
             )
         extra_text = f" Policies may {' and '.join(extras)}." if extras else ""
-        return (
-            f"{verb} {eligible:,} of {len(members):,} matched member(s); "
-            f"{issues:,} had policy issues.{extra_text}"
-        )
+        return f"{verb} {eligible:,} of {len(members):,} matched member(s); {issues:,} had policy issues.{extra_text}"
 
     async def _dashboard_import_settings(
         self,
@@ -1052,15 +1009,13 @@ class DashboardIntegration:
         form_data: typing.Any,
     ) -> tuple[str, int]:
         if not self._dash_bool(form_data, "confirm_import"):
-            raise commands.BadArgument(
-                "Confirm the import before replacing settings.")
+            raise commands.BadArgument("Confirm the import before replacing settings.")
         source = self._dash_value(form_data, "import_source").lower()
         if source == "roletools":
             return "RoleTools", await self._import_roletools_settings(guild)
         if source == "roleutils":
             return "RoleUtils", await self._import_roleutils_settings(guild)
-        raise commands.BadArgument(
-            "Import source must be RoleTools or RoleUtils.")
+        raise commands.BadArgument("Import source must be RoleTools or RoleUtils.")
 
     def _dashboard_valid_role_ids(
         self,
@@ -1094,20 +1049,14 @@ class DashboardIntegration:
         channel_id = self._dash_required_id(form_data, "panel_channel_id")
         channel = guild.get_channel(channel_id)
         if not isinstance(channel, discord.TextChannel):
-            raise commands.BadArgument(
-                "Reaction panel channel must be a text channel.")
+            raise commands.BadArgument("Reaction panel channel must be a text channel.")
         title = self._dash_value(form_data, "panel_title").strip()[:256]
         if not title:
             raise commands.BadArgument("Reaction panel title is required.")
         raw_bindings = self._dash_value(form_data, "panel_bindings").strip()
-        parts = [
-            part.strip()
-            for part in raw_bindings.replace("\n", "|").split("|")
-            if part.strip()
-        ]
+        parts = [part.strip() for part in raw_bindings.replace("\n", "|").split("|") if part.strip()]
         if not parts:
-            raise commands.BadArgument(
-                "Add at least one `emoji;role` binding.")
+            raise commands.BadArgument("Add at least one `emoji;role` binding.")
         bindings: list[tuple[str, discord.Role]] = []
         for part in parts:
             if ";" not in part:
@@ -1123,14 +1072,11 @@ class DashboardIntegration:
             self._dashboard_check_role_manageable(guild, role, member)
             bindings.append((emoji, role))
         if len(bindings) > 20:
-            raise commands.BadArgument(
-                "Reaction panels are limited to 20 bindings.")
+            raise commands.BadArgument("Reaction panels are limited to 20 bindings.")
 
         embed = discord.Embed(
             title=title,
-            description="\n".join(
-                f"{emoji} - {role.mention}" for emoji, role in bindings
-            ),
+            description="\n".join(f"{emoji} - {role.mention}" for emoji, role in bindings),
             color=guild.me.color if guild.me else discord.Color.blurple(),
         )
         message = await channel.send(
@@ -1172,8 +1118,7 @@ class DashboardIntegration:
         react_roles = await self.config.guild(guild).react_roles()
         data = react_roles.get(str(message_id))
         if not data:
-            raise commands.BadArgument(
-                "That message has no configured reaction roles.")
+            raise commands.BadArgument("That message has no configured reaction roles.")
         channel = guild.get_channel(int(data.get("channel_id", 0)))
         if not isinstance(channel, discord.TextChannel):
             raise commands.BadArgument(
@@ -1239,13 +1184,11 @@ class DashboardIntegration:
 
         channel = guild.get_channel(channel_id)
         if not isinstance(channel, discord.TextChannel):
-            raise commands.BadArgument(
-                "Reaction-role channel must be a text channel.")
+            raise commands.BadArgument("Reaction-role channel must be a text channel.")
         try:
             message = await channel.fetch_message(message_id)
         except discord.HTTPException as exc:
-            raise commands.BadArgument(
-                "I could not fetch that message.") from exc
+            raise commands.BadArgument("I could not fetch that message.") from exc
 
         emoji_key = self._emoji_key(emoji)
         async with self.config.guild(guild).react_roles() as react_roles:
@@ -1275,8 +1218,7 @@ class DashboardIntegration:
         async with self.config.guild(guild).react_roles() as react_roles:
             message_data = react_roles.get(str(message_id))
             if not message_data or emoji_key not in message_data.get("binds", {}):
-                raise commands.BadArgument(
-                    "That reaction-role binding was not found.")
+                raise commands.BadArgument("That reaction-role binding was not found.")
             del message_data["binds"][emoji_key]
             if not message_data["binds"]:
                 del react_roles[str(message_id)]
@@ -1291,8 +1233,7 @@ class DashboardIntegration:
         message_id = self._dash_required_id(form_data, "message_id")
         async with self.config.guild(guild).react_roles() as react_roles:
             if str(message_id) not in react_roles:
-                raise commands.BadArgument(
-                    "That reaction-role message was not found.")
+                raise commands.BadArgument("That reaction-role message was not found.")
             del react_roles[str(message_id)]
         self._reaction_message_cache.discard(message_id)
         return message_id
@@ -1308,10 +1249,7 @@ class DashboardIntegration:
             temp_roles[:] = [
                 item
                 for item in temp_roles
-                if not (
-                    int(item.get("member_id", 0)) == member_id
-                    and int(item.get("role_id", 0)) == role_id
-                )
+                if not (int(item.get("member_id", 0)) == member_id and int(item.get("role_id", 0)) == role_id)
             ]
         return member_id, role_id
 
@@ -1323,10 +1261,8 @@ class DashboardIntegration:
     ) -> str:
         name = self._dash_value(form_data, "button_name").strip().lower()
         if not name or " " in name:
-            raise commands.BadArgument(
-                "Button name cannot be empty or contain spaces.")
-        role = self._dashboard_role_from_form(
-            guild, form_data, "button_role_id")
+            raise commands.BadArgument("Button name cannot be empty or contain spaces.")
+        role = self._dashboard_role_from_form(guild, form_data, "button_role_id")
         self._dashboard_check_role_manageable(guild, role, member)
         await self.config.role(role).self_assignable.set(True)
         await self.config.role(role).self_removable.set(True)
@@ -1382,10 +1318,8 @@ class DashboardIntegration:
     ) -> str:
         name = self._dash_value(form_data, "option_name").strip().lower()
         if not name or " " in name:
-            raise commands.BadArgument(
-                "Option name cannot be empty or contain spaces.")
-        role = self._dashboard_role_from_form(
-            guild, form_data, "option_role_id")
+            raise commands.BadArgument("Option name cannot be empty or contain spaces.")
+        role = self._dashboard_role_from_form(guild, form_data, "option_role_id")
         self._dashboard_check_role_manageable(guild, role, member)
         await self.config.role(role).self_assignable.set(True)
         await self.config.role(role).self_removable.set(True)
@@ -1442,24 +1376,20 @@ class DashboardIntegration:
     ) -> str:
         name = self._dash_value(form_data, "menu_name").strip().lower()
         if not name or " " in name:
-            raise commands.BadArgument(
-                "Menu name cannot be empty or contain spaces.")
+            raise commands.BadArgument("Menu name cannot be empty or contain spaces.")
         option_names = self._parse_name_list(
             self._dash_value(form_data, "menu_options"),
         )
         saved_options = await self.config.guild(guild).select_options()
-        missing = [
-            option for option in option_names if option not in saved_options]
+        missing = [option for option in option_names if option not in saved_options]
         if missing:
-            raise commands.BadArgument(
-                f"Missing option(s): {', '.join(missing)}")
+            raise commands.BadArgument(f"Missing option(s): {', '.join(missing)}")
         if not option_names:
             raise commands.BadArgument("At least one option is required.")
         try:
             min_values = int(self._dash_value(form_data, "menu_min", "0") or 0)
             max_values = int(
-                self._dash_value(form_data, "menu_max", str(len(option_names)))
-                or len(option_names),
+                self._dash_value(form_data, "menu_max", str(len(option_names))) or len(option_names),
             )
         except ValueError as exc:
             raise commands.BadArgument(
@@ -1527,10 +1457,8 @@ class DashboardIntegration:
         guild: discord.Guild,
         form_data: typing.Any,
     ) -> discord.Message:
-        channel_id = self._dash_required_id(
-            form_data, "edit_component_channel_id")
-        message_id = self._dash_required_id(
-            form_data, "edit_component_message_id")
+        channel_id = self._dash_required_id(form_data, "edit_component_channel_id")
+        message_id = self._dash_required_id(form_data, "edit_component_message_id")
         channel = guild.get_channel(channel_id)
         if not isinstance(channel, discord.TextChannel):
             raise commands.BadArgument(
@@ -1585,17 +1513,11 @@ class DashboardIntegration:
         selected_role = guild.get_role(selected_role_id or 0)
         if selected_role is None:
             selected_role = next(
-                (
-                    role
-                    for role in guild.roles
-                    if not role.is_default() and not role.managed
-                ),
+                (role for role in guild.roles if not role.is_default() and not role.managed),
                 None,
             )
         selected_role_id = selected_role.id if selected_role else None
-        reaction_bind_count = sum(
-            len(message_data.get("binds", {})) for message_data in react_roles.values()
-        )
+        reaction_bind_count = sum(len(message_data.get("binds", {})) for message_data in react_roles.values())
 
         return f"""
         <style>
@@ -1818,8 +1740,7 @@ class DashboardIntegration:
         atomic: bool | None,
         csrf: str,
     ) -> str:
-        selected_atomic = "inherit" if atomic is None else str(
-            bool(atomic)).lower()
+        selected_atomic = "inherit" if atomic is None else str(bool(atomic)).lower()
         atomic_select = self._select(
             "atomic",
             "Atomic Assignment",
@@ -1916,8 +1837,7 @@ class DashboardIntegration:
         for name, rule in sorted(rules.items()):
             trigger = guild.get_role(int(rule.get("trigger_role_id", 0)))
             trigger_name = trigger.name if trigger else "Missing role"
-            add_names = self._dashboard_role_names(
-                guild, rule.get("add_role_ids", []))
+            add_names = self._dashboard_role_names(guild, rule.get("add_role_ids", []))
             remove_names = self._dashboard_role_names(
                 guild,
                 rule.get("remove_role_ids", []),
@@ -2157,14 +2077,13 @@ class DashboardIntegration:
                 {self._checkbox("self_assignable", "Members can add this role with selfrole", self_assignable)}
                 {self._checkbox("self_removable", "Members can remove this role with selfrole", self_removable)}
                 {self._checkbox("sticky", "Restore this role when members rejoin", sticky)}
-                {self._checkbox("require_any", "Require any prerequisite instead of all prerequisites",
-                config.get("require_any"))}
+                {
+                self._checkbox("require_any", "Require any prerequisite instead of all prerequisites", config.get("require_any"))
+            }
                 <div class="rmdash-grid">
                     {self._multi_role_select(guild, "required_roles", "Required Roles", config.get("required") or [])}
-                    {self._multi_role_select(guild, "inclusive_roles", "Inclusive Roles", config.get("inclusive_with")
-                    or [])}
-                    {self._multi_role_select(guild, "exclusive_roles", "Exclusive Roles", config.get("exclusive_to") or
-                    [])}
+                    {self._multi_role_select(guild, "inclusive_roles", "Inclusive Roles", config.get("inclusive_with") or [])}
+                    {self._multi_role_select(guild, "exclusive_roles", "Exclusive Roles", config.get("exclusive_to") or [])}
                 </div>
                 <div class="rmdash-actions">
                     <button class="rmdash-btn" name="action" value="save_role_flags" type="submit">Save Role
@@ -2225,9 +2144,7 @@ class DashboardIntegration:
             jump_url = f"https://discord.com/channels/{guild.id}/{message_data.get('channel_id')}/{message_id}"
             for emoji_key, bind in sorted(message_data.get("binds", {}).items()):
                 role = guild.get_role(int(bind.get("role_id", 0)))
-                role_label = (
-                    role.name if role else f"Missing role {bind.get('role_id')}"
-                )
+                role_label = role.name if role else f"Missing role {bind.get('role_id')}"
                 rows.append(
                     "<tr>"
                     f'<td><a href="{self._h(jump_url)}">{self._h(message_id)}</a></td>'
@@ -2406,8 +2323,14 @@ class DashboardIntegration:
                             {self._role_select(guild, "button_role_id", "Button Role", data.get("role_id"))}
                             {self._input("button_label", "Label", data.get("label") or "")}
                             {self._input("button_emoji", "Emoji", data.get("emoji") or "")}
-                            {self._select("button_style", "Style", [("primary", "Primary"), ("secondary", "Secondary"),
-                            ("success", "Success"), ("danger", "Danger")], style_name)}
+                            {
+                    self._select(
+                        "button_style",
+                        "Style",
+                        [("primary", "Primary"), ("secondary", "Secondary"), ("success", "Success"), ("danger", "Danger")],
+                        style_name,
+                    )
+                }
                         </div>
                         <button class="rmdash-btn" type="submit">Save Button</button>
                     </form>
@@ -2491,8 +2414,7 @@ class DashboardIntegration:
                         <input type="hidden" name="action" value="create_select_menu">
                         <input type="hidden" name="menu_name" value="{self._h(name)}">
                         <div class="rmdash-row">
-                            {self._input("menu_options", "Option Names, comma separated", ", ".join(data.get("options",
-                            [])))}
+                            {self._input("menu_options", "Option Names, comma separated", ", ".join(data.get("options", [])))}
                             {self._input("menu_min", "Min Values", data.get("min_values", 0))}
                             {self._input("menu_max", "Max Values", data.get("max_values", 1))}
                             {self._input("menu_placeholder", "Placeholder", data.get("placeholder") or "Pick roles")}
@@ -2520,8 +2442,14 @@ class DashboardIntegration:
                     {self._role_select(guild, "button_role_id", "Button Role", None)}
                     {self._input("button_label", "Label", "")}
                     {self._input("button_emoji", "Emoji", "")}
-                    {self._select("button_style", "Style", [("primary", "Primary"), ("secondary", "Secondary"),
-                    ("success", "Success"), ("danger", "Danger")], "secondary")}
+                    {
+            self._select(
+                "button_style",
+                "Style",
+                [("primary", "Primary"), ("secondary", "Secondary"), ("success", "Success"), ("danger", "Danger")],
+                "secondary",
+            )
+        }
                     <button class="rmdash-btn" type="submit">Save Button</button>
                 </form>
                 <form method="POST">
@@ -2583,24 +2511,15 @@ class DashboardIntegration:
         """
 
     def _role_options(self, guild: discord.Guild) -> list[tuple[int, str]]:
-        roles = [
-            role for role in guild.roles if not role.is_default() and not role.managed
-        ]
-        return [
-            (role.id, role.name)
-            for role in sorted(roles, key=lambda item: item.position, reverse=True)
-        ]
+        roles = [role for role in guild.roles if not role.is_default() and not role.managed]
+        return [(role.id, role.name) for role in sorted(roles, key=lambda item: item.position, reverse=True)]
 
     def _dashboard_role_names(
         self,
         guild: discord.Guild,
         role_ids: typing.Iterable[int],
     ) -> str:
-        names = [
-            role.name
-            for role_id in role_ids
-            if (role := guild.get_role(int(role_id))) is not None
-        ]
+        names = [role.name for role_id in role_ids if (role := guild.get_role(int(role_id))) is not None]
         return ", ".join(names) if names else "None"
 
     def _text_options(self, guild: discord.Guild) -> list[tuple[int, str]]:
@@ -2653,8 +2572,7 @@ class DashboardIntegration:
         option_html = ['<option value="">Select...</option>']
         for value, text in options:
             option_html.append(
-                f'<option value="{self._h(value)}" {self._selected(value, selected)}>'
-                f"{self._h(text)}</option>",
+                f'<option value="{self._h(value)}" {self._selected(value, selected)}>{self._h(text)}</option>',
             )
         return (
             f'<div class="rmdash-field"><label>{self._h(label)}</label>'
