@@ -38,7 +38,7 @@ Every configurable cog includes its own purpose-built Red-Web-Dashboard page wit
 | -------------------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
 | [messagestudio](./messagestudio)         | Rich message building   | EmbedUtils-compatible commands, embeds and Components V2, stored messages, webhooks, JSON/YAML, and a standalone visual dashboard builder. |
 | [toolz](./toolz)                       | Role and user utilities  | Role/user info, role audits, role comparison, CSV exports, bot/no-role audits, role-triggered messages with `{user}` placeholders.          |
-| [rolemanager](./rolemanager)           | Role management          | Self roles, external role-change rules, policies, role panels, autoroles, sticky/temp roles, dashboard operations, imports, and bulk tools. |
+| [rolemanager](./rolemanager)           | Role automation          | Audited role policies, advanced targeting/jobs, panels, resilient autoroles, sticky/temp roles, and verified migrations with rollback. |
 | [yalc](./yalc)                         | Server logging           | Strict audit attribution, raw message coverage, complete event routing, fail-closed delivery, advanced filters, and an optional journal.   |
 | [applications](./applications)         | Staff applications       | Configurable forms, application panels, DM questionnaires, review buttons, role actions, CSV exports, polls, and dashboard setup.            |
 | [welcome](./welcome)                   | Join messages            | Configurable welcome messages, placeholders, JSON embeds, cached welcome images, avatar overlays, and dashboard setup.                       |
@@ -74,7 +74,7 @@ Install these if you want better moderation visibility, invite attribution, feed
 ```
 
 - `toolz` gives staff role/user lookup, audit, export, and role-triggered message tools.
-- `rolemanager` handles self roles, automatic role-change rules, role policies, reaction/button/select role panels, autoroles, sticky roles, temporary roles, dashboard operations, dry-runs, imports, and bulk role updates.
+- `rolemanager` handles audited self/policy roles, advanced targeting and jobs, reaction/button/select panels, resilient autoroles, sticky/temporary roles, lifecycle reports, and verified imports with rollback.
 - `YALC` gives detailed server logging.
 - `applications` handles staff applications, review workflows, and approval roles.
 - `welcome` handles onboarding messages.

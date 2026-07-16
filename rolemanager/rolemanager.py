@@ -4,8 +4,12 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import io
+import json
 import logging
 import re
+import secrets
+import time
 from collections import deque
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -13,10 +17,17 @@ from typing import TYPE_CHECKING, Any, Union
 
 import discord
 from discord.ext import tasks
-from redbot.core import Config, bank, commands
+from redbot.core import Config, app_commands, bank, commands
 from redbot.core.utils.chat_formatting import humanize_list, pagify
 from redbot.core.utils.mod import get_audit_reason
 
+from .advanced import (
+    normalize_component_policy,
+    parse_target_query,
+    plan_reaction_role_changes,
+    reaction_record_issues,
+    trim_history,
+)
 from .components import RoleButton, RoleManagerView, RoleSelect
 from .dashboard_integration import DashboardIntegration
 from .reaction_compat import (
@@ -42,7 +53,15 @@ RECOVERABLE_EXCEPTIONS = (
     AttributeError,
 )
 
-TargetType = Union[discord.Role, discord.TextChannel, discord.Member, str]
+TargetType = Union[
+    discord.Role,
+    discord.TextChannel,
+    discord.VoiceChannel,
+    discord.StageChannel,
+    discord.Thread,
+    discord.Member,
+    str,
+]
 
 
 @dataclass
@@ -79,12 +98,25 @@ class RoleManager(DashboardIntegration, commands.Cog):
                 "all": [],
                 "humans": [],
                 "bots": [],
+                "all_enabled": True,
+                "humans_enabled": True,
+                "bots_enabled": True,
+                "delay_seconds": 0,
+                "minimum_account_age_hours": 0,
+                "retries": 3,
             },
             buttons={},
             select_options={},
             select_menus={},
             temporary_roles=[],
             role_rules={},
+            audit_channel_id=None,
+            audit_history=[],
+            backups={},
+            target_presets={},
+            bulk_jobs=[],
+            migration_history=[],
+            autorole_queue=[],
         )
         self.config.register_global(atomic=True)
         self.config.register_role(
@@ -104,30 +136,122 @@ class RoleManager(DashboardIntegration, commands.Cog):
         self._reaction_message_cache: set[int] = set()
         self._component_views: dict[int, dict[str, RoleManagerView]] = {}
         self._role_rule_processing: set[tuple[int, int]] = set()
+        self._member_locks: dict[tuple[int, int], asyncio.Lock] = {}
+        self._component_cooldowns: dict[tuple[int, int, str], float] = {}
+        self._bulk_tasks: dict[str, asyncio.Task] = {}
+        self._autorole_tasks: dict[tuple[int, int], asyncio.Task] = {}
+        self._deleted_user_ids: set[int] = set()
         self._startup_task = asyncio.create_task(self._startup())
         self._temp_sweeper.start()
 
     async def cog_unload(self) -> None:
         self._startup_task.cancel()
         self._temp_sweeper.cancel()
+        for task in (*self._bulk_tasks.values(), *self._autorole_tasks.values()):
+            task.cancel()
         for guild_views in self._component_views.values():
             for view in guild_views.values():
                 view.stop()
 
     async def _startup(self) -> None:
         await self.bot.wait_until_red_ready()
+        await self._repair_advanced_records()
         repaired = await self._repair_reaction_role_records()
         await self._refresh_reaction_cache()
         await self._load_component_views()
+        await self._resume_autorole_queue()
         if repaired:
             log.info("Repaired %s imported reaction-role binding record(s).", repaired)
 
+    async def _repair_advanced_records(self) -> None:
+        """Upgrade older component and autorole records in place."""
+        for guild_id, data in (await self.config.all_guilds()).items():
+            conf = self.config.guild_from_id(guild_id)
+            buttons = data.get("buttons", {})
+            repaired_buttons = {
+                name: normalize_component_policy(record) for name, record in buttons.items() if isinstance(record, dict)
+            }
+            if repaired_buttons != buttons:
+                await conf.buttons.set(repaired_buttons)
+
+            menus = data.get("select_menus", {})
+            repaired_menus = {
+                name: normalize_component_policy(record, select=True)
+                for name, record in menus.items()
+                if isinstance(record, dict)
+            }
+            if repaired_menus != menus:
+                await conf.select_menus.set(repaired_menus)
+
+            autoroles = dict(data.get("auto_roles", {}))
+            autoroles.setdefault("enabled", False)
+            autoroles.setdefault("all", [])
+            autoroles.setdefault("humans", [])
+            autoroles.setdefault("bots", [])
+            autoroles.setdefault("all_enabled", True)
+            autoroles.setdefault("humans_enabled", True)
+            autoroles.setdefault("bots_enabled", True)
+            autoroles.setdefault("delay_seconds", 0)
+            autoroles.setdefault("minimum_account_age_hours", 0)
+            autoroles.setdefault("retries", 3)
+            if autoroles != data.get("auto_roles", {}):
+                await conf.auto_roles.set(autoroles)
+
     async def red_delete_data_for_user(self, *, requester: str, user_id: int) -> None:
-        """Remove stored sticky/temp role references for a Discord user ID."""
+        """Remove stored member, temp, audit, job, and backup references for a user."""
+        user_id = int(user_id)
+        self._deleted_user_ids.add(user_id)
         all_guilds = await self.config.all_guilds()
         for guild_id, data in all_guilds.items():
-            temp_roles = [item for item in data.get("temporary_roles", []) if int(item.get("member_id", 0)) != int(user_id)]
-            await self.config.guild_from_id(guild_id).temporary_roles.set(temp_roles)
+            conf = self.config.guild_from_id(guild_id)
+            temp_roles = []
+            for raw_item in data.get("temporary_roles", []):
+                item = dict(raw_item)
+                if int(item.get("member_id", 0) or 0) == user_id:
+                    continue
+                if int(item.get("granted_by", 0) or 0) == user_id:
+                    item["granted_by"] = None
+                temp_roles.append(item)
+            await conf.temporary_roles.set(temp_roles)
+            await conf.audit_history.set(
+                [
+                    item
+                    for item in data.get("audit_history", [])
+                    if int(item.get("member_id", 0) or 0) != user_id and int(item.get("actor_id", 0) or 0) != user_id
+                ],
+            )
+            for item in data.get("bulk_jobs", []):
+                if int(item.get("actor_id", 0) or 0) == user_id:
+                    task = self._bulk_tasks.get(f"{guild_id}:{item.get('id')}")
+                    if task is not None:
+                        task.cancel()
+            await conf.bulk_jobs.set([item for item in data.get("bulk_jobs", []) if int(item.get("actor_id", 0) or 0) != user_id])
+            await conf.autorole_queue.set(
+                [item for item in data.get("autorole_queue", []) if int(item.get("member_id", 0) or 0) != user_id],
+            )
+            queued_task = self._autorole_tasks.get((int(guild_id), user_id))
+            if queued_task is not None:
+                queued_task.cancel()
+            backups = dict(data.get("backups", {}))
+            for backup in backups.values():
+                snapshot = backup.get("guild", {})
+                snapshot["temporary_roles"] = [
+                    item
+                    for item in snapshot.get("temporary_roles", [])
+                    if int(item.get("member_id", 0) or 0) != user_id and int(item.get("granted_by", 0) or 0) != user_id
+                ]
+                snapshot["audit_history"] = [
+                    item
+                    for item in snapshot.get("audit_history", [])
+                    if int(item.get("member_id", 0) or 0) != user_id and int(item.get("actor_id", 0) or 0) != user_id
+                ]
+                snapshot["bulk_jobs"] = [
+                    item for item in snapshot.get("bulk_jobs", []) if int(item.get("actor_id", 0) or 0) != user_id
+                ]
+                snapshot["autorole_queue"] = [
+                    item for item in snapshot.get("autorole_queue", []) if int(item.get("member_id", 0) or 0) != user_id
+                ]
+            await conf.backups.set(backups)
             await self.config.member_from_ids(guild_id, user_id).clear()
 
     @staticmethod
@@ -774,6 +898,15 @@ class RoleManager(DashboardIntegration, commands.Cog):
             )
         for role in to_remove:
             await self._clear_temp_role(member, role)
+        if to_add or to_remove:
+            await self._record_role_audit(
+                guild,
+                action="role_policy_update",
+                member_id=member.id,
+                role_ids=[role.id for role in (*to_add, *to_remove)],
+                source="role-change",
+                detail=reason,
+            )
         return failures, to_add, to_remove
 
     async def _remove_roles(
@@ -838,6 +971,15 @@ class RoleManager(DashboardIntegration, commands.Cog):
 
         for role in to_remove:
             await self._clear_temp_role(member, role)
+        if to_remove:
+            await self._record_role_audit(
+                guild,
+                action="role_remove",
+                member_id=member.id,
+                role_ids=[role.id for role in to_remove],
+                source="role-change",
+                detail=reason,
+            )
         return failures, to_remove
 
     @staticmethod
@@ -847,6 +989,97 @@ class RoleManager(DashboardIntegration, commands.Cog):
             prefix = f"{response.role.mention}: " if response.role else ""
             lines.append(f"- {prefix}{response.reason}")
         return "\n".join(lines)
+
+    def _member_lock(self, member: discord.Member) -> asyncio.Lock:
+        """Return the per-member lock used by every interactive role control."""
+        return self._member_locks.setdefault(
+            (member.guild.id, member.id),
+            asyncio.Lock(),
+        )
+
+    async def _record_role_audit(
+        self,
+        guild: discord.Guild,
+        *,
+        action: str,
+        member_id: int | None = None,
+        role_ids: Sequence[int] = (),
+        actor_id: int | None = None,
+        source: str = "RoleManager",
+        detail: str = "",
+    ) -> None:
+        """Persist and optionally deliver a bounded RoleManager audit record."""
+        if member_id in self._deleted_user_ids:
+            member_id = None
+        if actor_id in self._deleted_user_ids:
+            actor_id = None
+        entry = {
+            "id": secrets.token_hex(6),
+            "timestamp": self._now_ts(),
+            "action": str(action)[:80],
+            "member_id": int(member_id) if member_id else None,
+            "role_ids": [int(role_id) for role_id in role_ids],
+            "actor_id": int(actor_id) if actor_id else None,
+            "source": str(source)[:80],
+            "detail": str(detail)[:500],
+        }
+        async with self.config.guild(guild).audit_history() as history:
+            history.append(entry)
+            history[:] = trim_history(history, maximum=250)
+
+        channel_id = await self.config.guild(guild).audit_channel_id()
+        channel = guild.get_channel(int(channel_id or 0))
+        if not isinstance(channel, discord.TextChannel):
+            return
+        roles = [guild.get_role(role_id) for role_id in entry["role_ids"]]
+        role_text = humanize_list([role.mention for role in roles if role]) or "None"
+        lines = [f"**{entry['action']}** · {entry['source']}"]
+        if member_id:
+            lines.append(f"Member: <@{member_id}> (`{member_id}`)")
+        if actor_id:
+            lines.append(f"Actor: <@{actor_id}> (`{actor_id}`)")
+        lines.append(f"Roles: {role_text}")
+        if detail:
+            lines.append(str(detail)[:500])
+        with contextlib.suppress(discord.HTTPException):
+            await channel.send(
+                "\n".join(lines),
+                allowed_mentions=discord.AllowedMentions.none(),
+            )
+
+    async def _component_policy_error(
+        self,
+        member: discord.Member,
+        policy: dict[str, Any],
+        *,
+        key: str,
+        adding_role: discord.Role | None = None,
+    ) -> str | None:
+        required = {int(role_id) for role_id in policy.get("required_role_ids", [])}
+        blocked = {int(role_id) for role_id in policy.get("blocked_role_ids", [])}
+        owned = {role.id for role in member.roles}
+        if required and not required.issubset(owned):
+            missing = [member.guild.get_role(role_id) for role_id in required - owned]
+            return "Required role(s): " + humanize_list(
+                [role.name for role in missing if role],
+            )
+        if blocked & owned:
+            present = [member.guild.get_role(role_id) for role_id in blocked & owned]
+            return "Blocked by role(s): " + humanize_list(
+                [role.name for role in present if role],
+            )
+        cooldown = int(policy.get("cooldown_seconds", 0) or 0)
+        cooldown_key = (member.guild.id, member.id, key)
+        last_used = self._component_cooldowns.get(cooldown_key, 0.0)
+        remaining = cooldown - (time.monotonic() - last_used)
+        if remaining > 0:
+            return f"This control is on cooldown for {int(remaining) + 1}s."
+        if adding_role is not None:
+            maximum = int(policy.get("max_holders", 0) or 0)
+            if maximum and len(adding_role.members) >= maximum:
+                return f"{adding_role.name} has reached its {maximum:,}-member limit."
+        self._component_cooldowns[cooldown_key] = time.monotonic()
+        return None
 
     async def handle_button_interaction(
         self,
@@ -860,6 +1093,12 @@ class RoleManager(DashboardIntegration, commands.Cog):
         ):
             await interaction.response.send_message(
                 "This can only be used in a server.",
+                ephemeral=True,
+            )
+            return
+        if await self.bot.cog_disabled_in_guild(self, interaction.guild):
+            await interaction.response.send_message(
+                "RoleManager is disabled in this server.",
                 ephemeral=True,
             )
             return
@@ -878,12 +1117,44 @@ class RoleManager(DashboardIntegration, commands.Cog):
                 ephemeral=True,
             )
             return
+        button_data = normalize_component_policy(button_data)
         await interaction.response.defer(ephemeral=True, thinking=True)
-        message = await self._component_toggle_role(
-            interaction.user,
-            role,
-            "Button role.",
-        )
+        async with self._member_lock(interaction.user):
+            adding = role not in interaction.user.roles
+            mode = button_data["mode"]
+            if mode == "add":
+                adding = True
+            elif mode == "remove":
+                adding = False
+            policy_error = await self._component_policy_error(
+                interaction.user,
+                button_data,
+                key=f"button:{button.name}",
+                adding_role=role if adding else None,
+            )
+            if policy_error:
+                message = policy_error
+            elif adding and role in interaction.user.roles:
+                message = f"You already have {role.name}."
+            elif not adding and role not in interaction.user.roles:
+                message = f"You do not have {role.name}."
+            else:
+                message = await self._component_toggle_role(
+                    interaction.user,
+                    role,
+                    "Button role.",
+                    force_adding=adding,
+                    temp_seconds=int(button_data.get("temp_seconds", 0) or 0),
+                )
+                await self._record_role_audit(
+                    interaction.guild,
+                    action="component_add" if adding else "component_remove",
+                    member_id=interaction.user.id,
+                    role_ids=[role.id],
+                    actor_id=interaction.user.id,
+                    source=f"button:{button.name}",
+                    detail=message,
+                )
         button.refresh_label(interaction.guild)
         if interaction.message and isinstance(button.view, RoleManagerView):
             with contextlib.suppress(discord.HTTPException):
@@ -905,27 +1176,79 @@ class RoleManager(DashboardIntegration, commands.Cog):
                 ephemeral=True,
             )
             return
+        if await self.bot.cog_disabled_in_guild(self, interaction.guild):
+            await interaction.response.send_message(
+                "RoleManager is disabled in this server.",
+                ephemeral=True,
+            )
+            return
         await interaction.response.defer(ephemeral=True, thinking=True)
         menus = await self.config.guild(interaction.guild).select_menus()
-        if select.name not in menus:
+        menu_data = menus.get(select.name)
+        if not menu_data:
             await interaction.followup.send(
                 "That select menu is no longer active.",
                 ephemeral=True,
             )
             return
+        menu_data = normalize_component_policy(menu_data, select=True)
         messages = []
-        for value in select.values:
-            role = interaction.guild.get_role(int(value))
-            if role is None:
-                messages.append("A selected role no longer exists.")
-                continue
-            messages.append(
-                await self._component_toggle_role(
-                    interaction.user,
-                    role,
-                    "Select role.",
-                ),
+        async with self._member_lock(interaction.user):
+            policy_error = await self._component_policy_error(
+                interaction.user,
+                menu_data,
+                key=f"select:{select.name}",
             )
+            if policy_error:
+                messages.append(policy_error)
+            else:
+                selected_ids = {int(value) for value in select.values}
+                options = await self.config.guild(interaction.guild).select_options()
+                option_role_ids = {int(options[name]["role_id"]) for name in menu_data.get("options", []) if name in options}
+                mode = menu_data["mode"]
+                for role_id in option_role_ids:
+                    role = interaction.guild.get_role(role_id)
+                    if role is None:
+                        continue
+                    selected = role_id in selected_ids
+                    if mode == "add" and not selected:
+                        continue
+                    if mode == "toggle" and not selected:
+                        continue
+                    should_add = selected
+                    if mode == "toggle":
+                        should_add = role not in interaction.user.roles
+                    if should_add and role in interaction.user.roles:
+                        continue
+                    if not should_add and role not in interaction.user.roles:
+                        continue
+                    error = await self._component_policy_error(
+                        interaction.user,
+                        {**menu_data, "cooldown_seconds": 0},
+                        key=f"select-role:{select.name}:{role.id}",
+                        adding_role=role if should_add else None,
+                    )
+                    if error:
+                        messages.append(error)
+                        continue
+                    messages.append(
+                        await self._component_toggle_role(
+                            interaction.user,
+                            role,
+                            "Select role.",
+                            force_adding=should_add,
+                            temp_seconds=int(menu_data.get("temp_seconds", 0) or 0),
+                        ),
+                    )
+                await self._record_role_audit(
+                    interaction.guild,
+                    action=f"component_select_{mode}",
+                    member_id=interaction.user.id,
+                    role_ids=list(selected_ids),
+                    actor_id=interaction.user.id,
+                    source=f"select:{select.name}",
+                    detail="; ".join(messages)[:500],
+                )
         select.refresh_options(interaction.guild)
         if interaction.message and isinstance(select.view, RoleManagerView):
             with contextlib.suppress(discord.HTTPException):
@@ -940,10 +1263,14 @@ class RoleManager(DashboardIntegration, commands.Cog):
         member: discord.Member,
         role: discord.Role,
         reason: str,
+        *,
+        force_adding: bool | None = None,
+        temp_seconds: int = 0,
     ) -> str:
         if member.bot:
             return "Bots cannot use role controls."
-        if role in member.roles:
+        adding = role not in member.roles if force_adding is None else force_adding
+        if not adding:
             if not await self.config.role(role).self_removable():
                 return f"{role.name} is not self-removable."
             responses, removed = await self._remove_roles(member, [role], reason)
@@ -959,7 +1286,12 @@ class RoleManager(DashboardIntegration, commands.Cog):
             return f"You need to spend more time in this server first. Try again {discord.utils.format_dt(retry_at, 'R')}."
         if getattr(member, "pending", False):
             return "Finish Discord membership screening before taking self roles."
-        responses, added, _removed = await self._give_roles(member, [role], reason)
+        responses, added, _removed = await self._give_roles(
+            member,
+            [role],
+            reason,
+            duration_overrides={role.id: temp_seconds} if temp_seconds else None,
+        )
         if responses:
             return self._response_text(responses)
         return f"Added {self._format_role_names(added)}."
@@ -970,6 +1302,10 @@ class RoleManager(DashboardIntegration, commands.Cog):
         role: discord.Role,
         *,
         duration: int | None = None,
+        granted_by: int | None = None,
+        reason: str | None = None,
+        notify_channel_id: int | None = None,
+        notify_member: bool = False,
     ) -> None:
         if duration is None:
             duration = await self.config.role(role).temp_duration()
@@ -987,6 +1323,11 @@ class RoleManager(DashboardIntegration, commands.Cog):
                     "member_id": member.id,
                     "role_id": role.id,
                     "expires_at": expires_at,
+                    "created_at": self._now_ts(),
+                    "granted_by": granted_by,
+                    "reason": reason,
+                    "notify_channel_id": notify_channel_id,
+                    "notify_member": notify_member,
                 },
             )
 
@@ -1028,8 +1369,17 @@ class RoleManager(DashboardIntegration, commands.Cog):
             elif isinstance(target, discord.Role):
                 target_members = target.members if not target.is_default() else guild.members
                 labels.append(target.name)
-            elif isinstance(target, discord.TextChannel):
+            elif isinstance(
+                target,
+                (discord.TextChannel, discord.VoiceChannel, discord.StageChannel),
+            ):
                 target_members = target.members
+                labels.append(target.mention)
+            elif isinstance(target, discord.Thread):
+                fetched = await target.fetch_members()
+                target_members = [
+                    member for thread_member in fetched if (member := guild.get_member(thread_member.id)) is not None
+                ]
                 labels.append(target.mention)
             else:
                 target_name = self._normalise_target(target)
@@ -1047,6 +1397,111 @@ class RoleManager(DashboardIntegration, commands.Cog):
                 members[member.id] = member
 
         return list(members.values()), labels
+
+    def _find_guild_channel(self, guild: discord.Guild, value: str) -> Any:
+        """Resolve a guild channel/thread by ID, mention, or case-insensitive name."""
+        cleaned = value.strip().strip("<#>")
+        if cleaned.isdigit():
+            channel = guild.get_channel_or_thread(int(cleaned))
+            if channel is not None:
+                return channel
+        lowered = value.casefold()
+        return next(
+            (channel for channel in [*guild.channels, *guild.threads] if channel.name.casefold() == lowered),
+            None,
+        )
+
+    async def _members_from_query(
+        self,
+        guild: discord.Guild,
+        argument: str,
+    ) -> list[discord.Member]:
+        """Resolve advanced `key=value` member targeting filters."""
+        try:
+            query = parse_target_query(argument)
+        except ValueError as exc:
+            raise commands.BadArgument(str(exc)) from exc
+        await self._ensure_member_cache(guild)
+        members = list(guild.members)
+
+        types = {value.casefold() for value in query.get("type")}
+        if types:
+            if not types <= {"humans", "bots"}:
+                raise commands.BadArgument("type must be humans or bots.")
+            members = [member for member in members if ("bots" if member.bot else "humans") in types]
+
+        statuses = {value.casefold() for value in query.get("status")}
+        if statuses:
+            valid = {"online", "idle", "dnd", "offline"}
+            if not statuses <= valid:
+                raise commands.BadArgument(
+                    "status must be online, idle, dnd, or offline.",
+                )
+            members = [member for member in members if str(member.status) in statuses]
+
+        def resolve_roles(values: Sequence[str]) -> set[int]:
+            resolved = set()
+            for value in values:
+                role = self._find_role(guild, value)
+                if role is None:
+                    raise commands.BadArgument(f"Could not resolve role `{value}`.")
+                resolved.add(role.id)
+            return resolved
+
+        required = resolve_roles(query.get("has"))
+        any_roles = resolve_roles(query.get("any"))
+        excluded = resolve_roles(query.get("none"))
+        if required or any_roles or excluded:
+            filtered = []
+            for member in members:
+                owned = {role.id for role in member.roles}
+                if required and not required.issubset(owned):
+                    continue
+                if any_roles and not any_roles.intersection(owned):
+                    continue
+                if excluded.intersection(owned):
+                    continue
+                filtered.append(member)
+            members = filtered
+
+        channel_member_ids: set[int] | None = None
+        for key in ("channel", "voice", "thread"):
+            for value in query.get(key):
+                channel = self._find_guild_channel(guild, value)
+                if channel is None:
+                    raise commands.BadArgument(f"Could not resolve {key} `{value}`.")
+                if key == "thread":
+                    if not isinstance(channel, discord.Thread):
+                        raise commands.BadArgument(f"`{value}` is not a thread.")
+                    fetched = await channel.fetch_members()
+                    ids = {item.id for item in fetched}
+                else:
+                    if key == "voice" and not isinstance(
+                        channel,
+                        (discord.VoiceChannel, discord.StageChannel),
+                    ):
+                        raise commands.BadArgument(f"`{value}` is not a voice channel.")
+                    ids = {member.id for member in channel.members}
+                channel_member_ids = ids if channel_member_ids is None else channel_member_ids & ids
+        if channel_member_ids is not None:
+            members = [member for member in members if member.id in channel_member_ids]
+
+        now = self._now()
+        if query.get("joined_days"):
+            try:
+                days = int(query.get("joined_days")[0])
+            except ValueError as exc:
+                raise commands.BadArgument("joined_days must be a whole number.") from exc
+            cutoff = now - timedelta(days=max(0, days))
+            members = [member for member in members if member.joined_at and member.joined_at >= cutoff]
+        if query.get("account_days"):
+            try:
+                days = int(query.get("account_days")[0])
+            except ValueError as exc:
+                raise commands.BadArgument("account_days must be a whole number.") from exc
+            cutoff = now - timedelta(days=max(0, days))
+            members = [member for member in members if member.created_at <= cutoff]
+        return members
 
     async def _apply_role_to_members(
         self,
@@ -1179,6 +1634,27 @@ class RoleManager(DashboardIntegration, commands.Cog):
                         role.id,
                         member.id,
                     )
+                    continue
+                await self._record_role_audit(
+                    guild,
+                    action="temporary_role_expired",
+                    member_id=member.id,
+                    role_ids=[role.id],
+                    actor_id=item.get("granted_by"),
+                    source="temporary-role-sweeper",
+                    detail=str(item.get("reason") or "Temporary assignment expired."),
+                )
+                notice = f"Your temporary **{role.name}** role in **{guild.name}** has expired."
+                if item.get("notify_member"):
+                    with contextlib.suppress(discord.HTTPException):
+                        await member.send(notice)
+                channel = guild.get_channel(int(item.get("notify_channel_id", 0) or 0))
+                if isinstance(channel, discord.TextChannel):
+                    with contextlib.suppress(discord.HTTPException):
+                        await channel.send(
+                            f"Temporary role `{role.name}` expired for {member.mention}.",
+                            allowed_mentions=discord.AllowedMentions(users=False),
+                        )
 
             await self.config.guild_from_id(guild_id).temporary_roles.set(keep)
 
@@ -1781,6 +2257,206 @@ class RoleManager(DashboardIntegration, commands.Cog):
             f"Excludes: {roles_from_ids(config.get('exclusive_to') or [])}"
         )
 
+    async def _create_config_backup(self, guild: discord.Guild, source: str) -> str:
+        """Create a bounded, restorable snapshot before a migration or bulk edit."""
+        guild_data = await self.config.guild(guild).all()
+        guild_data.pop("backups", None)
+        role_data = {str(role.id): await self.config.role(role).all() for role in guild.roles if not role.is_default()}
+        backup_id = f"{int(self._now_ts())}-{secrets.token_hex(2)}"
+        backup = {
+            "id": backup_id,
+            "source": source,
+            "created_at": self._now_ts(),
+            "guild": guild_data,
+            "roles": role_data,
+        }
+        async with self.config.guild(guild).backups() as backups:
+            backups[backup_id] = backup
+            for old_id in sorted(
+                backups,
+                key=lambda item: float(backups[item].get("created_at", 0)),
+                reverse=True,
+            )[5:]:
+                del backups[old_id]
+        return backup_id
+
+    async def _restore_config_backup(self, guild: discord.Guild, backup_id: str) -> bool:
+        backups = await self.config.guild(guild).backups()
+        backup = backups.get(backup_id)
+        if not backup:
+            return False
+        current_backups = backups.copy()
+        restored = dict(backup.get("guild", {}))
+        restored["backups"] = current_backups
+        await self.config.guild(guild).set(restored)
+        for role_id, data in backup.get("roles", {}).items():
+            role = guild.get_role(int(role_id))
+            if role is not None:
+                await self.config.role(role).set(data)
+        await self._repair_advanced_records()
+        await self._refresh_reaction_cache()
+        await self._load_component_views()
+        return True
+
+    async def _reaction_health(self, guild: discord.Guild) -> dict[str, Any]:
+        records = await self.config.guild(guild).react_roles()
+        issues = reaction_record_issues(
+            records,
+            channel_ids={channel.id for channel in [*guild.channels, *guild.threads]},
+            role_ids={role.id for role in guild.roles},
+        )
+        for message_id, data in records.items():
+            channel = guild.get_channel_or_thread(int(data.get("channel_id", 0) or 0))
+            if channel is None or not hasattr(channel, "fetch_message"):
+                continue
+            try:
+                await channel.fetch_message(int(message_id))
+            except discord.NotFound:
+                issues.append(f"Message {message_id} no longer exists.")
+            except discord.Forbidden:
+                issues.append(f"Message {message_id} cannot be read by the bot.")
+            except (discord.HTTPException, ValueError):
+                issues.append(f"Message {message_id} could not be verified.")
+        invalid_messages = {str(message_id) for message_id in records if any(str(message_id) in issue for issue in issues)}
+        valid = max(0, len(records) - len(invalid_messages))
+        return {"messages": len(records), "valid": valid, "issues": issues}
+
+    async def _reconcile_reaction_roles(
+        self,
+        guild: discord.Guild,
+        *,
+        remove_missing: bool,
+    ) -> dict[str, int]:
+        """Reapply roles from live reactions and optionally remove stale assignments."""
+        records = await self.config.guild(guild).react_roles()
+        desired: dict[int, set[int]] = {}
+        managed_roles: set[int] = set()
+        stats = {"messages": 0, "added": 0, "removed": 0, "missing": 0}
+        for message_id, data in records.items():
+            channel = guild.get_channel_or_thread(int(data.get("channel_id", 0) or 0))
+            if not isinstance(channel, (discord.TextChannel, discord.Thread)):
+                stats["missing"] += 1
+                continue
+            try:
+                message = await channel.fetch_message(int(message_id))
+            except (discord.NotFound, discord.Forbidden, discord.HTTPException, ValueError):
+                stats["missing"] += 1
+                continue
+            stats["messages"] += 1
+            bindings = data.get("binds", {})
+            managed_roles.update(int(bind.get("role_id", 0) or 0) for bind in bindings.values())
+            for reaction in message.reactions:
+                bind = bindings.get(self._emoji_key(reaction.emoji))
+                if not bind:
+                    continue
+                role_id = int(bind.get("role_id", 0) or 0)
+                async for user in reaction.users(limit=None):
+                    if not user.bot:
+                        desired.setdefault(user.id, set()).add(role_id)
+        current = {member.id: {role.id for role in member.roles} for member in guild.members if not member.bot}
+        plan = plan_reaction_role_changes(
+            current,
+            desired,
+            managed_roles,
+            remove_missing=remove_missing,
+        )
+        for member_id, changes in plan.items():
+            member = guild.get_member(member_id)
+            if member is None:
+                continue
+            additions = [
+                role
+                for role_id in changes["add"]
+                if (role := guild.get_role(role_id)) is not None and self._bot_can_apply_to_member(member, role)
+            ]
+            removals = [
+                role
+                for role_id in changes["remove"]
+                if (role := guild.get_role(role_id)) is not None and self._bot_can_apply_to_member(member, role)
+            ]
+            if additions:
+                with contextlib.suppress(discord.HTTPException):
+                    await member.add_roles(*additions, reason="RoleManager reaction reconciliation.")
+                    stats["added"] += len(additions)
+            if removals:
+                with contextlib.suppress(discord.HTTPException):
+                    await member.remove_roles(*removals, reason="RoleManager reaction reconciliation.")
+                    stats["removed"] += len(removals)
+        return stats
+
+    async def _inspect_legacy_source(
+        self,
+        guild: discord.Guild,
+        source: str,
+    ) -> dict[str, int]:
+        """Read legacy cog data and return a no-write migration preview."""
+        source = source.casefold()
+        if source == "roletools":
+            old = Config.get_conf(None, identifier=218773382617890828, cog_name="RoleTools")
+            old.register_guild(
+                reaction_roles={},
+                auto_roles=[],
+                buttons={},
+                select_options={},
+                select_menus={},
+                temporary_roles=[],
+            )
+            old.register_role(
+                sticky=False,
+                selfassignable=False,
+                selfremovable=False,
+                exclusive_to=[],
+                inclusive_with=[],
+                required=[],
+                cost=0,
+                duration=None,
+            )
+            data = await old.guild(guild).all()
+            configured_roles = 0
+            for role in guild.roles:
+                if role.is_default():
+                    continue
+                role_data = await old.role(role).all()
+                if any(role_data.get(key) for key in role_data):
+                    configured_roles += 1
+            return {
+                "reaction_bindings": len(data.get("reaction_roles", {})),
+                "buttons": len(data.get("buttons", {})),
+                "select_options": len(data.get("select_options", {})),
+                "select_menus": len(data.get("select_menus", {})),
+                "autoroles": len(data.get("auto_roles", [])),
+                "temporary_roles": len(data.get("temporary_roles", [])),
+                "configured_roles": configured_roles,
+            }
+        if source == "roleutils":
+            old = Config.get_conf(None, identifier=326235423452394523, cog_name="RoleUtils")
+            old.register_guild(
+                autoroles={
+                    "toggle": False,
+                    "roles": [],
+                    "bots": {"toggle": False, "roles": []},
+                    "humans": {"toggle": False, "roles": []},
+                },
+            )
+            old.register_role(sticky=False)
+            old.init_custom("GuildMessage", 2)
+            old.register_custom("GuildMessage", reactroles={"react_to_roleid": {}})
+            data = await old.guild(guild).all()
+            autoroles = data.get("autoroles", {})
+            custom = await old.custom("GuildMessage", guild.id).all()
+            sticky_roles = 0
+            for role in guild.roles:
+                if not role.is_default() and await old.role(role).sticky():
+                    sticky_roles += 1
+            return {
+                "reaction_bindings": sum(len(item.get("reactroles", {}).get("react_to_roleid", {})) for item in custom.values()),
+                "autoroles": len(autoroles.get("roles", []))
+                + len(autoroles.get("humans", {}).get("roles", []))
+                + len(autoroles.get("bots", {}).get("roles", [])),
+                "sticky_roles": sticky_roles,
+            }
+        raise commands.BadArgument("Migration source must be roletools or roleutils.")
+
     @rolemanager.group(name="import")
     @commands.admin_or_permissions(manage_roles=True)
     async def import_group(self, ctx: commands.Context) -> None:
@@ -1789,9 +2465,10 @@ class RoleManager(DashboardIntegration, commands.Cog):
     @import_group.command(name="roletools")
     async def import_roletools(self, ctx: commands.Context) -> None:
         """Import compatible settings from TrustyJAID RoleTools."""
+        backup_id = await self._create_config_backup(ctx.guild, "before-roletools-import")
         imported = await self._import_roletools_settings(ctx.guild)
         await ctx.send(
-            f"Imported RoleTools-compatible settings. Records touched: {imported:,}.",
+            f"Imported RoleTools-compatible settings. Records touched: {imported:,}. Backup: `{backup_id}`.",
         )
 
     async def _import_roletools_settings(self, guild: discord.Guild) -> int:
@@ -1888,16 +2565,27 @@ class RoleManager(DashboardIntegration, commands.Cog):
             await self.config.role(role).required.set(data.get("required") or [])
             await self.config.role(role).require_any.set(bool(data.get("require_any")))
             await self.config.role(role).cost.set(int(data.get("cost") or 0))
+        await self._repair_advanced_records()
         await self._refresh_reaction_cache()
         await self._load_component_views()
+        async with self.config.guild(guild).migration_history() as history:
+            history.append(
+                {
+                    "source": "RoleTools",
+                    "records": imported,
+                    "timestamp": self._now_ts(),
+                },
+            )
+            history[:] = trim_history(history, maximum=25)
         return imported
 
     @import_group.command(name="roleutils")
     async def import_roleutils(self, ctx: commands.Context) -> None:
         """Import compatible settings from Seina RoleUtils."""
+        backup_id = await self._create_config_backup(ctx.guild, "before-roleutils-import")
         imported = await self._import_roleutils_settings(ctx.guild)
         await ctx.send(
-            f"Imported RoleUtils-compatible settings. Records touched: {imported:,}.",
+            f"Imported RoleUtils-compatible settings. Records touched: {imported:,}. Backup: `{backup_id}`.",
         )
 
     async def _import_roleutils_settings(self, guild: discord.Guild) -> int:
@@ -1953,8 +2641,127 @@ class RoleManager(DashboardIntegration, commands.Cog):
             if data.get("sticky"):
                 await self.config.role(role).sticky.set(True)
                 imported += 1
+        await self._repair_advanced_records()
         await self._refresh_reaction_cache()
+        async with self.config.guild(guild).migration_history() as history:
+            history.append(
+                {
+                    "source": "RoleUtils",
+                    "records": imported,
+                    "timestamp": self._now_ts(),
+                },
+            )
+            history[:] = trim_history(history, maximum=25)
         return imported
+
+    @rolemanager.group(name="migration", aliases=["migrate"])
+    @commands.admin_or_permissions(manage_roles=True)
+    async def migration_group(self, ctx: commands.Context) -> None:
+        """Verify, reconcile, export, or roll back imported role data."""
+
+    @migration_group.command(name="verify", aliases=["preview"])
+    async def migration_verify(self, ctx: commands.Context) -> None:
+        """Validate imported reaction, component, role, and temporary-role records."""
+        health = await self._reaction_health(ctx.guild)
+        data = await self.config.guild(ctx.guild).all()
+        invalid_temp = sum(
+            1
+            for item in data.get("temporary_roles", [])
+            if ctx.guild.get_member(int(item.get("member_id", 0) or 0)) is None
+            or ctx.guild.get_role(int(item.get("role_id", 0) or 0)) is None
+        )
+        component_issues = sum(
+            1 for item in data.get("buttons", {}).values() if ctx.guild.get_role(int(item.get("role_id", 0) or 0)) is None
+        )
+        saved_options = data.get("select_options", {})
+        component_issues += sum(
+            1 for item in saved_options.values() if ctx.guild.get_role(int(item.get("role_id", 0) or 0)) is None
+        )
+        component_issues += sum(
+            1
+            for menu in data.get("select_menus", {}).values()
+            for option in menu.get("options", [])
+            if option not in saved_options
+        )
+        lines = [
+            f"Reaction messages: {health['valid']}/{health['messages']} valid",
+            f"Buttons: {len(data.get('buttons', {}))}",
+            f"Select menus: {len(data.get('select_menus', {}))}",
+            f"Component references needing cleanup: {component_issues}",
+            f"Temporary records needing cleanup: {invalid_temp}",
+        ]
+        lines.extend(f"- {issue}" for issue in health["issues"][:20])
+        await ctx.send("\n".join(lines))
+
+    @migration_group.command(name="inspect")
+    async def migration_inspect(self, ctx: commands.Context, source: str) -> None:
+        """Preview legacy RoleTools or RoleUtils records without changing anything."""
+        counts = await self._inspect_legacy_source(ctx.guild, source)
+        await ctx.send(
+            f"{source.title()} migration preview:\n"
+            + "\n".join(f"- {key.replace('_', ' ').title()}: {value:,}" for key, value in counts.items()),
+        )
+
+    @migration_group.command(name="reconcile", aliases=["sync"])
+    @commands.bot_has_permissions(manage_roles=True, read_message_history=True)
+    async def migration_reconcile(
+        self,
+        ctx: commands.Context,
+        mode: str = "add",
+        confirmation: str = "",
+    ) -> None:
+        """Reapply live reaction roles; use `sync` to also remove stale roles."""
+        mode = mode.lower()
+        if mode not in {"add", "sync"}:
+            raise commands.BadArgument("Mode must be `add` or `sync`.")
+        if mode == "sync" and confirmation.upper() != "CONFIRM":
+            await ctx.send("Full sync can remove roles. Run it again as `sync CONFIRM`.")
+            return
+        stats = await self._reconcile_reaction_roles(ctx.guild, remove_missing=mode == "sync")
+        await ctx.send(
+            f"Reconciled {stats['messages']} message(s): {stats['added']} added, "
+            f"{stats['removed']} removed, {stats['missing']} unavailable.",
+        )
+
+    @migration_group.command(name="backups")
+    async def migration_backups(self, ctx: commands.Context) -> None:
+        """List automatic migration backups."""
+        backups = await self.config.guild(ctx.guild).backups()
+        if not backups:
+            await ctx.send("No RoleManager backups exist for this server.")
+            return
+        lines = [
+            f"`{backup_id}` — {item.get('source', 'manual')} — <t:{int(item.get('created_at', 0))}:R>"
+            for backup_id, item in sorted(backups.items(), key=lambda pair: pair[1].get("created_at", 0), reverse=True)
+        ]
+        await ctx.send("\n".join(lines))
+
+    @migration_group.command(name="backup")
+    async def migration_backup(self, ctx: commands.Context, *, label: str = "manual") -> None:
+        """Create a manual configuration backup."""
+        backup_id = await self._create_config_backup(ctx.guild, label[:80])
+        await ctx.send(f"Created backup `{backup_id}`.")
+
+    @migration_group.command(name="rollback", aliases=["restore"])
+    async def migration_rollback(self, ctx: commands.Context, backup_id: str) -> None:
+        """Restore a RoleManager backup."""
+        safety_id = await self._create_config_backup(ctx.guild, "before-rollback")
+        if not await self._restore_config_backup(ctx.guild, backup_id):
+            await ctx.send(f"Backup `{backup_id}` was not found.")
+            return
+        await ctx.send(f"Restored `{backup_id}`. Pre-rollback safety backup: `{safety_id}`.")
+
+    @migration_group.command(name="export")
+    async def migration_export(self, ctx: commands.Context) -> None:
+        """Export the current guild and role configuration as JSON."""
+        payload = {
+            "guild_id": ctx.guild.id,
+            "exported_at": self._now_ts(),
+            "guild": await self.config.guild(ctx.guild).all(),
+            "roles": {str(role.id): await self.config.role(role).all() for role in ctx.guild.roles if not role.is_default()},
+        }
+        content = json.dumps(payload, indent=2, sort_keys=True, default=str).encode()
+        await ctx.send(file=discord.File(io.BytesIO(content), filename=f"rolemanager-{ctx.guild.id}.json"))
 
     @rolemanager.group(name="role")
     @commands.admin_or_permissions(manage_roles=True)
@@ -2030,6 +2837,14 @@ class RoleManager(DashboardIntegration, commands.Cog):
             name=name,
             reason=get_audit_reason(ctx.author, "RoleManager role create."),
         )
+        await self._record_role_audit(
+            ctx.guild,
+            action="role_created",
+            role_ids=[role.id],
+            actor_id=ctx.author.id,
+            source="role-command",
+            detail=role.name,
+        )
         await ctx.send(
             f"Created {role.mention}.",
             allowed_mentions=discord.AllowedMentions.none(),
@@ -2050,6 +2865,14 @@ class RoleManager(DashboardIntegration, commands.Cog):
             name=name,
             reason=get_audit_reason(ctx.author, "RoleManager role rename."),
         )
+        await self._record_role_audit(
+            ctx.guild,
+            action="role_renamed",
+            role_ids=[role.id],
+            actor_id=ctx.author.id,
+            source="role-command",
+            detail=f"{old_name} -> {name}",
+        )
         await ctx.send(f"Renamed `{old_name}` to `{name}`.")
 
     @role_group.command(name="color", aliases=["colour"])
@@ -2064,6 +2887,14 @@ class RoleManager(DashboardIntegration, commands.Cog):
         await role.edit(
             color=color,
             reason=get_audit_reason(ctx.author, "RoleManager role color."),
+        )
+        await self._record_role_audit(
+            ctx.guild,
+            action="role_color_changed",
+            role_ids=[role.id],
+            actor_id=ctx.author.id,
+            source="role-command",
+            detail=str(color),
         )
         await ctx.send(
             f"Changed {role.mention} color to `{color}`.",
@@ -2084,6 +2915,14 @@ class RoleManager(DashboardIntegration, commands.Cog):
             hoist=enabled,
             reason=get_audit_reason(ctx.author, "RoleManager role hoist."),
         )
+        await self._record_role_audit(
+            ctx.guild,
+            action="role_hoist_changed",
+            role_ids=[role.id],
+            actor_id=ctx.author.id,
+            source="role-command",
+            detail=str(enabled),
+        )
         await ctx.send(
             f"{role.mention} is {'now' if enabled else 'no longer'} hoisted.",
             allowed_mentions=discord.AllowedMentions.none(),
@@ -2103,10 +2942,235 @@ class RoleManager(DashboardIntegration, commands.Cog):
             mentionable=enabled,
             reason=get_audit_reason(ctx.author, "RoleManager role mentionable."),
         )
+        await self._record_role_audit(
+            ctx.guild,
+            action="role_mentionable_changed",
+            role_ids=[role.id],
+            actor_id=ctx.author.id,
+            source="role-command",
+            detail=str(enabled),
+        )
         await ctx.send(
             f"{role.mention} is {'now' if enabled else 'no longer'} mentionable.",
             allowed_mentions=discord.AllowedMentions.none(),
         )
+
+    @role_group.command(name="info")
+    async def role_info(self, ctx: commands.Context, role: discord.Role) -> None:
+        """Show Discord and RoleManager details for a role."""
+        data = await self.config.role(role).all()
+        permissions = [name for name, enabled in role.permissions if enabled]
+        embed = discord.Embed(
+            title=role.name,
+            color=role.color,
+            description=role.mention,
+        )
+        embed.add_field(name="ID", value=str(role.id))
+        embed.add_field(name="Members", value=str(len(role.members)))
+        embed.add_field(name="Position", value=str(role.position))
+        embed.add_field(name="Hoisted", value=str(role.hoist))
+        embed.add_field(name="Mentionable", value=str(role.mentionable))
+        embed.add_field(name="Managed", value=str(role.managed))
+        embed.add_field(
+            name="RoleManager",
+            value=(
+                f"Self assignable: {bool(data.get('self_assignable'))}\n"
+                f"Self removable: {bool(data.get('self_removable'))}\n"
+                f"Sticky: {bool(data.get('sticky'))}\n"
+                f"Temporary: {int(data.get('temp_duration') or 0)} seconds"
+            ),
+            inline=False,
+        )
+        embed.add_field(
+            name="Permissions",
+            value=", ".join(permissions)[:1024] or "None",
+            inline=False,
+        )
+        await ctx.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
+
+    @role_group.command(name="members", aliases=["dump", "export"])
+    async def role_members(self, ctx: commands.Context, role: discord.Role) -> None:
+        """List or export every member with a role."""
+        lines = [f"{member.id}\t{member}" for member in sorted(role.members, key=lambda item: item.id)]
+        if not lines:
+            await ctx.send(f"No members have {role.mention}.")
+            return
+        content = "\n".join(lines)
+        if len(content) <= 1800:
+            await ctx.send(f"```text\n{content}\n```")
+            return
+        await ctx.send(
+            f"Exported {len(lines)} member(s) with {role.name}.",
+            file=discord.File(io.BytesIO(content.encode()), filename=f"role-{role.id}-members.txt"),
+        )
+
+    @role_group.command(name="colors", aliases=["colours"])
+    async def role_colors(self, ctx: commands.Context) -> None:
+        """Export the server's role color palette."""
+        roles = [role for role in reversed(ctx.guild.roles) if not role.is_default()]
+        lines = [f"#{role.color.value:06X}\t{role.id}\t{role.name}" for role in roles]
+        content = "\n".join(lines) or "No roles."
+        await ctx.send(
+            file=discord.File(io.BytesIO(content.encode()), filename=f"{ctx.guild.id}-role-colors.txt"),
+        )
+
+    @role_group.command(name="unused")
+    async def role_unused(self, ctx: commands.Context) -> None:
+        """Find editable roles which have no members."""
+        roles = [role for role in reversed(ctx.guild.roles) if not role.is_default() and not role.managed and not role.members]
+        content = "\n".join(f"{role.id}\t{role.name}" for role in roles)
+        if not content:
+            await ctx.send("There are no unused editable roles.")
+        elif len(content) <= 1800:
+            await ctx.send(f"```text\n{content}\n```")
+        else:
+            await ctx.send(
+                f"Found {len(roles)} unused roles.",
+                file=discord.File(io.BytesIO(content.encode()), filename="unused-roles.txt"),
+            )
+
+    @role_group.command(name="clone")
+    async def role_clone(
+        self,
+        ctx: commands.Context,
+        role: discord.Role,
+        *,
+        name: str | None = None,
+    ) -> None:
+        """Clone a role's appearance and permissions."""
+        self._check_role_manageable(ctx, role)
+        clone = await ctx.guild.create_role(
+            name=name or f"{role.name} copy",
+            permissions=role.permissions,
+            color=role.color,
+            hoist=role.hoist,
+            mentionable=role.mentionable,
+            reason=get_audit_reason(ctx.author, "RoleManager role clone."),
+        )
+        with contextlib.suppress(discord.HTTPException):
+            await clone.edit(position=max(1, role.position - 1))
+        await self._record_role_audit(
+            ctx.guild,
+            action="role_cloned",
+            role_ids=[role.id, clone.id],
+            actor_id=ctx.author.id,
+            source="role-command",
+            detail=clone.name,
+        )
+        await ctx.send(f"Created {clone.mention} from `{role.name}`.")
+
+    @role_group.command(name="delete")
+    async def role_delete(
+        self,
+        ctx: commands.Context,
+        role: discord.Role,
+        confirmation: str = "",
+    ) -> None:
+        """Delete a role. The final argument must be CONFIRM."""
+        self._check_role_manageable(ctx, role)
+        if confirmation.upper() != "CONFIRM":
+            await ctx.send("This is destructive. Run the command again with `CONFIRM` at the end.")
+            return
+        name = role.name
+        role_id = role.id
+        await role.delete(reason=get_audit_reason(ctx.author, "RoleManager role delete."))
+        await self._record_role_audit(
+            ctx.guild,
+            action="role_deleted",
+            role_ids=[role_id],
+            actor_id=ctx.author.id,
+            source="role-command",
+            detail=name,
+        )
+        await ctx.send(f"Deleted `{name}`.")
+
+    @role_group.command(name="position")
+    async def role_position(
+        self,
+        ctx: commands.Context,
+        role: discord.Role,
+        position: int,
+    ) -> None:
+        """Move a role to a new hierarchy position."""
+        self._check_role_manageable(ctx, role)
+        maximum = max(1, ctx.guild.me.top_role.position - 1)
+        position = max(1, min(position, maximum))
+        await role.edit(
+            position=position,
+            reason=get_audit_reason(ctx.author, "RoleManager role position."),
+        )
+        await self._record_role_audit(
+            ctx.guild,
+            action="role_position_changed",
+            role_ids=[role.id],
+            actor_id=ctx.author.id,
+            source="role-command",
+            detail=str(position),
+        )
+        await ctx.send(f"Moved {role.mention} to position {position}.")
+
+    @role_group.command(name="permission", aliases=["perm"])
+    async def role_permission(
+        self,
+        ctx: commands.Context,
+        role: discord.Role,
+        permission: str,
+        enabled: bool,
+    ) -> None:
+        """Enable or disable one Discord permission on a role."""
+        self._check_role_manageable(ctx, role)
+        permission = permission.lower().replace(" ", "_")
+        if permission not in discord.Permissions.VALID_FLAGS:
+            raise commands.BadArgument(f"Unknown Discord permission: {permission}")
+        permissions = role.permissions
+        permissions.update(**{permission: enabled})
+        await role.edit(
+            permissions=permissions,
+            reason=get_audit_reason(ctx.author, "RoleManager role permission."),
+        )
+        await self._record_role_audit(
+            ctx.guild,
+            action="role_permission_changed",
+            role_ids=[role.id],
+            actor_id=ctx.author.id,
+            source="role-command",
+            detail=f"{permission}={enabled}",
+        )
+        await ctx.send(f"Set `{permission}` on {role.mention} to `{enabled}`.")
+
+    @role_group.command(name="icon")
+    async def role_icon(
+        self,
+        ctx: commands.Context,
+        role: discord.Role,
+        icon: str | None = None,
+    ) -> None:
+        """Set a role icon from an attachment or Unicode emoji; use `none` to clear."""
+        self._check_role_manageable(ctx, role)
+        display_icon: bytes | str | None
+        if ctx.message.attachments:
+            display_icon = await ctx.message.attachments[0].read()
+        elif icon and icon.casefold() not in {"none", "clear", "off"}:
+            display_icon = icon
+        else:
+            display_icon = None
+        try:
+            await role.edit(
+                display_icon=display_icon,
+                reason=get_audit_reason(ctx.author, "RoleManager role icon."),
+            )
+        except TypeError as exc:
+            raise commands.UserFeedbackCheckFailure(
+                "This Discord.py/Red version does not support editing role icons.",
+            ) from exc
+        await self._record_role_audit(
+            ctx.guild,
+            action="role_icon_changed",
+            role_ids=[role.id],
+            actor_id=ctx.author.id,
+            source="role-command",
+        )
+        await ctx.send(f"Updated the icon for {role.mention}.")
 
     @role_group.command(name="addmulti", aliases=["addmany"])
     async def role_addmulti(
@@ -2405,6 +3469,327 @@ class RoleManager(DashboardIntegration, commands.Cog):
         )
         await self._send_operation_result(ctx, role, result, adding=False)
 
+    @rolemanager.group(name="target", aliases=["targets"])
+    @commands.admin_or_permissions(manage_roles=True)
+    async def target_group(self, ctx: commands.Context) -> None:
+        """Preview, save, and apply advanced member targeting queries."""
+
+    @target_group.command(name="preview")
+    async def target_preview(self, ctx: commands.Context, *, query: str) -> None:
+        """Preview `key=value` filters without changing roles."""
+        members = await self._members_from_query(ctx.guild, query)
+        preview = "\n".join(f"{member} ({member.id})" for member in members)
+        summary = f"Matched {len(members):,} member(s)."
+        if not preview:
+            await ctx.send(summary)
+        elif len(preview) <= 1700:
+            await ctx.send(f"{summary}\n```text\n{preview}\n```")
+        else:
+            await ctx.send(
+                summary,
+                file=discord.File(
+                    io.BytesIO(preview.encode("utf-8")),
+                    filename="rolemanager-target-preview.txt",
+                ),
+            )
+
+    @target_group.command(name="add")
+    @commands.bot_has_permissions(manage_roles=True)
+    async def target_add(
+        self,
+        ctx: commands.Context,
+        role: discord.Role,
+        *,
+        query: str,
+    ) -> None:
+        """Add a role to members matching an advanced query."""
+        self._check_role_manageable(ctx, role)
+        members = await self._members_from_query(ctx.guild, query)
+        result = await self._apply_role_to_members(
+            ctx,
+            role,
+            members,
+            adding=True,
+            reason=get_audit_reason(ctx.author, f"RoleManager target add: {query}"),
+        )
+        await self._send_operation_result(ctx, role, result, adding=True)
+
+    @target_group.command(name="remove")
+    @commands.bot_has_permissions(manage_roles=True)
+    async def target_remove(
+        self,
+        ctx: commands.Context,
+        role: discord.Role,
+        *,
+        query: str,
+    ) -> None:
+        """Remove a role from members matching an advanced query."""
+        self._check_role_manageable(ctx, role)
+        members = await self._members_from_query(ctx.guild, query)
+        result = await self._apply_role_to_members(
+            ctx,
+            role,
+            members,
+            adding=False,
+            reason=get_audit_reason(ctx.author, f"RoleManager target remove: {query}"),
+        )
+        await self._send_operation_result(ctx, role, result, adding=False)
+
+    @target_group.command(name="save")
+    async def target_save(
+        self,
+        ctx: commands.Context,
+        name: str,
+        *,
+        query: str,
+    ) -> None:
+        """Save a validated advanced target query."""
+        await self._members_from_query(ctx.guild, query)
+        clean_name = name.casefold().strip()
+        if not clean_name or len(clean_name) > 50:
+            raise commands.BadArgument("Preset name must be 1-50 characters.")
+        async with self.config.guild(ctx.guild).target_presets() as presets:
+            presets[clean_name] = query
+        await ctx.send(f"Saved target preset `{clean_name}`.")
+
+    @target_group.command(name="delete")
+    async def target_delete(self, ctx: commands.Context, *, name: str) -> None:
+        """Delete a saved target query."""
+        async with self.config.guild(ctx.guild).target_presets() as presets:
+            if presets.pop(name.casefold().strip(), None) is None:
+                raise commands.BadArgument("That target preset does not exist.")
+        await ctx.send("Target preset deleted.")
+
+    @target_group.command(name="list")
+    async def target_list(self, ctx: commands.Context) -> None:
+        """List saved advanced target queries."""
+        presets = await self.config.guild(ctx.guild).target_presets()
+        if not presets:
+            await ctx.send("No target presets are saved.")
+            return
+        await ctx.send(
+            "\n".join(f"`{name}`: `{query}`" for name, query in sorted(presets.items())),
+        )
+
+    @target_group.command(name="run", aliases=["apply"])
+    @commands.bot_has_permissions(manage_roles=True)
+    async def target_run(
+        self,
+        ctx: commands.Context,
+        action: str,
+        role: discord.Role,
+        *,
+        name: str,
+    ) -> None:
+        """Apply a saved target preset with action `add` or `remove`."""
+        action = action.lower()
+        if action not in {"add", "remove"}:
+            raise commands.BadArgument("Action must be `add` or `remove`.")
+        self._check_role_manageable(ctx, role)
+        presets = await self.config.guild(ctx.guild).target_presets()
+        query = presets.get(name.casefold().strip())
+        if query is None:
+            raise commands.BadArgument("That target preset does not exist.")
+        members = await self._members_from_query(ctx.guild, query)
+        result = await self._apply_role_to_members(
+            ctx,
+            role,
+            members,
+            adding=action == "add",
+            reason=get_audit_reason(ctx.author, f"RoleManager target preset {name}."),
+        )
+        await self._send_operation_result(ctx, role, result, adding=action == "add")
+
+    async def _save_bulk_job(self, guild: discord.Guild, record: dict[str, Any]) -> None:
+        record = dict(record)
+        if int(record.get("actor_id", 0) or 0) in self._deleted_user_ids:
+            record["actor_id"] = None
+        async with self.config.guild(guild).bulk_jobs() as jobs:
+            jobs[:] = [item for item in jobs if item.get("id") != record.get("id")]
+            jobs.append(dict(record))
+            jobs[:] = trim_history(jobs, maximum=25)
+
+    async def _run_bulk_job(
+        self,
+        guild: discord.Guild,
+        record: dict[str, Any],
+        member_ids: Sequence[int],
+    ) -> None:
+        key = f"{guild.id}:{record['id']}"
+        role = guild.get_role(int(record["role_id"]))
+        try:
+            if role is None:
+                record.update(status="failed", error="Role no longer exists.")
+                return
+            for index, member_id in enumerate(member_ids, start=1):
+                member = guild.get_member(int(member_id))
+                if member is None:
+                    record["skipped"] += 1
+                elif record["action"] == "add":
+                    responses, added, _removed = await self._give_roles(
+                        member,
+                        [role],
+                        f"RoleManager bulk job {record['id']}.",
+                        check_cost=False,
+                    )
+                    if role in added:
+                        record["completed"] += 1
+                    elif responses:
+                        record["failed"] += 1
+                    else:
+                        record["skipped"] += 1
+                else:
+                    responses, removed = await self._remove_roles(
+                        member,
+                        [role],
+                        f"RoleManager bulk job {record['id']}.",
+                    )
+                    if role in removed:
+                        record["completed"] += 1
+                    elif responses:
+                        record["failed"] += 1
+                    else:
+                        record["skipped"] += 1
+                record["processed"] = index
+                if index % 20 == 0:
+                    await self._save_bulk_job(guild, record)
+                    await asyncio.sleep(1)
+            record["status"] = "completed"
+        except asyncio.CancelledError:
+            record["status"] = "cancelled"
+            raise
+        except Exception as exc:
+            record.update(status="failed", error=str(exc)[:300])
+            log.exception("RoleManager bulk job %s failed.", record["id"])
+        finally:
+            record["finished_at"] = self._now_ts()
+            await self._save_bulk_job(guild, record)
+            self._bulk_tasks.pop(key, None)
+
+    @rolemanager.group(name="job", aliases=["jobs"])
+    @commands.admin_or_permissions(manage_roles=True)
+    async def job_group(self, ctx: commands.Context) -> None:
+        """Run and inspect persistent, cancellable bulk role jobs."""
+
+    @job_group.command(name="start")
+    @commands.bot_has_permissions(manage_roles=True)
+    async def job_start(
+        self,
+        ctx: commands.Context,
+        action: str,
+        role: discord.Role,
+        *,
+        query: str,
+    ) -> None:
+        """Start a background `add` or `remove` job using an advanced target query."""
+        action = action.lower()
+        if action not in {"add", "remove"}:
+            raise commands.BadArgument("Action must be `add` or `remove`.")
+        self._check_role_manageable(ctx, role)
+        members = await self._members_from_query(ctx.guild, query)
+        if not members:
+            raise commands.BadArgument("No members matched that target query.")
+        job_id = secrets.token_hex(3)
+        record = {
+            "id": job_id,
+            "action": action,
+            "role_id": role.id,
+            "query": query,
+            "actor_id": ctx.author.id,
+            "status": "running",
+            "total": len(members),
+            "processed": 0,
+            "completed": 0,
+            "skipped": 0,
+            "failed": 0,
+            "created_at": self._now_ts(),
+        }
+        await self._save_bulk_job(ctx.guild, record)
+        key = f"{ctx.guild.id}:{job_id}"
+        self._bulk_tasks[key] = asyncio.create_task(self._run_bulk_job(ctx.guild, record, [member.id for member in members]))
+        await ctx.send(f"Started job `{job_id}` for {len(members):,} member(s).")
+
+    @job_group.command(name="list", aliases=["status"])
+    async def job_list(self, ctx: commands.Context, job_id: str | None = None) -> None:
+        """Show recent jobs or one job's detailed status."""
+        jobs = await self.config.guild(ctx.guild).bulk_jobs()
+        if job_id:
+            jobs = [item for item in jobs if item.get("id") == job_id]
+        if not jobs:
+            await ctx.send("No matching bulk jobs were found.")
+            return
+        lines = [
+            f"`{item.get('id')}` {item.get('status')} {item.get('action')} role "
+            f"`{item.get('role_id')}` — {item.get('processed', 0)}/{item.get('total', 0)} "
+            f"processed, {item.get('failed', 0)} failed"
+            for item in reversed(jobs[-10:])
+        ]
+        await ctx.send("\n".join(lines))
+
+    @job_group.command(name="cancel")
+    async def job_cancel(self, ctx: commands.Context, job_id: str) -> None:
+        """Cancel a running bulk job."""
+        task = self._bulk_tasks.get(f"{ctx.guild.id}:{job_id}")
+        if task is None or task.done():
+            await ctx.send("That job is not running on this bot process.")
+            return
+        task.cancel()
+        await ctx.send(f"Cancellation requested for job `{job_id}`.")
+
+    @job_group.command(name="export")
+    async def job_export(self, ctx: commands.Context) -> None:
+        """Export recent bulk-job records as JSON."""
+        content = json.dumps(await self.config.guild(ctx.guild).bulk_jobs(), indent=2, default=str).encode()
+        await ctx.send(file=discord.File(io.BytesIO(content), filename="rolemanager-jobs.json"))
+
+    @rolemanager.group(name="audit")
+    @commands.admin_or_permissions(manage_roles=True)
+    async def audit_group(self, ctx: commands.Context) -> None:
+        """Configure and inspect RoleManager's local role-change journal."""
+
+    @audit_group.command(name="channel")
+    async def audit_channel(
+        self,
+        ctx: commands.Context,
+        channel: discord.TextChannel | None = None,
+    ) -> None:
+        """Set the audit delivery channel, or omit it to disable delivery."""
+        await self.config.guild(ctx.guild).audit_channel_id.set(channel.id if channel else None)
+        await ctx.send(f"Audit delivery channel: {channel.mention if channel else 'disabled'}.")
+
+    @audit_group.command(name="list", aliases=["recent"])
+    async def audit_list(self, ctx: commands.Context, limit: int = 15) -> None:
+        """Show recent RoleManager audit records."""
+        history = await self.config.guild(ctx.guild).audit_history()
+        limit = max(1, min(limit, 50))
+        if not history:
+            await ctx.send("The RoleManager audit journal is empty.")
+            return
+        lines = [
+            f"<t:{int(item.get('timestamp', 0))}:R> `{item.get('action')}` "
+            f"member `{item.get('member_id') or '-'}` roles "
+            f"`{','.join(str(role_id) for role_id in item.get('role_ids', [])) or '-'}` "
+            f"via {item.get('source')}"
+            for item in reversed(history[-limit:])
+        ]
+        for page in pagify("\n".join(lines), page_length=1900):
+            await ctx.send(page)
+
+    @audit_group.command(name="export")
+    async def audit_export(self, ctx: commands.Context) -> None:
+        """Export the full bounded role-change journal."""
+        content = json.dumps(await self.config.guild(ctx.guild).audit_history(), indent=2, default=str).encode()
+        await ctx.send(file=discord.File(io.BytesIO(content), filename="rolemanager-audit.json"))
+
+    @audit_group.command(name="clear")
+    async def audit_clear(self, ctx: commands.Context, confirmation: str = "") -> None:
+        """Clear the journal; the final argument must be CONFIRM."""
+        if confirmation.upper() != "CONFIRM":
+            await ctx.send("Run this command again with `CONFIRM` to clear the journal.")
+            return
+        await self.config.guild(ctx.guild).audit_history.clear()
+        await ctx.send("RoleManager audit journal cleared.")
+
     @rolemanager.group(name="autorole", invoke_without_command=True)
     @commands.admin_or_permissions(manage_roles=True)
     @commands.bot_has_permissions(manage_roles=True)
@@ -2495,10 +3880,18 @@ class RoleManager(DashboardIntegration, commands.Cog):
     async def autorole_list(self, ctx: commands.Context) -> None:
         """Show autorole settings."""
         settings = await self.config.guild(ctx.guild).auto_roles()
-        lines = [f"Enabled: {bool(settings.get('enabled'))}"]
+        lines = [
+            f"Enabled: {bool(settings.get('enabled'))}",
+            f"Delay: {int(settings.get('delay_seconds', 0))} seconds",
+            f"Minimum account age: {int(settings.get('minimum_account_age_hours', 0))} hours",
+            f"Retries: {int(settings.get('retries', 3))}",
+        ]
         for target in ("all", "humans", "bots"):
             roles = [role for role_id in settings.get(target, []) if (role := ctx.guild.get_role(int(role_id))) is not None]
-            lines.append(f"{target.title()}: {self._role_list(roles)}")
+            lines.append(
+                f"{target.title()} ({'enabled' if settings.get(f'{target}_enabled', True) else 'disabled'}): "
+                f"{self._role_list(roles)}",
+            )
         await ctx.send(
             "\n".join(lines),
             allowed_mentions=discord.AllowedMentions.none(),
@@ -2508,9 +3901,41 @@ class RoleManager(DashboardIntegration, commands.Cog):
     async def autorole_clear(self, ctx: commands.Context) -> None:
         """Clear all autoroles for this server."""
         await self.config.guild(ctx.guild).auto_roles.set(
-            {"enabled": False, "all": [], "humans": [], "bots": []},
+            {
+                "enabled": False,
+                "all": [],
+                "humans": [],
+                "bots": [],
+                "all_enabled": True,
+                "humans_enabled": True,
+                "bots_enabled": True,
+                "delay_seconds": 0,
+                "minimum_account_age_hours": 0,
+                "retries": 3,
+            },
         )
         await ctx.send("Autoroles have been cleared and disabled.")
+
+    @autorole_group.command(name="settings", aliases=["policy"])
+    async def autorole_settings(
+        self,
+        ctx: commands.Context,
+        delay_seconds: int = 0,
+        minimum_account_age_hours: int = 0,
+        retries: int = 3,
+        all_enabled: bool = True,
+        humans_enabled: bool = True,
+        bots_enabled: bool = True,
+    ) -> None:
+        """Set delay, account-age safety, retries, and independent list toggles."""
+        async with self.config.guild(ctx.guild).auto_roles() as settings:
+            settings["delay_seconds"] = max(0, min(delay_seconds, 86_400))
+            settings["minimum_account_age_hours"] = max(0, min(minimum_account_age_hours, 876_000))
+            settings["retries"] = max(1, min(retries, 10))
+            settings["all_enabled"] = all_enabled
+            settings["humans_enabled"] = humans_enabled
+            settings["bots_enabled"] = bots_enabled
+        await ctx.send("Autorole delivery settings updated.")
 
     @rolemanager.command(name="auto")
     @commands.admin_or_permissions(manage_roles=True)
@@ -2685,25 +4110,87 @@ class RoleManager(DashboardIntegration, commands.Cog):
         member: discord.Member,
         role: discord.Role,
         *,
-        duration: str,
+        specification: str,
     ) -> None:
-        """Give a role that expires after a duration."""
+        """Give an expiring role. Format: `duration | optional reason | notify true/false`."""
         self._check_role_manageable(ctx, role)
-        seconds = self._parse_duration(duration)
+        parts = [part.strip() for part in specification.split("|", 2)]
+        seconds = self._parse_duration(parts[0])
+        reason = parts[1] if len(parts) > 1 and parts[1] else "Temporary role granted by staff."
+        notify_member = len(parts) > 2 and parts[2].casefold() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+            "notify",
+        }
         responses, added, _removed = await self._give_roles(
             member,
             [role],
-            get_audit_reason(ctx.author, "Temporary role."),
+            get_audit_reason(ctx.author, reason[:400]),
             check_cost=False,
             duration_overrides={role.id: seconds},
         )
         if responses and role not in added:
             await ctx.send(self._response_text(responses))
             return
+        async with self.config.guild(ctx.guild).temporary_roles() as records:
+            for item in reversed(records):
+                if int(item.get("member_id", 0)) == member.id and int(item.get("role_id", 0)) == role.id:
+                    item.update(
+                        granted_by=ctx.author.id,
+                        reason=reason[:500],
+                        notify_channel_id=ctx.channel.id,
+                        notify_member=notify_member,
+                    )
+                    break
         await ctx.send(
             f"{role.mention} added to {member.mention} for {self._format_duration(seconds)}.",
             allowed_mentions=discord.AllowedMentions(users=False, roles=False),
         )
+
+    @temp_group.command(name="extend")
+    @commands.admin_or_permissions(manage_roles=True)
+    async def temp_extend(
+        self,
+        ctx: commands.Context,
+        member: discord.Member,
+        role: discord.Role,
+        *,
+        duration: str,
+    ) -> None:
+        """Extend a pending temporary role from now."""
+        seconds = self._parse_duration(duration)
+        found = False
+        async with self.config.guild(ctx.guild).temporary_roles() as records:
+            for item in records:
+                if int(item.get("member_id", 0)) == member.id and int(item.get("role_id", 0)) == role.id:
+                    item["expires_at"] = self._now_ts() + seconds
+                    item["extended_by"] = ctx.author.id
+                    found = True
+        if not found:
+            await ctx.send("That member and role do not have a pending temporary assignment.")
+            return
+        await ctx.send(f"Extended the assignment by {self._format_duration(seconds)} from now.")
+
+    @temp_group.command(name="revoke")
+    @commands.admin_or_permissions(manage_roles=True)
+    async def temp_revoke(
+        self,
+        ctx: commands.Context,
+        member: discord.Member,
+        role: discord.Role,
+        *,
+        reason: str = "Temporary role revoked by staff.",
+    ) -> None:
+        """Remove a temporary role immediately and clear its schedule."""
+        self._check_role_manageable(ctx, role)
+        responses, removed = await self._remove_roles(member, [role], get_audit_reason(ctx.author, reason[:400]))
+        await self._clear_temp_role(member, role)
+        if responses and not removed:
+            await ctx.send(self._response_text(responses))
+            return
+        await ctx.send(f"Revoked {role.mention} from {member.mention}.")
 
     @temp_group.command(name="setduration", aliases=["duration"])
     @commands.admin_or_permissions(manage_roles=True)
@@ -2935,7 +4422,7 @@ class RoleManager(DashboardIntegration, commands.Cog):
             return
         lines: list[str] = []
         for message_id, data in react_roles.items():
-            channel = ctx.guild.get_channel(int(data.get("channel_id", 0)))
+            channel = ctx.guild.get_channel_or_thread(int(data.get("channel_id", 0)))
             if channel is None:
                 continue
             jump_url = f"https://discord.com/channels/{ctx.guild.id}/{channel.id}/{message_id}"
@@ -2957,8 +4444,8 @@ class RoleManager(DashboardIntegration, commands.Cog):
         removed = 0
         async with self.config.guild(ctx.guild).react_roles() as react_roles:
             for message_id, data in list(react_roles.items()):
-                channel = ctx.guild.get_channel(int(data.get("channel_id", 0)))
-                if not isinstance(channel, discord.TextChannel):
+                channel = ctx.guild.get_channel_or_thread(int(data.get("channel_id", 0)))
+                if not isinstance(channel, (discord.TextChannel, discord.Thread)):
                     del react_roles[message_id]
                     self._reaction_message_cache.discard(int(message_id))
                     removed += 1
@@ -2997,6 +4484,53 @@ class RoleManager(DashboardIntegration, commands.Cog):
                 await message.add_reaction(bind.get("emoji"))
         await ctx.send("Reaction-role reactions refreshed.")
 
+    @reactrole_group.command(name="reset")
+    @commands.bot_has_permissions(manage_messages=True, add_reactions=True, read_message_history=True)
+    async def reactrole_reset(
+        self,
+        ctx: commands.Context,
+        message: discord.Message,
+        confirmation: str = "",
+    ) -> None:
+        """Clear and rebuild the reactions on one configured panel."""
+        if confirmation.upper() != "CONFIRM":
+            await ctx.send("Run this command again with `CONFIRM` to rebuild every reaction.")
+            return
+        records = await self.config.guild(ctx.guild).react_roles()
+        data = records.get(str(message.id))
+        if not data:
+            await ctx.send("That message has no configured reaction roles.")
+            return
+        await message.clear_reactions()
+        failed = 0
+        for bind in data.get("binds", {}).values():
+            try:
+                await message.add_reaction(bind.get("emoji"))
+            except (discord.HTTPException, TypeError):
+                failed += 1
+        await ctx.send(f"Rebuilt the reaction panel. Failed emoji: {failed}.")
+
+    @reactrole_group.command(name="sync")
+    @commands.bot_has_permissions(manage_roles=True, read_message_history=True)
+    async def reactrole_sync(
+        self,
+        ctx: commands.Context,
+        mode: str = "add",
+        confirmation: str = "",
+    ) -> None:
+        """Reconcile configured roles with live reactions (`add` or `sync`)."""
+        mode = mode.lower()
+        if mode not in {"add", "sync"}:
+            raise commands.BadArgument("Mode must be `add` or `sync`.")
+        if mode == "sync" and confirmation.upper() != "CONFIRM":
+            await ctx.send("Full sync can remove roles. Run it again as `sync CONFIRM`.")
+            return
+        stats = await self._reconcile_reaction_roles(ctx.guild, remove_missing=mode == "sync")
+        await ctx.send(
+            f"Reconciled {stats['messages']} message(s): {stats['added']} added, "
+            f"{stats['removed']} removed, {stats['missing']} unavailable.",
+        )
+
     @rolemanager.group(name="button", aliases=["buttons"])
     @commands.admin_or_permissions(manage_roles=True)
     @commands.bot_has_permissions(manage_roles=True)
@@ -3034,6 +4568,16 @@ class RoleManager(DashboardIntegration, commands.Cog):
             if old:
                 button_data["messages"] = list(old.get("messages", []))
                 old_role_id = int(old.get("role_id", 0)) or None
+                policy = normalize_component_policy(old)
+                for key in (
+                    "mode",
+                    "required_role_ids",
+                    "blocked_role_ids",
+                    "cooldown_seconds",
+                    "max_holders",
+                    "temp_seconds",
+                ):
+                    button_data[key] = policy[key]
             buttons[clean_name] = button_data
         if old_role_id is not None and old_role_id != role.id:
             async with self.config.role_from_id(old_role_id).buttons() as role_buttons:
@@ -3055,6 +4599,53 @@ class RoleManager(DashboardIntegration, commands.Cog):
         button.refresh_label(ctx.guild)
         preview.add_item(button)
         await ctx.send("Button saved. Preview:", view=preview)
+
+    def _component_policy_role_ids(self, guild: discord.Guild, value: str) -> list[int]:
+        if not value or value.strip() in {"-", "none"}:
+            return []
+        role_ids: list[int] = []
+        for role_text in self._parse_name_list(value):
+            role = self._find_role(guild, role_text)
+            if role is None:
+                raise commands.BadArgument(f"I could not find role `{role_text}`.")
+            if role.id not in role_ids:
+                role_ids.append(role.id)
+        return role_ids
+
+    @button_group.command(name="policy")
+    async def button_policy(
+        self,
+        ctx: commands.Context,
+        name: str,
+        mode: str = "toggle",
+        cooldown_seconds: int = 0,
+        max_holders: int = 0,
+        temp_seconds: int = 0,
+        required_roles: str = "-",
+        *,
+        blocked_roles: str = "-",
+    ) -> None:
+        """Set button mode, locks, cooldown, capacity, and temporary duration."""
+        clean_name = name.lower().strip()
+        async with self.config.guild(ctx.guild).buttons() as buttons:
+            if clean_name not in buttons:
+                raise commands.BadArgument(f"Button `{clean_name}` does not exist.")
+            data = normalize_component_policy(
+                {
+                    **buttons[clean_name],
+                    "mode": mode,
+                    "cooldown_seconds": cooldown_seconds,
+                    "max_holders": max_holders,
+                    "temp_seconds": temp_seconds,
+                    "required_role_ids": self._component_policy_role_ids(ctx.guild, required_roles),
+                    "blocked_role_ids": self._component_policy_role_ids(ctx.guild, blocked_roles),
+                },
+            )
+            if data["mode"] != mode.lower():
+                raise commands.BadArgument("Button mode must be `toggle`, `add`, or `remove`.")
+            buttons[clean_name] = data
+        await self._load_component_views()
+        await ctx.send(f"Updated policy for button `{clean_name}`.")
 
     @button_group.command(name="delete", aliases=["remove", "del"])
     async def button_delete(self, ctx: commands.Context, *, name: str) -> None:
@@ -3083,8 +4674,10 @@ class RoleManager(DashboardIntegration, commands.Cog):
         lines = []
         for name, data in sorted(buttons.items()):
             role = ctx.guild.get_role(int(data.get("role_id", 0)))
+            policy = normalize_component_policy(data)
             lines.append(
-                f"`{name}` -> {role.mention if role else 'missing role'} messages: {len(data.get('messages', [])):,}",
+                f"`{name}` -> {role.mention if role else 'missing role'} "
+                f"mode: {policy['mode']} messages: {len(data.get('messages', [])):,}",
             )
         for page in pagify("\n".join(lines), page_length=1900):
             await ctx.send(page, allowed_mentions=discord.AllowedMentions.none())
@@ -3223,6 +4816,16 @@ class RoleManager(DashboardIntegration, commands.Cog):
             old = menus.get(clean_name)
             if old:
                 menu_data["messages"] = list(old.get("messages", []))
+                policy = normalize_component_policy(old, select=True)
+                for key in (
+                    "mode",
+                    "required_role_ids",
+                    "blocked_role_ids",
+                    "cooldown_seconds",
+                    "max_holders",
+                    "temp_seconds",
+                ):
+                    menu_data[key] = policy[key]
             menus[clean_name] = menu_data
         await self._load_component_views()
         preview_data = await self.config.guild(ctx.guild).all()
@@ -3236,6 +4839,44 @@ class RoleManager(DashboardIntegration, commands.Cog):
             timeout=120,
         )
         await ctx.send("Select menu saved. Preview:", view=preview)
+
+    @select_group.command(name="policy")
+    async def select_policy(
+        self,
+        ctx: commands.Context,
+        name: str,
+        mode: str = "toggle",
+        cooldown_seconds: int = 0,
+        max_holders: int = 0,
+        temp_seconds: int = 0,
+        required_roles: str = "-",
+        *,
+        blocked_roles: str = "-",
+    ) -> None:
+        """Set menu mode, locks, cooldown, capacity, and temporary duration."""
+        clean_name = name.lower().strip()
+        async with self.config.guild(ctx.guild).select_menus() as menus:
+            if clean_name not in menus:
+                raise commands.BadArgument(f"Select menu `{clean_name}` does not exist.")
+            data = normalize_component_policy(
+                {
+                    **menus[clean_name],
+                    "mode": mode,
+                    "cooldown_seconds": cooldown_seconds,
+                    "max_holders": max_holders,
+                    "temp_seconds": temp_seconds,
+                    "required_role_ids": self._component_policy_role_ids(ctx.guild, required_roles),
+                    "blocked_role_ids": self._component_policy_role_ids(ctx.guild, blocked_roles),
+                },
+                select=True,
+            )
+            if data["mode"] != mode.lower():
+                raise commands.BadArgument(
+                    "Select mode must be `toggle`, `sync`, `exclusive`, or `add`.",
+                )
+            menus[clean_name] = data
+        await self._load_component_views()
+        await ctx.send(f"Updated policy for select menu `{clean_name}`.")
 
     @select_group.command(name="delete", aliases=["remove", "del"])
     async def select_delete(self, ctx: commands.Context, *, name: str) -> None:
@@ -3257,8 +4898,10 @@ class RoleManager(DashboardIntegration, commands.Cog):
             return
         lines = []
         for name, data in sorted(menus.items()):
+            policy = normalize_component_policy(data, select=True)
             lines.append(
-                f"`{name}` options: {humanize_list(data.get('options', []))} messages: {len(data.get('messages', [])):,}",
+                f"`{name}` mode: {policy['mode']} options: "
+                f"{humanize_list(data.get('options', []))} messages: {len(data.get('messages', [])):,}",
             )
         for page in pagify("\n".join(lines), page_length=1900):
             await ctx.send(page)
@@ -3555,6 +5198,15 @@ class RoleManager(DashboardIntegration, commands.Cog):
                 await self._clear_temp_role(member, role)
             for role in added_roles:
                 await self._maybe_track_temp_role(member, role)
+            if added_roles or removed_roles:
+                await self._record_role_audit(
+                    guild,
+                    action="automatic_role_rule",
+                    member_id=member.id,
+                    role_ids=[role.id for role in (*added_roles, *removed_roles)],
+                    source="external-role-rule",
+                    detail=(f"Added {len(added_roles)} and removed {len(removed_roles)} role(s)."),
+                )
         finally:
             self._role_rule_processing.discard(key)
 
@@ -3565,7 +5217,7 @@ class RoleManager(DashboardIntegration, commands.Cog):
         await self._restore_sticky_roles(member)
         if getattr(member, "pending", False):
             return
-        await self._apply_autoroles(member)
+        await self._schedule_autoroles(member)
 
     @commands.Cog.listener()
     async def on_member_update(
@@ -3576,7 +5228,7 @@ class RoleManager(DashboardIntegration, commands.Cog):
         if await self.bot.cog_disabled_in_guild(self, after.guild):
             return
         if getattr(before, "pending", False) and not getattr(after, "pending", False):
-            await self._apply_autoroles(after)
+            await self._schedule_autoroles(after)
         before_role_ids = {role.id for role in before.roles}
         after_role_ids = {role.id for role in after.roles}
         added_role_ids = after_role_ids - before_role_ids
@@ -3627,13 +5279,106 @@ class RoleManager(DashboardIntegration, commands.Cog):
                 check_cost=False,
             )
 
-    async def _apply_autoroles(self, member: discord.Member) -> None:
+    async def _resume_autorole_queue(self) -> None:
+        """Resume delayed autorole assignments which survived a bot restart."""
+        for guild_id, data in (await self.config.all_guilds()).items():
+            guild = self.bot.get_guild(guild_id)
+            if guild is None:
+                continue
+            pending = [
+                (member, item)
+                for item in data.get("autorole_queue", [])
+                if (member := guild.get_member(int(item.get("member_id", 0) or 0))) is not None
+            ]
+            await self.config.guild(guild).autorole_queue.set([item for _member, item in pending])
+            for member, item in pending:
+                key = (guild.id, member.id)
+                if key not in self._autorole_tasks:
+                    self._autorole_tasks[key] = asyncio.create_task(
+                        self._autorole_worker(
+                            member,
+                            run_at=float(item.get("run_at", self._now_ts())),
+                        ),
+                    )
+
+    async def _schedule_autoroles(self, member: discord.Member) -> None:
+        key = (member.guild.id, member.id)
+        previous = self._autorole_tasks.get(key)
+        if previous is not None and not previous.done():
+            previous.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await previous
         settings = await self.config.guild(member.guild).auto_roles()
+        delay = max(0, min(int(settings.get("delay_seconds", 0) or 0), 86_400))
+        run_at = self._now_ts() + delay
+        async with self.config.guild(member.guild).autorole_queue() as queue:
+            queue[:] = [item for item in queue if int(item.get("member_id", 0) or 0) != member.id]
+            queue.append({"member_id": member.id, "run_at": run_at})
+        self._autorole_tasks[key] = asyncio.create_task(self._autorole_worker(member, run_at=run_at))
+
+    async def _autorole_worker(
+        self,
+        member: discord.Member,
+        *,
+        run_at: float,
+    ) -> None:
+        key = (member.guild.id, member.id)
+        try:
+            settings = await self.config.guild(member.guild).auto_roles()
+            delay = max(0.0, run_at - self._now_ts())
+            if delay:
+                await asyncio.sleep(delay)
+            current = member.guild.get_member(member.id)
+            if current is None:
+                return
+            if await self.bot.cog_disabled_in_guild(self, current.guild):
+                return
+            minimum_age = max(0, int(settings.get("minimum_account_age_hours", 0) or 0))
+            account_age = datetime.now(timezone.utc) - current.created_at
+            if account_age < timedelta(hours=minimum_age):
+                await self._record_role_audit(
+                    current.guild,
+                    action="autorole_skipped",
+                    member_id=current.id,
+                    source="autorole",
+                    detail=f"Account younger than {minimum_age} hour(s).",
+                )
+                return
+            retries = max(1, min(int(settings.get("retries", 3) or 3), 10))
+            for attempt in range(retries):
+                try:
+                    if await self._apply_autoroles(current, settings=settings):
+                        return
+                    if attempt + 1 >= retries:
+                        return
+                    await asyncio.sleep(min(2 ** (attempt + 1), 30))
+                except discord.HTTPException:
+                    if attempt + 1 >= retries:
+                        raise
+                    await asyncio.sleep(min(2 ** (attempt + 1), 30))
+        except asyncio.CancelledError:
+            raise
+        except discord.HTTPException:
+            log.exception("Autorole delivery failed for member %s.", member.id)
+        finally:
+            async with self.config.guild(member.guild).autorole_queue() as queue:
+                queue[:] = [item for item in queue if int(item.get("member_id", 0) or 0) != member.id]
+            self._autorole_tasks.pop(key, None)
+
+    async def _apply_autoroles(
+        self,
+        member: discord.Member,
+        *,
+        settings: dict[str, Any] | None = None,
+    ) -> bool:
+        settings = settings or await self.config.guild(member.guild).auto_roles()
         if not settings.get("enabled"):
-            return
+            return True
         await self._wait_for_guild_verification(member)
-        role_ids = list(settings.get("all", []))
-        role_ids.extend(settings.get("bots" if member.bot else "humans", []))
+        role_ids = list(settings.get("all", [])) if settings.get("all_enabled", True) else []
+        target = "bots" if member.bot else "humans"
+        if settings.get(f"{target}_enabled", True):
+            role_ids.extend(settings.get(target, []))
         roles = [
             role
             for role_id in dict.fromkeys(role_ids)
@@ -3642,13 +5387,22 @@ class RoleManager(DashboardIntegration, commands.Cog):
             and role not in member.roles
         ]
         if not roles:
-            return
-        await self._give_roles(
+            return True
+        responses, added, _removed = await self._give_roles(
             member,
             roles,
             "RoleManager autorole.",
             check_cost=False,
         )
+        await self._record_role_audit(
+            member.guild,
+            action="autorole",
+            member_id=member.id,
+            role_ids=[role.id for role in added],
+            source="autorole",
+            detail=self._response_text(responses) if responses else "Assigned joining roles.",
+        )
+        return not any("Discord rejected" in response.reason for response in responses)
 
     @commands.Cog.listener()
     async def on_raw_reaction_add(
@@ -3777,6 +5531,63 @@ class RoleManager(DashboardIntegration, commands.Cog):
                 role.id,
                 member.id,
             )
+
+    @app_commands.command(
+        name="rolemanager-selfrole",
+        description="Add or remove one of this server's self roles.",
+    )
+    @app_commands.guild_only()
+    async def app_selfrole(
+        self,
+        interaction: discord.Interaction,
+        role: discord.Role,
+    ) -> None:
+        """Slash-command role picker for self-service roles."""
+        if interaction.guild is None or not isinstance(interaction.user, discord.Member):
+            await interaction.response.send_message("This can only be used in a server.", ephemeral=True)
+            return
+        if await self.bot.cog_disabled_in_guild(self, interaction.guild):
+            await interaction.response.send_message("RoleManager is disabled here.", ephemeral=True)
+            return
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        member = interaction.user
+        if role in member.roles:
+            if not await self.config.role(role).self_removable():
+                message = f"{role.name} is not self-removable."
+            else:
+                responses, removed = await self._remove_roles(member, [role], "Selfrole app command.")
+                message = self._response_text(responses) if responses else f"Removed {self._format_role_names(removed)}."
+        elif not await self.config.role(role).self_assignable():
+            message = f"{role.name} is not self-assignable."
+        elif getattr(member, "pending", False):
+            message = "Finish Discord membership screening before taking self roles."
+        elif wait := await self._check_guild_verification(member, interaction.guild):
+            retry_at = datetime.now(timezone.utc) + timedelta(seconds=int(wait))
+            message = f"Spend more time in this server first; try again {discord.utils.format_dt(retry_at, 'R')}."
+        else:
+            responses, added, _removed = await self._give_roles(member, [role], "Selfrole app command.")
+            message = self._response_text(responses) if responses else f"Added {self._format_role_names(added)}."
+        await interaction.followup.send(message, ephemeral=True)
+
+    @app_commands.command(
+        name="rolemanager-role-info",
+        description="Show information about a server role.",
+    )
+    @app_commands.guild_only()
+    async def app_role_info(
+        self,
+        interaction: discord.Interaction,
+        role: discord.Role,
+    ) -> None:
+        """Slash-command role report with Discord's native role picker."""
+        data = await self.config.role(role).all()
+        embed = discord.Embed(title=role.name, color=role.color)
+        embed.description = (
+            f"ID: `{role.id}`\nMembers: `{len(role.members)}`\nPosition: `{role.position}`\n"
+            f"Self assignable: `{bool(data.get('self_assignable'))}`\n"
+            f"Self removable: `{bool(data.get('self_removable'))}`\nSticky: `{bool(data.get('sticky'))}`"
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @commands.Cog.listener()
     async def on_raw_message_delete(

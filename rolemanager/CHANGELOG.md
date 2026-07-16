@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.4.0
+
+- Added verified RoleTools/RoleUtils migrations with automatic pre-import backups, bounded backup history, health checks, JSON exports, rollback, and live reaction reconciliation in add-only or full-sync mode.
+- Added button and select policies for toggle/add/remove/sync/exclusive behavior, required and blocked roles, per-member cooldowns, holder limits, temporary assignments, and concurrency locks.
+- Added advanced `key=value` member targeting with status, role, channel, voice, thread, join-age, and account-age filters plus reusable target presets.
+- Added persistent background bulk jobs with progress, cancellation, recent history, and JSON export.
+- Added a bounded role-change audit journal with optional live channel delivery and dashboard controls.
+- Added role reports, member/color exports, unused-role discovery, cloning, guarded deletion, hierarchy movement, individual permission editing, and role icons.
+- Added restart-safe autorole queueing with independent all/human/bot lists, delivery delay, minimum account age, retry policy, and audit records.
+- Added temporary-role reasons, grant metadata, optional expiry notifications, extension, immediate revocation, and expiry auditing.
+- Added slash-command role pickers for self roles and role information.
+- Expanded the standalone dashboard with every new policy and safety setting, target/job visibility, migration recovery tools, and audit controls.
+- Retained backward-compatible toggle behavior for existing select menus while adding the new component policy modes.
+
 ## 0.3.2
 
 - Reconnected existing imported reaction-role panels with explicit add/remove event listeners.

@@ -19,11 +19,14 @@ Combined role management tools for Red-DiscordBot.
 - Role-change rules that react to roles added or removed manually, by another cog, or by RoleManager.
 - Reaction roles that can be attached to existing messages or generated as a panel.
 - Persistent button roles and select-menu roles.
-- Autoroles for all new members, humans only, or bots only.
+- Component modes, required/blocked-role locks, cooldowns, capacity limits, and temporary component roles.
+- Restart-safe autoroles for all members, humans, or bots with independent switches, delay, account-age safety, and retries.
 - Sticky roles that are restored when a member rejoins.
 - Temporary roles with explicit durations or a per-role default duration.
 - Bulk role add/remove tools for members, roles, channels, humans, bots, online members, or everyone.
-- Dry-run previews, cleanup commands, and RoleTools/RoleUtils import helpers.
+- Advanced member queries, reusable target presets, cancellable background jobs, and dry-run previews.
+- Role lifecycle/reporting tools and a bounded audit journal with optional live channel delivery.
+- Verified RoleTools/RoleUtils imports with backups, validation, rollback, and live reaction reconciliation.
 - Existing RoleTools/RoleUtils reaction-role messages remain usable after import; RoleManager repairs legacy emoji keys and handles their reactions directly.
 - Full Red-Web-Dashboard support for policies, role rules, role/member operations, autoroles, sticky and temporary roles, reaction roles, components, cleanup, and imports.
 
@@ -57,29 +60,56 @@ Combined role management tools for Red-DiscordBot.
 | `[p]rolemanager role color <role> <color>` | Change a role color. |
 | `[p]rolemanager role hoist <role> [true|false]` | Toggle whether a role is shown separately. |
 | `[p]rolemanager role mentionable <role> [true|false]` | Toggle whether a role can be mentioned by everyone. |
+| `[p]rolemanager role info <role>` | Show Discord and RoleManager details. |
+| `[p]rolemanager role members <role>` | List or export members with a role. |
+| `[p]rolemanager role colors` | Export the server role color palette. |
+| `[p]rolemanager role unused` | Find editable roles with no members. |
+| `[p]rolemanager role clone <role> [name]` | Clone a role's appearance and permissions. |
+| `[p]rolemanager role delete <role> CONFIRM` | Safely delete a role with explicit confirmation. |
+| `[p]rolemanager role position <role> <position>` | Move a role in the hierarchy. |
+| `[p]rolemanager role permission <role> <permission> <true|false>` | Change one role permission. |
+| `[p]rolemanager role icon <role> [emoji|none]` | Set a role icon from emoji or an attachment. |
 | `[p]rolemanager giverole <role> <targets...>` | Bulk-add a role. Targets can be members, roles, text channels, `everyone`, `here`, `humans`, or `bots`. |
 | `[p]rolemanager removerole <role> <targets...>` | Bulk-remove a role from the same target types. |
 | `[p]rolemanager dryrun add <role> <targets...>` | Preview a bulk add without changing roles. |
 | `[p]rolemanager dryrun remove <role> <targets...>` | Preview a bulk removal without changing roles. |
+| `[p]rolemanager target preview <query>` | Preview advanced `key=value` targeting. |
+| `[p]rolemanager target save <name> <query>` | Save a reusable targeting query. |
+| `[p]rolemanager target run <add|remove> <role> <name>` | Apply a saved target preset. |
+| `[p]rolemanager job start <add|remove> <role> <query>` | Start a persistent background role job. |
+| `[p]rolemanager job list [id]` | Show job progress and recent results. |
+| `[p]rolemanager job cancel <id>` | Cancel a running job. |
 | `[p]rolemanager autorole add <role> [all|humans|bots]` | Add an autorole target. |
 | `[p]rolemanager autorole toggle [true|false]` | Enable, disable, or toggle autoroles. |
+| `[p]rolemanager autorole settings <delay> <account_age_hours> <retries> [list toggles...]` | Configure resilient delivery. |
 | `[p]rolemanager sticky set <role> [true|false]` | Mark a role as sticky for future rejoins. |
 | `[p]rolemanager sticky add <member> <role>` | Force a sticky role onto one member. |
-| `[p]rolemanager temp give <member> <role> <duration>` | Give a temporary role. |
+| `[p]rolemanager temp give <member> <role> <duration> [| reason | notify]` | Give a temporary role with optional expiry notification. |
 | `[p]rolemanager temp setduration <role> [duration]` | Set or clear a default temp duration for assignments made by this cog. |
 | `[p]rolemanager temp list [member]` | List pending temporary roles. |
+| `[p]rolemanager temp extend <member> <role> <duration>` | Move a temporary expiry forward from now. |
+| `[p]rolemanager temp revoke <member> <role> [reason]` | Immediately revoke a temporary role. |
 | `[p]rolemanager reactrole bind <message> <emoji> <role> [remove_on_unreact]` | Bind an emoji on an existing message. |
 | `[p]rolemanager reactrole create [channel] <title> | <emoji>;<role> | ...` | Create a reaction-role panel. |
 | `[p]rolemanager reactrole unbind <message> <emoji>` | Remove one emoji binding. |
 | `[p]rolemanager reactrole clear <message>` | Remove all bindings for a message. |
 | `[p]rolemanager reactrole cleanup` | Remove stale reaction-role records. |
 | `[p]rolemanager reactrole list` | List configured reaction roles. |
+| `[p]rolemanager reactrole reset <message> CONFIRM` | Clear and rebuild a panel's reactions. |
+| `[p]rolemanager reactrole sync [add|sync] [CONFIRM]` | Reconcile roles against live reactions; full sync requires confirmation. |
 | `[p]rolemanager button create <name> <role> [style] [emoji] [label]` | Save a persistent role button. |
+| `[p]rolemanager button policy <name> ...` | Configure button behavior, locks, cooldown, capacity, and duration. |
 | `[p]rolemanager select option create <name> <role> [emoji | label | description]` | Save a select-menu option. |
 | `[p]rolemanager select create <name> <options_csv> [min] [max] [placeholder]` | Save a select menu. |
+| `[p]rolemanager select policy <name> ...` | Configure menu behavior, locks, cooldown, capacity, and duration. |
 | `[p]rolemanager message send <channel> <buttons_csv> [selects_csv] [text]` | Send a component role panel. |
 | `[p]rolemanager import roletools` | Import compatible settings from TrustyJAID RoleTools config. |
 | `[p]rolemanager import roleutils` | Import compatible settings from Seina RoleUtils config. |
+| `[p]rolemanager migration inspect <roletools|roleutils>` | Preview legacy records without changing configuration. |
+| `[p]rolemanager migration verify` | Validate imported/configured records. |
+| `[p]rolemanager migration reconcile [add|sync] [CONFIRM]` | Reapply roles from live panels; full sync requires confirmation. |
+| `[p]rolemanager migration backups|backup|rollback|export` | Manage migration safety and recovery. |
+| `[p]rolemanager audit channel|list|export|clear` | Configure and inspect the audit journal. |
 
 Duration examples: `30m`, `2 hours`, `7d`, `1 week 2 days`.
 
@@ -99,17 +129,17 @@ Existing required, inclusive, and exclusive policies are also enforced when a ro
 
 ## Dashboard
 
-The Red-Web-Dashboard page is organized into responsive tabs for overview, role setup, member operations, role panels, and data/imports. It supports guild atomic settings, role creation and editing, a complete policy overview, mutual include/exclude links, role-change rule creation and editing, autoroles, single-member and bulk role operations with dry-run previews, member sticky roles, temporary-role grants, reaction panel creation and maintenance, persistent component creation/editing/cleanup, and RoleTools/RoleUtils imports.
+The Red-Web-Dashboard page is organized into responsive tabs for overview, role setup, member operations, role panels, and data/imports. It exposes the full autorole delivery policy, advanced target presets and job status, component behavior and access controls, migration verification/reconciliation/backups/restore, audit delivery/history, policies, rules, sticky/temp roles, reaction panels, and component maintenance.
 
 Live dashboard role operations require the confirmation checkbox. Imports also require explicit confirmation because compatible destination settings may be replaced.
 
 ## Requirements
 
-- Red-DiscordBot 3.5.0 or newer.
+- Red-DiscordBot 3.5.0 or newer on Python 3.9+.
 - The bot needs `Manage Roles` and its top role must be above any managed role.
 - Reaction-role setup also needs `Add Reactions`, `Read Message History`, and access to the target channel.
 - Server Members intent is required for external role-change rules and recommended for autoroles, sticky roles, and accurate bulk targeting.
 
 ## Data
 
-This cog stores role IDs, channel/message IDs, emoji keys, role-policy and role-change-rule settings, role costs, component definitions, temporary-role expiry timestamps, and Discord user IDs for sticky and temporary role assignment. It does not store message content except optional component panel text sent directly to Discord.
+This cog stores role IDs, channel/message IDs, emoji keys, policies and rules, role costs, component definitions, target presets, bounded job/audit records, migration backups, temporary-role metadata and expiry timestamps, and the Discord user IDs needed to perform those workflows. It does not store message content except optional component panel text sent directly to Discord.

@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import html
 import logging
+import secrets
 import typing
 from datetime import datetime, timezone
 
 import discord
 from redbot.core import bank, commands
+
+from .advanced import normalize_component_policy
 
 log = logging.getLogger("red.taakoscogs.rolemanager.dashboard")
 
@@ -166,6 +170,7 @@ class DashboardIntegration:
             "save_role_flags": "roles",
             "make_inclusive_mutual": "roles",
             "make_exclusive_mutual": "roles",
+            "role_lifecycle": "roles",
             "save_role_rule": "roles",
             "delete_role_rule": "roles",
             "save_autoroles": "roles",
@@ -173,6 +178,7 @@ class DashboardIntegration:
             "sticky_member_action": "members",
             "give_temp_role": "members",
             "clear_temp_role": "members",
+            "temp_role_action": "members",
             "bind_reaction_role": "panels",
             "create_reaction_panel": "panels",
             "refresh_reaction_message": "panels",
@@ -189,6 +195,17 @@ class DashboardIntegration:
             "edit_component_message": "panels",
             "cleanup_component_messages": "panels",
             "import_settings": "data",
+            "inspect_import": "data",
+            "migration_verify": "data",
+            "migration_reconcile": "data",
+            "migration_backup": "data",
+            "migration_restore": "data",
+            "save_audit_settings": "data",
+            "clear_audit_history": "data",
+            "save_target_preset": "members",
+            "delete_target_preset": "members",
+            "start_bulk_job": "members",
+            "cancel_bulk_job": "members",
         }
         return action_tabs.get(action, "overview")
 
@@ -230,6 +247,13 @@ class DashboardIntegration:
             role = self._dashboard_role_from_form(guild, form_data, "role_id")
             self._dashboard_check_role_manageable(guild, role, member)
             await self._dashboard_save_role_flags(guild, member, role, form_data)
+            await self._record_role_audit(
+                guild,
+                action="role_settings_changed",
+                role_ids=[role.id],
+                actor_id=member.id if member else None,
+                source="dashboard",
+            )
             messages.append(
                 {
                     "message": f"Saved role settings for {role.name}.",
@@ -273,6 +297,18 @@ class DashboardIntegration:
                 },
             )
             return role.id, messages
+
+        if action == "role_lifecycle":
+            role = self._dashboard_role_from_form(guild, form_data, "role_id")
+            self._dashboard_check_role_manageable(guild, role, member)
+            message, next_role_id = await self._dashboard_role_lifecycle(
+                guild,
+                member,
+                role,
+                form_data,
+            )
+            messages.append({"message": message, "category": "success"})
+            return next_role_id, messages
 
         if action == "save_role_rule":
             name = await self._dashboard_save_role_rule(guild, member, form_data)
@@ -388,7 +424,7 @@ class DashboardIntegration:
             return selected_role_id, messages
 
         if action == "create_select_menu":
-            name = await self._dashboard_create_select_menu(guild, form_data)
+            name = await self._dashboard_create_select_menu(guild, member, form_data)
             messages.append(
                 {"message": f"Select menu `{name}` saved.", "category": "success"},
             )
@@ -451,13 +487,149 @@ class DashboardIntegration:
             return selected_role_id, messages
 
         if action == "import_settings":
-            source, count = await self._dashboard_import_settings(guild, form_data)
+            source, count, backup_id = await self._dashboard_import_settings(guild, form_data)
             messages.append(
                 {
-                    "message": f"Imported {source} settings. Records touched: {count:,}.",
+                    "message": f"Imported {source} settings. Records touched: {count:,}. Backup: {backup_id}.",
                     "category": "success",
                 },
             )
+            return selected_role_id, messages
+
+        if action == "inspect_import":
+            source = self._dash_value(form_data, "import_source").lower()
+            counts = await self._inspect_legacy_source(guild, source)
+            summary = ", ".join(f"{key.replace('_', ' ')}: {value}" for key, value in counts.items())
+            messages.append({"message": f"{source.title()} preview — {summary}", "category": "success"})
+            return selected_role_id, messages
+
+        if action == "migration_verify":
+            health = await self._reaction_health(guild)
+            messages.append(
+                {
+                    "message": (
+                        f"Migration health: {health['valid']}/{health['messages']} reaction messages valid; "
+                        f"{len(health['issues'])} issue(s)."
+                    ),
+                    "category": "success" if not health["issues"] else "warning",
+                },
+            )
+            return selected_role_id, messages
+
+        if action == "migration_reconcile":
+            mode = self._dash_value(form_data, "reconcile_mode", "add").lower()
+            if mode not in {"add", "sync"}:
+                raise commands.BadArgument("Reconciliation mode must be add or sync.")
+            if mode == "sync" and not self._dash_bool(form_data, "confirm_full_sync"):
+                raise commands.BadArgument("Confirm full sync before removing stale reaction roles.")
+            stats = await self._reconcile_reaction_roles(guild, remove_missing=mode == "sync")
+            messages.append(
+                {
+                    "message": (
+                        f"Reconciled {stats['messages']} messages: {stats['added']} added, "
+                        f"{stats['removed']} removed, {stats['missing']} unavailable."
+                    ),
+                    "category": "success",
+                },
+            )
+            return selected_role_id, messages
+
+        if action == "migration_backup":
+            backup_id = await self._create_config_backup(guild, self._dash_value(form_data, "backup_label", "dashboard")[:80])
+            messages.append({"message": f"Created backup {backup_id}.", "category": "success"})
+            return selected_role_id, messages
+
+        if action == "migration_restore":
+            backup_id = self._dash_value(form_data, "backup_id").strip()
+            if not self._dash_bool(form_data, "confirm_restore"):
+                raise commands.BadArgument("Confirm the backup restore first.")
+            safety = await self._create_config_backup(guild, "before-dashboard-restore")
+            if not await self._restore_config_backup(guild, backup_id):
+                raise commands.BadArgument("That backup was not found.")
+            messages.append(
+                {
+                    "message": f"Restored {backup_id}. Safety backup: {safety}.",
+                    "category": "success",
+                },
+            )
+            return selected_role_id, messages
+
+        if action == "save_audit_settings":
+            channel_id = self._dash_optional_id(form_data, "audit_channel_id")
+            if channel_id is not None and not isinstance(guild.get_channel(channel_id), discord.TextChannel):
+                raise commands.BadArgument("Audit channel must be a text channel.")
+            await self.config.guild(guild).audit_channel_id.set(channel_id)
+            messages.append({"message": "Audit delivery settings saved.", "category": "success"})
+            return selected_role_id, messages
+
+        if action == "clear_audit_history":
+            if not self._dash_bool(form_data, "confirm_audit_clear"):
+                raise commands.BadArgument("Confirm clearing the audit history first.")
+            await self.config.guild(guild).audit_history.clear()
+            messages.append({"message": "Audit history cleared.", "category": "success"})
+            return selected_role_id, messages
+
+        if action == "save_target_preset":
+            name = self._dash_value(form_data, "target_name").casefold().strip()
+            query = self._dash_value(form_data, "target_query").strip()
+            if not name or len(name) > 50:
+                raise commands.BadArgument("Target preset names must be 1-50 characters.")
+            matched = await self._members_from_query(guild, query)
+            async with self.config.guild(guild).target_presets() as presets:
+                presets[name] = query
+            messages.append(
+                {"message": f"Saved target {name}; it currently matches {len(matched)} members.", "category": "success"},
+            )
+            return selected_role_id, messages
+
+        if action == "delete_target_preset":
+            name = self._dash_value(form_data, "target_name").casefold().strip()
+            async with self.config.guild(guild).target_presets() as presets:
+                if presets.pop(name, None) is None:
+                    raise commands.BadArgument("That target preset was not found.")
+            messages.append({"message": f"Deleted target {name}.", "category": "success"})
+            return selected_role_id, messages
+
+        if action == "start_bulk_job":
+            if not self._dash_bool(form_data, "confirm_bulk_job"):
+                raise commands.BadArgument("Confirm starting the background job first.")
+            job_action = self._dash_value(form_data, "job_action", "add").lower()
+            if job_action not in {"add", "remove"}:
+                raise commands.BadArgument("Job action must be add or remove.")
+            role = self._dashboard_role_from_form(guild, form_data, "job_role_id")
+            self._dashboard_check_role_manageable(guild, role, member)
+            query = self._dash_value(form_data, "job_query").strip()
+            matched = await self._members_from_query(guild, query)
+            if not matched:
+                raise commands.BadArgument("No members matched that target query.")
+            job_id = secrets.token_hex(3)
+            record = {
+                "id": job_id,
+                "action": job_action,
+                "role_id": role.id,
+                "query": query,
+                "actor_id": member.id if member else None,
+                "status": "running",
+                "total": len(matched),
+                "processed": 0,
+                "completed": 0,
+                "skipped": 0,
+                "failed": 0,
+                "created_at": self._now_ts(),
+            }
+            await self._save_bulk_job(guild, record)
+            key = f"{guild.id}:{job_id}"
+            self._bulk_tasks[key] = asyncio.create_task(self._run_bulk_job(guild, record, [target.id for target in matched]))
+            messages.append({"message": f"Started job {job_id} for {len(matched)} members.", "category": "success"})
+            return selected_role_id, messages
+
+        if action == "cancel_bulk_job":
+            job_id = self._dash_value(form_data, "job_id").strip()
+            task = self._bulk_tasks.get(f"{guild.id}:{job_id}")
+            if task is None or task.done():
+                raise commands.BadArgument("That job is not currently running.")
+            task.cancel()
+            messages.append({"message": f"Cancellation requested for {job_id}.", "category": "success"})
             return selected_role_id, messages
 
         if action == "clear_temp_role":
@@ -468,6 +640,41 @@ class DashboardIntegration:
                     "category": "success",
                 },
             )
+            return selected_role_id, messages
+
+        if action == "temp_role_action":
+            target = guild.get_member(self._dash_required_id(form_data, "temp_action_member_id"))
+            if target is None:
+                raise commands.BadArgument("That member is not in the server.")
+            role = self._dashboard_role_from_form(guild, form_data, "temp_action_role_id")
+            self._dashboard_check_role_manageable(guild, role, member)
+            operation = self._dash_value(form_data, "temp_action_operation").lower()
+            if operation == "extend":
+                seconds = self._parse_duration(self._dash_value(form_data, "temp_action_duration"))
+                found = False
+                async with self.config.guild(guild).temporary_roles() as records:
+                    for item in records:
+                        if int(item.get("member_id", 0)) == target.id and int(item.get("role_id", 0)) == role.id:
+                            item["expires_at"] = self._now_ts() + seconds
+                            found = True
+                if not found:
+                    raise commands.BadArgument("That temporary assignment was not found.")
+                message = f"Extended {role.name} for {target} from now."
+            elif operation == "revoke":
+                if not self._dash_bool(form_data, "confirm_temp_revoke"):
+                    raise commands.BadArgument("Confirm revoking the role first.")
+                responses, removed = await self._remove_roles(
+                    target,
+                    [role],
+                    "Temporary role revoked from RoleManager dashboard.",
+                )
+                await self._clear_temp_role(target, role)
+                if responses and not removed:
+                    raise commands.BadArgument(self._response_text(responses))
+                message = f"Revoked {role.name} from {target}."
+            else:
+                raise commands.BadArgument("Temporary role action must be extend or revoke.")
+            messages.append({"message": message, "category": "success"})
             return selected_role_id, messages
 
         if action:
@@ -813,8 +1020,137 @@ class DashboardIntegration:
                 form_data,
                 "auto_bots",
             ),
+            "all_enabled": self._dash_bool(form_data, "auto_all_enabled"),
+            "humans_enabled": self._dash_bool(form_data, "auto_humans_enabled"),
+            "bots_enabled": self._dash_bool(form_data, "auto_bots_enabled"),
+            "delay_seconds": self._dashboard_bounded_int(
+                form_data,
+                "autorole_delay",
+                0,
+                86_400,
+            ),
+            "minimum_account_age_hours": self._dashboard_bounded_int(
+                form_data,
+                "autorole_account_age",
+                0,
+                876_000,
+            ),
+            "retries": self._dashboard_bounded_int(
+                form_data,
+                "autorole_retries",
+                1,
+                10,
+            ),
         }
         await self.config.guild(guild).auto_roles.set(settings)
+
+    async def _dashboard_role_lifecycle(
+        self,
+        guild: discord.Guild,
+        actor: discord.Member | None,
+        role: discord.Role,
+        form_data: typing.Any,
+    ) -> tuple[str, int | None]:
+        operation = self._dash_value(form_data, "lifecycle_operation").lower()
+        reason = f"RoleManager dashboard lifecycle action by {actor or 'bot owner'}."
+        actor_id = actor.id if actor else None
+        if operation == "clone":
+            clone = await guild.create_role(
+                name=self._dash_value(form_data, "lifecycle_value", f"{role.name} copy")[:100],
+                permissions=role.permissions,
+                color=role.color,
+                hoist=role.hoist,
+                mentionable=role.mentionable,
+                reason=reason,
+            )
+            await self._record_role_audit(
+                guild,
+                action="role_cloned",
+                role_ids=[role.id, clone.id],
+                actor_id=actor_id,
+                source="dashboard",
+            )
+            return f"Cloned {role.name} to {clone.name}.", clone.id
+        if operation == "position":
+            position = self._dashboard_bounded_int(
+                form_data,
+                "lifecycle_value",
+                1,
+                max(1, guild.me.top_role.position - 1),
+            )
+            await role.edit(position=position, reason=reason)
+            await self._record_role_audit(
+                guild,
+                action="role_position_changed",
+                role_ids=[role.id],
+                actor_id=actor_id,
+                source="dashboard",
+                detail=str(position),
+            )
+            return f"Moved {role.name} to position {position}.", role.id
+        if operation in {"permission_on", "permission_off"}:
+            permission = self._dash_value(form_data, "lifecycle_value").lower().replace(" ", "_")
+            if permission not in discord.Permissions.VALID_FLAGS:
+                raise commands.BadArgument("Enter a valid Discord permission name.")
+            enabled = operation == "permission_on"
+            permissions = role.permissions
+            permissions.update(**{permission: enabled})
+            await role.edit(permissions=permissions, reason=reason)
+            await self._record_role_audit(
+                guild,
+                action="role_permission_changed",
+                role_ids=[role.id],
+                actor_id=actor_id,
+                source="dashboard",
+                detail=f"{permission}={enabled}",
+            )
+            return f"Set {permission} on {role.name} to {enabled}.", role.id
+        if operation == "icon":
+            value = self._dash_value(form_data, "lifecycle_value").strip()
+            icon = None if value.casefold() in {"", "none", "clear", "off"} else value
+            try:
+                await role.edit(display_icon=icon, reason=reason)
+            except TypeError as exc:
+                raise commands.BadArgument(
+                    "This Red/Discord.py version does not support role icons.",
+                ) from exc
+            await self._record_role_audit(
+                guild,
+                action="role_icon_changed",
+                role_ids=[role.id],
+                actor_id=actor_id,
+                source="dashboard",
+            )
+            return f"Updated the icon for {role.name}.", role.id
+        if operation == "delete":
+            if not self._dash_bool(form_data, "confirm_lifecycle"):
+                raise commands.BadArgument("Confirm deleting this role first.")
+            name = role.name
+            role_id = role.id
+            await role.delete(reason=reason)
+            await self._record_role_audit(
+                guild,
+                action="role_deleted",
+                role_ids=[role_id],
+                actor_id=actor_id,
+                source="dashboard",
+                detail=name,
+            )
+            return f"Deleted {name}.", None
+        raise commands.BadArgument("Choose a valid lifecycle operation.")
+
+    def _dashboard_bounded_int(
+        self,
+        form_data: typing.Any,
+        key: str,
+        minimum: int,
+        maximum: int,
+    ) -> int:
+        try:
+            value = int(self._dash_value(form_data, key, str(minimum)) or minimum)
+        except ValueError as exc:
+            raise commands.BadArgument(f"{key} must be a whole number.") from exc
+        return max(minimum, min(value, maximum))
 
     async def _dashboard_sticky_member_action(
         self,
@@ -890,15 +1226,31 @@ class DashboardIntegration:
         duration = self._parse_duration(
             self._dash_value(form_data, "temp_give_duration"),
         )
+        reason = self._dash_value(
+            form_data,
+            "temp_give_reason",
+            "Temporary role granted from the RoleManager dashboard.",
+        )[:500]
+        notify_member = self._dash_bool(form_data, "temp_notify_member")
         responses, added, _removed = await self._give_roles(
             target,
             [role],
-            "RoleManager dashboard temporary role.",
+            reason,
             check_cost=False,
             duration_overrides={role.id: duration},
         )
         if responses and role not in added:
             raise commands.BadArgument(self._response_text(responses))
+        async with self.config.guild(guild).temporary_roles() as records:
+            for item in reversed(records):
+                if int(item.get("member_id", 0)) == target.id and int(item.get("role_id", 0)) == role.id:
+                    item.update(
+                        granted_by=actor.id if actor else None,
+                        reason=reason,
+                        notify_channel_id=None,
+                        notify_member=notify_member,
+                    )
+                    break
         return f"Added {role.name} to {target} for {self._format_duration(duration)}."
 
     async def _dashboard_role_operation(
@@ -1007,14 +1359,18 @@ class DashboardIntegration:
         self,
         guild: discord.Guild,
         form_data: typing.Any,
-    ) -> tuple[str, int]:
+    ) -> tuple[str, int, str]:
         if not self._dash_bool(form_data, "confirm_import"):
             raise commands.BadArgument("Confirm the import before replacing settings.")
         source = self._dash_value(form_data, "import_source").lower()
+        backup_id = await self._create_config_backup(
+            guild,
+            f"before-{source}-dashboard-import",
+        )
         if source == "roletools":
-            return "RoleTools", await self._import_roletools_settings(guild)
+            return "RoleTools", await self._import_roletools_settings(guild), backup_id
         if source == "roleutils":
-            return "RoleUtils", await self._import_roleutils_settings(guild)
+            return "RoleUtils", await self._import_roleutils_settings(guild), backup_id
         raise commands.BadArgument("Import source must be RoleTools or RoleUtils.")
 
     def _dashboard_valid_role_ids(
@@ -1119,8 +1475,8 @@ class DashboardIntegration:
         data = react_roles.get(str(message_id))
         if not data:
             raise commands.BadArgument("That message has no configured reaction roles.")
-        channel = guild.get_channel(int(data.get("channel_id", 0)))
-        if not isinstance(channel, discord.TextChannel):
+        channel = guild.get_channel_or_thread(int(data.get("channel_id", 0)))
+        if not isinstance(channel, (discord.TextChannel, discord.Thread)):
             raise commands.BadArgument(
                 "The configured reaction-role channel is missing.",
             )
@@ -1143,8 +1499,8 @@ class DashboardIntegration:
         removed = 0
         async with self.config.guild(guild).react_roles() as react_roles:
             for message_id, data in list(react_roles.items()):
-                channel = guild.get_channel(int(data.get("channel_id", 0)))
-                if not isinstance(channel, discord.TextChannel):
+                channel = guild.get_channel_or_thread(int(data.get("channel_id", 0)))
+                if not isinstance(channel, (discord.TextChannel, discord.Thread)):
                     del react_roles[message_id]
                     self._reaction_message_cache.discard(int(message_id))
                     removed += 1
@@ -1266,15 +1622,37 @@ class DashboardIntegration:
         self._dashboard_check_role_manageable(guild, role, member)
         await self.config.role(role).self_assignable.set(True)
         await self.config.role(role).self_removable.set(True)
-        data = {
-            "role_id": role.id,
-            "label": self._dash_value(form_data, "button_label", f"@{role.name}")[:80],
-            "emoji": self._dash_value(form_data, "button_emoji").strip() or None,
-            "style": self._button_style_value(
-                self._dash_value(form_data, "button_style", "secondary"),
-            ),
-            "messages": [],
-        }
+        data = normalize_component_policy(
+            {
+                "role_id": role.id,
+                "label": self._dash_value(form_data, "button_label", f"@{role.name}")[:80],
+                "emoji": self._dash_value(form_data, "button_emoji").strip() or None,
+                "style": self._button_style_value(
+                    self._dash_value(form_data, "button_style", "secondary"),
+                ),
+                "mode": self._dash_value(form_data, "button_mode", "toggle"),
+                "cooldown_seconds": self._dashboard_bounded_int(form_data, "button_cooldown", 0, 86_400),
+                "max_holders": self._dashboard_bounded_int(form_data, "button_max_holders", 0, 1_000_000),
+                "temp_seconds": self._dashboard_bounded_int(form_data, "button_temp_seconds", 0, 31_536_000),
+                "required_role_ids": self._dashboard_valid_role_ids(
+                    guild,
+                    member,
+                    form_data,
+                    "button_required_roles",
+                    check_manageable=False,
+                ),
+                "blocked_role_ids": self._dashboard_valid_role_ids(
+                    guild,
+                    member,
+                    form_data,
+                    "button_blocked_roles",
+                    check_manageable=False,
+                ),
+                "messages": [],
+            },
+        )
+        if data["mode"] != self._dash_value(form_data, "button_mode", "toggle").lower():
+            raise commands.BadArgument("Button behavior must be toggle, add, or remove.")
         old_role_id = None
         async with self.config.guild(guild).buttons() as buttons:
             old = buttons.get(name)
@@ -1372,6 +1750,7 @@ class DashboardIntegration:
     async def _dashboard_create_select_menu(
         self,
         guild: discord.Guild,
+        member: discord.Member | None,
         form_data: typing.Any,
     ) -> str:
         name = self._dash_value(form_data, "menu_name").strip().lower()
@@ -1398,17 +1777,42 @@ class DashboardIntegration:
         min_values = max(0, min(min_values, 25))
         max_values = max(1, min(max_values, len(option_names), 25))
         min_values = min(min_values, max_values)
-        data = {
-            "options": option_names,
-            "min_values": min_values,
-            "max_values": max_values,
-            "placeholder": self._dash_value(
-                form_data,
-                "menu_placeholder",
-                "Pick roles",
-            )[:100],
-            "messages": [],
-        }
+        data = normalize_component_policy(
+            {
+                "options": option_names,
+                "min_values": min_values,
+                "max_values": max_values,
+                "placeholder": self._dash_value(
+                    form_data,
+                    "menu_placeholder",
+                    "Pick roles",
+                )[:100],
+                "mode": self._dash_value(form_data, "menu_mode", "toggle"),
+                "cooldown_seconds": self._dashboard_bounded_int(form_data, "menu_cooldown", 0, 86_400),
+                "max_holders": self._dashboard_bounded_int(form_data, "menu_max_holders", 0, 1_000_000),
+                "temp_seconds": self._dashboard_bounded_int(form_data, "menu_temp_seconds", 0, 31_536_000),
+                "required_role_ids": self._dashboard_valid_role_ids(
+                    guild,
+                    member,
+                    form_data,
+                    "menu_required_roles",
+                    check_manageable=False,
+                ),
+                "blocked_role_ids": self._dashboard_valid_role_ids(
+                    guild,
+                    member,
+                    form_data,
+                    "menu_blocked_roles",
+                    check_manageable=False,
+                ),
+                "messages": [],
+            },
+            select=True,
+        )
+        if data["mode"] != self._dash_value(form_data, "menu_mode", "toggle").lower():
+            raise commands.BadArgument(
+                "Menu behavior must be toggle, sync, exclusive, or add.",
+            )
         async with self.config.guild(guild).select_menus() as menus:
             old = menus.get(name)
             if old:
@@ -1505,6 +1909,11 @@ class DashboardIntegration:
         select_options = await self.config.guild(guild).select_options()
         select_menus = await self.config.guild(guild).select_menus()
         role_rules = await self.config.guild(guild).role_rules()
+        target_presets = await self.config.guild(guild).target_presets()
+        bulk_jobs = await self.config.guild(guild).bulk_jobs()
+        backups = await self.config.guild(guild).backups()
+        audit_channel_id = await self.config.guild(guild).audit_channel_id()
+        audit_history = await self.config.guild(guild).audit_history()
         atomic = await self.config.guild(guild).atomic()
         csrf = self._dash_csrf(kwargs)
         active_tab = self._dashboard_active_tab(kwargs)
@@ -1610,6 +2019,7 @@ class DashboardIntegration:
             <section class="rmdash-tab-panel{self._dashboard_active_class("members", active_tab)}"
             data-tab-panel="members" id="rmdash-panel-members" role="tabpanel" aria-labelledby="rmdash-tab-members">
                 {self._dashboard_role_operations_section(guild, csrf)}
+                {self._dashboard_targets_section(guild, target_presets, bulk_jobs, csrf)}
                 {self._dashboard_sticky_section(guild, csrf)}
                 {self._dashboard_temporary_roles_section(guild, temp_roles, csrf)}
             </section>
@@ -1621,6 +2031,7 @@ class DashboardIntegration:
             <section class="rmdash-tab-panel{self._dashboard_active_class("data", active_tab)}" data-tab-panel="data"
             id="rmdash-panel-data" role="tabpanel" aria-labelledby="rmdash-tab-data">
                 {self._dashboard_import_section(csrf)}
+                {self._dashboard_data_tools_section(guild, backups, audit_channel_id, audit_history, csrf)}
             </section>
             {self._dashboard_tabs_script()}
         </div>
@@ -2019,10 +2430,156 @@ class DashboardIntegration:
             <h3>Import Existing Cog Settings</h3>
             <form method="POST">
                 {csrf}
-                <input type="hidden" name="action" value="import_settings">
                 {import_source_select}
                 {self._checkbox("confirm_import", "Confirm replacing compatible RoleManager settings", False)}
-                <button class="rmdash-btn danger" type="submit">Import Settings</button>
+                <button class="rmdash-btn secondary" name="action" value="inspect_import" type="submit">
+                Preview Without Changes</button>
+                <button class="rmdash-btn danger" name="action" value="import_settings" type="submit">
+                Import Settings</button>
+            </form>
+        </div>
+        """
+
+    def _dashboard_targets_section(
+        self,
+        guild: discord.Guild,
+        presets: dict[str, str],
+        jobs: list[dict[str, typing.Any]],
+        csrf: str,
+    ) -> str:
+        preset_rows = (
+            "".join(
+                f"<tr><td>{self._h(name)}</td><td><code>{self._h(query)}</code></td><td>"
+                f'<form method="POST" class="rmdash-inline">{csrf}'
+                '<input type="hidden" name="action" value="delete_target_preset">'
+                f'<input type="hidden" name="target_name" value="{self._h(name)}">'
+                '<button class="rmdash-btn danger" type="submit">Delete</button></form></td></tr>'
+                for name, query in sorted(presets.items())
+            )
+            or '<tr><td colspan="3" class="rmdash-muted">No saved target presets.</td></tr>'
+        )
+        job_rows = (
+            "".join(
+                "<tr>"
+                f"<td>{self._h(item.get('id'))}</td><td>{self._h(item.get('status'))}</td>"
+                f"<td>{self._h(item.get('action'))} role {self._h(item.get('role_id'))}</td>"
+                f"<td>{int(item.get('processed', 0))}/{int(item.get('total', 0))}</td>"
+                f'<td><form method="POST" class="rmdash-inline">{csrf}'
+                '<input type="hidden" name="action" value="cancel_bulk_job">'
+                f'<input type="hidden" name="job_id" value="{self._h(item.get("id"))}">'
+                '<button class="rmdash-btn danger" type="submit">Cancel</button></form></td></tr>'
+                for item in reversed(jobs[-10:])
+            )
+            or '<tr><td colspan="5" class="rmdash-muted">No recent background jobs.</td></tr>'
+        )
+        return f"""
+        <div class="rmdash-card">
+            <h3>Advanced Member Targets</h3>
+            <p class="rmdash-muted">Filters: type, status, has, any, none, channel, voice, thread,
+            joined_days, and account_days. Quote role or channel names containing spaces.</p>
+            <form method="POST">
+                {csrf}<input type="hidden" name="action" value="save_target_preset">
+                <div class="rmdash-row">
+                    {self._input("target_name", "Preset Name", "")}
+                    {self._input("target_query", "Target Query", "type=humans status=online")}
+                </div>
+                <button class="rmdash-btn" type="submit">Validate & Save Target</button>
+            </form>
+            <div class="rmdash-scroll"><table class="rmdash-table"><thead><tr><th>Name</th><th>Query</th><th></th>
+            </tr></thead><tbody>{preset_rows}</tbody></table></div>
+            <h3>Start Background Job</h3>
+            <form method="POST">
+                {csrf}<input type="hidden" name="action" value="start_bulk_job">
+                <div class="rmdash-row">
+                    {self._select("job_action", "Action", [("add", "Add role"), ("remove", "Remove role")], "add")}
+                    {self._role_select(guild, "job_role_id", "Role", None)}
+                    {self._input("job_query", "Target Query", "type=humans")}
+                </div>
+                {self._checkbox("confirm_bulk_job", "Confirm background role changes", False)}
+                <button class="rmdash-btn" type="submit">Start Job</button>
+            </form>
+            <h3>Recent Bulk Jobs</h3>
+            <div class="rmdash-scroll"><table class="rmdash-table"><thead><tr><th>ID</th><th>Status</th><th>Action</th>
+            <th>Progress</th><th></th></tr></thead><tbody>{job_rows}</tbody></table></div>
+        </div>
+        """
+
+    def _dashboard_data_tools_section(
+        self,
+        guild: discord.Guild,
+        backups: dict[str, dict[str, typing.Any]],
+        audit_channel_id: int | None,
+        audit_history: list[dict[str, typing.Any]],
+        csrf: str,
+    ) -> str:
+        backup_options = [
+            (backup_id, f"{backup_id} — {item.get('source', 'manual')}")
+            for backup_id, item in sorted(
+                backups.items(),
+                key=lambda pair: pair[1].get("created_at", 0),
+                reverse=True,
+            )
+        ]
+        restore_select = (
+            self._select("backup_id", "Backup to Restore", backup_options, backup_options[0][0])
+            if backup_options
+            else '<p class="rmdash-muted">No backups are available yet.</p>'
+        )
+        audit_rows = (
+            "".join(
+                "<tr>"
+                f"<td>{self._dashboard_time(item.get('timestamp'))}</td>"
+                f"<td>{self._h(item.get('action'))}</td>"
+                f"<td>{self._h(item.get('member_id') or '-')}</td>"
+                f"<td>{self._h(', '.join(str(value) for value in item.get('role_ids', [])) or '-')}</td>"
+                f"<td>{self._h(item.get('source'))}</td></tr>"
+                for item in reversed(audit_history[-15:])
+            )
+            or '<tr><td colspan="5" class="rmdash-muted">No audit records yet.</td></tr>'
+        )
+        reconcile_select = self._select(
+            "reconcile_mode",
+            "Reaction Reconciliation",
+            [("add", "Add missing roles"), ("sync", "Full sync (also removes)")],
+            "add",
+        )
+        return f"""
+        <div class="rmdash-card">
+            <h3>Migration Health & Recovery</h3>
+            <div class="rmdash-actions">
+                <form method="POST" class="rmdash-inline">{csrf}<button class="rmdash-btn secondary"
+                name="action" value="migration_verify" type="submit">Verify Imported Data</button></form>
+                <form method="POST" class="rmdash-inline">{csrf}
+                {reconcile_select}
+                {self._checkbox("confirm_full_sync", "Confirm removals when using full sync", False)}
+                <button class="rmdash-btn" name="action" value="migration_reconcile" type="submit">
+                Reconcile Reactions</button></form>
+            </div>
+            <div class="rmdash-grid">
+                <form method="POST">{csrf}<input type="hidden" name="action" value="migration_backup">
+                    {self._input("backup_label", "Backup Label", "dashboard-manual")}
+                    <button class="rmdash-btn" type="submit">Create Backup</button>
+                </form>
+                <form method="POST">{csrf}<input type="hidden" name="action" value="migration_restore">
+                    {restore_select}
+                    {self._checkbox("confirm_restore", "Confirm restoring this backup", False)}
+                    <button class="rmdash-btn danger" type="submit">Restore Backup</button>
+                </form>
+            </div>
+        </div>
+        <div class="rmdash-card">
+            <h3>Role Audit Journal</h3>
+            <p class="rmdash-muted">{len(audit_history)} locally retained role-change record(s), capped at 250.</p>
+            <div class="rmdash-scroll"><table class="rmdash-table"><thead><tr><th>When</th><th>Action</th>
+            <th>Member ID</th><th>Role IDs</th><th>Source</th></tr></thead><tbody>{audit_rows}</tbody></table></div>
+            <form method="POST">{csrf}<input type="hidden" name="action" value="save_audit_settings">
+                {self._text_channel_select(guild, "audit_channel_id", "Live Audit Channel (blank disables)", audit_channel_id)}
+                <button class="rmdash-btn" type="submit">Save Audit Delivery</button>
+            </form>
+            <form method="POST" class="rmdash-actions">{csrf}
+                <input type="hidden" name="action" value="clear_audit_history">
+                {self._checkbox("confirm_audit_clear", "Confirm clearing retained audit records", False)}
+                <button class="rmdash-btn danger" type="submit">Clear Audit History</button>
             </form>
         </div>
         """
@@ -2094,6 +2651,34 @@ class DashboardIntegration:
                     Excludes Mutual</button>
                 </div>
             </form>
+            <details>
+                <summary>Role lifecycle, hierarchy, and permissions</summary>
+                <form method="POST">
+                    {csrf}
+                    <input type="hidden" name="action" value="role_lifecycle">
+                    <input type="hidden" name="role_id" value="{self._h(role_id)}">
+                    <div class="rmdash-row">
+                        {
+                self._select(
+                    "lifecycle_operation",
+                    "Operation",
+                    [
+                        ("clone", "Clone role (value = new name)"),
+                        ("position", "Move role (value = position)"),
+                        ("permission_on", "Enable permission (value = permission name)"),
+                        ("permission_off", "Disable permission (value = permission name)"),
+                        ("icon", "Set icon (value = Unicode emoji or none)"),
+                        ("delete", "Delete role"),
+                    ],
+                    "clone",
+                )
+            }
+                        {self._input("lifecycle_value", "Name, Position, or Permission", "")}
+                    </div>
+                    {self._checkbox("confirm_lifecycle", "Confirm destructive delete operation", False)}
+                    <button class="rmdash-btn danger" type="submit">Run Role Operation</button>
+                </form>
+            </details>
             """
         return f"""
         <div id="role-settings" class="rmdash-card">
@@ -2114,6 +2699,11 @@ class DashboardIntegration:
         settings: dict[str, typing.Any],
         csrf: str,
     ) -> str:
+        account_age_input = self._input(
+            "autorole_account_age",
+            "Minimum Account Age (hours)",
+            settings.get("minimum_account_age_hours", 0),
+        )
         return f"""
         <div id="autoroles" class="rmdash-card">
             <h3>Autoroles</h3>
@@ -2121,10 +2711,18 @@ class DashboardIntegration:
                 {csrf}
                 <input type="hidden" name="action" value="save_autoroles">
                 {self._checkbox("autoroles_enabled", "Enable autoroles", settings.get("enabled"))}
+                <div class="rmdash-row">
+                    {self._input("autorole_delay", "Assignment Delay (seconds)", settings.get("delay_seconds", 0))}
+                    {account_age_input}
+                    {self._input("autorole_retries", "Delivery Retries", settings.get("retries", 3))}
+                </div>
                 <div class="rmdash-grid">
-                    {self._multi_role_select(guild, "auto_all", "All New Members", settings.get("all", []))}
-                    {self._multi_role_select(guild, "auto_humans", "Humans Only", settings.get("humans", []))}
-                    {self._multi_role_select(guild, "auto_bots", "Bots Only", settings.get("bots", []))}
+                    <div>{self._checkbox("auto_all_enabled", "Enable all-member list", settings.get("all_enabled", True))}
+                    {self._multi_role_select(guild, "auto_all", "All New Members", settings.get("all", []))}</div>
+                    <div>{self._checkbox("auto_humans_enabled", "Enable human list", settings.get("humans_enabled", True))}
+                    {self._multi_role_select(guild, "auto_humans", "Humans Only", settings.get("humans", []))}</div>
+                    <div>{self._checkbox("auto_bots_enabled", "Enable bot list", settings.get("bots_enabled", True))}
+                    {self._multi_role_select(guild, "auto_bots", "Bots Only", settings.get("bots", []))}</div>
                 </div>
                 <button class="rmdash-btn" type="submit">Save Autoroles</button>
             </form>
@@ -2139,7 +2737,7 @@ class DashboardIntegration:
     ) -> str:
         rows = []
         for message_id, message_data in sorted(react_roles.items()):
-            channel = guild.get_channel(int(message_data.get("channel_id", 0)))
+            channel = guild.get_channel_or_thread(int(message_data.get("channel_id", 0)))
             channel_label = f"#{channel.name}" if channel else "Missing channel"
             jump_url = f"https://discord.com/channels/{guild.id}/{message_data.get('channel_id')}/{message_id}"
             for emoji_key, bind in sorted(message_data.get("binds", {}).items()):
@@ -2249,6 +2847,12 @@ class DashboardIntegration:
         temp_roles: list[dict[str, typing.Any]],
         csrf: str,
     ) -> str:
+        temp_action_select = self._select(
+            "temp_action_operation",
+            "Action",
+            [("extend", "Extend from now"), ("revoke", "Revoke now")],
+            "extend",
+        )
         rows = []
         for item in sorted(
             temp_roles,
@@ -2290,10 +2894,57 @@ class DashboardIntegration:
                     {self._input("temp_member_id", "Member ID", "")}
                     {self._role_select(guild, "temp_role_id", "Role", None)}
                     {self._input("temp_give_duration", "Duration", "7d")}
+                    {self._input("temp_give_reason", "Reason", "Temporary role granted by staff")}
                 </div>
+                {self._checkbox("temp_notify_member", "DM member when the role expires", False)}
                 <button class="rmdash-btn" type="submit">Give Temporary Role</button>
             </form>
+            <details><summary>Extend or revoke a pending temporary role</summary>
+                <form method="POST">
+                    {csrf}<input type="hidden" name="action" value="temp_role_action">
+                    <div class="rmdash-row">
+                        {temp_action_select}
+                        {self._input("temp_action_member_id", "Member ID", "")}
+                        {self._role_select(guild, "temp_action_role_id", "Role", None)}
+                        {self._input("temp_action_duration", "Extension Duration", "7d")}
+                    </div>
+                    {self._checkbox("confirm_temp_revoke", "Confirm immediate revocation", False)}
+                    <button class="rmdash-btn danger" type="submit">Apply Temporary Role Action</button>
+                </form>
+            </details>
             {table}
+        </div>
+        """
+
+    def _dashboard_component_policy_fields(
+        self,
+        guild: discord.Guild,
+        prefix: str,
+        data: dict[str, typing.Any] | None = None,
+        *,
+        select: bool = False,
+    ) -> str:
+        policy = normalize_component_policy(data or {}, select=select)
+        modes = (
+            [
+                ("toggle", "Toggle selected roles"),
+                ("sync", "Match selection exactly"),
+                ("exclusive", "Exclusive selection"),
+                ("add", "Add only"),
+            ]
+            if select
+            else [("toggle", "Toggle"), ("add", "Add only"), ("remove", "Remove only")]
+        )
+        return f"""
+        <div class="rmdash-row">
+            {self._select(f"{prefix}_mode", "Behavior", modes, policy["mode"])}
+            {self._input(f"{prefix}_cooldown", "Cooldown (seconds)", policy["cooldown_seconds"])}
+            {self._input(f"{prefix}_max_holders", "Maximum Role Holders (0 = unlimited)", policy["max_holders"])}
+            {self._input(f"{prefix}_temp_seconds", "Temporary Duration (seconds, 0 = permanent)", policy["temp_seconds"])}
+        </div>
+        <div class="rmdash-grid">
+            {self._multi_role_select(guild, f"{prefix}_required_roles", "Required Roles", policy["required_role_ids"])}
+            {self._multi_role_select(guild, f"{prefix}_blocked_roles", "Blocked Roles", policy["blocked_role_ids"])}
         </div>
         """
 
@@ -2309,11 +2960,13 @@ class DashboardIntegration:
         button_editors = []
         for name, data in sorted(buttons.items()):
             role = guild.get_role(int(data.get("role_id", 0)))
+            policy = normalize_component_policy(data)
             button_rows.append(
                 "<tr>"
                 f"<td>{self._h(name)}</td>"
                 f"<td>{self._h(role.name if role else 'Missing role')}</td>"
                 f"<td>{self._h(data.get('label'))}</td>"
+                f"<td>{self._h(policy['mode'])}</td>"
                 f"<td>{len(data.get('messages', [])):,}</td>"
                 "<td>"
                 '<form method="POST" class="rmdash-inline">'
@@ -2354,6 +3007,7 @@ class DashboardIntegration:
                     )
                 }
                         </div>
+                        {self._dashboard_component_policy_fields(guild, "button", data)}
                         <button class="rmdash-btn" type="submit">Save Button</button>
                     </form>
                 </details>
@@ -2363,7 +3017,7 @@ class DashboardIntegration:
             '<p class="rmdash-muted">No buttons configured.</p>'
             if not button_rows
             else '<table class="rmdash-table"><thead><tr><th>Name</th><th>Role</th>'
-            f"<th>Label</th><th>Messages</th><th></th></tr></thead><tbody>{''.join(button_rows)}</tbody></table>"
+            f"<th>Label</th><th>Mode</th><th>Messages</th><th></th></tr></thead><tbody>{''.join(button_rows)}</tbody></table>"
         )
 
         option_rows = []
@@ -2413,10 +3067,12 @@ class DashboardIntegration:
         menu_rows = []
         menu_editors = []
         for name, data in sorted(select_menus.items()):
+            policy = normalize_component_policy(data, select=True)
             menu_rows.append(
                 "<tr>"
                 f"<td>{self._h(name)}</td>"
                 f"<td>{self._h(', '.join(data.get('options', [])))}</td>"
+                f"<td>{self._h(policy['mode'])}</td>"
                 f"<td>{len(data.get('messages', [])):,}</td>"
                 "<td>"
                 '<form method="POST" class="rmdash-inline">'
@@ -2441,6 +3097,7 @@ class DashboardIntegration:
                             {self._input("menu_max", "Max Values", data.get("max_values", 1))}
                             {self._input("menu_placeholder", "Placeholder", data.get("placeholder") or "Pick roles")}
                         </div>
+                        {self._dashboard_component_policy_fields(guild, "menu", data, select=True)}
                         <button class="rmdash-btn" type="submit">Save Menu</button>
                     </form>
                 </details>
@@ -2450,7 +3107,7 @@ class DashboardIntegration:
             '<p class="rmdash-muted">No select menus configured.</p>'
             if not menu_rows
             else '<table class="rmdash-table"><thead><tr><th>Name</th><th>Options</th>'
-            f"<th>Messages</th><th></th></tr></thead><tbody>{''.join(menu_rows)}</tbody></table>"
+            f"<th>Mode</th><th>Messages</th><th></th></tr></thead><tbody>{''.join(menu_rows)}</tbody></table>"
         )
 
         return f"""
@@ -2472,6 +3129,7 @@ class DashboardIntegration:
                 "secondary",
             )
         }
+                    {self._dashboard_component_policy_fields(guild, "button")}
                     <button class="rmdash-btn" type="submit">Save Button</button>
                 </form>
                 <form method="POST">
@@ -2492,6 +3150,7 @@ class DashboardIntegration:
                     {self._input("menu_min", "Min Values", "0")}
                     {self._input("menu_max", "Max Values", "")}
                     {self._input("menu_placeholder", "Placeholder", "Pick roles")}
+                    {self._dashboard_component_policy_fields(guild, "menu", select=True)}
                     <button class="rmdash-btn" type="submit">Save Menu</button>
                 </form>
                 <form method="POST">

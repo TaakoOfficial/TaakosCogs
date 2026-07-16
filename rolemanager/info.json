@@ -1,31 +1,37 @@
 {
-  "$schema": "https://raw.githubusercontent.com/Cog-Creators/Red-DiscordBot/V3/develop/schema/red_cog.schema.json",
-  "name": "rolemanager",
-  "author": ["Taako"],
-  "version": "0.3.2",
-  "description": "A combined role management cog inspired by RoleUtils and RoleTools, with self roles, external role-change rules, policy enforcement, reaction roles, button roles, select-menu roles, autoroles, sticky roles, temporary roles, bulk role operations, migration helpers, and full Red-Web-Dashboard support.",
-  "install_msg": "rolemanager loaded. Use `[p]rolemanager` or `[p]rm` for setup, `[p]rm selfrole <role>` for member self roles, `[p]rm rule` for automatic role-change rules, and the Red-Web-Dashboard page for visual configuration and operations.",
-  "short": "Complete role management with automatic rules, self roles, policies, role panels, autoroles, sticky/temp roles, dashboard operations, and bulk tools.",
-  "tags": [
-    "roles",
-    "reaction roles",
-    "self roles",
-    "button roles",
-    "select roles",
-    "role policies",
-    "role rules",
-    "autorole",
-    "sticky roles",
-    "temporary roles",
-    "moderation",
-    "dashboard",
-    "utility"
-  ],
-  "requirements": [],
-  "min_bot_version": "3.5.0",
-  "min_python_version": [3, 9, 0],
-  "hidden": false,
-  "disabled": false,
-  "type": "COG",
-  "end_user_data_statement": "This cog stores per-guild role configuration, role-policy and role-change-rule settings, role costs, button/select/reaction-role component settings, message IDs, channel IDs, role IDs, emoji keys, temporary-role expiry timestamps, and Discord user IDs for sticky and temporary role assignment. It does not store message content except optional component panel text sent directly to Discord."
+    "$schema": "https://raw.githubusercontent.com/Cog-Creators/Red-DiscordBot/V3/develop/schema/red_cog.schema.json",
+    "name": "rolemanager",
+    "author": [
+        "Taako"
+    ],
+    "version": "0.4.0",
+    "description": "A complete role automation suite with self roles, policies, advanced targeting, audited background jobs, reaction/component panels, resilient autoroles, temporary roles, verified migrations with rollback, slash commands, and a full dashboard.",
+    "install_msg": "rolemanager loaded. Use `[p]rolemanager` or `[p]rm` for setup, `[p]rm selfrole <role>` for member self roles, `[p]rm rule` for automatic role-change rules, and the Red-Web-Dashboard page for visual configuration and operations.",
+    "short": "Audited role automation, advanced targeting, panels, resilient autoroles, migrations, lifecycle tools, and dashboard operations.",
+    "tags": [
+        "roles",
+        "reaction roles",
+        "self roles",
+        "button roles",
+        "select roles",
+        "role policies",
+        "role rules",
+        "autorole",
+        "sticky roles",
+        "temporary roles",
+        "moderation",
+        "dashboard",
+        "utility"
+    ],
+    "requirements": [],
+    "min_bot_version": "3.5.0",
+    "min_python_version": [
+        3,
+        9,
+        0
+    ],
+    "hidden": false,
+    "disabled": false,
+    "type": "COG",
+    "end_user_data_statement": "This cog stores per-guild role configuration, role policies and rules, component settings, message/channel/role IDs, emoji keys, target presets, bounded job and role-audit records, migration backups, autorole queue entries, temporary-role metadata and expiry timestamps, and Discord user IDs needed for sticky, temporary, audit, and role assignment workflows. It does not store message content except optional component panel text sent directly to Discord."
 }
