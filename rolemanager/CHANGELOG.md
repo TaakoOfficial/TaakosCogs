@@ -5,6 +5,8 @@
 - Reconnected existing imported reaction-role panels with explicit add/remove event listeners.
 - Made saved dashboard/config records authoritative so a stale in-memory message cache can no longer block role updates.
 - Added live repair when an older imported emoji binding is encountered during a reaction event.
+- Matched Trusty RoleTools role assignment behavior for moderators whose staff role is above the bot while the assigned reaction role remains below it.
+- Added per-binding dashboard readiness checks for the Reactions intent, channel access, Manage Roles permission, missing roles, and bot-role hierarchy.
 
 ## 0.3.1
 

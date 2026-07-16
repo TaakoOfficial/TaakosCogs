@@ -2145,6 +2145,27 @@ class DashboardIntegration:
             for emoji_key, bind in sorted(message_data.get("binds", {}).items()):
                 role = guild.get_role(int(bind.get("role_id", 0)))
                 role_label = role.name if role else f"Missing role {bind.get('role_id')}"
+                me = guild.me
+                intents = getattr(self.bot, "intents", None)
+                reactions_intent = bool(getattr(intents, "reactions", True))
+                if not reactions_intent:
+                    readiness = "Blocked: Reactions intent disabled"
+                elif channel is None:
+                    readiness = "Blocked: channel missing"
+                elif me is None:
+                    readiness = "Blocked: bot member unavailable"
+                elif not channel.permissions_for(me).view_channel:
+                    readiness = "Blocked: bot cannot view channel"
+                elif not me.guild_permissions.manage_roles:
+                    readiness = "Blocked: Manage Roles missing"
+                elif role is None:
+                    readiness = "Blocked: role missing"
+                elif role.is_default() or role.managed:
+                    readiness = "Blocked: role cannot be assigned"
+                elif role >= me.top_role:
+                    readiness = "Blocked: move bot role higher"
+                else:
+                    readiness = "Ready"
                 rows.append(
                     "<tr>"
                     f'<td><a href="{self._h(jump_url)}">{self._h(message_id)}</a></td>'
@@ -2152,6 +2173,7 @@ class DashboardIntegration:
                     f"<td>{self._h(bind.get('emoji') or emoji_key)}</td>"
                     f"<td>{self._h(role_label)}</td>"
                     f"<td>{self._h(bind.get('remove_on_unreact', True))}</td>"
+                    f"<td>{self._h(readiness)}</td>"
                     "<td>"
                     '<form method="POST" class="rmdash-inline">'
                     f"{csrf}"
@@ -2165,7 +2187,7 @@ class DashboardIntegration:
                 )
             rows.append(
                 "<tr>"
-                f'<td colspan="5" class="rmdash-muted">Clear all bindings for message {self._h(message_id)}</td>'
+                f'<td colspan="6" class="rmdash-muted">Clear all bindings for message {self._h(message_id)}</td>'
                 "<td>"
                 '<form method="POST" class="rmdash-inline">'
                 f"{csrf}"
@@ -2186,7 +2208,7 @@ class DashboardIntegration:
             '<p class="rmdash-muted">No reaction roles configured.</p>'
             if not rows
             else '<div class="rmdash-scroll"><table class="rmdash-table"><thead><tr><th>Message</th><th>Channel</th>'
-            "<th>Emoji</th><th>Role</th><th>Remove On Unreact</th><th>Actions</th>"
+            "<th>Emoji</th><th>Role</th><th>Remove On Unreact</th><th>Readiness</th><th>Actions</th>"
             f"</tr></thead><tbody>{''.join(rows)}</tbody></table></div>"
         )
         return f"""

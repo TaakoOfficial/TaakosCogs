@@ -530,9 +530,12 @@ class RoleManager(DashboardIntegration, commands.Cog):
         me = guild.me
         if me is None or not me.guild_permissions.manage_roles:
             return False
-        if role.is_default() or role.managed or role >= me.top_role:
-            return False
-        return not (member.id != guild.owner_id and member.top_role >= me.top_role)
+        # Role assignment is governed by the position of the role being
+        # granted, not the target member's highest role. RoleTools therefore
+        # allows a moderator whose staff role is above the bot to receive a
+        # lower reaction role. Rejecting that member here made otherwise valid
+        # imported panels appear disconnected.
+        return not (role.is_default() or role.managed or role >= me.top_role)
 
     async def _check_guild_verification(
         self,
@@ -3730,6 +3733,21 @@ class RoleManager(DashboardIntegration, commands.Cog):
                     self._reaction_message_cache.discard(payload.message_id)
             return
         if not self._bot_can_apply_to_member(member, role):
+            me = guild.me
+            if me is None or not me.guild_permissions.manage_roles:
+                reason = "the bot does not have Manage Roles"
+            elif role.is_default():
+                reason = "the @everyone role cannot be assigned"
+            elif role.managed:
+                reason = "the role is managed by an integration"
+            else:
+                reason = "the bot's highest role is not above the target role"
+            log.info(
+                "Reaction-role update for role %s and member %s was blocked because %s.",
+                role.id,
+                member.id,
+                reason,
+            )
             return
 
         try:
