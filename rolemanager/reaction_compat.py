@@ -20,6 +20,25 @@ def canonical_emoji_key(emoji: Any) -> str:
     return match.group("id") if match else text
 
 
+def role_assignment_blocker(member: Any, role: Any) -> str | None:
+    """Return why a bot cannot assign a role, or ``None`` when it can.
+
+    Discord and Trusty RoleTools gate assignment on the bot permission and the
+    target role's position. The target member's highest role is intentionally
+    not part of this check.
+    """
+    me = member.guild.me
+    if me is None or not me.guild_permissions.manage_roles:
+        return "the bot does not have Manage Roles"
+    if role.is_default():
+        return "the @everyone role cannot be assigned"
+    if role.managed:
+        return "the role is managed by an integration"
+    if role >= me.top_role:
+        return "the bot's highest role is not above the target role"
+    return None
+
+
 def normalize_reaction_bindings(bindings: Any) -> tuple[dict[str, dict[str, Any]], int]:
     """Normalize imported binding keys while preserving their display emoji."""
     if not isinstance(bindings, dict):

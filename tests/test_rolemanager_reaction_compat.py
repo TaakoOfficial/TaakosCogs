@@ -43,5 +43,51 @@ class EmojiCompatibilityTests(unittest.TestCase):
         self.assertTrue(normalized["123456789"]["remove_on_unreact"])
 
 
+class RoleAssignmentCompatibilityTests(unittest.TestCase):
+    class FakeRole:
+        def __init__(self, position, *, default=False, managed=False):
+            self.position = position
+            self._default = default
+            self.managed = managed
+
+        def is_default(self):
+            return self._default
+
+        def __ge__(self, other):
+            return self.position >= other.position
+
+    def test_high_ranking_member_can_receive_a_lower_role(self):
+        bot_role = self.FakeRole(50)
+        reaction_role = self.FakeRole(10)
+        staff_role = self.FakeRole(100)
+        permissions = type("Permissions", (), {"manage_roles": True})()
+        bot_member = type(
+            "BotMember",
+            (),
+            {"top_role": bot_role, "guild_permissions": permissions},
+        )()
+        guild = type("Guild", (), {"me": bot_member})()
+        member = type("Member", (), {"guild": guild, "top_role": staff_role})()
+
+        self.assertIsNone(compat.role_assignment_blocker(member, reaction_role))
+
+    def test_role_at_or_above_bot_remains_blocked(self):
+        bot_role = self.FakeRole(50)
+        reaction_role = self.FakeRole(50)
+        permissions = type("Permissions", (), {"manage_roles": True})()
+        bot_member = type(
+            "BotMember",
+            (),
+            {"top_role": bot_role, "guild_permissions": permissions},
+        )()
+        guild = type("Guild", (), {"me": bot_member})()
+        member = type("Member", (), {"guild": guild})()
+
+        self.assertIn(
+            "highest role",
+            compat.role_assignment_blocker(member, reaction_role),
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
