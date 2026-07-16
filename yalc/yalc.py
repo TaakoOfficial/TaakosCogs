@@ -8950,7 +8950,11 @@ class YALC(DashboardIntegration, commands.Cog):
             "role": [k for k in self.event_descriptions if k.startswith("role_")],
             "guild": [k for k in self.event_descriptions if k.startswith(("guild_", "emoji_", "sticker_", "invite_"))],
             "voice": [k for k in self.event_descriptions if k.startswith("voice_")],
-            "moderation": [k for k, group in self.EVENT_TO_SETUP_GROUP.items() if group == "moderation"],
+            "moderation": [
+                event_type
+                for event_type in self.event_descriptions
+                if self._get_default_event_channel_key(event_type) == "moderation"
+            ],
             "application": [k for k in self.event_descriptions if k.startswith(("command_", "application_", "integration_"))],
             "automod": [k for k in self.event_descriptions if k.startswith("automod_")],
             "stage": [k for k in self.event_descriptions if k.startswith("stage_")],
@@ -9011,7 +9015,11 @@ class YALC(DashboardIntegration, commands.Cog):
             "role": [k for k in self.event_descriptions if k.startswith("role_")],
             "guild": [k for k in self.event_descriptions if k.startswith(("guild_", "emoji_", "sticker_", "invite_"))],
             "voice": [k for k in self.event_descriptions if k.startswith("voice_")],
-            "moderation": [k for k, group in self.EVENT_TO_SETUP_GROUP.items() if group == "moderation"],
+            "moderation": [
+                event_type
+                for event_type in self.event_descriptions
+                if self._get_default_event_channel_key(event_type) == "moderation"
+            ],
             "application": [k for k in self.event_descriptions if k.startswith(("command_", "application_", "integration_"))],
             "automod": [k for k in self.event_descriptions if k.startswith("automod_")],
             "stage": [k for k in self.event_descriptions if k.startswith("stage_")],

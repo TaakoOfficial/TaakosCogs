@@ -544,7 +544,7 @@ class DashboardIntegration:
 
         suggestions = {}
         for event_type in self.event_descriptions:
-            group = self.EVENT_TO_SETUP_GROUP.get(event_type, event_type.split("_", 1)[0])
+            group = self._get_default_event_channel_key(event_type)
             meaningful_terms = set(event_type.split("_")) - action_words
             normalized_event = event_type.replace("_", "-")
             choices = []

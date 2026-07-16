@@ -121,5 +121,12 @@ class EventJournalTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((await self.journal.stats(1))["count"], 1)
 
 
+class DashboardRoutingRegressionTests(unittest.TestCase):
+    def test_removed_event_group_mapping_is_not_referenced(self):
+        for relative_path in ("yalc/dashboard_integration.py", "yalc/yalc.py"):
+            source = (ROOT / relative_path).read_text(encoding="utf-8")
+            self.assertNotIn("EVENT_TO_SETUP_GROUP", source, relative_path)
+
+
 if __name__ == "__main__":
     unittest.main()

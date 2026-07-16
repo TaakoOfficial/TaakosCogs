@@ -1,5 +1,11 @@
 # 📝 YALC Changelog
 
+## [v4.0.1] - 2026-07-15
+
+- Fixed the dashboard smart-route renderer referencing the removed `EVENT_TO_SETUP_GROUP` attribute.
+- Fixed the same stale mapping reference in the bulk moderation enable and disable commands.
+- Routed dashboard suggestions and bulk categories through YALC's canonical event-to-channel resolver.
+
 ## [v4.0.0] - 2026-07-15
 
 - Rebuilt audit attribution around a bounded, deduplicated audit stream with strict action, target, channel, and time matching. YALC no longer substitutes an unrelated newest audit entry.
