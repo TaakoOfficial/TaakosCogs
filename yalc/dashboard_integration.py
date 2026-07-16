@@ -242,7 +242,40 @@ class DashboardIntegration:
         journal_count = int(journal_stats.get("count") or 0)
         return f"""
 <section class="yd"><style>
-.yd .card{{border:1px solid rgba(127,127,127,.3);border-radius:.75rem;padding:1rem;margin-bottom:1rem}}.yd .stats{{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.7rem}}.yd .stat strong{{display:block;font-size:1.5rem}}.yd .grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(235px,1fr));gap:1rem}}.yd label{{display:flex;flex-direction:column;gap:.3rem}}.yd .check{{flex-direction:row;align-items:center}}.yd input,.yd select,.yd textarea{{padding:.55rem;border:1px solid rgba(127,127,127,.35);border-radius:.4rem;background:var(--background,#202225);color:var(--text,#fff)}}.yd select[multiple],.yd textarea{{min-height:8rem}}.yd table{{width:100%;border-collapse:collapse}}.yd th,.yd td{{padding:.5rem;border-bottom:1px solid rgba(127,127,127,.25);text-align:left;vertical-align:middle}}.yd .events{{max-height:48rem;overflow:auto}}.yd .ok{{color:#3ba55c}}.yd .warn{{color:#faa61a}}.yd .actions{{display:flex;gap:.5rem;flex-wrap:wrap}}.yd small{{opacity:.76}}
+.yd{{color:#f2f3f5!important;color-scheme:dark}}
+.yd h2,.yd h3,.yd h4,.yd p,.yd label,.yd th,.yd td,.yd small{{color:#f2f3f5!important}}
+.yd .card{{background:#2b2d31!important;color:#f2f3f5!important;border:1px solid #4e5058!important;border-radius:.75rem;padding:1rem;margin-bottom:1rem;box-shadow:none!important}}
+.yd .stats{{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.7rem}}
+.yd .stat strong{{display:block;font-size:1.5rem}}
+.yd .grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(235px,1fr));gap:1rem}}
+.yd label{{display:flex!important;flex-direction:column;gap:.4rem;font-weight:600;line-height:1.35}}
+.yd .check{{flex-direction:row!important;align-items:center;min-height:2rem}}
+.yd input:not([type="checkbox"]):not([type="color"]),.yd select,.yd textarea{{box-sizing:border-box;width:100%;padding:.65rem .75rem;border:1px solid #4e5058!important;border-radius:.4rem;background:#1e1f22!important;color:#f2f3f5!important;-webkit-text-fill-color:#f2f3f5!important}}
+.yd input::placeholder,.yd textarea::placeholder{{color:#a7aab0!important;opacity:1}}
+.yd input[type="checkbox"]{{width:1.15rem!important;height:1.15rem!important;min-width:1.15rem;accent-color:#5865f2}}
+.yd input[type="color"]{{width:4.5rem!important;height:2.75rem!important;padding:.2rem!important;border:1px solid #4e5058!important;border-radius:.4rem;background:#1e1f22!important}}
+.yd select{{min-height:2.75rem}}
+.yd select option{{background:#1e1f22;color:#f2f3f5}}
+.yd select[multiple],.yd textarea{{min-height:9rem}}
+.yd .choices,.yd .choices__inner{{color:#f2f3f5!important}}
+.yd .choices__inner{{box-sizing:border-box;min-height:2.75rem!important;background:#1e1f22!important;border:1px solid #4e5058!important;border-radius:.4rem!important}}
+.yd .choices__input{{background:#1e1f22!important;color:#f2f3f5!important;border-color:#4e5058!important;-webkit-text-fill-color:#f2f3f5!important}}
+.yd .choices__list--single,.yd .choices__list--multiple,.yd .choices__item{{color:#f2f3f5!important}}
+.yd .choices__list--multiple .choices__item{{background:#5865f2!important;border-color:#7983f5!important}}
+.yd .choices__list--dropdown,.yd .choices__list[aria-expanded]{{background:#1e1f22!important;color:#f2f3f5!important;border:1px solid #4e5058!important;z-index:50}}
+.yd .choices__list--dropdown .choices__item--selectable.is-highlighted,.yd .choices__list[aria-expanded] .choices__item--selectable.is-highlighted{{background:#3f4147!important}}
+.yd .choices__placeholder{{color:#a7aab0!important;opacity:1!important}}
+.yd .choices[data-type*="select-one"]::after{{border-color:#f2f3f5 transparent transparent!important}}
+.yd .select2-container .select2-selection,.yd .select2-dropdown{{background:#1e1f22!important;color:#f2f3f5!important;border-color:#4e5058!important}}
+.yd .select2-container .select2-selection__rendered,.yd .select2-results__option{{color:#f2f3f5!important}}
+.yd table{{width:100%;border-collapse:collapse;color:#f2f3f5!important}}
+.yd th,.yd td{{padding:.65rem;border-bottom:1px solid #4e5058;text-align:left;vertical-align:middle;background:#2b2d31!important}}
+.yd code{{color:#c9cdfb!important;background:#1e1f22;padding:.12rem .3rem;border-radius:.25rem}}
+.yd .events{{max-height:48rem;overflow:auto;border:1px solid #4e5058;border-radius:.5rem}}
+.yd .ok{{color:#57f287!important}}.yd .warn{{color:#fee75c!important}}
+.yd .actions{{display:flex;gap:.5rem;flex-wrap:wrap;align-items:end}}
+.yd small{{opacity:.82;font-weight:400}}
+.yd hr{{border-color:#4e5058}}
 </style><h2>YALC Logging Control Center</h2><p>Configure delivery, audit attribution, privacy, filtering, and searchable history for <strong>{html.escape(guild.name)}</strong>.</p>
 <div class="stats"><div class="card stat"><strong>{enabled_count}/{len(self.event_descriptions)}</strong>events enabled</div><div class="card stat"><strong>{routed_count}</strong>event routes</div><div class="card stat"><strong class="{"ok" if delivery_issues == 0 else "warn"}">{delivery_issues}</strong>delivery issues</div><div class="card stat"><strong>{journal_count:,}</strong>journal records</div><div class="card stat"><strong class="{health_class}">{health}</strong>audit stream</div><div class="card stat"><strong>{audit_stats["matches"]}</strong>audit matches</div><div class="card stat"><strong>{audit_stats["misses"]}</strong>audit misses</div></div>
 <div class="card"><h3>Audit readiness</h3><p>View Audit Log: <strong class="{"ok" if view_audit else "warn"}">{"Yes" if view_audit else "Missing"}</strong> · Guild Moderation intent: <strong class="{"ok" if moderation_intent else "warn"}">{"Enabled" if moderation_intent else "Disabled"}</strong> · Cached audit entries: {audit_stats["cached_entries"]} · Deduplicated: {audit_stats["duplicates"]}</p></div>
