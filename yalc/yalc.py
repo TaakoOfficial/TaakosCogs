@@ -6,15 +6,24 @@ A comprehensive logging solution with both classic and slash commands.
 from __future__ import annotations
 
 import asyncio
+import csv
 import datetime
+import io
+import json
 import logging
+import sqlite3
 import time
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import discord
 from redbot.core import Config, app_commands, commands, modlog
+from redbot.core.data_manager import cog_data_path
+from redbot.core.utils.chat_formatting import pagify
 
+from .audit import AuditCorrelator
 from .dashboard_integration import DashboardIntegration
+from .models import LogEvent
+from .storage import EventJournal
 
 if TYPE_CHECKING:
     from redbot.core.bot import Red
@@ -93,6 +102,9 @@ class YALC(DashboardIntegration, commands.Cog):
         "channel_create": "channel",
         "channel_delete": "channel",
         "channel_update": "channel",
+        "overwrite_create": "channel",
+        "overwrite_delete": "channel",
+        "overwrite_update": "channel",
         "automod_action": "discord_automod",
         "automod_rule_create": "discord_automod",
         "automod_rule_delete": "discord_automod",
@@ -136,8 +148,12 @@ class YALC(DashboardIntegration, commands.Cog):
         "voice_state_update": "voice",
         "voice_update": "voice",
         "webhook_update": "webhook",
+        "webhook_create": "webhook",
+        "webhook_delete": "webhook",
+        "bot_add": "moderation",
         "member_ban": "moderation",
         "member_kick": "moderation",
+        "member_prune": "moderation",
         "member_timeout": "moderation",
         "member_unban": "moderation",
     }
@@ -153,54 +169,20 @@ class YALC(DashboardIntegration, commands.Cog):
         # Real-time audit log entry storage for role attribution
         self.recent_audit_entries = {}
         self._recent_role_event_logs = {}
+        self._audit_correlator = AuditCorrelator()
+        self._raw_event_ids: dict[tuple[str, int], float] = {}
+        self._embed_event_types: dict[int, str] = {}
+        self._journal: EventJournal | None = None
+        self._journal_cleanup_task: asyncio.Task | None = None
 
         # Ban cache to distinguish between kicks and leaves
         self._ban_cache = {}
 
-        # Enhanced audit log caching system
-        self._audit_cache = {}
-        self._cache_cleanup_task = None
-
         # Settings cache for performance optimization
         self._settings_cache = {}
         self._settings_cache_timeout = 300  # 5 minutes
 
-        # Background task queue system for async performance
-        self._log_queue = asyncio.Queue(maxsize=1000)  # Prevent memory issues
-        self._background_worker_task = None
         self._processing_shutdown = False
-
-        # Smart audit log debouncing system
-        self._audit_debounce_cache = {}
-        self._debounce_timeout = 30  # 30 seconds
-
-        # Object pooling for memory efficiency and consistent performance
-        self._embed_pool = []
-        self._embed_pool_size = 50
-        self._embed_pool_lock = asyncio.Lock()
-
-        # Connection and batch optimization
-        self._batch_operations = {}
-        self._batch_timeout = 2.0  # 2 seconds
-        self._max_batch_size = 10
-
-        # Performance metrics tracking
-        self._performance_metrics = {
-            "events_processed": 0,
-            "cache_hits": 0,
-            "cache_misses": 0,
-            "api_calls_saved": 0,
-            "background_queue_size": 0,
-            "last_reset": time.time(),
-        }
-
-        # Enhanced audit log caching system
-        self._audit_cache = {}
-        self._cache_cleanup_task = None
-
-        # Settings cache for performance optimization
-        self._settings_cache = {}
-        self._settings_cache_timeout = 300  # 5 minutes
 
         # Event descriptions for logging and dashboard - MUST be set before DashboardIntegration.__init__
         self.event_descriptions = {
@@ -218,10 +200,15 @@ class YALC(DashboardIntegration, commands.Cog):
             "member_update": ("👤", "Member Updates"),
             "member_kick": ("👢", "Member Kicks"),
             "member_timeout": ("⏰", "Member Timeouts"),
+            "member_prune": ("🧹", "Member Prunes"),
+            "bot_add": ("🤖", "Bot Additions"),
             # Channel events
             "channel_create": ("📝", "Channel Creation"),
             "channel_delete": ("🗑️", "Channel Deletion"),
             "channel_update": ("🔄", "Channel Updates"),
+            "overwrite_create": ("🔐", "Permission Overwrite Creation"),
+            "overwrite_update": ("🔐", "Permission Overwrite Updates"),
+            "overwrite_delete": ("🔓", "Permission Overwrite Deletion"),
             "thread_create": ("🧵", "Thread Creation"),
             "thread_delete": ("🗑️", "Thread Deletion"),
             "thread_update": ("🔄", "Thread Updates"),
@@ -271,7 +258,9 @@ class YALC(DashboardIntegration, commands.Cog):
             "soundboard_sound_update": ("🔊", "Soundboard Sound Updates"),
             "soundboard_sound_delete": ("🔇", "Soundboard Sound Deletion"),
             # Webhook/AutoMod
+            "webhook_create": ("🪝", "Webhook Creation"),
             "webhook_update": ("🪝", "Webhook Updates"),
+            "webhook_delete": ("🗑️", "Webhook Deletion"),
             "automod_rule_create": ("🛡️", "AutoMod Rule Creation"),
             "automod_rule_update": ("🔄", "AutoMod Rule Updates"),
             "automod_rule_delete": ("🗑️", "AutoMod Rule Deletion"),
@@ -304,12 +293,16 @@ class YALC(DashboardIntegration, commands.Cog):
             "tupperbox_ids": ["239232811662311425"],
             "include_thumbnails": True,
             "detect_proxy_deletes": True,
+            "raw_message_events": True,
+            "audit_only_events": True,
             "message_prefix_filter": [],
             "webhook_name_filter": [],
-            # --- Dashboard example config fields ---
-            "enable_feature": False,
-            "custom_message": "",
+            "fallback_channel_id": None,
+            "journal_enabled": False,
+            "journal_include_message_content": False,
             "log_retention_days": 7,
+            "event_colors": {},
+            "command_log_mode": "all",
             # Voice session tracking
             # Active sessions: user_id -> {"channel_id": int, "start_time": float}
             "voice_sessions": {},
@@ -320,6 +313,22 @@ class YALC(DashboardIntegration, commands.Cog):
 
         # Dashboard integration is handled via inheritance and decorators in dashboard_integration.py
 
+    async def red_delete_data_for_user(self, *, requester: str, user_id: int) -> None:
+        """Remove stored voice, ignore-rule, and journal references for a user."""
+        for guild_id in await self.config.all_guilds():
+            conf = self.config.guild_from_id(guild_id)
+            async with conf.voice_sessions() as sessions:
+                sessions.pop(str(user_id), None)
+                sessions.pop(user_id, None)
+            async with conf.voice_events() as events:
+                events[:] = [event for event in events if event.get("user_id") != user_id]
+            async with conf.ignored_users() as ignored_users:
+                ignored_users[:] = [item for item in ignored_users if str(item) != str(user_id)]
+            async with conf.granular_ignores() as rules:
+                rules[:] = [rule for rule in rules if rule.get("user_id") != user_id]
+        if self._journal is not None:
+            await self._journal.delete_user(user_id)
+
     async def _get_audit_log_entry_with_retry(
         self,
         guild,
@@ -327,6 +336,7 @@ class YALC(DashboardIntegration, commands.Cog):
         target=None,
         timeout_seconds=30,
         retries=3,
+        channel_id: int | None = None,
     ):
         """
         Helper function to get recent audit log entries with retry logic and improved reliability.
@@ -341,43 +351,58 @@ class YALC(DashboardIntegration, commands.Cog):
         Returns:
             AuditLogEntry or None if not found/no permission
 
-        Matching order:
-        1. Exact object match (entry.target == target)
-        2. Fallback: match by .id if both entry.target and target have .id
-        3. Fallback: most recent entry in window
+        Matching is strict when a target is supplied. An unrelated recent entry
+        is never returned as a substitute.
         """
-        if not guild.me.guild_permissions.view_audit_log:
+        if action is None:
             return None
+        bot_member = guild.me
+        if bot_member is None or not bot_member.guild_permissions.view_audit_log:
+            return None
+
+        target_id = getattr(target, "id", None)
+        cached = self._audit_correlator.match(
+            guild.id,
+            action,
+            target_id=target_id,
+            channel_id=channel_id,
+            max_age_seconds=timeout_seconds,
+        )
+        if cached:
+            return cached.entry
 
         for attempt in range(retries):
             try:
                 await asyncio.sleep(2 + (attempt * 0.5))  # Progressive delay
 
-                now = datetime.datetime.now(datetime.UTC)
-                entries = []
+                now = datetime.datetime.now(datetime.timezone.utc)
                 async for entry in guild.audit_logs(action=action, limit=15):
                     age = (now - entry.created_at).total_seconds()
                     if age > timeout_seconds * 2:
                         break
-                    if age <= timeout_seconds:
-                        entries.append(entry)
-                        # First, try exact match
-                        if target is not None and entry.target == target:
-                            return entry
+                    if age > timeout_seconds:
+                        continue
+                    self._audit_correlator.record(entry)
+                    entry_target_id = getattr(getattr(entry, "target", None), "id", None)
+                    if target_id is not None and entry_target_id != target_id:
+                        continue
+                    extra = getattr(entry, "extra", None)
+                    entry_channel_id = getattr(extra, "channel_id", None)
+                    if entry_channel_id is None:
+                        entry_channel_id = getattr(getattr(extra, "channel", None), "id", None)
+                    if channel_id is not None and target_id is None and entry_channel_id is None:
+                        continue
+                    if channel_id is not None and entry_channel_id is not None and int(entry_channel_id) != int(channel_id):
+                        continue
+                    return entry
 
-                # Fallback: try matching by .id for any target type
-                if target is not None and hasattr(target, "id"):
-                    for entry in entries:
-                        if hasattr(entry.target, "id") and entry.target.id == target.id:
-                            return entry
-
-                # Fallback: return most recent entry in window if any
-                if entries:
-                    return entries[0]
-
-                # If no entries found, don't retry
+                if attempt < retries - 1:
+                    continue
                 return None
 
+            except discord.Forbidden:
+                # Permission failures cannot be repaired by retrying.
+                break
             except discord.HTTPException as e:
                 if attempt < retries - 1:
                     self.log.debug(
@@ -388,8 +413,7 @@ class YALC(DashboardIntegration, commands.Cog):
                 self.log.warning(
                     f"Audit log fetch failed after {retries} attempts: {e}",
                 )
-            except (discord.Forbidden, asyncio.TimeoutError):
-                # Don't retry for permission or timeout errors
+            except asyncio.TimeoutError:
                 break
             except RECOVERABLE_EXCEPTIONS as e:
                 self.log.error(f"Unexpected error in audit log fetch: {e}")
@@ -403,6 +427,7 @@ class YALC(DashboardIntegration, commands.Cog):
         action,
         target=None,
         timeout_seconds=30,
+        channel_id: int | None = None,
     ):
         """Legacy method for backward compatibility - redirects to retry version."""
         return await self._get_audit_log_entry_with_retry(
@@ -410,6 +435,7 @@ class YALC(DashboardIntegration, commands.Cog):
             action,
             target,
             timeout_seconds,
+            channel_id=channel_id,
         )
 
     async def _get_cached_settings(self, guild: discord.Guild) -> dict:
@@ -608,8 +634,7 @@ class YALC(DashboardIntegration, commands.Cog):
                 copy_notes.append(f"`{filename}` could not be copied.")
 
         if copied_files:
-            copy_notes.insert(
-                0, f"Copied {len(copied_files)} deleted image(s) below.")
+            copy_notes.insert(0, f"Copied {len(copied_files)} deleted image(s) below.")
 
         return copied_files, copy_notes
 
@@ -626,11 +651,7 @@ class YALC(DashboardIntegration, commands.Cog):
     def _prune_recent_role_event_logs(self) -> None:
         """Remove old role log markers used to prevent gateway/audit duplicates."""
         current_time = time.time()
-        expired_keys = [
-            key
-            for key, timestamp in self._recent_role_event_logs.items()
-            if current_time - timestamp > 30
-        ]
+        expired_keys = [key for key, timestamp in self._recent_role_event_logs.items() if current_time - timestamp > 30]
         for key in expired_keys:
             del self._recent_role_event_logs[key]
 
@@ -641,18 +662,13 @@ class YALC(DashboardIntegration, commands.Cog):
         if guild_id is None or role_key is None:
             return
         self._prune_recent_role_event_logs()
-        self._recent_role_event_logs[
-            self._role_event_log_key(guild_id, event_type, role_key)
-        ] = time.time()
+        self._recent_role_event_logs[self._role_event_log_key(guild_id, event_type, role_key)] = time.time()
 
     def _was_role_event_logged(self, guild_id: int, event_type: str, role_key) -> bool:
         if guild_id is None or role_key is None:
             return False
         self._prune_recent_role_event_logs()
-        return (
-            self._role_event_log_key(guild_id, event_type, role_key)
-            in self._recent_role_event_logs
-        )
+        return self._role_event_log_key(guild_id, event_type, role_key) in self._recent_role_event_logs
 
     def _get_audit_role_name(self, entry) -> str | None:
         target = getattr(entry, "target", None)
@@ -735,9 +751,8 @@ class YALC(DashboardIntegration, commands.Cog):
             if reason:
                 embed.add_field(name="Reason", value=reason, inline=False)
 
-            event_time = datetime.datetime.now(datetime.UTC)
-            self.set_embed_footer(
-                embed, event_time=event_time, label=footer_label)
+            event_time = datetime.datetime.now(datetime.timezone.utc)
+            self.set_embed_footer(embed, event_time=event_time, label=footer_label)
 
             sent_message = await self.safe_send(channel, embed=embed)
             if sent_message:
@@ -787,8 +802,7 @@ class YALC(DashboardIntegration, commands.Cog):
 
             # 1. Check if this event type is enabled at all
             if not settings["events"].get(event_type, False):
-                self.log.debug(
-                    f"Event type {event_type} is disabled in settings")
+                self.log.debug(f"Event type {event_type} is disabled in settings")
                 return False
 
             # 2. Channel-based ignore checks
@@ -829,8 +843,7 @@ class YALC(DashboardIntegration, commands.Cog):
             if user:
                 # Direct user ignore
                 if user.id in settings["ignored_users"]:
-                    self.log.debug(
-                        f"User {user.id} is in the ignored users list")
+                    self.log.debug(f"User {user.id} is in the ignored users list")
                     return False
 
                 # Role-based ignore (only for Members)
@@ -897,8 +910,7 @@ class YALC(DashboardIntegration, commands.Cog):
                             and rule["channel_id"] == channel.parent.id
                         ):
                             self.log.debug(
-                                "Event %s from user %s in thread %s "
-                                "(parent channel %s granularly ignored)",
+                                "Event %s from user %s in thread %s (parent channel %s granularly ignored)",
                                 event_type,
                                 user.id,
                                 channel.id,
@@ -908,11 +920,7 @@ class YALC(DashboardIntegration, commands.Cog):
 
                 # Regular granular ignore checks
                 for rule in granular_ignores:
-                    if (
-                        rule["event_type"] == event_type
-                        and rule["user_id"] == user.id
-                        and rule["channel_id"] == channel.id
-                    ):
+                    if rule["event_type"] == event_type and rule["user_id"] == user.id and rule["channel_id"] == channel.id:
                         self.log.debug(
                             f"Event {event_type} from user {user.id} in channel {channel.id} is granularly ignored",
                         )
@@ -1121,7 +1129,7 @@ class YALC(DashboardIntegration, commands.Cog):
             title=self._get_embed_title(event_type),
             description=description,
             color=self._get_event_color(event_type),
-            timestamp=datetime.datetime.now(datetime.UTC),
+            timestamp=datetime.datetime.now(datetime.timezone.utc),
         )
 
         # Add all fields from kwargs with truncation
@@ -1135,22 +1143,15 @@ class YALC(DashboardIntegration, commands.Cog):
 
                 # Check individual field limits
                 if len(field_value_str) > 1024:
-                    field_value_str = (
-                        self._smart_truncate(field_value_str, 1021) + "..."
-                    )
-                elif (
-                    str(field_name).lower() in ["content", "message_content"]
-                    and len(field_value_str) > 512
-                ):
+                    field_value_str = self._smart_truncate(field_value_str, 1021) + "..."
+                elif str(field_name).lower() in ["content", "message_content"] and len(field_value_str) > 512:
                     # Be more conservative with content fields
-                    field_value_str = self._smart_truncate(
-                        field_value_str, 509) + "..."
+                    field_value_str = self._smart_truncate(field_value_str, 509) + "..."
 
                 embed.add_field(
                     name=self._format_embed_field_name(field_name),
                     value=field_value_str,
-                    inline=self._should_inline_embed_field(
-                        field_name, field_value_str),
+                    inline=self._should_inline_embed_field(field_name, field_value_str),
                 )
 
         return embed
@@ -1279,12 +1280,12 @@ class YALC(DashboardIntegration, commands.Cog):
         discord_embed_limit = 6000  # Discord's total embed character limit
 
         if total_size <= discord_embed_limit:
+            self._remember_embed_event(embed, event_type)
             return embed
 
         # If we're over the limit, we need to intelligently truncate content
         self.log.warning(
-            "Embed size (%s) exceeds Discord limit (%s) for event_type: %s. "
-            "Applying intelligent truncation.",
+            "Embed size (%s) exceeds Discord limit (%s) for event_type: %s. Applying intelligent truncation.",
             total_size,
             discord_embed_limit,
             event_type,
@@ -1293,16 +1294,13 @@ class YALC(DashboardIntegration, commands.Cog):
         # Create a new embed with more aggressive truncation
         embed = discord.Embed(
             title=self._get_embed_title(event_type),
-            description=self._smart_truncate(description, 3500)
-            if description
-            else None,  # Reserve space for fields
+            description=self._smart_truncate(description, 3500) if description else None,  # Reserve space for fields
             color=self._get_event_color(event_type),
-            timestamp=datetime.datetime.now(datetime.UTC),
+            timestamp=datetime.datetime.now(datetime.timezone.utc),
         )
 
         # Add fields with more aggressive truncation, prioritizing important fields
-        important_fields = ["user", "author",
-            "member", "channel", "role", "reason"]
+        important_fields = ["user", "author", "member", "channel", "role", "reason"]
         regular_fields = []
         content_fields = []
 
@@ -1313,13 +1311,10 @@ class YALC(DashboardIntegration, commands.Cog):
                 if any(important in field_name_lower for important in important_fields):
                     # Important fields get priority and moderate truncation
                     if isinstance(field_value, str) and len(field_value) > 512:
-                        field_value = self._smart_truncate(
-                            field_value, 509) + "..."
+                        field_value = self._smart_truncate(field_value, 509) + "..."
                     embed.add_field(
                         name=self._format_embed_field_name(field_name),
-                        value=self._format_embed_field_value(field_name, field_value)[
-                            :1024
-                        ],
+                        value=self._format_embed_field_value(field_name, field_value)[:1024],
                         inline=True,
                     )
                 elif field_name_lower in ["content", "message_content", "changes"]:
@@ -1334,11 +1329,9 @@ class YALC(DashboardIntegration, commands.Cog):
         discord_embed_limit - current_size - 500  # Reserve space for footer and safety
 
         for field_name, field_value in regular_fields:
-            field_value_str = self._format_embed_field_value(
-                field_name, field_value)
+            field_value_str = self._format_embed_field_value(field_name, field_value)
             if len(field_value_str) > 256:
-                field_value_str = self._smart_truncate(
-                    field_value_str, 253) + "..."
+                field_value_str = self._smart_truncate(field_value_str, 253) + "..."
 
             # Estimate field size (name + value + some overhead)
             field_name_str = self._format_embed_field_name(field_name)
@@ -1348,8 +1341,7 @@ class YALC(DashboardIntegration, commands.Cog):
                 embed.add_field(
                     name=field_name_str,
                     value=field_value_str,
-                    inline=self._should_inline_embed_field(
-                        field_name, field_value_str),
+                    inline=self._should_inline_embed_field(field_name, field_value_str),
                 )
                 current_size += field_size
             else:
@@ -1371,11 +1363,7 @@ class YALC(DashboardIntegration, commands.Cog):
                     field_value,
                 )
                 if len(field_value_str) > max_content_length:
-                    field_value_str = (
-                        self._smart_truncate(
-                            field_value_str, max_content_length - 3)
-                        + "..."
-                    )
+                    field_value_str = self._smart_truncate(field_value_str, max_content_length - 3) + "..."
 
                 embed.add_field(
                     name=self._format_embed_field_name(field_name),
@@ -1406,22 +1394,12 @@ class YALC(DashboardIntegration, commands.Cog):
         final_size = self._calculate_embed_size(embed)
         if final_size > discord_embed_limit:
             # Emergency truncation - remove fields from the end until we fit
-            while (
-                len(embed.fields) > 0
-                and self._calculate_embed_size(embed) > discord_embed_limit
-            ):
+            while len(embed.fields) > 0 and self._calculate_embed_size(embed) > discord_embed_limit:
                 embed.remove_field(-1)
 
             # If we still don't fit, truncate the description more aggressively
-            if (
-                self._calculate_embed_size(embed) > discord_embed_limit
-                and embed.description
-            ):
-                available_desc_space = (
-                    discord_embed_limit
-                    - (self._calculate_embed_size(embed) - len(embed.description))
-                    - 100
-                )
+            if self._calculate_embed_size(embed) > discord_embed_limit and embed.description:
+                available_desc_space = discord_embed_limit - (self._calculate_embed_size(embed) - len(embed.description)) - 100
                 if available_desc_space > 50:
                     embed.description = (
                         self._smart_truncate(
@@ -1433,7 +1411,14 @@ class YALC(DashboardIntegration, commands.Cog):
                 else:
                     embed.description = "*Content truncated due to size limits*"
 
+        self._remember_embed_event(embed, event_type)
         return embed
+
+    def _remember_embed_event(self, embed: discord.Embed, event_type: str) -> None:
+        if len(self._embed_event_types) > 2000:
+            for key in tuple(self._embed_event_types)[:500]:
+                self._embed_event_types.pop(key, None)
+        self._embed_event_types[id(embed)] = event_type
 
     def set_embed_footer(
         self,
@@ -1459,7 +1444,7 @@ class YALC(DashboardIntegration, commands.Cog):
         """
         # Use current time if not specified
         if event_time is None:
-            event_time = datetime.datetime.now(datetime.UTC)
+            event_time = datetime.datetime.now(datetime.timezone.utc)
 
         # Format time in a readable manner
         formatted_time = event_time.strftime("%B %d, %Y, %I:%M %p UTC")
@@ -1476,11 +1461,13 @@ class YALC(DashboardIntegration, commands.Cog):
         try:
             dashboard_cog = self.bot.get_cog("Dashboard")
             if dashboard_cog and hasattr(dashboard_cog, "rpc"):
-                dashboard_cog.rpc.third_parties_handler.remove_third_party(
-                    self)
+                dashboard_cog.rpc.third_parties_handler.remove_third_party(self)
         except RECOVERABLE_EXCEPTIONS as e:
-            self.log.error(
-                f"Error removing dashboard integration: {e}", exc_info=True)
+            self.log.error(f"Error removing dashboard integration: {e}", exc_info=True)
+
+        self._processing_shutdown = True
+        if self._journal_cleanup_task is not None:
+            self._journal_cleanup_task.cancel()
 
         # Clean up voice sessions and other resources
         try:
@@ -1494,8 +1481,8 @@ class YALC(DashboardIntegration, commands.Cog):
                 exc_info=True,
             )
 
-        # Clean up any other resources
-        await super().cog_unload()
+        # discord.py's base Cog unload hook is a synchronous no-op; all YALC
+        # resources have been released above.
 
     async def cog_load(self) -> None:
         """Register all YALC events as modlog case types and dashboard third party."""
@@ -1515,6 +1502,19 @@ class YALC(DashboardIntegration, commands.Cog):
             self.log.info("Registered all YALC events as modlog case types.")
         except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Failed to register YALC case types: {e}")
+
+        try:
+            self._journal = EventJournal(cog_data_path(self) / "events.sqlite3")
+            await self._journal.initialize()
+        except (OSError, sqlite3.Error) as error:
+            self._journal = None
+            self.log.error("Could not initialize YALC event journal: %s", error)
+
+        self._processing_shutdown = False
+        self._journal_cleanup_task = asyncio.create_task(
+            self._journal_cleanup_loop(),
+            name="yalc-journal-cleanup",
+        )
 
         # Dashboard integration will be handled by the on_dashboard_cog_add listener
         # when the Dashboard cog loads
@@ -1567,8 +1567,7 @@ class YALC(DashboardIntegration, commands.Cog):
                 and before.self_stream == after.self_stream
                 and before.self_video == after.self_video
                 and before.suppress == after.suppress
-                and getattr(before, "requested_to_speak_at", None)
-                == getattr(after, "requested_to_speak_at", None)
+                and getattr(before, "requested_to_speak_at", None) == getattr(after, "requested_to_speak_at", None)
             ):
                 return
 
@@ -1632,37 +1631,30 @@ class YALC(DashboardIntegration, commands.Cog):
                 changes = []
 
                 if before.self_mute != after.self_mute:
-                    changes.append(
-                        f"Self Mute: {before.self_mute} → {after.self_mute}")
+                    changes.append(f"Self Mute: {before.self_mute} → {after.self_mute}")
                 if before.self_deaf != after.self_deaf:
                     changes.append(
                         f"Self Deafen: {before.self_deaf} → {after.self_deaf}",
                     )
                 if before.mute != after.mute:
-                    changes.append(
-                        f"Server Mute: {before.mute} → {after.mute}")
+                    changes.append(f"Server Mute: {before.mute} → {after.mute}")
                 if before.deaf != after.deaf:
-                    changes.append(
-                        f"Server Deafen: {before.deaf} → {after.deaf}")
+                    changes.append(f"Server Deafen: {before.deaf} → {after.deaf}")
                 if before.self_stream != after.self_stream:
                     changes.append(
                         f"Streaming: {before.self_stream} → {after.self_stream}",
                     )
                 if before.self_video != after.self_video:
-                    changes.append(
-                        f"Camera: {before.self_video} → {after.self_video}")
+                    changes.append(f"Camera: {before.self_video} → {after.self_video}")
                 if before.suppress != after.suppress:
-                    changes.append(
-                        f"Suppressed: {before.suppress} → {after.suppress}")
+                    changes.append(f"Suppressed: {before.suppress} → {after.suppress}")
                 if getattr(before, "requested_to_speak_at", None) != getattr(
                     after,
                     "requested_to_speak_at",
                     None,
                 ):
-                    before_request = getattr(
-                        before, "requested_to_speak_at", None)
-                    after_request = getattr(
-                        after, "requested_to_speak_at", None)
+                    before_request = getattr(before, "requested_to_speak_at", None)
+                    after_request = getattr(after, "requested_to_speak_at", None)
                     changes.append(
                         "Request to Speak: "
                         f"{discord.utils.format_dt(before_request, 'R') if before_request else 'None'} → "
@@ -1673,9 +1665,7 @@ class YALC(DashboardIntegration, commands.Cog):
                     return  # No meaningful changes
 
                 channel_mention = after.channel.mention if after.channel else "voice"
-                description = (
-                    f"🎛️ {member.mention} voice state updated in {channel_mention}"
-                )
+                description = f"🎛️ {member.mention} voice state updated in {channel_mention}"
                 session_info["state_changes"] = changes
 
                 # Check if mute/deafen was done by moderator
@@ -1758,9 +1748,7 @@ class YALC(DashboardIntegration, commands.Cog):
             if session_info and "state_changes" in session_info:
                 embed.add_field(
                     name="Changes",
-                    value="\n".join(
-                        f"• {change}" for change in session_info["state_changes"]
-                    ),
+                    value="\n".join(f"• {change}" for change in session_info["state_changes"]),
                     inline=False,
                 )
 
@@ -1787,9 +1775,7 @@ class YALC(DashboardIntegration, commands.Cog):
             else:
                 embed.add_field(
                     name="Action Type",
-                    value="User-initiated"
-                    if action != "state_changed"
-                    else "State change",
+                    value="User-initiated" if action != "state_changed" else "State change",
                     inline=True,
                 )
 
@@ -1797,7 +1783,7 @@ class YALC(DashboardIntegration, commands.Cog):
             embed.add_field(
                 name="Timestamp",
                 value=discord.utils.format_dt(
-                    datetime.datetime.now(datetime.UTC),
+                    datetime.datetime.now(datetime.timezone.utc),
                     style="F",
                 ),
                 inline=True,
@@ -1809,8 +1795,7 @@ class YALC(DashboardIntegration, commands.Cog):
                 embed.set_thumbnail(url=member.display_avatar.url)
 
             # Set footer
-            self.set_embed_footer(
-                embed, label="YALC Logger • Voice State Update")
+            self.set_embed_footer(embed, label="YALC Logger • Voice State Update")
 
             await self.safe_send(channel, embed=embed)
 
@@ -1877,24 +1862,19 @@ class YALC(DashboardIntegration, commands.Cog):
                             session_key = str(user_id)
                             if session_key in sessions:
                                 session = sessions[session_key]
-                                if (
-                                    session.get("active", False)
-                                    and session["channel_id"] != current_channel_id
-                                ):
+                                if session.get("active", False) and session["channel_id"] != current_channel_id:
                                     await self._log_voice_event(
                                         guild,
                                         user_id,
                                         "channel_move",
                                         channel_id=current_channel_id,
-                                        )
+                                    )
 
             except RECOVERABLE_EXCEPTIONS as e:
-                self.log.error(
-                    f"Error in voice session tracking: {e}", exc_info=True)
+                self.log.error(f"Error in voice session tracking: {e}", exc_info=True)
 
         except RECOVERABLE_EXCEPTIONS as e:
-            self.log.error(
-                f"Failed to log voice_state_update: {e}", exc_info=True)
+            self.log.error(f"Failed to log voice_state_update: {e}", exc_info=True)
 
     async def _log_message_pin(self, message: discord.Message) -> None:
         """Log message pin events with audit log integration."""
@@ -1942,15 +1922,11 @@ class YALC(DashboardIntegration, commands.Cog):
                     inline=True,
                 )
                 if entry.reason:
-                    embed.add_field(
-                        name="Reason", value=entry.reason, inline=False)
+                    embed.add_field(name="Reason", value=entry.reason, inline=False)
 
             # Include user thumbnail
             settings = await self.config.guild(message.guild).all()
-            if (
-                settings.get("include_thumbnails", True)
-                and message.author.display_avatar
-            ):
+            if settings.get("include_thumbnails", True) and message.author.display_avatar:
                 embed.set_thumbnail(url=message.author.display_avatar.url)
 
             await self.safe_send(channel, embed=embed)
@@ -2004,15 +1980,11 @@ class YALC(DashboardIntegration, commands.Cog):
                     inline=True,
                 )
                 if entry.reason:
-                    embed.add_field(
-                        name="Reason", value=entry.reason, inline=False)
+                    embed.add_field(name="Reason", value=entry.reason, inline=False)
 
             # Include user thumbnail
             settings = await self.config.guild(message.guild).all()
-            if (
-                settings.get("include_thumbnails", True)
-                and message.author.display_avatar
-            ):
+            if settings.get("include_thumbnails", True) and message.author.display_avatar:
                 embed.set_thumbnail(url=message.author.display_avatar.url)
 
             await self.safe_send(channel, embed=embed)
@@ -2044,11 +2016,7 @@ class YALC(DashboardIntegration, commands.Cog):
                 return
 
             # Get emoji representation
-            emoji_str = (
-                str(reaction.emoji)
-                if hasattr(reaction.emoji, "name")
-                else reaction.emoji
-            )
+            emoji_str = str(reaction.emoji) if hasattr(reaction.emoji, "name") else reaction.emoji
             if hasattr(reaction.emoji, "id") and reaction.emoji.id:
                 emoji_str = f"<:{reaction.emoji.name}:{reaction.emoji.id}>"
             elif isinstance(reaction.emoji, str):
@@ -2060,9 +2028,7 @@ class YALC(DashboardIntegration, commands.Cog):
                 user=f"{user.mention} ({user.id})",
                 reaction=f"{emoji_str} ({reaction.emoji})",
                 channel=f"{reaction.message.channel.mention}",
-                message_content=reaction.message.content[:100]
-                if reaction.message.content
-                else "*No text content*",
+                message_content=reaction.message.content[:100] if reaction.message.content else "*No text content*",
             )
 
             embed.add_field(
@@ -2108,11 +2074,7 @@ class YALC(DashboardIntegration, commands.Cog):
                 return
 
             # Get emoji representation
-            emoji_str = (
-                str(reaction.emoji)
-                if hasattr(reaction.emoji, "name")
-                else reaction.emoji
-            )
+            emoji_str = str(reaction.emoji) if hasattr(reaction.emoji, "name") else reaction.emoji
             if hasattr(reaction.emoji, "id") and reaction.emoji.id:
                 emoji_str = f"<:{reaction.emoji.name}:{reaction.emoji.id}>"
             elif isinstance(reaction.emoji, str):
@@ -2124,9 +2086,7 @@ class YALC(DashboardIntegration, commands.Cog):
                 user=f"{user.mention} ({user.id})",
                 reaction=f"{emoji_str} ({reaction.emoji})",
                 channel=f"{reaction.message.channel.mention}",
-                message_content=reaction.message.content[:100]
-                if reaction.message.content
-                else "*No text content*",
+                message_content=reaction.message.content[:100] if reaction.message.content else "*No text content*",
             )
 
             embed.add_field(
@@ -2168,17 +2128,13 @@ class YALC(DashboardIntegration, commands.Cog):
                 return
 
             # Analyze reactions that were cleared
-            unique_emoji = {
-                str(r.emoji) if hasattr(r.emoji, "name") else r.emoji for r in reactions
-            }
+            unique_emoji = {str(r.emoji) if hasattr(r.emoji, "name") else r.emoji for r in reactions}
 
             embed = self.create_embed(
                 "reaction_clear",
                 f"🧹 All reactions cleared from message in {message.channel.mention}",
                 cleared_reactions=f"**{len(reactions)}** total reactions ({len(unique_emoji)} unique emojis)",
-                message_content=message.content[:100]
-                if message.content
-                else "*No text content*",
+                message_content=message.content[:100] if message.content else "*No text content*",
                 author=f"{message.author.mention} ({message.author.id})",
             )
 
@@ -2190,10 +2146,7 @@ class YALC(DashboardIntegration, commands.Cog):
 
             # Include user thumbnail
             settings = await self.config.guild(message.guild).all()
-            if (
-                settings.get("include_thumbnails", True)
-                and message.author.display_avatar
-            ):
+            if settings.get("include_thumbnails", True) and message.author.display_avatar:
                 embed.set_thumbnail(url=message.author.display_avatar.url)
 
             await self.safe_send(channel, embed=embed)
@@ -2284,10 +2237,8 @@ class YALC(DashboardIntegration, commands.Cog):
                 "integration_update",
                 f"🔄 Integration updated: **{integration.name}**",
             )
-            embed.add_field(name="Type", value=str(
-                integration.type), inline=True)
-            embed.add_field(name="Enabled", value=str(
-                integration.enabled), inline=True)
+            embed.add_field(name="Type", value=str(integration.type), inline=True)
+            embed.add_field(name="Enabled", value=str(integration.enabled), inline=True)
 
             if entry and entry.user:
                 embed.add_field(
@@ -2296,8 +2247,7 @@ class YALC(DashboardIntegration, commands.Cog):
                     inline=True,
                 )
                 if entry.reason:
-                    embed.add_field(
-                        name="Reason", value=entry.reason, inline=False)
+                    embed.add_field(name="Reason", value=entry.reason, inline=False)
 
             embed.set_footer(text=f"Integration ID: {integration.id}")
 
@@ -2328,13 +2278,9 @@ class YALC(DashboardIntegration, commands.Cog):
                 timeout_seconds=10,
             )
             integration_id = getattr(payload, "integration_id", None)
-            integration_name = (
-                f"ID `{integration_id}`" if integration_id else "Unknown integration"
-            )
+            integration_name = f"ID `{integration_id}`" if integration_id else "Unknown integration"
             if entry and entry.target:
-                integration_name = (
-                    getattr(entry.target, "name", None) or integration_name
-                )
+                integration_name = getattr(entry.target, "name", None) or integration_name
 
             embed = self.create_embed(
                 "integration_delete",
@@ -2354,8 +2300,7 @@ class YALC(DashboardIntegration, commands.Cog):
                     inline=True,
                 )
                 if entry.reason:
-                    embed.add_field(
-                        name="Reason", value=entry.reason, inline=False)
+                    embed.add_field(name="Reason", value=entry.reason, inline=False)
 
             if integration_id:
                 embed.set_footer(text=f"Integration ID: {integration_id}")
@@ -2527,8 +2472,11 @@ class YALC(DashboardIntegration, commands.Cog):
             actions_list = []
             for action in rule.actions:
                 action_type = (
-                    str(getattr(action, "type", action),
-                        ).replace("_", " ").title()
+                    str(
+                        getattr(action, "type", action),
+                    )
+                    .replace("_", " ")
+                    .title()
                 )
                 actions_list.append(f"• {action_type}")
             if actions_list:
@@ -2545,8 +2493,7 @@ class YALC(DashboardIntegration, commands.Cog):
                     inline=True,
                 )
                 if entry.reason:
-                    embed.add_field(
-                        name="Reason", value=entry.reason, inline=False)
+                    embed.add_field(name="Reason", value=entry.reason, inline=False)
 
             embed.set_footer(text=f"Rule ID: {rule.id}")
 
@@ -2642,11 +2589,7 @@ class YALC(DashboardIntegration, commands.Cog):
             )
 
             if execution.content and len(execution.content) > 0:
-                content_preview = (
-                    execution.content[:500]
-                    if len(execution.content) > 500
-                    else execution.content
-                )
+                content_preview = execution.content[:500] if len(execution.content) > 500 else execution.content
                 embed.add_field(
                     name="Flagged Content",
                     value=f"```\n{content_preview}\n```",
@@ -2657,8 +2600,7 @@ class YALC(DashboardIntegration, commands.Cog):
                 metadata_info = []
                 for metadata in execution.action.metadatas:
                     if hasattr(metadata, "channel_id"):
-                        channel_obj = execution.guild.get_channel(
-                            metadata.channel_id)
+                        channel_obj = execution.guild.get_channel(metadata.channel_id)
                         metadata_info.append(
                             f"• Timeout in {channel_obj.mention}"
                             if channel_obj
@@ -2671,9 +2613,7 @@ class YALC(DashboardIntegration, commands.Cog):
                             if seconds < 3600:
                                 duration_str = f"{seconds // 60}m {seconds % 60}s"
                             else:
-                                duration_str = (
-                                    f"{seconds // 3600}h {(seconds % 3600) // 60}m"
-                                )
+                                duration_str = f"{seconds // 3600}h {(seconds % 3600) // 60}m"
                         metadata_info.append(f"• Duration: {duration_str}")
 
                 if metadata_info:
@@ -2689,11 +2629,7 @@ class YALC(DashboardIntegration, commands.Cog):
 
             # Include user thumbnail
             settings = await self.config.guild(execution.guild).all()
-            if (
-                execution.member
-                and settings.get("include_thumbnails", True)
-                and execution.member.display_avatar
-            ):
+            if execution.member and settings.get("include_thumbnails", True) and execution.member.display_avatar:
                 embed.set_thumbnail(url=execution.member.display_avatar.url)
 
             await self.safe_send(channel, embed=embed)
@@ -2792,9 +2728,7 @@ class YALC(DashboardIntegration, commands.Cog):
         """Get statistics for all active voice sessions."""
         try:
             async with self.config.guild(guild).voice_sessions() as sessions:
-                active_sessions = sum(
-                    1 for s in sessions.values() if s.get("active", False)
-                )
+                active_sessions = sum(1 for s in sessions.values() if s.get("active", False))
 
                 stats = {
                     "active_sessions": active_sessions,
@@ -2808,8 +2742,7 @@ class YALC(DashboardIntegration, commands.Cog):
                         channel_id = session["channel_id"]
                         if channel_id not in stats["sessions_by_channel"]:
                             stats["sessions_by_channel"][channel_id] = []
-                        stats["sessions_by_channel"][channel_id].append(
-                            user_id)
+                        stats["sessions_by_channel"][channel_id].append(user_id)
 
                 return stats
 
@@ -2876,9 +2809,7 @@ class YALC(DashboardIntegration, commands.Cog):
         if seconds < 86400:
             hours = int(seconds // 3600)
             minutes = int((seconds % 3600) // 60)
-            min_part = (
-                f" {minutes} minute{'s' if minutes != 1 else ''}" if minutes > 0 else ""
-            )
+            min_part = f" {minutes} minute{'s' if minutes != 1 else ''}" if minutes > 0 else ""
             return f"{hours} hour{'s' if hours != 1 else ''}{min_part}"
         days = int(seconds // 86400)
         hours = int((seconds % 86400) // 3600)
@@ -2892,9 +2823,7 @@ class YALC(DashboardIntegration, commands.Cog):
             channel = await self.get_log_channel(after.guild, "presence_update")
             if not channel:
                 return
-            desc = (
-                f"🟢 {after.mention} presence changed: {before.status} → {after.status}"
-            )
+            desc = f"🟢 {after.mention} presence changed: {before.status} → {after.status}"
             # Presence updates are user-driven, so actor is the user themselves
             embed = self.create_embed(
                 "presence_update",
@@ -3005,17 +2934,18 @@ class YALC(DashboardIntegration, commands.Cog):
             )
             if entry and entry.user:
                 desc += f" by {entry.user.mention} ({entry.user})"
-            embed = self.create_embed(
-                "application_cmd_permissions_update", desc)
+            embed = self.create_embed("application_cmd_permissions_update", desc)
             await self.safe_send(channel, embed=embed)
         except RECOVERABLE_EXCEPTIONS as e:
-            self.log.error(
-                f"Failed to log application_command_permissions_update: {e}")
+            self.log.error(f"Failed to log application_command_permissions_update: {e}")
 
     @commands.Cog.listener()
     async def on_audit_log_entry_create(self, entry):
-        """Handle audit log entries for role attribution and gateway fallbacks."""
+        """Cache every audit entry and directly log audit-only actions."""
         try:
+            if not self._audit_correlator.record(entry):
+                return
+
             role_create_action = self._get_audit_action("role_create")
             role_delete_action = self._get_audit_action("role_delete")
             role_update_action = self._get_audit_action("role_update")
@@ -3041,12 +2971,24 @@ class YALC(DashboardIntegration, commands.Cog):
                     # Clean up old entries (older than 30 seconds) to prevent memory leaks
                     current_time = time.time()
                     expired_keys = [
-                        key
-                        for key, data in self.recent_audit_entries.items()
-                        if current_time - data["timestamp"] > 30
+                        key for key, data in self.recent_audit_entries.items() if current_time - data["timestamp"] > 30
                     ]
                     for key in expired_keys:
                         del self.recent_audit_entries[key]
+
+            action_name = str(getattr(getattr(entry, "action", None), "name", ""))
+            audit_only_events = {
+                "bot_add": "bot_add",
+                "member_prune": "member_prune",
+                "overwrite_create": "overwrite_create",
+                "overwrite_update": "overwrite_update",
+                "overwrite_delete": "overwrite_delete",
+                "webhook_create": "webhook_create",
+                "webhook_delete": "webhook_delete",
+            }
+            event_type = audit_only_events.get(action_name)
+            if event_type:
+                await self._log_audit_only_event(entry, event_type)
 
         except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(
@@ -3054,10 +2996,254 @@ class YALC(DashboardIntegration, commands.Cog):
                 exc_info=True,
             )
 
+    async def _log_audit_only_event(self, entry, event_type: str) -> None:
+        """Render actions for which Discord has no equally useful gateway object."""
+        guild = getattr(entry, "guild", None)
+        if guild is None:
+            return
+        settings = await self._get_cached_settings(guild)
+        if not settings.get("audit_only_events", True):
+            return
+        if not await self.should_log_event(guild, event_type):
+            return
+        channel = await self.get_log_channel(guild, event_type)
+        if channel is None:
+            return
+
+        actor = getattr(entry, "user", None)
+        target = getattr(entry, "target", None)
+        actor_id = getattr(actor, "id", None)
+        target_id = getattr(target, "id", None)
+        action_name = str(getattr(getattr(entry, "action", None), "name", event_type))
+        summary = action_name.replace("_", " ").title()
+        if target is not None:
+            summary += f": {target}"
+
+        event = LogEvent(
+            guild_id=guild.id,
+            event_type=event_type,
+            summary=summary,
+            actor_id=actor_id,
+            target_id=target_id,
+            audit_entry_id=getattr(entry, "id", None),
+            confidence="confirmed",
+            details={
+                "reason": getattr(entry, "reason", None),
+                "changes": self._format_audit_changes(entry),
+            },
+        )
+        embed = self.create_embed(event_type, f"{self.event_descriptions[event_type][0]} {summary}\n\u200b")
+        if target is not None:
+            embed.add_field(
+                name="Target",
+                value=f"{target} (`{target_id or 'unknown'}`)",
+                inline=True,
+            )
+        embed.add_field(
+            name="Performed By",
+            value=(f"{actor.mention} (`{actor}`, ID: `{actor_id}`)" if actor is not None else "Unknown"),
+            inline=True,
+        )
+        embed.add_field(
+            name="Audit Entry",
+            value=f"`{getattr(entry, 'id', 'unknown')}` · Confirmed",
+            inline=True,
+        )
+        changes = event.details.get("changes")
+        if changes:
+            embed.add_field(name="Changes", value=str(changes)[:1024], inline=False)
+        reason = event.details.get("reason")
+        if reason:
+            embed.add_field(name="Reason", value=str(reason)[:1024], inline=False)
+        await self.safe_send(channel, embed=embed, yalc_event=event)
+
+    @staticmethod
+    def _format_audit_changes(entry) -> str:
+        """Return a compact before/after summary from discord.py audit diffs."""
+        before = getattr(entry, "before", None)
+        after = getattr(entry, "after", None)
+        if before is None and after is None:
+            return ""
+        changes = []
+        try:
+            attributes = {name for name, _value in before}
+            attributes.update(name for name, _value in after)
+        except (TypeError, ValueError):
+            attributes = set()
+        for name in sorted(attributes):
+            old_value = getattr(before, name, None)
+            new_value = getattr(after, name, None)
+            if old_value != new_value:
+                changes.append(f"{name.replace('_', ' ').title()}: {old_value} → {new_value}")
+        return "\n".join(changes[:20])
+
     # --- Event Listeners ---
 
     # Dashboard integration is handled by the DashboardIntegration class
     # The on_dashboard_cog_add method is inherited from DashboardIntegration
+
+    def _claim_raw_event(self, event_type: str, event_id: int) -> bool:
+        """Deduplicate raw gateway events for a short period."""
+        now = time.monotonic()
+        for key, timestamp in tuple(self._raw_event_ids.items()):
+            if now - timestamp > 120:
+                self._raw_event_ids.pop(key, None)
+        key = (event_type, int(event_id))
+        if key in self._raw_event_ids:
+            return False
+        self._raw_event_ids[key] = now
+        return True
+
+    @commands.Cog.listener()
+    async def on_raw_message_delete(self, payload: discord.RawMessageDeleteEvent) -> None:
+        """Log uncached deletions so message IDs never disappear silently."""
+        if payload.guild_id is None or getattr(payload, "cached_message", None) is not None:
+            return
+        guild = self.bot.get_guild(payload.guild_id)
+        if guild is None or not self._claim_raw_event("message_delete", payload.message_id):
+            return
+        settings = await self._get_cached_settings(guild)
+        if not settings.get("raw_message_events", True):
+            return
+        source_channel = guild.get_channel_or_thread(payload.channel_id)
+        if source_channel is None or not await self.should_log_event(
+            guild,
+            "message_delete",
+            channel=source_channel,
+        ):
+            return
+        log_channel = await self.get_log_channel(guild, "message_delete")
+        if log_channel is None:
+            return
+
+        audit_entry = await self._get_audit_log_entry(
+            guild,
+            discord.AuditLogAction.message_delete,
+            timeout_seconds=15,
+            channel_id=payload.channel_id,
+        )
+        actor = getattr(audit_entry, "user", None)
+        event = LogEvent(
+            guild_id=guild.id,
+            event_type="message_delete",
+            summary=f"Uncached message {payload.message_id} deleted in #{getattr(source_channel, 'name', payload.channel_id)}",
+            actor_id=getattr(actor, "id", None),
+            source_channel_id=payload.channel_id,
+            audit_entry_id=getattr(audit_entry, "id", None),
+            confidence="probable" if audit_entry else "unavailable",
+            details={"message_id": payload.message_id, "content_available": False},
+        )
+        embed = self.create_embed(
+            "message_delete",
+            f"🗑️ An uncached message was deleted in {getattr(source_channel, 'mention', source_channel)}.",
+        )
+        embed.add_field(name="Message ID", value=f"`{payload.message_id}`", inline=True)
+        embed.add_field(name="Channel", value=getattr(source_channel, "mention", str(source_channel)), inline=True)
+        embed.add_field(name="Content", value="Unavailable because the message was not cached.", inline=False)
+        if actor:
+            embed.add_field(name="Deleted By", value=f"{actor.mention} (`{actor.id}`) · Probable", inline=True)
+        await self.safe_send(log_channel, embed=embed, yalc_event=event)
+
+    @commands.Cog.listener()
+    async def on_raw_bulk_message_delete(self, payload: discord.RawBulkMessageDeleteEvent) -> None:
+        """Log every ID from a bulk deletion that Discord.py did not cache."""
+        if payload.guild_id is None:
+            return
+        cached_ids = {message.id for message in (getattr(payload, "cached_messages", None) or ())}
+        uncached_ids = set(payload.message_ids) - cached_ids
+        if not uncached_ids:
+            return
+        guild = self.bot.get_guild(payload.guild_id)
+        batch_key = min(uncached_ids)
+        if guild is None or not self._claim_raw_event("message_bulk_delete", batch_key):
+            return
+        settings = await self._get_cached_settings(guild)
+        if not settings.get("raw_message_events", True):
+            return
+        source_channel = guild.get_channel_or_thread(payload.channel_id)
+        if source_channel is None or not await self.should_log_event(
+            guild,
+            "message_bulk_delete",
+            channel=source_channel,
+        ):
+            return
+        log_channel = await self.get_log_channel(guild, "message_bulk_delete")
+        if log_channel is None:
+            return
+        audit_entry = await self._get_audit_log_entry(
+            guild,
+            discord.AuditLogAction.message_bulk_delete,
+            timeout_seconds=20,
+            channel_id=payload.channel_id,
+        )
+        actor = getattr(audit_entry, "user", None)
+        ids = sorted(uncached_ids)
+        event = LogEvent(
+            guild_id=guild.id,
+            event_type="message_bulk_delete",
+            summary=f"{len(ids)} uncached messages bulk deleted",
+            actor_id=getattr(actor, "id", None),
+            source_channel_id=payload.channel_id,
+            audit_entry_id=getattr(audit_entry, "id", None),
+            confidence="confirmed" if audit_entry else "unavailable",
+            details={"message_ids": ids},
+        )
+        embed = self.create_embed(
+            "message_bulk_delete",
+            f"♻️ **{len(ids)}** uncached messages were deleted in {getattr(source_channel, 'mention', source_channel)}.",
+        )
+        embed.add_field(name="Message IDs", value=", ".join(f"`{item}`" for item in ids[:25])[:1024], inline=False)
+        if len(ids) > 25:
+            embed.add_field(name="Additional IDs", value=f"{len(ids) - 25} more IDs omitted from this embed.", inline=False)
+        if actor:
+            embed.add_field(name="Deleted By", value=f"{actor.mention} (`{actor.id}`) · Confirmed", inline=True)
+        await self.safe_send(log_channel, embed=embed, yalc_event=event)
+
+    @commands.Cog.listener()
+    async def on_raw_message_edit(self, payload: discord.RawMessageUpdateEvent) -> None:
+        """Record uncached message edits with the data Discord made available."""
+        if payload.guild_id is None or getattr(payload, "cached_message", None) is not None:
+            return
+        guild = self.bot.get_guild(payload.guild_id)
+        if guild is None or not self._claim_raw_event("message_edit", payload.message_id):
+            return
+        settings = await self._get_cached_settings(guild)
+        if not settings.get("raw_message_events", True):
+            return
+        source_channel = guild.get_channel_or_thread(payload.channel_id)
+        if source_channel is None or not await self.should_log_event(
+            guild,
+            "message_edit",
+            channel=source_channel,
+        ):
+            return
+        log_channel = await self.get_log_channel(guild, "message_edit")
+        if log_channel is None:
+            return
+        data = payload.data or {}
+        author_data = data.get("author") or {}
+        author_id = author_data.get("id")
+        content = data.get("content")
+        event = LogEvent(
+            guild_id=guild.id,
+            event_type="message_edit",
+            summary=f"Uncached message {payload.message_id} edited",
+            actor_id=int(author_id) if str(author_id).isdigit() else None,
+            source_channel_id=payload.channel_id,
+            confidence="confirmed" if author_id else "unavailable",
+            details={"message_id": payload.message_id, "after_content": content},
+        )
+        embed = self.create_embed(
+            "message_edit",
+            f"✏️ An uncached message was edited in {getattr(source_channel, 'mention', source_channel)}.",
+        )
+        embed.add_field(name="Message ID", value=f"`{payload.message_id}`", inline=True)
+        if author_id:
+            embed.add_field(name="Author", value=f"<@{author_id}> (`{author_id}`)", inline=True)
+        embed.add_field(name="Before", value="Unavailable because the message was not cached.", inline=False)
+        if content is not None:
+            embed.add_field(name="After", value=str(content)[:1024] or "*No text content*", inline=False)
+        await self.safe_send(log_channel, embed=embed, yalc_event=event)
 
     @commands.Cog.listener()
     async def on_message_delete(self, message: discord.Message) -> None:
@@ -3080,8 +3266,7 @@ class YALC(DashboardIntegration, commands.Cog):
                 return
 
             # 2. Enhanced Tupperbox message detection
-            tupperbox_ids = settings.get(
-                "tupperbox_ids", ["239232811662311425"])
+            tupperbox_ids = settings.get("tupperbox_ids", ["239232811662311425"])
             ignore_tupperbox = settings.get("ignore_tupperbox", True)
 
             if ignore_tupperbox:
@@ -3096,7 +3281,7 @@ class YALC(DashboardIntegration, commands.Cog):
                 if settings.get("detect_proxy_deletes", True):
                     # Time-based proxy deletion detection
                     # (Tupperbox often deletes the original command message after proxying)
-                    now = datetime.datetime.now(datetime.UTC)
+                    now = datetime.datetime.now(datetime.timezone.utc)
                     msg_age = now - message.created_at
 
                     # Check if message is very new (typical for proxy command deletion)
@@ -3104,20 +3289,15 @@ class YALC(DashboardIntegration, commands.Cog):
                         content = getattr(message, "content", "").lower()
 
                         # Common proxy message command patterns
-                        proxy_commands = [";", "!", "//",
-                            "pk;", "tb:", "$", "t!"]
+                        proxy_commands = [";", "!", "//", "pk;", "tb:", "$", "t!"]
 
                         if any(content.startswith(cmd) for cmd in proxy_commands):
-                            self.log.debug(
-                                "Skipping likely proxy command deletion.")
+                            self.log.debug("Skipping likely proxy command deletion.")
                             return
 
                         # Check for message prefix patterns from settings
-                        custom_prefixes = settings.get(
-                            "message_prefix_filter", [])
-                        if any(
-                            content.startswith(prefix) for prefix in custom_prefixes
-                        ):
+                        custom_prefixes = settings.get("message_prefix_filter", [])
+                        if any(content.startswith(prefix) for prefix in custom_prefixes):
                             self.log.debug(
                                 "Skipping deletion due to custom prefix match.",
                             )
@@ -3135,17 +3315,13 @@ class YALC(DashboardIntegration, commands.Cog):
 
                 if webhook and webhook_name_filters:
                     webhook_name = getattr(webhook, "name", "").lower()
-                    if any(
-                        filter_term.lower() in webhook_name
-                        for filter_term in webhook_name_filters
-                    ):
+                    if any(filter_term.lower() in webhook_name for filter_term in webhook_name_filters):
                         self.log.debug(
                             f"Skipping webhook message from filtered name: {webhook_name}",
                         )
                         return
                 else:
-                    self.log.debug(
-                        "Skipping webhook message (all webhooks ignored).")
+                    self.log.debug("Skipping webhook message (all webhooks ignored).")
                     return
 
             # 4. Check app message ignore setting
@@ -3187,8 +3363,7 @@ class YALC(DashboardIntegration, commands.Cog):
         try:
             author = getattr(message, "author", None)
             content = getattr(message, "content", "")
-            attachment_objects = list(
-                getattr(message, "attachments", []) or [])
+            attachment_objects = list(getattr(message, "attachments", []) or [])
             (
                 deleted_image_files,
                 image_copy_notes,
@@ -3204,18 +3379,15 @@ class YALC(DashboardIntegration, commands.Cog):
             )
 
             # Additional context for debugging
-            self.log.debug(
-                f"Logging message_delete: {author} in #{channel_name}")
+            self.log.debug(f"Logging message_delete: {author} in #{channel_name}")
 
             # Rich message metadata for comprehensive logging
             metadata = {}
 
             # Format timestamps consistently with Discord native formatting
             if hasattr(message, "created_at") and message.created_at:
-                formatted_time = discord.utils.format_dt(
-                    message.created_at, style="F")
-                relative_time = discord.utils.format_dt(
-                    message.created_at, style="R")
+                formatted_time = discord.utils.format_dt(message.created_at, style="F")
+                relative_time = discord.utils.format_dt(message.created_at, style="R")
                 metadata["Created"] = f"{formatted_time} ({relative_time})"
 
             # User information with clickable link
@@ -3225,8 +3397,7 @@ class YALC(DashboardIntegration, commands.Cog):
 
                 # Add role info if author is a member (not a webhook or system user)
                 if isinstance(author, discord.Member) and author.roles:
-                    top_role = author.roles[-1] if len(
-                        author.roles) > 1 else None
+                    top_role = author.roles[-1] if len(author.roles) > 1 else None
                     if top_role and top_role.name != "@everyone":
                         metadata["Top Role"] = f"{top_role.mention} ({top_role.id})"
             else:
@@ -3242,6 +3413,7 @@ class YALC(DashboardIntegration, commands.Cog):
                         discord.AuditLogAction.message_delete,
                         target=message.author,
                         timeout_seconds=10,
+                        channel_id=getattr(message.channel, "id", None),
                     )
 
                     if audit_entry:
@@ -3274,9 +3446,7 @@ class YALC(DashboardIntegration, commands.Cog):
             # Add deletion metadata
             if deletion_info:
                 deleter = deletion_info["deleted_by"]
-                metadata["Deleted By"] = (
-                    f"{deleter.mention} (`{deleter}`, ID: `{deleter.id}`)"
-                )
+                metadata["Deleted By"] = f"{deleter.mention} (`{deleter}`, ID: `{deleter.id}`)"
 
                 # Add reason if provided
                 if deletion_info["reason"]:
@@ -3305,14 +3475,12 @@ class YALC(DashboardIntegration, commands.Cog):
                     # Preserve the code block as-is
                     embed.add_field(
                         name="Content",
-                        value=content[:1024]
-                        if len(content) <= 1024
-                        else content[:1021] + "...",
+                        value=content[:1024] if len(content) <= 1024 else content[:1021] + "...",
                         inline=False,
                     )
                 else:
                     # Format regular text with multi-line support and proper escaping
-                    formatted_content = content
+                    formatted_content = content.replace("```", "``\u200b`")
                     if len(formatted_content) > 1024:
                         formatted_content = formatted_content[:1021] + "..."
 
@@ -3322,15 +3490,13 @@ class YALC(DashboardIntegration, commands.Cog):
                         inline=False,
                     )
             else:
-                embed.add_field(
-                    name="Content", value="*No text content*", inline=False)
+                embed.add_field(name="Content", value="*No text content*", inline=False)
 
             # Handle attachments with better formatting
             if attachment_objects:
                 attachment_list = []
                 for attachment in attachment_objects:
-                    file_name = getattr(
-                        attachment, "filename", None) or "Attachment"
+                    file_name = getattr(attachment, "filename", None) or "Attachment"
                     url = getattr(attachment, "url", None)
                     size = getattr(attachment, "size", None)
                     file_label = file_name
@@ -3345,8 +3511,7 @@ class YALC(DashboardIntegration, commands.Cog):
                     name=f"Attachments ({len(attachment_objects)})",
                     value="\n".join(attachment_list)
                     if len(attachment_list) <= 5
-                    else "\n".join(attachment_list[:5])
-                    + f"\n*...and {len(attachment_list) - 5} more*",
+                    else "\n".join(attachment_list[:5]) + f"\n*...and {len(attachment_list) - 5} more*",
                     inline=False,
                 )
 
@@ -3354,13 +3519,41 @@ class YALC(DashboardIntegration, commands.Cog):
                 embed.add_field(
                     name="Deleted Image Copy",
                     value="\n".join(image_copy_notes[:5])
-                    + (
-                        f"\n*...and {len(image_copy_notes) - 5} more notes*"
-                        if len(image_copy_notes) > 5
-                        else ""
-                    ),
+                    + (f"\n*...and {len(image_copy_notes) - 5} more notes*" if len(image_copy_notes) > 5 else ""),
                     inline=False,
                 )
+
+            reference = getattr(message, "reference", None)
+            if reference is not None and getattr(reference, "message_id", None):
+                reference_url = (
+                    f"https://discord.com/channels/{message.guild.id}/"
+                    f"{getattr(reference, 'channel_id', message.channel.id)}/"
+                    f"{reference.message_id}"
+                )
+                embed.add_field(name="Replying To", value=reference_url, inline=False)
+
+            stickers = list(getattr(message, "stickers", []) or [])
+            if stickers:
+                sticker_lines = [
+                    f"[{sticker.name}]({sticker.url})" if getattr(sticker, "url", None) else f"`{sticker.name}`"
+                    for sticker in stickers
+                ]
+                embed.add_field(name="Stickers", value="\n".join(sticker_lines)[:1024], inline=False)
+
+            poll = getattr(message, "poll", None)
+            if poll is not None:
+                question = getattr(getattr(poll, "question", None), "text", None) or getattr(poll, "question", "Unknown")
+                answers = [getattr(answer, "text", str(answer)) for answer in getattr(poll, "answers", [])]
+                poll_text = f"**{question}**"
+                if answers:
+                    poll_text += "\n" + "\n".join(f"• {answer}" for answer in answers)
+                embed.add_field(name="Poll", value=poll_text[:1024], inline=False)
+
+            snapshots = list(getattr(message, "message_snapshots", []) or [])
+            if snapshots:
+                snapshot = snapshots[0]
+                snapshot_text = getattr(snapshot, "content", None) or "Forwarded message snapshot"
+                embed.add_field(name="Forwarded Message", value=str(snapshot_text)[:1024], inline=False)
 
             # Add embed information if message contained embeds
             if embeds:
@@ -3402,8 +3595,7 @@ class YALC(DashboardIntegration, commands.Cog):
                                     f"**Author**: [{author_name}]({author_url})",
                                 )
                             else:
-                                embed_details.append(
-                                    f"**Author**: {author_name}")
+                                embed_details.append(f"**Author**: {author_name}")
 
                             if author_icon:
                                 embed_details.append(
@@ -3415,8 +3607,7 @@ class YALC(DashboardIntegration, commands.Cog):
                     if embed_fields:
                         embed_details.append("**Fields**:")
                         for j, field in enumerate(embed_fields[:3]):
-                            field_name = getattr(
-                                field, "name", "Unnamed Field")
+                            field_name = getattr(field, "name", "Unnamed Field")
                             field_value = getattr(field, "value", "")
                             field_inline = getattr(field, "inline", False)
 
@@ -3461,8 +3652,7 @@ class YALC(DashboardIntegration, commands.Cog):
                             msg_embed.timestamp,
                             style="f",
                         )
-                        embed_details.append(
-                            f"**Timestamp**: {formatted_time}")
+                        embed_details.append(f"**Timestamp**: {formatted_time}")
 
                     # Footer with enhanced formatting
                     embed_footer = getattr(msg_embed, "footer", None)
@@ -3508,8 +3698,7 @@ class YALC(DashboardIntegration, commands.Cog):
 
                 # Show info about additional embeds
                 if len(embeds) > 3:
-                    embed_info.append(
-                        f"*...and {len(embeds) - 3} more embeds*")
+                    embed_info.append(f"*...and {len(embeds) - 3} more embeds*")
 
                 # Add all embed info to the logging embed
                 embed.add_field(
@@ -3535,15 +3724,33 @@ class YALC(DashboardIntegration, commands.Cog):
                 embed.set_thumbnail(url=author.display_avatar.url)
 
             # Send the log message to the configured channel
+            deleter = deletion_info.get("deleted_by") if deletion_info else None
+            event = LogEvent(
+                guild_id=message.guild.id,
+                event_type="message_delete",
+                summary=f"Message {message.id} deleted in #{channel_name}",
+                actor_id=getattr(deleter, "id", None),
+                target_id=getattr(author, "id", None),
+                source_channel_id=getattr(message.channel, "id", None),
+                audit_entry_id=getattr(audit_entry, "id", None) if deletion_info else None,
+                confidence="confirmed" if deletion_info else "unavailable",
+                details={
+                    "message_id": message.id,
+                    "content": content,
+                    "attachment_count": len(attachment_objects),
+                    "sticker_count": len(stickers),
+                },
+            )
             try:
                 if deleted_image_files:
                     await self.safe_send(
                         channel,
                         embed=embed,
                         files=deleted_image_files,
+                        yalc_event=event,
                     )
                 else:
-                    await self.safe_send(channel, embed=embed)
+                    await self.safe_send(channel, embed=embed, yalc_event=event)
             finally:
                 self._close_send_files(deleted_image_files)
 
@@ -3582,8 +3789,7 @@ class YALC(DashboardIntegration, commands.Cog):
                 return
 
             # 2. Enhanced Tupperbot filtering
-            tupperbox_ids = settings.get(
-                "tupperbox_ids", ["239232811662311425"])
+            tupperbox_ids = settings.get("tupperbox_ids", ["239232811662311425"])
             ignore_tupperbox = settings.get("ignore_tupperbox", True)
 
             if ignore_tupperbox:
@@ -3620,18 +3826,14 @@ class YALC(DashboardIntegration, commands.Cog):
                 # If content is the same, check if this is just an auto-embed conversion
                 # Auto-embeds typically happen when Discord processes links into embeds
                 # without the user actually editing the message
-                if (
-                    len(before.embeds) != len(after.embeds)
-                    or before.embeds != after.embeds
-                ):
+                if len(before.embeds) != len(after.embeds) or before.embeds != after.embeds:
                     # This is likely an auto-embed conversion, skip logging
                     self.log.debug(
                         "Skipping auto-embed conversion - content unchanged, only embeds different",
                     )
                     return
                 # If content and embeds are the same, nothing meaningful changed
-                self.log.debug(
-                    "Skipping message edit - no meaningful changes detected")
+                self.log.debug("Skipping message edit - no meaningful changes detected")
                 return
 
             # 4. Get the appropriate log channel
@@ -3660,24 +3862,17 @@ class YALC(DashboardIntegration, commands.Cog):
             )
 
             # Additional context for debugging
-            self.log.debug(
-                f"Logging message_edit in #{channel_name} by {author}")
+            self.log.debug(f"Logging message_edit in #{channel_name} by {author}")
 
             # Prepare user identification with link
-            user_link = (
-                f"[{author}](https://discord.com/users/{author.id})"
-                if author and hasattr(author, "id")
-                else "Unknown"
-            )
+            user_link = f"[{author}](https://discord.com/users/{author.id})" if author and hasattr(author, "id") else "Unknown"
 
             # Include jump URL if available
             jump_url = getattr(after, "jump_url", None)
 
             # Rich message metadata for comprehensive logging
             metadata = {
-                "Author": f"{user_link} ({author.id})"
-                if author and hasattr(author, "id")
-                else "Unknown",
+                "Author": f"{user_link} ({author.id})" if author and hasattr(author, "id") else "Unknown",
                 "Channel": f"#{channel_name}",
             }
 
@@ -3688,8 +3883,7 @@ class YALC(DashboardIntegration, commands.Cog):
                     style="F",
                 )
             if hasattr(after, "edited_at") and after.edited_at:
-                metadata["Edited"] = discord.utils.format_dt(
-                    after.edited_at, style="R")
+                metadata["Edited"] = discord.utils.format_dt(after.edited_at, style="R")
 
             # Create a visually appealing and comprehensive embed
             embed = self.create_embed(
@@ -3706,6 +3900,8 @@ class YALC(DashboardIntegration, commands.Cog):
             after_text = after.content or "No content"
 
             # Format content with proper quoting for better readability
+            before_text = before_text.replace("```", "``\u200b`")
+            after_text = after_text.replace("```", "``\u200b`")
             if len(before_text) > 1024:
                 before_text = before_text[:1021] + "..."
             if len(after_text) > 1024:
@@ -3716,8 +3912,7 @@ class YALC(DashboardIntegration, commands.Cog):
                 value=f"```\n{before_text}\n```",
                 inline=False,
             )
-            embed.add_field(
-                name="After", value=f"```\n{after_text}\n```", inline=False)
+            embed.add_field(name="After", value=f"```\n{after_text}\n```", inline=False)
 
             # Add jump link to original message
             if jump_url:
@@ -3730,13 +3925,9 @@ class YALC(DashboardIntegration, commands.Cog):
             # Add attachment and embed information
             if attachments:
                 attachment_text = "\n".join(
-                    [
-                        f"[Attachment {i + 1}]({url})"
-                        for i, url in enumerate(attachments)
-                    ],
+                    [f"[Attachment {i + 1}]({url})" for i, url in enumerate(attachments)],
                 )
-                embed.add_field(name="Attachments",
-                                value=attachment_text, inline=False)
+                embed.add_field(name="Attachments", value=attachment_text, inline=False)
 
             if embeds:
                 embed_info = []
@@ -3777,8 +3968,7 @@ class YALC(DashboardIntegration, commands.Cog):
                                     f"**Author**: [{author_name}]({author_url})",
                                 )
                             else:
-                                embed_details.append(
-                                    f"**Author**: {author_name}")
+                                embed_details.append(f"**Author**: {author_name}")
 
                             if author_icon:
                                 embed_details.append(
@@ -3790,8 +3980,7 @@ class YALC(DashboardIntegration, commands.Cog):
                     if embed_fields:
                         embed_details.append("**Fields**:")
                         for j, field in enumerate(embed_fields[:3]):
-                            field_name = getattr(
-                                field, "name", "Unnamed Field")
+                            field_name = getattr(field, "name", "Unnamed Field")
                             field_value = getattr(field, "value", "")
                             field_inline = getattr(field, "inline", False)
 
@@ -3836,8 +4025,7 @@ class YALC(DashboardIntegration, commands.Cog):
                             msg_embed.timestamp,
                             style="f",
                         )
-                        embed_details.append(
-                            f"**Timestamp**: {formatted_time}")
+                        embed_details.append(f"**Timestamp**: {formatted_time}")
 
                     # Footer with enhanced formatting
                     embed_footer = getattr(msg_embed, "footer", None)
@@ -3867,10 +4055,7 @@ class YALC(DashboardIntegration, commands.Cog):
                             color_indicator = "🟨"
                         elif msg_embed.color.value < 0x008080:  # Green
                             color_indicator = "🟩"
-                        elif (
-                            msg_embed.color.value < 0x000080
-                            or msg_embed.color.value < 0x800080
-                        ):  # Teal/Cyan
+                        elif msg_embed.color.value < 0x000080 or msg_embed.color.value < 0x800080:  # Teal/Cyan
                             color_indicator = "🟦"
                         else:  # Purple/Pink
                             color_indicator = "🟪"
@@ -3884,8 +4069,7 @@ class YALC(DashboardIntegration, commands.Cog):
 
                 # Show info about additional embeds
                 if len(embeds) > 3:
-                    embed_info.append(
-                        f"*...and {len(embeds) - 3} more embeds*")
+                    embed_info.append(f"*...and {len(embeds) - 3} more embeds*")
 
                 # Add all embed info to the logging embed
                 embed.add_field(
@@ -3899,11 +4083,7 @@ class YALC(DashboardIntegration, commands.Cog):
                 embed.set_thumbnail(url=author.display_avatar.url)
 
             # Set appropriate footer with timestamp
-            edit_time = (
-                after.edited_at
-                or after.created_at
-                or datetime.datetime.now(datetime.UTC)
-            )
+            edit_time = after.edited_at or after.created_at or datetime.datetime.now(datetime.timezone.utc)
             self.set_embed_footer(
                 embed,
                 event_time=edit_time,
@@ -3911,7 +4091,22 @@ class YALC(DashboardIntegration, commands.Cog):
             )
 
             # Send the log embed
-            await self.safe_send(channel, embed=embed)
+            event = LogEvent(
+                guild_id=before.guild.id,
+                event_type="message_edit",
+                summary=f"Message {before.id} edited in #{channel_name}",
+                actor_id=getattr(author, "id", None),
+                target_id=before.id,
+                source_channel_id=getattr(before.channel, "id", None),
+                confidence="confirmed",
+                details={
+                    "message_id": before.id,
+                    "before_content": before.content,
+                    "after_content": after.content,
+                    "attachment_count": len(attachments),
+                },
+            )
+            await self.safe_send(channel, embed=embed, yalc_event=event)
 
         except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Failed to log message_edit: {e}", exc_info=True)
@@ -3954,8 +4149,7 @@ class YALC(DashboardIntegration, commands.Cog):
 
             # Check if channel is in ignore list
             if channel.id in settings.get("ignored_channels", []):
-                self.log.debug(
-                    f"Channel {channel.id} is in the ignored channels list.")
+                self.log.debug(f"Channel {channel.id} is in the ignored channels list.")
                 return
 
             # Check if channel category is ignored
@@ -3972,8 +4166,7 @@ class YALC(DashboardIntegration, commands.Cog):
             # Get the appropriate log channel
             log_channel = await self.get_log_channel(guild, "message_bulk_delete")
             if not log_channel:
-                self.log.debug(
-                    "No log channel configured for message_bulk_delete.")
+                self.log.debug("No log channel configured for message_bulk_delete.")
                 return
 
             # Apply enhanced filtering
@@ -3982,8 +4175,7 @@ class YALC(DashboardIntegration, commands.Cog):
 
             # Filter out Tupperbot messages if configured
             if settings.get("ignore_tupperbox", True):
-                tupperbox_ids = settings.get(
-                    "tupperbox_ids", ["239232811662311425"])
+                tupperbox_ids = settings.get("tupperbox_ids", ["239232811662311425"])
 
                 original_count = len(filtered_messages)
 
@@ -3999,21 +4191,13 @@ class YALC(DashboardIntegration, commands.Cog):
             # Filter out webhook messages if configured
             if settings.get("ignore_webhooks", False):
                 original_count = len(filtered_messages)
-                filtered_messages = [
-                    msg
-                    for msg in filtered_messages
-                    if not getattr(msg, "webhook_id", None)
-                ]
+                filtered_messages = [msg for msg in filtered_messages if not getattr(msg, "webhook_id", None)]
                 filtered_out_count += original_count - len(filtered_messages)
 
             # Filter out app messages if configured
             if settings.get("ignore_apps", True):
                 original_count = len(filtered_messages)
-                filtered_messages = [
-                    msg
-                    for msg in filtered_messages
-                    if not getattr(msg, "application", None)
-                ]
+                filtered_messages = [msg for msg in filtered_messages if not getattr(msg, "application", None)]
                 filtered_out_count += original_count - len(filtered_messages)
 
             # Skip logging if all messages were filtered out
@@ -4064,8 +4248,7 @@ class YALC(DashboardIntegration, commands.Cog):
             if filtered_out_count > 0:
                 message_count_text += f" ({filtered_out_count} filtered out)"
 
-            embed.add_field(name="Message Count",
-                            value=message_count_text, inline=True)
+            embed.add_field(name="Message Count", value=message_count_text, inline=True)
 
             # Add moderation data if available using centralized audit log helper
             audit_entry = None
@@ -4163,15 +4346,11 @@ class YALC(DashboardIntegration, commands.Cog):
                     content = msg.content if msg.content else "[No text content]"
                     if len(content) > 60:
                         content = content[:57] + "..."
-                    timestamp = discord.utils.format_dt(
-                        msg.created_at, style="R")
-                    preview_text.append(
-                        f"• **{author_name}** ({timestamp}): {content}")
+                    timestamp = discord.utils.format_dt(msg.created_at, style="R")
+                    preview_text.append(f"• **{author_name}** ({timestamp}): {content}")
 
                 embed.add_field(
-                    name=f"First {preview_count} Messages"
-                    if len(filtered_messages) > preview_count
-                    else "Messages",
+                    name=f"First {preview_count} Messages" if len(filtered_messages) > preview_count else "Messages",
                     value="\n".join(preview_text) or "*No preview available*",
                     inline=False,
                 )
@@ -4182,34 +4361,29 @@ class YALC(DashboardIntegration, commands.Cog):
 
                     preview_text = []
                     for msg in last_msgs:
-                        author_name = str(
-                            msg.author) if msg.author else "Unknown"
+                        author_name = str(msg.author) if msg.author else "Unknown"
                         content = msg.content if msg.content else "[No text content]"
                         if len(content) > 60:
                             content = content[:57] + "..."
-                        timestamp = discord.utils.format_dt(
-                            msg.created_at, style="R")
+                        timestamp = discord.utils.format_dt(msg.created_at, style="R")
                         preview_text.append(
                             f"• **{author_name}** ({timestamp}): {content}",
                         )
 
                     embed.add_field(
                         name=f"Last {preview_count} Messages",
-                        value="\n".join(
-                            preview_text) or "*No preview available*",
+                        value="\n".join(preview_text) or "*No preview available*",
                         inline=False,
                     )
 
             # Add timestamp for when deletion occurred
-            self.set_embed_footer(
-                embed, label="YALC Logger • Bulk Message Delete")
+            self.set_embed_footer(embed, label="YALC Logger • Bulk Message Delete")
 
             # Send the log entry
             await self.safe_send(log_channel, embed=embed)
 
         except RECOVERABLE_EXCEPTIONS as e:
-            self.log.error(
-                f"Error logging bulk message delete: {e}", exc_info=True)
+            self.log.error(f"Error logging bulk message delete: {e}", exc_info=True)
 
     @commands.Cog.listener()
     async def on_member_join(self, member: discord.Member) -> None:
@@ -4304,13 +4478,35 @@ class YALC(DashboardIntegration, commands.Cog):
         self.log.debug(f"About to send to channel: {channel}")
         if not channel:
             return
+        audit_entry = await self._get_audit_log_entry(
+            guild,
+            discord.AuditLogAction.ban,
+            target=user,
+            timeout_seconds=20,
+        )
+        actor = getattr(audit_entry, "user", None)
+        reason = getattr(audit_entry, "reason", None)
         embed = self.create_embed(
             "member_ban",
             f"🔨 {user.mention if hasattr(user, 'mention') else user} has been banned.\n\u200b",
             user=f"{user} ({user.id})",
             channel_name=guild.name if guild else "Unknown",
         )
-        await self.safe_send(channel, embed=embed)
+        if actor:
+            embed.add_field(name="Banned By", value=f"{actor.mention} (`{actor.id}`) · Confirmed", inline=True)
+        if reason:
+            embed.add_field(name="Reason", value=str(reason)[:1024], inline=False)
+        event = LogEvent(
+            guild_id=guild.id,
+            event_type="member_ban",
+            summary=f"{user} was banned",
+            actor_id=getattr(actor, "id", None),
+            target_id=user.id,
+            audit_entry_id=getattr(audit_entry, "id", None),
+            confidence="confirmed" if audit_entry else "unavailable",
+            details={"reason": reason},
+        )
+        await self.safe_send(channel, embed=embed, yalc_event=event)
 
     @commands.Cog.listener()
     async def on_member_unban(self, guild: discord.Guild, user: discord.User) -> None:
@@ -4322,62 +4518,35 @@ class YALC(DashboardIntegration, commands.Cog):
         self.log.debug(f"About to send to channel: {channel}")
         if not channel:
             return
+        audit_entry = await self._get_audit_log_entry(
+            guild,
+            discord.AuditLogAction.unban,
+            target=user,
+            timeout_seconds=20,
+        )
+        actor = getattr(audit_entry, "user", None)
+        reason = getattr(audit_entry, "reason", None)
         embed = self.create_embed(
             "member_unban",
             f"🔓 {user.mention if hasattr(user, 'mention') else user} has been unbanned.\n\u200b",
             user=f"{user} ({user.id})",
             channel_name=guild.name if guild else "Unknown",
         )
-        await self.safe_send(channel, embed=embed)
-
-    async def _get_audit_log_entry(
-        self,
-        guild: discord.Guild,
-        action,
-        target=None,
-        timeout_seconds: int = 10,
-    ):
-        """Get a recent audit log entry, optionally matching by target object or ID."""
-        guild_me = getattr(guild, "me", None)
-        if (
-            action is None
-            or not guild_me
-            or not guild_me.guild_permissions.view_audit_log
-        ):
-            return None
-
-        cutoff = datetime.datetime.now(datetime.UTC) - datetime.timedelta(
-            seconds=timeout_seconds,
+        if actor:
+            embed.add_field(name="Unbanned By", value=f"{actor.mention} (`{actor.id}`) · Confirmed", inline=True)
+        if reason:
+            embed.add_field(name="Reason", value=str(reason)[:1024], inline=False)
+        event = LogEvent(
+            guild_id=guild.id,
+            event_type="member_unban",
+            summary=f"{user} was unbanned",
+            actor_id=getattr(actor, "id", None),
+            target_id=user.id,
+            audit_entry_id=getattr(audit_entry, "id", None),
+            confidence="confirmed" if audit_entry else "unavailable",
+            details={"reason": reason},
         )
-        recent_entries = []
-
-        try:
-            await asyncio.sleep(1)
-            async for entry in guild.audit_logs(action=action, limit=50):
-                if entry.created_at < cutoff:
-                    break
-
-                recent_entries.append(entry)
-                if target is not None:
-                    if entry.target == target:
-                        return entry
-                    if (
-                        hasattr(entry.target, "id")
-                        and hasattr(target, "id")
-                        and entry.target.id == target.id
-                    ):
-                        return entry
-
-            if target is None and recent_entries:
-                return recent_entries[0]
-            if recent_entries:
-                return recent_entries[0]
-        except discord.Forbidden:
-            self.log.debug("No permission to view audit logs")
-        except RECOVERABLE_EXCEPTIONS as e:
-            self.log.debug(f"Error fetching audit logs: {e}")
-
-        return None
+        await self.safe_send(channel, embed=embed, yalc_event=event)
 
     async def _log_member_kick(self, member: discord.Member, kick_entry):
         """Log a member kick event."""
@@ -4394,7 +4563,7 @@ class YALC(DashboardIntegration, commands.Cog):
             title="👢 Member Kicked",
             description=f"{member.mention} has been kicked from the server.\n\u200b",
             color=discord.Color(0xE74C3C),  # Red color for kicks
-            timestamp=datetime.datetime.now(datetime.UTC),
+            timestamp=datetime.datetime.now(datetime.timezone.utc),
         )
 
         # Add user information
@@ -4422,8 +4591,7 @@ class YALC(DashboardIntegration, commands.Cog):
 
         # Add join date information
         if member.joined_at:
-            join_date_formatted = member.joined_at.strftime(
-                "%B %d, %Y at %I:%M %p")
+            join_date_formatted = member.joined_at.strftime("%B %d, %Y at %I:%M %p")
             embed.add_field(
                 name="📅 Originally Joined",
                 value=join_date_formatted,
@@ -4431,8 +4599,7 @@ class YALC(DashboardIntegration, commands.Cog):
             )
 
             # Calculate how long they were in the server
-            time_in_server = datetime.datetime.now(
-                datetime.UTC) - member.joined_at
+            time_in_server = datetime.datetime.now(datetime.timezone.utc) - member.joined_at
             days = time_in_server.days
             if days > 0:
                 embed.add_field(
@@ -4485,7 +4652,7 @@ class YALC(DashboardIntegration, commands.Cog):
                 title="👋 Member Leave",
                 description=f"{member.mention} has left the server.\n\u200b",
                 color=discord.Color(0xF39C12),  # Orange color for leave events
-                timestamp=datetime.datetime.now(datetime.UTC),
+                timestamp=datetime.datetime.now(datetime.timezone.utc),
             )
 
             # Add user information
@@ -4497,8 +4664,7 @@ class YALC(DashboardIntegration, commands.Cog):
 
             # Add join date information - this is what was requested
             if member.joined_at:
-                join_date_formatted = member.joined_at.strftime(
-                    "%B %d, %Y at %I:%M %p")
+                join_date_formatted = member.joined_at.strftime("%B %d, %Y at %I:%M %p")
                 embed.add_field(
                     name="📅 Originally Joined",
                     value=join_date_formatted,
@@ -4506,8 +4672,7 @@ class YALC(DashboardIntegration, commands.Cog):
                 )
 
                 # Calculate how long they were in the server
-                time_in_server = datetime.datetime.now(
-                    datetime.UTC) - member.joined_at
+                time_in_server = datetime.datetime.now(datetime.timezone.utc) - member.joined_at
                 days = time_in_server.days
                 if days > 0:
                     embed.add_field(
@@ -4517,8 +4682,7 @@ class YALC(DashboardIntegration, commands.Cog):
                     )
 
             # Add server information
-            embed.add_field(name="🏠 Server",
-                            value=member.guild.name, inline=True)
+            embed.add_field(name="🏠 Server", value=member.guild.name, inline=True)
             embed.add_field(
                 name="👥 Members",
                 value=str(member.guild.member_count),
@@ -4550,8 +4714,7 @@ class YALC(DashboardIntegration, commands.Cog):
             return
         event_type = (
             "member_timeout"
-            if getattr(before, "communication_disabled_until", None)
-            != getattr(after, "communication_disabled_until", None)
+            if getattr(before, "communication_disabled_until", None) != getattr(after, "communication_disabled_until", None)
             else "member_update"
         )
         try:
@@ -4564,8 +4727,7 @@ class YALC(DashboardIntegration, commands.Cog):
             self.log.error(f"Error in should_log_event: {e}")
             return
         if not should_log:
-            self.log.debug(
-                f"should_log_event returned False for {event_type}.")
+            self.log.debug(f"should_log_event returned False for {event_type}.")
             return
         try:
             channel = await self.get_log_channel(before.guild, event_type)
@@ -4612,10 +4774,8 @@ class YALC(DashboardIntegration, commands.Cog):
                     changes.append(f"➖ Removed {role.mention}")
 
             # Check for timeout/communication restriction changes
-            before_timeout = getattr(
-                before, "communication_disabled_until", None)
-            after_timeout = getattr(
-                after, "communication_disabled_until", None)
+            before_timeout = getattr(before, "communication_disabled_until", None)
+            after_timeout = getattr(after, "communication_disabled_until", None)
 
             if before_timeout != after_timeout:
                 try:
@@ -4642,13 +4802,13 @@ class YALC(DashboardIntegration, commands.Cog):
                 if after_timeout:
                     if before_timeout:
                         # Timeout duration changed
-                        after_timeout - datetime.datetime.now(datetime.UTC)
+                        after_timeout - datetime.datetime.now(datetime.timezone.utc)
                         changes.append(
                             f"⏰ Timeout updated: expires {discord.utils.format_dt(after_timeout, 'R')}",
                         )
                     else:
                         # New timeout applied
-                        after_timeout - datetime.datetime.now(datetime.UTC)
+                        after_timeout - datetime.datetime.now(datetime.timezone.utc)
                         changes.append(
                             f"⏰ Timeout applied: expires {discord.utils.format_dt(after_timeout, 'R')}",
                         )
@@ -4688,13 +4848,10 @@ class YALC(DashboardIntegration, commands.Cog):
             # Create the embed with enhanced information
             if moderator_info:
                 description = (
-                    f"👤 {after.mention} ({after.display_name})'s profile was "
-                    f"updated by {moderator_info['moderator'].mention}"
+                    f"👤 {after.mention} ({after.display_name})'s profile was updated by {moderator_info['moderator'].mention}"
                 )
             else:
-                description = (
-                    f"👤 {after.mention} ({after.display_name})'s profile was updated"
-                )
+                description = f"👤 {after.mention} ({after.display_name})'s profile was updated"
 
             embed = self.create_embed(
                 event_type,
@@ -4762,14 +4919,9 @@ class YALC(DashboardIntegration, commands.Cog):
                 embed.set_thumbnail(url=after.display_avatar.url)
 
             # Set footer
-            event_time = datetime.datetime.now(datetime.UTC)
-            footer_label = (
-                "YALC Logger • Member Timeout"
-                if event_type == "member_timeout"
-                else "YALC Logger • Member Update"
-            )
-            self.set_embed_footer(
-                embed, event_time=event_time, label=footer_label)
+            event_time = datetime.datetime.now(datetime.timezone.utc)
+            footer_label = "YALC Logger • Member Timeout" if event_type == "member_timeout" else "YALC Logger • Member Update"
+            self.set_embed_footer(embed, event_time=event_time, label=footer_label)
 
             # Send the log message
             await self.safe_send(channel, embed=embed)
@@ -4794,8 +4946,7 @@ class YALC(DashboardIntegration, commands.Cog):
             self.log.error(f"Error in should_log_event: {e}")
             return
         if not should_log:
-            self.log.debug(
-                "should_log_event returned False for channel_create.")
+            self.log.debug("should_log_event returned False for channel_create.")
             return
         try:
             log_channel = await self.get_log_channel(channel.guild, "channel_create")
@@ -4824,19 +4975,15 @@ class YALC(DashboardIntegration, commands.Cog):
                         "reason": getattr(audit_entry, "reason", None),
                     }
             except RECOVERABLE_EXCEPTIONS as e:
-                self.log.debug(
-                    f"Could not fetch audit log for channel creation: {e}")
+                self.log.debug(f"Could not fetch audit log for channel creation: {e}")
 
             # Create the embed with enhanced information
             if creator_info:
                 description = (
-                    f"📝 Channel created: {getattr(channel, 'mention', str(channel))} "
-                    f"by {creator_info['creator'].mention}"
+                    f"📝 Channel created: {getattr(channel, 'mention', str(channel))} by {creator_info['creator'].mention}"
                 )
             else:
-                description = (
-                    f"📝 Channel created: {getattr(channel, 'mention', str(channel))}"
-                )
+                description = f"📝 Channel created: {getattr(channel, 'mention', str(channel))}"
 
             description += "\n\u200b"
 
@@ -4894,9 +5041,7 @@ class YALC(DashboardIntegration, commands.Cog):
                 if channel.topic:
                     embed.add_field(
                         name="Topic",
-                        value=channel.topic[:1024]
-                        if len(channel.topic) <= 1024
-                        else channel.topic[:1021] + "...",
+                        value=channel.topic[:1024] if len(channel.topic) <= 1024 else channel.topic[:1021] + "...",
                         inline=False,
                     )
                 embed.add_field(
@@ -4925,16 +5070,11 @@ class YALC(DashboardIntegration, commands.Cog):
 
             # Add creator thumbnail for better visual identification
             settings = await self.config.guild(channel.guild).all()
-            if (
-                creator_info
-                and settings.get("include_thumbnails", True)
-                and hasattr(creator_info["creator"], "display_avatar")
-            ):
-                embed.set_thumbnail(
-                    url=creator_info["creator"].display_avatar.url)
+            if creator_info and settings.get("include_thumbnails", True) and hasattr(creator_info["creator"], "display_avatar"):
+                embed.set_thumbnail(url=creator_info["creator"].display_avatar.url)
 
             # Set footer
-            event_time = datetime.datetime.now(datetime.UTC)
+            event_time = datetime.datetime.now(datetime.timezone.utc)
             self.set_embed_footer(
                 embed,
                 event_time=event_time,
@@ -4962,8 +5102,7 @@ class YALC(DashboardIntegration, commands.Cog):
             self.log.error(f"Error in should_log_event: {e}")
             return
         if not should_log:
-            self.log.debug(
-                "should_log_event returned False for channel_delete.")
+            self.log.debug("should_log_event returned False for channel_delete.")
             return
         try:
             log_channel = await self.get_log_channel(channel.guild, "channel_delete")
@@ -4992,8 +5131,7 @@ class YALC(DashboardIntegration, commands.Cog):
                         "reason": getattr(audit_entry, "reason", None),
                     }
             except RECOVERABLE_EXCEPTIONS as e:
-                self.log.debug(
-                    f"Could not fetch audit log for channel deletion: {e}")
+                self.log.debug(f"Could not fetch audit log for channel deletion: {e}")
 
             # Create the embed with enhanced information
             if deleter_info:
@@ -5057,9 +5195,7 @@ class YALC(DashboardIntegration, commands.Cog):
                 if hasattr(channel, "topic") and channel.topic:
                     embed.add_field(
                         name="Topic",
-                        value=channel.topic[:1024]
-                        if len(channel.topic) <= 1024
-                        else channel.topic[:1021] + "...",
+                        value=channel.topic[:1024] if len(channel.topic) <= 1024 else channel.topic[:1021] + "...",
                         inline=False,
                     )
                 if hasattr(channel, "nsfw"):
@@ -5090,16 +5226,11 @@ class YALC(DashboardIntegration, commands.Cog):
 
             # Add deleter thumbnail for better visual identification
             settings = await self.config.guild(channel.guild).all()
-            if (
-                deleter_info
-                and settings.get("include_thumbnails", True)
-                and hasattr(deleter_info["deleter"], "display_avatar")
-            ):
-                embed.set_thumbnail(
-                    url=deleter_info["deleter"].display_avatar.url)
+            if deleter_info and settings.get("include_thumbnails", True) and hasattr(deleter_info["deleter"], "display_avatar"):
+                embed.set_thumbnail(url=deleter_info["deleter"].display_avatar.url)
 
             # Set footer
-            event_time = datetime.datetime.now(datetime.UTC)
+            event_time = datetime.datetime.now(datetime.timezone.utc)
             self.set_embed_footer(
                 embed,
                 event_time=event_time,
@@ -5127,9 +5258,7 @@ class YALC(DashboardIntegration, commands.Cog):
         )
         if stage_channel_cls:
             voice_like_channel = (
-                voice_like_channel
-                or isinstance(before, stage_channel_cls)
-                or isinstance(after, stage_channel_cls)
+                voice_like_channel or isinstance(before, stage_channel_cls) or isinstance(after, stage_channel_cls)
             )
         event_type = "voice_update" if voice_like_channel else "channel_update"
         try:
@@ -5138,8 +5267,7 @@ class YALC(DashboardIntegration, commands.Cog):
             self.log.error(f"Error in should_log_event: {e}")
             return
         if not should_log:
-            self.log.debug(
-                f"should_log_event returned False for {event_type}.")
+            self.log.debug(f"should_log_event returned False for {event_type}.")
             return
         try:
             log_channel = await self.get_log_channel(before.guild, event_type)
@@ -5171,8 +5299,7 @@ class YALC(DashboardIntegration, commands.Cog):
                 discord.VoiceChannel,
             ):
                 if before.bitrate != after.bitrate:
-                    changes.append(
-                        f"Bitrate: {before.bitrate} → {after.bitrate}")
+                    changes.append(f"Bitrate: {before.bitrate} → {after.bitrate}")
                 if before.user_limit != after.user_limit:
                     changes.append(
                         f"User limit: {before.user_limit} → {after.user_limit}",
@@ -5214,14 +5341,12 @@ class YALC(DashboardIntegration, commands.Cog):
                         "reason": getattr(audit_entry, "reason", None),
                     }
             except RECOVERABLE_EXCEPTIONS as e:
-                self.log.debug(
-                    f"Could not fetch audit log for channel update: {e}")
+                self.log.debug(f"Could not fetch audit log for channel update: {e}")
 
             # Build description with updater if available
             if updater_info:
                 description = (
-                    f"🔄 Channel updated: {getattr(after, 'mention', str(after))} "
-                    f"by {updater_info['updater'].mention}\n\u200b"
+                    f"🔄 Channel updated: {getattr(after, 'mention', str(after))} by {updater_info['updater'].mention}\n\u200b"
                 )
             else:
                 description = f"🔄 Channel updated: {getattr(after, 'mention', str(after))}\n\u200b"
@@ -5263,10 +5388,7 @@ class YALC(DashboardIntegration, commands.Cog):
         if not thread.guild:
             self.log.debug("No guild on thread.")
             return
-        event_type = (
-            "forum_post_create" if self._is_forum_thread(
-                thread) else "thread_create"
-        )
+        event_type = "forum_post_create" if self._is_forum_thread(thread) else "thread_create"
         try:
             should_log = await self.should_log_event(
                 thread.guild,
@@ -5277,8 +5399,7 @@ class YALC(DashboardIntegration, commands.Cog):
             self.log.error(f"Error in should_log_event: {e}")
             return
         if not should_log:
-            self.log.debug(
-                f"should_log_event returned False for {event_type}.")
+            self.log.debug(f"should_log_event returned False for {event_type}.")
             return
         try:
             log_channel = await self.get_log_channel(thread.guild, event_type)
@@ -5305,8 +5426,7 @@ class YALC(DashboardIntegration, commands.Cog):
                         "reason": getattr(audit_entry, "reason", None),
                     }
             except RECOVERABLE_EXCEPTIONS as e:
-                self.log.debug(
-                    f"Could not fetch audit log for thread creation: {e}")
+                self.log.debug(f"Could not fetch audit log for thread creation: {e}")
 
             item_label = "Forum post" if event_type == "forum_post_create" else "Thread"
             item_emoji = "📋" if event_type == "forum_post_create" else "🧵"
@@ -5324,13 +5444,9 @@ class YALC(DashboardIntegration, commands.Cog):
                 description,
                 thread=thread.mention,
                 name=thread.name,
-                creator=f"{thread.owner} ({thread.owner_id})"
-                if thread.owner
-                else f"ID: {thread.owner_id}",
+                creator=f"{thread.owner} ({thread.owner_id})" if thread.owner else f"ID: {thread.owner_id}",
                 type=str(thread.type),
-                slowmode=f"{thread.slowmode_delay}s"
-                if thread.slowmode_delay
-                else "None",
+                slowmode=f"{thread.slowmode_delay}s" if thread.slowmode_delay else "None",
             )
 
             if creator_info:
@@ -5362,10 +5478,7 @@ class YALC(DashboardIntegration, commands.Cog):
         if not thread.guild:
             self.log.debug("No guild on thread.")
             return
-        event_type = (
-            "forum_post_delete" if self._is_forum_thread(
-                thread) else "thread_delete"
-        )
+        event_type = "forum_post_delete" if self._is_forum_thread(thread) else "thread_delete"
         try:
             should_log = await self.should_log_event(
                 thread.guild,
@@ -5376,8 +5489,7 @@ class YALC(DashboardIntegration, commands.Cog):
             self.log.error(f"Error in should_log_event: {e}")
             return
         if not should_log:
-            self.log.debug(
-                f"should_log_event returned False for {event_type}.")
+            self.log.debug(f"should_log_event returned False for {event_type}.")
             return
         try:
             log_channel = await self.get_log_channel(thread.guild, event_type)
@@ -5404,8 +5516,7 @@ class YALC(DashboardIntegration, commands.Cog):
                         "reason": getattr(audit_entry, "reason", None),
                     }
             except RECOVERABLE_EXCEPTIONS as e:
-                self.log.debug(
-                    f"Could not fetch audit log for thread deletion: {e}")
+                self.log.debug(f"Could not fetch audit log for thread deletion: {e}")
 
             item_label = "forum post" if event_type == "forum_post_delete" else "thread"
             if deleter_info:
@@ -5459,10 +5570,7 @@ class YALC(DashboardIntegration, commands.Cog):
         if not before.guild:
             self.log.debug("No guild on thread.")
             return
-        event_type = (
-            "forum_post_update" if self._is_forum_thread(
-                after) else "thread_update"
-        )
+        event_type = "forum_post_update" if self._is_forum_thread(after) else "thread_update"
         try:
             should_log = await self.should_log_event(
                 before.guild,
@@ -5473,8 +5581,7 @@ class YALC(DashboardIntegration, commands.Cog):
             self.log.error(f"Error in should_log_event: {e}")
             return
         if not should_log:
-            self.log.debug(
-                f"should_log_event returned False for {event_type}.")
+            self.log.debug(f"should_log_event returned False for {event_type}.")
             return
         try:
             log_channel = await self.get_log_channel(before.guild, event_type)
@@ -5490,8 +5597,7 @@ class YALC(DashboardIntegration, commands.Cog):
             if before.name != after.name:
                 changes.append(f"Name: {before.name} → {after.name}")
             if before.archived != after.archived:
-                changes.append(
-                    f"Archived: {before.archived} → {after.archived}")
+                changes.append(f"Archived: {before.archived} → {after.archived}")
             if before.locked != after.locked:
                 changes.append(f"Locked: {before.locked} → {after.locked}")
             if before.slowmode_delay != after.slowmode_delay:
@@ -5527,8 +5633,7 @@ class YALC(DashboardIntegration, commands.Cog):
             self.log.error(f"Error in should_log_event: {e}")
             return
         if not should_log:
-            self.log.debug(
-                "should_log_event returned False for thread_member_join.")
+            self.log.debug("should_log_event returned False for thread_member_join.")
             return
         try:
             log_channel = await self.get_log_channel(
@@ -5545,9 +5650,7 @@ class YALC(DashboardIntegration, commands.Cog):
         try:
             # Try to resolve the member as a guild member for mention
             resolved_member = member.thread.guild.get_member(member.id)
-            member_display = (
-                resolved_member.mention if resolved_member else f"ID: {member.id}"
-            )
+            member_display = resolved_member.mention if resolved_member else f"ID: {member.id}"
             embed = self.create_embed(
                 "thread_member_join",
                 f"➡️ Member joined thread {member.thread.mention}",
@@ -5570,8 +5673,7 @@ class YALC(DashboardIntegration, commands.Cog):
             self.log.error(f"Error in should_log_event: {e}")
             return
         if not should_log:
-            self.log.debug(
-                "should_log_event returned False for thread_member_leave.")
+            self.log.debug("should_log_event returned False for thread_member_leave.")
             return
         try:
             log_channel = await self.get_log_channel(
@@ -5587,9 +5689,7 @@ class YALC(DashboardIntegration, commands.Cog):
             return
         try:
             resolved_member = member.thread.guild.get_member(member.id)
-            member_display = (
-                resolved_member.mention if resolved_member else f"ID: {member.id}"
-            )
+            member_display = resolved_member.mention if resolved_member else f"ID: {member.id}"
             embed = self.create_embed(
                 "thread_member_leave",
                 f"⬅️ Member left thread {member.thread.mention}",
@@ -5642,8 +5742,7 @@ class YALC(DashboardIntegration, commands.Cog):
                         "reason": getattr(audit_entry, "reason", None),
                     }
             except RECOVERABLE_EXCEPTIONS as e:
-                self.log.debug(
-                    f"Could not fetch audit log for role creation: {e}")
+                self.log.debug(f"Could not fetch audit log for role creation: {e}")
 
             # Create the embed with enhanced information
             if creator_info:
@@ -5677,9 +5776,7 @@ class YALC(DashboardIntegration, commands.Cog):
                     color_indicator = "🟨"
                 elif role.color.value < 0x008080:  # Green
                     color_indicator = "🟩"
-                elif (
-                    role.color.value < 0x000080 or role.color.value < 0x800080
-                ):  # Teal/Cyan
+                elif role.color.value < 0x000080 or role.color.value < 0x800080:  # Teal/Cyan
                     color_indicator = "🟦"
                 else:  # Purple/Pink
                     color_indicator = "🟪"
@@ -5764,16 +5861,11 @@ class YALC(DashboardIntegration, commands.Cog):
 
             # Add creator thumbnail for better visual identification
             settings = await self.config.guild(role.guild).all()
-            if (
-                creator_info
-                and settings.get("include_thumbnails", True)
-                and hasattr(creator_info["creator"], "display_avatar")
-            ):
-                embed.set_thumbnail(
-                    url=creator_info["creator"].display_avatar.url)
+            if creator_info and settings.get("include_thumbnails", True) and hasattr(creator_info["creator"], "display_avatar"):
+                embed.set_thumbnail(url=creator_info["creator"].display_avatar.url)
 
             # Set footer
-            event_time = datetime.datetime.now(datetime.UTC)
+            event_time = datetime.datetime.now(datetime.timezone.utc)
             self.set_embed_footer(
                 embed,
                 event_time=event_time,
@@ -5782,8 +5874,7 @@ class YALC(DashboardIntegration, commands.Cog):
 
             sent_message = await self.safe_send(channel, embed=embed)
             if sent_message:
-                self._mark_role_event_logged(
-                    role.guild.id, "role_create", role.id)
+                self._mark_role_event_logged(role.guild.id, "role_create", role.id)
         except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Failed to log role_create: {e}", exc_info=True)
 
@@ -5829,8 +5920,7 @@ class YALC(DashboardIntegration, commands.Cog):
                         "reason": getattr(audit_entry, "reason", None),
                     }
             except RECOVERABLE_EXCEPTIONS as e:
-                self.log.debug(
-                    f"Could not fetch audit log for role deletion: {e}")
+                self.log.debug(f"Could not fetch audit log for role deletion: {e}")
 
             # Create the embed with enhanced information
             if deleter_info:
@@ -5864,9 +5954,7 @@ class YALC(DashboardIntegration, commands.Cog):
                     color_indicator = "🟨"
                 elif role.color.value < 0x008080:  # Green
                     color_indicator = "🟩"
-                elif (
-                    role.color.value < 0x000080 or role.color.value < 0x800080
-                ):  # Teal/Cyan
+                elif role.color.value < 0x000080 or role.color.value < 0x800080:  # Teal/Cyan
                     color_indicator = "🟦"
                 else:  # Purple/Pink
                     color_indicator = "🟪"
@@ -5951,16 +6039,11 @@ class YALC(DashboardIntegration, commands.Cog):
 
             # Add deleter thumbnail for better visual identification
             settings = await self.config.guild(role.guild).all()
-            if (
-                deleter_info
-                and settings.get("include_thumbnails", True)
-                and hasattr(deleter_info["deleter"], "display_avatar")
-            ):
-                embed.set_thumbnail(
-                    url=deleter_info["deleter"].display_avatar.url)
+            if deleter_info and settings.get("include_thumbnails", True) and hasattr(deleter_info["deleter"], "display_avatar"):
+                embed.set_thumbnail(url=deleter_info["deleter"].display_avatar.url)
 
             # Set footer
-            event_time = datetime.datetime.now(datetime.UTC)
+            event_time = datetime.datetime.now(datetime.timezone.utc)
             self.set_embed_footer(
                 embed,
                 event_time=event_time,
@@ -5969,8 +6052,7 @@ class YALC(DashboardIntegration, commands.Cog):
 
             sent_message = await self.safe_send(channel, embed=embed)
             if sent_message:
-                self._mark_role_event_logged(
-                    role.guild.id, "role_delete", role.id)
+                self._mark_role_event_logged(role.guild.id, "role_delete", role.id)
         except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Failed to log role_delete: {e}", exc_info=True)
 
@@ -6015,8 +6097,7 @@ class YALC(DashboardIntegration, commands.Cog):
             position_changed = before.position != after.position
 
             if before.name != after.name:
-                self.log.debug(
-                    f"Role name changed: {before.name} -> {after.name}")
+                self.log.debug(f"Role name changed: {before.name} -> {after.name}")
                 changes.append(f"**Name:** `{before.name}` → `{after.name}`")
             if before.permissions != after.permissions:
                 self.log.debug(
@@ -6035,12 +6116,10 @@ class YALC(DashboardIntegration, commands.Cog):
                     f"**Mentionable:** `{before.mentionable}` → `{after.mentionable}`",
                 )
             if before.hoist != after.hoist:
-                changes.append(
-                    f"**Hoisted:** `{before.hoist}` → `{after.hoist}`")
+                changes.append(f"**Hoisted:** `{before.hoist}` → `{after.hoist}`")
 
             if color_changed:
-                self.log.debug(
-                    f"Role color changed: {before.color} -> {after.color}")
+                self.log.debug(f"Role color changed: {before.color} -> {after.color}")
 
             # Check if there are any meaningful changes
             if not changes and not color_changed:
@@ -6059,8 +6138,7 @@ class YALC(DashboardIntegration, commands.Cog):
                     audit_entry = audit_data["entry"]
                     user_who_changed = audit_entry.user
                     audit_reason = getattr(audit_entry, "reason", None)
-                    self.log.debug(
-                        f"Using real-time audit data for role {after.id}")
+                    self.log.debug(f"Using real-time audit data for role {after.id}")
 
                     # Clean up used entry
                     del self.recent_audit_entries[after.id]
@@ -6077,17 +6155,13 @@ class YALC(DashboardIntegration, commands.Cog):
                     if audit_entry:
                         user_who_changed = audit_entry.user
                         audit_reason = getattr(audit_entry, "reason", None)
-                        self.log.debug(
-                            f"Using API audit data for role {after.id}")
+                        self.log.debug(f"Using API audit data for role {after.id}")
                 except RECOVERABLE_EXCEPTIONS as e:
-                    self.log.debug(
-                        f"Could not fetch audit log for role update: {e}")
+                    self.log.debug(f"Could not fetch audit log for role update: {e}")
 
             # Create enhanced embed with attribution
             if user_who_changed:
-                description = (
-                    f"🔄 Role updated: {after.mention} by {user_who_changed.mention}"
-                )
+                description = f"🔄 Role updated: {after.mention} by {user_who_changed.mention}"
             else:
                 description = f"🔄 Role updated: {after.mention}"
 
@@ -6153,12 +6227,7 @@ class YALC(DashboardIntegration, commands.Cog):
                             "🟩"
                             if before.color.value >= 0x008000
                             else (
-                                "🟨"
-                                if before.color.value >= 0x008080
-                                else (
-                                    "🟧" if before.color.value >= 0x808000 else (
-                                        "🟥")
-                                )
+                                "🟨" if before.color.value >= 0x008080 else ("🟧" if before.color.value >= 0x808000 else ("🟥"))
                             )
                         )
                     )
@@ -6172,11 +6241,7 @@ class YALC(DashboardIntegration, commands.Cog):
                         else (
                             "🟩"
                             if after.color.value >= 0x008000
-                            else (
-                                "🟨"
-                                if after.color.value >= 0x008080
-                                else ("🟧" if after.color.value >= 0x808000 else ("🟥"))
-                            )
+                            else ("🟨" if after.color.value >= 0x008080 else ("🟧" if after.color.value >= 0x808000 else ("🟥")))
                         )
                     )
                 )
@@ -6188,15 +6253,11 @@ class YALC(DashboardIntegration, commands.Cog):
 
             # Add user thumbnail for better visual identification
             settings = await self.config.guild(before.guild).all()
-            if (
-                user_who_changed
-                and settings.get("include_thumbnails", True)
-                and hasattr(user_who_changed, "display_avatar")
-            ):
+            if user_who_changed and settings.get("include_thumbnails", True) and hasattr(user_who_changed, "display_avatar"):
                 embed.set_thumbnail(url=user_who_changed.display_avatar.url)
 
             # Set footer
-            event_time = datetime.datetime.now(datetime.UTC)
+            event_time = datetime.datetime.now(datetime.timezone.utc)
             self.set_embed_footer(
                 embed,
                 event_time=event_time,
@@ -6292,15 +6353,10 @@ class YALC(DashboardIntegration, commands.Cog):
                         "reason": getattr(audit_entry, "reason", None),
                     }
             except RECOVERABLE_EXCEPTIONS as e:
-                self.log.debug(
-                    f"Could not fetch audit log for guild update: {e}")
+                self.log.debug(f"Could not fetch audit log for guild update: {e}")
 
             # Build description with updater if available
-            description = (
-                f"⚙️ Server updated by {updater_info['updater'].mention}"
-                if updater_info
-                else "⚙️ Server updated"
-            )
+            description = f"⚙️ Server updated by {updater_info['updater'].mention}" if updater_info else "⚙️ Server updated"
 
             embed = self.create_embed(
                 "guild_update",
@@ -6361,8 +6417,7 @@ class YALC(DashboardIntegration, commands.Cog):
             if added:
                 changes.append(f"Added: {', '.join(str(e) for e in added)}")
             if removed:
-                changes.append(
-                    f"Removed: {', '.join(str(e) for e in removed)}")
+                changes.append(f"Removed: {', '.join(str(e) for e in removed)}")
             if not changes:
                 return
             embed = self.create_embed(
@@ -6394,22 +6449,14 @@ class YALC(DashboardIntegration, commands.Cog):
 
             before_by_id = {sticker.id: sticker for sticker in before}
             after_by_id = {sticker.id: sticker for sticker in after}
-            added = [
-                after_by_id[sticker_id]
-                for sticker_id in after_by_id.keys() - before_by_id.keys()
-            ]
-            removed = [
-                before_by_id[sticker_id]
-                for sticker_id in before_by_id.keys() - after_by_id.keys()
-            ]
+            added = [after_by_id[sticker_id] for sticker_id in after_by_id.keys() - before_by_id.keys()]
+            removed = [before_by_id[sticker_id] for sticker_id in before_by_id.keys() - after_by_id.keys()]
             updated = [
                 after_by_id[sticker_id]
                 for sticker_id in before_by_id.keys() & after_by_id.keys()
                 if before_by_id[sticker_id].name != after_by_id[sticker_id].name
-                or getattr(before_by_id[sticker_id], "description", None)
-                != getattr(after_by_id[sticker_id], "description", None)
-                or getattr(before_by_id[sticker_id], "emoji", None)
-                != getattr(after_by_id[sticker_id], "emoji", None)
+                or getattr(before_by_id[sticker_id], "description", None) != getattr(after_by_id[sticker_id], "description", None)
+                or getattr(before_by_id[sticker_id], "emoji", None) != getattr(after_by_id[sticker_id], "emoji", None)
             ]
 
             if not added and not removed and not updated:
@@ -6418,27 +6465,18 @@ class YALC(DashboardIntegration, commands.Cog):
             changes = []
             if added:
                 changes.append(
-                    "Added: "
-                    + ", ".join(f"`{sticker.name}`" for sticker in added[:10]),
+                    "Added: " + ", ".join(f"`{sticker.name}`" for sticker in added[:10]),
                 )
             if removed:
                 changes.append(
-                    "Removed: "
-                    + ", ".join(f"`{sticker.name}`" for sticker in removed[:10]),
+                    "Removed: " + ", ".join(f"`{sticker.name}`" for sticker in removed[:10]),
                 )
             if updated:
                 changes.append(
-                    "Updated: "
-                    + ", ".join(f"`{sticker.name}`" for sticker in updated[:10]),
+                    "Updated: " + ", ".join(f"`{sticker.name}`" for sticker in updated[:10]),
                 )
 
-            action_name = (
-                "sticker_create"
-                if added
-                else "sticker_delete"
-                if removed
-                else "sticker_update"
-            )
+            action_name = "sticker_create" if added else "sticker_delete" if removed else "sticker_update"
             entry = await self._get_audit_log_entry(
                 guild,
                 self._get_audit_action(action_name),
@@ -6457,12 +6495,34 @@ class YALC(DashboardIntegration, commands.Cog):
                     inline=True,
                 )
                 if entry.reason:
-                    embed.add_field(
-                        name="Reason", value=entry.reason, inline=False)
+                    embed.add_field(name="Reason", value=entry.reason, inline=False)
 
             await self.safe_send(channel, embed=embed)
         except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Failed to log sticker_update: {e}", exc_info=True)
+
+    async def _command_logging_allowed(
+        self,
+        guild: discord.Guild,
+        user: discord.abc.User,
+        settings: dict[str, Any] | None = None,
+    ) -> bool:
+        """Apply the guild's command logging privacy policy."""
+        if settings is None:
+            settings = await self.config.guild(guild).all()
+        mode = settings.get("command_log_mode", "all")
+        if mode == "none":
+            return False
+        if mode != "staff":
+            return True
+
+        member = user if isinstance(user, discord.Member) else guild.get_member(user.id)
+        if member is None:
+            return False
+        permissions = member.guild_permissions
+        if permissions.administrator or permissions.manage_guild or permissions.moderate_members:
+            return True
+        return bool(await self.bot.is_owner(member) or await self.bot.is_admin(member) or await self.bot.is_mod(member))
 
     @commands.Cog.listener()
     async def on_command(self, ctx: commands.Context) -> None:
@@ -6471,6 +6531,9 @@ class YALC(DashboardIntegration, commands.Cog):
             return
 
         try:
+            settings = await self.config.guild(ctx.guild).all()
+            if not await self._command_logging_allowed(ctx.guild, ctx.author, settings):
+                return
             if not await self.should_log_event(
                 ctx.guild,
                 "command_use",
@@ -6484,9 +6547,7 @@ class YALC(DashboardIntegration, commands.Cog):
             if not channel:
                 return
 
-            command_name = (
-                ctx.command.qualified_name if ctx.command else "Unknown command"
-            )
+            command_name = ctx.command.qualified_name if ctx.command else "Unknown command"
             content = ctx.message.content if ctx.message else ""
             if len(content) > 1000:
                 content = content[:997] + "..."
@@ -6511,7 +6572,6 @@ class YALC(DashboardIntegration, commands.Cog):
                 inline=False,
             )
 
-            settings = await self.config.guild(ctx.guild).all()
             if settings.get("include_thumbnails", True) and hasattr(
                 ctx.author,
                 "display_avatar",
@@ -6534,11 +6594,10 @@ class YALC(DashboardIntegration, commands.Cog):
             return
 
         try:
-            event_channel = (
-                interaction.channel
-                if isinstance(interaction.channel, discord.abc.GuildChannel)
-                else None
-            )
+            settings = await self.config.guild(interaction.guild).all()
+            if not await self._command_logging_allowed(interaction.guild, interaction.user, settings):
+                return
+            event_channel = interaction.channel if isinstance(interaction.channel, discord.abc.GuildChannel) else None
             if not await self.should_log_event(
                 interaction.guild,
                 "application_cmd",
@@ -6583,19 +6642,16 @@ class YALC(DashboardIntegration, commands.Cog):
                     inline=False,
                 )
 
-            settings = await self.config.guild(interaction.guild).all()
             if settings.get("include_thumbnails", True) and hasattr(
                 interaction.user,
                 "display_avatar",
             ):
                 embed.set_thumbnail(url=interaction.user.display_avatar.url)
 
-            self.set_embed_footer(
-                embed, label="YALC Logger • Application Command")
+            self.set_embed_footer(embed, label="YALC Logger • Application Command")
             await self.safe_send(channel, embed=embed)
         except RECOVERABLE_EXCEPTIONS as e:
-            self.log.error(
-                f"Failed to log application_cmd: {e}", exc_info=True)
+            self.log.error(f"Failed to log application_cmd: {e}", exc_info=True)
 
     @commands.Cog.listener()
     async def on_app_command_error(
@@ -6608,11 +6664,10 @@ class YALC(DashboardIntegration, commands.Cog):
             return
 
         try:
-            event_channel = (
-                interaction.channel
-                if isinstance(interaction.channel, discord.abc.GuildChannel)
-                else None
-            )
+            settings = await self.config.guild(interaction.guild).all()
+            if not await self._command_logging_allowed(interaction.guild, interaction.user, settings):
+                return
+            event_channel = interaction.channel if isinstance(interaction.channel, discord.abc.GuildChannel) else None
             if not await self.should_log_event(
                 interaction.guild,
                 "command_error",
@@ -6696,6 +6751,9 @@ class YALC(DashboardIntegration, commands.Cog):
             # Get settings
             settings = await self.config.guild(ctx.guild).all()
 
+            if not await self._command_logging_allowed(ctx.guild, ctx.author, settings):
+                return
+
             # Skip if event is disabled
             if not settings["events"].get("command_error", False):
                 return
@@ -6715,9 +6773,7 @@ class YALC(DashboardIntegration, commands.Cog):
                 return
 
             # Create the log embed
-            command_name = (
-                ctx.command.qualified_name if ctx.command else "Unknown command"
-            )
+            command_name = ctx.command.qualified_name if ctx.command else "Unknown command"
 
             # Create embed description
             description = f"⚠️ Error occurred while executing command `{command_name}`"
@@ -6773,7 +6829,7 @@ class YALC(DashboardIntegration, commands.Cog):
             embed.add_field(
                 name="Timestamp",
                 value=discord.utils.format_dt(
-                    datetime.datetime.now(datetime.UTC),
+                    datetime.datetime.now(datetime.timezone.utc),
                     style="F",
                 ),
                 inline=True,
@@ -6856,16 +6912,13 @@ class YALC(DashboardIntegration, commands.Cog):
             if event.description:
                 embed.add_field(
                     name="Description",
-                    value=event.description
-                    if len(event.description) <= 1024
-                    else f"{event.description[:1021]}...",
+                    value=event.description if len(event.description) <= 1024 else f"{event.description[:1021]}...",
                     inline=False,
                 )
 
             # Add location info
             if hasattr(event, "location") and event.location:
-                embed.add_field(name="Location",
-                                value=event.location, inline=True)
+                embed.add_field(name="Location", value=event.location, inline=True)
             elif hasattr(event, "channel") and event.channel:
                 embed.add_field(
                     name="Channel",
@@ -6985,61 +7038,28 @@ class YALC(DashboardIntegration, commands.Cog):
                     after_desc = after_desc[:97] + "..."
                 changes.append("**Description:** Changed")
 
-            if (
-                hasattr(before, "location")
-                and hasattr(after, "location")
-                and before.location != after.location
-            ):
+            if hasattr(before, "location") and hasattr(after, "location") and before.location != after.location:
                 changes.append(
                     f"**Location:** `{before.location or 'None'}` → `{after.location or 'None'}`",
                 )
 
-            if (
-                hasattr(before, "channel_id")
-                and hasattr(after, "channel_id")
-                and before.channel_id != after.channel_id
-            ):
+            if hasattr(before, "channel_id") and hasattr(after, "channel_id") and before.channel_id != after.channel_id:
                 changes.append(
                     f"**Channel:** <#{before.channel_id or 'None'}> → <#{after.channel_id or 'None'}>",
                 )
 
             if before.start_time != after.start_time:
-                before_time = (
-                    discord.utils.format_dt(before.start_time, "F")
-                    if before.start_time
-                    else "None"
-                )
-                after_time = (
-                    discord.utils.format_dt(after.start_time, "F")
-                    if after.start_time
-                    else "None"
-                )
+                before_time = discord.utils.format_dt(before.start_time, "F") if before.start_time else "None"
+                after_time = discord.utils.format_dt(after.start_time, "F") if after.start_time else "None"
                 changes.append(f"**Start Time:** {before_time} → {after_time}")
 
-            if (
-                hasattr(before, "end_time")
-                and hasattr(after, "end_time")
-                and before.end_time != after.end_time
-            ):
-                before_time = (
-                    discord.utils.format_dt(before.end_time, "F")
-                    if before.end_time
-                    else "None"
-                )
-                after_time = (
-                    discord.utils.format_dt(after.end_time, "F")
-                    if after.end_time
-                    else "None"
-                )
+            if hasattr(before, "end_time") and hasattr(after, "end_time") and before.end_time != after.end_time:
+                before_time = discord.utils.format_dt(before.end_time, "F") if before.end_time else "None"
+                after_time = discord.utils.format_dt(after.end_time, "F") if after.end_time else "None"
                 changes.append(f"**End Time:** {before_time} → {after_time}")
 
-            if (
-                hasattr(before, "status")
-                and hasattr(after, "status")
-                and before.status != after.status
-            ):
-                changes.append(
-                    f"**Status:** `{before.status}` → `{after.status}`")
+            if hasattr(before, "status") and hasattr(after, "status") and before.status != after.status:
+                changes.append(f"**Status:** `{before.status}` → `{after.status}`")
 
             # Skip if no changes (shouldn't happen, but just in case)
             if not changes:
@@ -7061,8 +7081,7 @@ class YALC(DashboardIntegration, commands.Cog):
             )
 
             # Add event details
-            embed.add_field(name="Event ID",
-                            value=f"`{after.id}`", inline=True)
+            embed.add_field(name="Event ID", value=f"`{after.id}`", inline=True)
 
             # Add event URL
             if hasattr(after, "url") and after.url:
@@ -7145,22 +7164,18 @@ class YALC(DashboardIntegration, commands.Cog):
 
             # Add event details
             embed.add_field(name="Name", value=event.name, inline=True)
-            embed.add_field(name="Event ID",
-                            value=f"`{event.id}`", inline=True)
+            embed.add_field(name="Event ID", value=f"`{event.id}`", inline=True)
 
             if event.description:
                 embed.add_field(
                     name="Description",
-                    value=event.description
-                    if len(event.description) <= 1024
-                    else f"{event.description[:1021]}...",
+                    value=event.description if len(event.description) <= 1024 else f"{event.description[:1021]}...",
                     inline=False,
                 )
 
             # Add location info
             if hasattr(event, "location") and event.location:
-                embed.add_field(name="Location",
-                                value=event.location, inline=True)
+                embed.add_field(name="Location", value=event.location, inline=True)
             elif hasattr(event, "channel") and event.channel:
                 embed.add_field(
                     name="Channel",
@@ -7265,15 +7280,13 @@ class YALC(DashboardIntegration, commands.Cog):
             self.set_embed_footer(embed, label="YALC Logger • Stage Created")
             await self.safe_send(channel, embed=embed)
         except RECOVERABLE_EXCEPTIONS as e:
-            self.log.error(
-                f"Failed to log stage_instance_create: {e}", exc_info=True)
+            self.log.error(f"Failed to log stage_instance_create: {e}", exc_info=True)
 
     @commands.Cog.listener()
     async def on_stage_instance_update(self, before, after) -> None:
         """Log stage instance updates."""
         stage_channel = getattr(after, "channel", None)
-        guild = getattr(after, "guild", None) or getattr(
-            stage_channel, "guild", None)
+        guild = getattr(after, "guild", None) or getattr(stage_channel, "guild", None)
         if not guild:
             return
 
@@ -7340,8 +7353,7 @@ class YALC(DashboardIntegration, commands.Cog):
             self.set_embed_footer(embed, label="YALC Logger • Stage Updated")
             await self.safe_send(channel, embed=embed)
         except RECOVERABLE_EXCEPTIONS as e:
-            self.log.error(
-                f"Failed to log stage_instance_update: {e}", exc_info=True)
+            self.log.error(f"Failed to log stage_instance_update: {e}", exc_info=True)
 
     @commands.Cog.listener()
     async def on_stage_instance_delete(self, stage_instance) -> None:
@@ -7400,8 +7412,7 @@ class YALC(DashboardIntegration, commands.Cog):
             self.set_embed_footer(embed, label="YALC Logger • Stage Deleted")
             await self.safe_send(channel, embed=embed)
         except RECOVERABLE_EXCEPTIONS as e:
-            self.log.error(
-                f"Failed to log stage_instance_delete: {e}", exc_info=True)
+            self.log.error(f"Failed to log stage_instance_delete: {e}", exc_info=True)
 
     @commands.Cog.listener()
     async def on_soundboard_sound_create(self, sound) -> None:
@@ -7450,12 +7461,10 @@ class YALC(DashboardIntegration, commands.Cog):
                     inline=True,
                 )
 
-            self.set_embed_footer(
-                embed, label="YALC Logger • Soundboard Sound Created")
+            self.set_embed_footer(embed, label="YALC Logger • Soundboard Sound Created")
             await self.safe_send(channel, embed=embed)
         except RECOVERABLE_EXCEPTIONS as e:
-            self.log.error(
-                f"Failed to log soundboard_sound_create: {e}", exc_info=True)
+            self.log.error(f"Failed to log soundboard_sound_create: {e}", exc_info=True)
 
     @commands.Cog.listener()
     async def on_soundboard_sound_update(self, before, after) -> None:
@@ -7514,12 +7523,10 @@ class YALC(DashboardIntegration, commands.Cog):
                     inline=True,
                 )
 
-            self.set_embed_footer(
-                embed, label="YALC Logger • Soundboard Sound Updated")
+            self.set_embed_footer(embed, label="YALC Logger • Soundboard Sound Updated")
             await self.safe_send(channel, embed=embed)
         except RECOVERABLE_EXCEPTIONS as e:
-            self.log.error(
-                f"Failed to log soundboard_sound_update: {e}", exc_info=True)
+            self.log.error(f"Failed to log soundboard_sound_update: {e}", exc_info=True)
 
     @commands.Cog.listener()
     async def on_soundboard_sound_delete(self, sound) -> None:
@@ -7565,12 +7572,10 @@ class YALC(DashboardIntegration, commands.Cog):
                     inline=True,
                 )
 
-            self.set_embed_footer(
-                embed, label="YALC Logger • Soundboard Sound Deleted")
+            self.set_embed_footer(embed, label="YALC Logger • Soundboard Sound Deleted")
             await self.safe_send(channel, embed=embed)
         except RECOVERABLE_EXCEPTIONS as e:
-            self.log.error(
-                f"Failed to log soundboard_sound_delete: {e}", exc_info=True)
+            self.log.error(f"Failed to log soundboard_sound_delete: {e}", exc_info=True)
 
     @commands.hybrid_group(name="yalc", aliases=["logger"], invoke_without_command=True)
     @commands.guild_only()
@@ -7583,17 +7588,146 @@ class YALC(DashboardIntegration, commands.Cog):
         """
         await ctx.send_help(ctx.command)
 
+    @yalc_group.group(name="journal", invoke_without_command=True)
+    @commands.admin_or_permissions(manage_guild=True)
+    async def yalc_journal(self, ctx: commands.Context) -> None:
+        """Search and maintain YALC's optional local event journal."""
+        if self._journal is None:
+            await ctx.send("The YALC event journal could not be initialized.")
+            return
+        settings = await self.config.guild(ctx.guild).all()
+        stats = await self._journal.stats(ctx.guild.id)
+        embed = discord.Embed(title="YALC Event Journal", color=discord.Color.blurple())
+        embed.add_field(name="Enabled", value="Yes" if settings.get("journal_enabled") else "No")
+        embed.add_field(name="Stored events", value=f"{int(stats.get('count') or 0):,}")
+        embed.add_field(name="Retention", value=f"{int(settings.get('log_retention_days', 7))} days")
+        embed.add_field(
+            name="Message content",
+            value="Stored" if settings.get("journal_include_message_content") else "Not stored",
+        )
+        embed.add_field(name="Oldest", value=str(stats.get("oldest") or "No events"), inline=False)
+        await ctx.send(embed=embed)
+
+    @yalc_journal.command(name="search")
+    @commands.admin_or_permissions(manage_guild=True)
+    async def yalc_journal_search(
+        self,
+        ctx: commands.Context,
+        event_type: str | None = None,
+        *,
+        query: str = "",
+    ) -> None:
+        """Search recent journal summaries by event type and text."""
+        if self._journal is None:
+            await ctx.send("The YALC event journal is unavailable.")
+            return
+        if event_type and event_type not in self.event_descriptions:
+            await ctx.send("Unknown event type. Use `all` to search every event.")
+            return
+        rows = await self._journal.search(
+            ctx.guild.id,
+            query=query.strip(),
+            event_type=None if event_type in {None, "all"} else event_type,
+            limit=25,
+        )
+        if not rows:
+            await ctx.send("No journal events matched that search.")
+            return
+        lines = []
+        for row in rows:
+            timestamp = datetime.datetime.fromisoformat(row["occurred_at"])
+            when = discord.utils.format_dt(timestamp, "R")
+            lines.append(f"`#{row['id']}` {when} **{row['event_type']}** — {row['summary'][:160]}")
+        for page in pagify("\n".join(lines), page_length=3800):
+            await ctx.send(embed=discord.Embed(title="YALC Journal Search", description=page, color=discord.Color.blurple()))
+
+    @yalc_journal.command(name="export")
+    @commands.admin_or_permissions(manage_guild=True)
+    async def yalc_journal_export(
+        self,
+        ctx: commands.Context,
+        export_format: str = "csv",
+        event_type: str | None = None,
+    ) -> None:
+        """Export up to 500 recent journal events as CSV or JSON."""
+        if self._journal is None:
+            await ctx.send("The YALC event journal is unavailable.")
+            return
+        export_format = export_format.lower()
+        if export_format not in {"csv", "json"}:
+            await ctx.send("Export format must be `csv` or `json`.")
+            return
+        if event_type and event_type not in self.event_descriptions:
+            await ctx.send("Unknown event type.")
+            return
+        rows = await self._journal.search(ctx.guild.id, event_type=event_type, limit=500)
+        if export_format == "json":
+            payload = json.dumps(rows, ensure_ascii=False, indent=2).encode()
+        else:
+            output = io.StringIO()
+            fieldnames = list(rows[0]) if rows else ["id", "guild_id", "event_type", "occurred_at", "summary"]
+            writer = csv.DictWriter(output, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(rows)
+            payload = output.getvalue().encode()
+        await ctx.send(file=discord.File(io.BytesIO(payload), filename=f"yalc-events.{export_format}"))
+
+    @yalc_journal.command(name="prune")
+    @commands.admin_or_permissions(manage_guild=True)
+    async def yalc_journal_prune(self, ctx: commands.Context) -> None:
+        """Apply the configured journal retention immediately."""
+        if self._journal is None:
+            await ctx.send("The YALC event journal is unavailable.")
+            return
+        retention = await self.config.guild(ctx.guild).log_retention_days()
+        deleted = await self._journal.prune(ctx.guild.id, max(1, min(int(retention), 3650)))
+        await ctx.send(f"Pruned {deleted:,} expired journal events.")
+
+    @yalc_journal.command(name="clear")
+    @commands.admin_or_permissions(manage_guild=True)
+    async def yalc_journal_clear(self, ctx: commands.Context, confirmation: str) -> None:
+        """Permanently clear this server's local journal using CONFIRM."""
+        if confirmation != "CONFIRM":
+            await ctx.send("Run this command again with `CONFIRM` to clear the journal.")
+            return
+        if self._journal is None:
+            await ctx.send("The YALC event journal is unavailable.")
+            return
+        deleted = await self._journal.clear_guild(ctx.guild.id)
+        await ctx.send(f"Cleared {deleted:,} journal events.")
+
     @yalc_group.command(name="test", aliases=["diagnostics", "debug"])
     @commands.guild_only()
+    @commands.admin_or_permissions(manage_guild=True)
     async def yalc_test(self, ctx: commands.Context):
-        """Test YALC voice logging functionality and show comprehensive diagnostic information."""
+        """Show audit, routing, journal, gateway, and voice diagnostics."""
         try:
+            settings = await self.config.guild(ctx.guild).all()
+            bot_member = ctx.guild.me
+            view_audit = bool(bot_member and bot_member.guild_permissions.view_audit_log)
+            intents = self.bot.intents
+            moderation_intent = bool(getattr(intents, "moderation", getattr(intents, "guild_moderation", False)))
+            message_content_intent = bool(getattr(intents, "message_content", False))
+            configured_routes = {
+                event: channel_id for event, channel_id in settings.get("event_channels", {}).items() if channel_id
+            }
+            invalid_routes = [
+                event for event, channel_id in configured_routes.items() if ctx.guild.get_channel(channel_id) is None
+            ]
+            journal_stats = await self._journal.stats(ctx.guild.id) if self._journal is not None else {"count": 0}
+            audit_stats = self._audit_correlator.stats()
+            enabled_count = sum(bool(value) for value in settings.get("events", {}).values())
+            audit_totals = f"{audit_stats['matches']} / {audit_stats['misses']} / {audit_stats['duplicates']}"
+            journal_count = int(journal_stats.get("count") or 0)
+            fallback_status = "Configured" if settings.get("fallback_channel_id") else "None (fail closed)"
+            journal_status = "Enabled" if settings.get("journal_enabled") else "Disabled"
+
             # Create main diagnostic embed
             embed = discord.Embed(
                 title="🔍 YALC System Diagnostics",
-                description="Comprehensive system health check and voice session analysis",
+                description="Audit attribution, event delivery, privacy, journal, and voice health.",
                 color=discord.Color.blue(),
-                timestamp=datetime.datetime.now(datetime.UTC),
+                timestamp=datetime.datetime.now(datetime.timezone.utc),
             )
 
             # System Status Section
@@ -7603,6 +7737,27 @@ class YALC(DashboardIntegration, commands.Cog):
                 f"✅ Guild: {ctx.guild.name}\n"
                 f"✅ Bot latency: {self.bot.latency * 1000:.1f}ms\n"
                 f"✅ Guild members: {ctx.guild.member_count}",
+                inline=False,
+            )
+
+            embed.add_field(
+                name="🛡️ Audit & Gateway Readiness",
+                value=f"• View Audit Log: {'✅ Yes' if view_audit else '❌ Missing'}\n"
+                f"• Guild Moderation intent: {'✅ Enabled' if moderation_intent else '❌ Disabled'}\n"
+                f"• Message Content intent: {'✅ Enabled' if message_content_intent else '⚠️ Disabled'}\n"
+                f"• Cached audit entries: **{audit_stats['cached_entries']}**\n"
+                f"• Matches / misses / duplicates: **{audit_totals}**",
+                inline=False,
+            )
+
+            embed.add_field(
+                name="📨 Routing & Journal",
+                value=f"• Enabled events: **{enabled_count}/{len(self.event_descriptions)}**\n"
+                f"• Configured routes: **{len(configured_routes)}**\n"
+                f"• Invalid routes: **{len(invalid_routes)}**\n"
+                f"• Explicit fallback: **{fallback_status}**\n"
+                f"• Journal: **{journal_status}** · **{journal_count:,}** records\n"
+                f"• Journal message content: **{'Stored' if settings.get('journal_include_message_content') else 'Not stored'}**",
                 inline=False,
             )
 
@@ -7626,14 +7781,10 @@ class YALC(DashboardIntegration, commands.Cog):
                 for session in active_sessions[:5]:  # Show first 5
                     try:
                         member = ctx.guild.get_member(session["user_id"])
-                        member_display = (
-                            member.mention if member else f"ID: {session['user_id']}"
-                        )
+                        member_display = member.mention if member else f"ID: {session['user_id']}"
 
                         channel = ctx.guild.get_channel(session["channel_id"])
-                        channel_name = (
-                            channel.name if channel else f"ID: {session['channel_id']}"
-                        )
+                        channel_name = channel.name if channel else f"ID: {session['channel_id']}"
 
                         duration = self._format_duration(session["duration"])
                         session_info.append(
@@ -7671,31 +7822,20 @@ class YALC(DashboardIntegration, commands.Cog):
                         member = ctx.guild.get_member(
                             event["user_id"],
                         ) or await self.bot.fetch_user(event["user_id"])
-                        member_display = (
-                            member.mention
-                            if hasattr(member, "mention")
-                            else str(member)
-                        )
+                        member_display = member.mention if hasattr(member, "mention") else str(member)
 
                         channel = ctx.guild.get_channel(event["channel_id"])
-                        channel_name = (
-                            f"#{channel.name}"
-                            if channel
-                            else f"ID: {event['channel_id']}"
-                        )
+                        channel_name = f"#{channel.name}" if channel else f"ID: {event['channel_id']}"
 
                         event_time = datetime.datetime.fromtimestamp(
                             event["timestamp"],
                             tz=datetime.timezone.utc,
                         )
-                        relative_time = discord.utils.format_dt(
-                            event_time, style="R")
+                        relative_time = discord.utils.format_dt(event_time, style="R")
 
                         duration_text = ""
                         if event.get("duration") and event["duration"] > 0:
-                            duration_text = (
-                                f" ({self._format_duration(event['duration'])})"
-                            )
+                            duration_text = f" ({self._format_duration(event['duration'])})"
 
                         event_info.append(
                             f"• **{event['event_type']}** - {member_display} {channel_name}{duration_text}",
@@ -7722,16 +7862,12 @@ class YALC(DashboardIntegration, commands.Cog):
                 )
 
             # Voice Channels Monitoring
-            voice_channels = [
-                vc for vc in ctx.guild.channels if isinstance(vc, discord.VoiceChannel)
-            ]
+            voice_channels = [vc for vc in ctx.guild.channels if isinstance(vc, discord.VoiceChannel)]
             voice_stats = []
 
             for vc in voice_channels:
                 member_count = len(vc.members) if vc.members else 0
-                if (
-                    member_count > 0 or len(voice_channels) <= 10
-                ):  # Show active channels or if we have few channels
+                if member_count > 0 or len(voice_channels) <= 10:  # Show active channels or if we have few channels
                     voice_stats.append(
                         f"• **#{vc.name}**: {member_count} members ({'active' if member_count > 0 else 'empty'})",
                     )
@@ -7740,11 +7876,7 @@ class YALC(DashboardIntegration, commands.Cog):
                 embed.add_field(
                     name="🔊 Voice Channels Status",
                     value="\n".join(voice_stats[:10])
-                    + (
-                        f"\n*...and {len(voice_channels) - 10} more*"
-                        if len(voice_channels) > 10
-                        else ""
-                    ),
+                    + (f"\n*...and {len(voice_channels) - 10} more*" if len(voice_channels) > 10 else ""),
                     inline=False,
                 )
             else:
@@ -7755,23 +7887,12 @@ class YALC(DashboardIntegration, commands.Cog):
                 )
 
             # Configuration Check
-            settings = await self.config.guild(ctx.guild).all()
             enabled_voice_events = [
-                event
-                for event in self.event_descriptions
-                if event.startswith("voice_") and settings["events"].get(event, False)
+                event for event in self.event_descriptions if event.startswith("voice_") and settings["events"].get(event, False)
             ]
 
-            voice_state_status = (
-                "✅ Enabled"
-                if settings["events"].get("voice_state_update", False)
-                else "❌ Disabled"
-            )
-            voice_channel_status = (
-                "✅ Yes"
-                if settings["event_channels"].get("voice_state_update")
-                else "❌ No"
-            )
+            voice_state_status = "✅ Enabled" if settings["events"].get("voice_state_update", False) else "❌ Disabled"
+            voice_channel_status = "✅ Yes" if settings["event_channels"].get("voice_state_update") else "❌ No"
             embed.add_field(
                 name="⚙️ Voice Configuration",
                 value=f"• Voice state update event: {voice_state_status}\n"
@@ -7802,6 +7923,8 @@ class YALC(DashboardIntegration, commands.Cog):
             # Send summary message
             await ctx.send(
                 "✅ **YALC Diagnostics Complete!**\n"
+                f"🛡️ Audit readiness: {'healthy' if view_audit and moderation_intent else 'needs attention'}\n"
+                f"📨 {len(configured_routes)} configured routes ({len(invalid_routes)} invalid)\n"
                 f"🎧 Found {session_stats['active_sessions']} active voice sessions\n"
                 f"📊 Tracked {len(recent_events)} recent voice events\n"
                 f"🔊 Monitoring {len(voice_channels)} voice channels",
@@ -7812,7 +7935,7 @@ class YALC(DashboardIntegration, commands.Cog):
                 title="❌ Diagnostic Error",
                 description=f"An error occurred during diagnostics:\n```{e}```",
                 color=discord.Color.red(),
-                timestamp=datetime.datetime.now(datetime.UTC),
+                timestamp=datetime.datetime.now(datetime.timezone.utc),
             )
             await ctx.send(embed=error_embed)
             self.log.error(f"Error in YALC test command: {e}", exc_info=True)
@@ -7840,30 +7963,12 @@ class YALC(DashboardIntegration, commands.Cog):
 
             # Group events by category
             categories = {
-                "Message Events": [
-                    k for k in self.event_descriptions if k.startswith("message_")
-                ],
-                "Member Events": [
-                    k for k in self.event_descriptions if k.startswith("member_")
-                ],
-                "Channel Events": [
-                    k
-                    for k in self.event_descriptions
-                    if k.startswith(("channel_", "thread_", "forum_"))
-                ],
-                "Role Events": [
-                    k for k in self.event_descriptions if k.startswith("role_")
-                ],
-                "Guild Events": [
-                    k
-                    for k in self.event_descriptions
-                    if k.startswith(("guild_", "emoji_", "sticker_", "invite_"))
-                ],
-                "Voice/Stage Events": [
-                    k
-                    for k in self.event_descriptions
-                    if k.startswith(("voice_", "stage_"))
-                ],
+                "Message Events": [k for k in self.event_descriptions if k.startswith("message_")],
+                "Member Events": [k for k in self.event_descriptions if k.startswith("member_")],
+                "Channel Events": [k for k in self.event_descriptions if k.startswith(("channel_", "thread_", "forum_"))],
+                "Role Events": [k for k in self.event_descriptions if k.startswith("role_")],
+                "Guild Events": [k for k in self.event_descriptions if k.startswith(("guild_", "emoji_", "sticker_", "invite_"))],
+                "Voice/Stage Events": [k for k in self.event_descriptions if k.startswith(("voice_", "stage_"))],
                 "Application Events": [
                     k
                     for k in self.event_descriptions
@@ -7911,13 +8016,9 @@ class YALC(DashboardIntegration, commands.Cog):
             for category, events in categories.items():
                 if events:
                     event_list = "\n".join(
-                        [
-                            f"{self.event_descriptions[e][0]} `{e}` - {self.event_descriptions[e][1]}"
-                            for e in events
-                        ],
+                        [f"{self.event_descriptions[e][0]} `{e}` - {self.event_descriptions[e][1]}" for e in events],
                     )
-                    embed.add_field(
-                        name=category, value=event_list, inline=False)
+                    embed.add_field(name=category, value=event_list, inline=False)
 
             embed.set_footer(
                 text=f"Use {ctx.prefix}yalc enable <event_type> to enable a specific event type",
@@ -8039,11 +8140,7 @@ class YALC(DashboardIntegration, commands.Cog):
                 channel_info = ""
                 if channel_id:
                     channel = ctx.guild.get_channel(channel_id)
-                    channel_info = (
-                        f" → {channel.mention}"
-                        if channel
-                        else " → *Channel not found*"
-                    )
+                    channel_info = f" → {channel.mention}" if channel else " → *Channel not found*"
                 else:
                     channel_info = " → *No channel set*"
 
@@ -8114,26 +8211,17 @@ class YALC(DashboardIntegration, commands.Cog):
             role_names = [f"<@&{role_id}>" for role_id in ignored_roles[:3]]
             ignore_settings.append(
                 f"🚫 Ignored Roles: {', '.join(role_names)}"
-                + (
-                    f" *and {len(ignored_roles) - 3} more*"
-                    if len(ignored_roles) > 3
-                    else ""
-                ),
+                + (f" *and {len(ignored_roles) - 3} more*" if len(ignored_roles) > 3 else ""),
             )
         ignored_users = settings.get("ignored_users", [])
         if ignored_users:
             ignore_settings.append(f"🚫 Ignored Users: {len(ignored_users)}")
         ignored_channels = settings.get("ignored_channels", [])
         if ignored_channels:
-            channel_names = [
-                f"<#{channel_id}>" for channel_id in ignored_channels[:3]]
+            channel_names = [f"<#{channel_id}>" for channel_id in ignored_channels[:3]]
             ignore_settings.append(
                 f"🚫 Ignored Channels: {', '.join(channel_names)}"
-                + (
-                    f" *and {len(ignored_channels) - 3} more*"
-                    if len(ignored_channels) > 3
-                    else ""
-                ),
+                + (f" *and {len(ignored_channels) - 3} more*" if len(ignored_channels) > 3 else ""),
             )
         embed_ignore = discord.Embed(
             title="YALC Logger Settings",
@@ -8164,9 +8252,7 @@ class YALC(DashboardIntegration, commands.Cog):
 
                 # Get channel
                 channel = ctx.guild.get_channel(rule["channel_id"])
-                channel_display = (
-                    channel.mention if channel else f"ID: {rule['channel_id']}"
-                )
+                channel_display = channel.mention if channel else f"ID: {rule['channel_id']}"
 
                 # Get event info
                 event_type = rule["event_type"]
@@ -8176,9 +8262,7 @@ class YALC(DashboardIntegration, commands.Cog):
                 )
 
                 # Format rule
-                rule_text = (
-                    f"{emoji} **{event_type}** from {user_display} in {channel_display}"
-                )
+                rule_text = f"{emoji} **{event_type}** from {user_display} in {channel_display}"
                 if rule.get("reason"):
                     rule_text += f" *(Reason: {rule['reason']})*"
 
@@ -8461,11 +8545,7 @@ class YALC(DashboardIntegration, commands.Cog):
         async with self.config.guild(ctx.guild).granular_ignores() as granular_ignores:
             existing_rule = None
             for rule in granular_ignores:
-                if (
-                    rule["event_type"] == event_type
-                    and rule["user_id"] == user.id
-                    and rule["channel_id"] == channel.id
-                ):
+                if rule["event_type"] == event_type and rule["user_id"] == user.id and rule["channel_id"] == channel.id:
                     existing_rule = rule
                     break
 
@@ -8481,7 +8561,7 @@ class YALC(DashboardIntegration, commands.Cog):
                 "user_id": user.id,
                 "channel_id": channel.id,
                 "created_by": ctx.author.id,
-                "created_at": datetime.datetime.now(datetime.UTC).isoformat(),
+                "created_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
                 "reason": reason,
             }
 
@@ -8526,11 +8606,7 @@ class YALC(DashboardIntegration, commands.Cog):
         async with self.config.guild(ctx.guild).granular_ignores() as granular_ignores:
             rule_found = False
             for i, rule in enumerate(granular_ignores):
-                if (
-                    rule["event_type"] == event_type
-                    and rule["user_id"] == user.id
-                    and rule["channel_id"] == channel.id
-                ):
+                if rule["event_type"] == event_type and rule["user_id"] == user.id and rule["channel_id"] == channel.id:
                     granular_ignores.pop(i)
                     rule_found = True
                     break
@@ -8591,11 +8667,7 @@ class YALC(DashboardIntegration, commands.Cog):
         async with self.config.guild(ctx.guild).granular_ignores() as granular_ignores:
             existing_rule = None
             for rule in granular_ignores:
-                if (
-                    rule["event_type"] == event_type
-                    and rule["user_id"] == user.id
-                    and rule.get("thread_id") == thread.id
-                ):
+                if rule["event_type"] == event_type and rule["user_id"] == user.id and rule.get("thread_id") == thread.id:
                     existing_rule = rule
                     break
 
@@ -8612,7 +8684,7 @@ class YALC(DashboardIntegration, commands.Cog):
                 "thread_id": thread.id,
                 "parent_channel_id": thread.parent_id,
                 "created_by": ctx.author.id,
-                "created_at": datetime.datetime.now(datetime.UTC).isoformat(),
+                "created_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
                 "reason": reason,
             }
 
@@ -8662,11 +8734,7 @@ class YALC(DashboardIntegration, commands.Cog):
         async with self.config.guild(ctx.guild).granular_ignores() as granular_ignores:
             rule_found = False
             for i, rule in enumerate(granular_ignores):
-                if (
-                    rule["event_type"] == event_type
-                    and rule["user_id"] == user.id
-                    and rule.get("thread_id") == thread.id
-                ):
+                if rule["event_type"] == event_type and rule["user_id"] == user.id and rule.get("thread_id") == thread.id:
                     granular_ignores.pop(i)
                     rule_found = True
                     break
@@ -8718,11 +8786,7 @@ class YALC(DashboardIntegration, commands.Cog):
                         user_mentions.append(f"ID: {user_id}")
                 broad_rules.append(
                     f"**👤 Ignored Users ({len(ignored_users)}):** {', '.join(user_mentions)}"
-                    + (
-                        f" *and {len(ignored_users) - 5} more*"
-                        if len(ignored_users) > 5
-                        else ""
-                    ),
+                    + (f" *and {len(ignored_users) - 5} more*" if len(ignored_users) > 5 else ""),
                 )
 
             # Ignored channels
@@ -8737,11 +8801,7 @@ class YALC(DashboardIntegration, commands.Cog):
                         channel_mentions.append(f"ID: {channel_id}")
                 broad_rules.append(
                     f"**📢 Ignored Channels ({len(ignored_channels)}):** {', '.join(channel_mentions)}"
-                    + (
-                        f" *and {len(ignored_channels) - 5} more*"
-                        if len(ignored_channels) > 5
-                        else ""
-                    ),
+                    + (f" *and {len(ignored_channels) - 5} more*" if len(ignored_channels) > 5 else ""),
                 )
 
             # Ignored roles
@@ -8756,11 +8816,7 @@ class YALC(DashboardIntegration, commands.Cog):
                         role_mentions.append(f"ID: {role_id}")
                 broad_rules.append(
                     f"**🎭 Ignored Roles ({len(ignored_roles)}):** {', '.join(role_mentions)}"
-                    + (
-                        f" *and {len(ignored_roles) - 5} more*"
-                        if len(ignored_roles) > 5
-                        else ""
-                    ),
+                    + (f" *and {len(ignored_roles) - 5} more*" if len(ignored_roles) > 5 else ""),
                 )
 
             # Other ignore settings
@@ -8775,8 +8831,7 @@ class YALC(DashboardIntegration, commands.Cog):
                 other_ignores.append("📱 Application messages")
 
             if other_ignores:
-                broad_rules.append(
-                    f"**⚙️ System Ignores:** {', '.join(other_ignores)}")
+                broad_rules.append(f"**⚙️ System Ignores:** {', '.join(other_ignores)}")
 
             if broad_rules:
                 embed.add_field(
@@ -8804,9 +8859,7 @@ class YALC(DashboardIntegration, commands.Cog):
 
                     # Get channel
                     channel = ctx.guild.get_channel(rule["channel_id"])
-                    channel_display = (
-                        channel.mention if channel else f"ID: {rule['channel_id']}"
-                    )
+                    channel_display = channel.mention if channel else f"ID: {rule['channel_id']}"
 
                     # Get event info
                     event_type = rule["event_type"]
@@ -8882,7 +8935,7 @@ class YALC(DashboardIntegration, commands.Cog):
         if category is None:
             await ctx.send(
                 "❌ Please specify a category: `message`, `member`, `channel`, "
-                "`role`, `voice`, `guild`, `application`, `automod`, `stage`, "
+                "`role`, `voice`, `guild`, `moderation`, `application`, `automod`, `stage`, "
                 "`soundboard`, `webhook`, `invite`, or `all`",
             )
             return
@@ -8892,29 +8945,16 @@ class YALC(DashboardIntegration, commands.Cog):
         # Define event categories
         categories = {
             "message": [k for k in self.event_descriptions if k.startswith("message_")],
-            "member": [k for k in self.event_descriptions if k.startswith("member_")],
-            "channel": [
-                k
-                for k in self.event_descriptions
-                if k.startswith(("channel_", "thread_", "forum_"))
-            ],
+            "member": [k for k in self.event_descriptions if k.startswith("member_") or k == "bot_add"],
+            "channel": [k for k in self.event_descriptions if k.startswith(("channel_", "overwrite_", "thread_", "forum_"))],
             "role": [k for k in self.event_descriptions if k.startswith("role_")],
-            "guild": [
-                k
-                for k in self.event_descriptions
-                if k.startswith(("guild_", "emoji_", "sticker_", "invite_"))
-            ],
+            "guild": [k for k in self.event_descriptions if k.startswith(("guild_", "emoji_", "sticker_", "invite_"))],
             "voice": [k for k in self.event_descriptions if k.startswith("voice_")],
-            "application": [
-                k
-                for k in self.event_descriptions
-                if k.startswith(("command_", "application_", "integration_"))
-            ],
+            "moderation": [k for k, group in self.EVENT_TO_SETUP_GROUP.items() if group == "moderation"],
+            "application": [k for k in self.event_descriptions if k.startswith(("command_", "application_", "integration_"))],
             "automod": [k for k in self.event_descriptions if k.startswith("automod_")],
             "stage": [k for k in self.event_descriptions if k.startswith("stage_")],
-            "soundboard": [
-                k for k in self.event_descriptions if k.startswith("soundboard_")
-            ],
+            "soundboard": [k for k in self.event_descriptions if k.startswith("soundboard_")],
             "webhook": [k for k in self.event_descriptions if k.startswith("webhook_")],
             "invite": [k for k in self.event_descriptions if k.startswith("invite_")],
             "all": list(self.event_descriptions.keys()),
@@ -8956,7 +8996,7 @@ class YALC(DashboardIntegration, commands.Cog):
         if category is None:
             await ctx.send(
                 "❌ Please specify a category: `message`, `member`, `channel`, "
-                "`role`, `voice`, `guild`, `application`, `automod`, `stage`, "
+                "`role`, `voice`, `guild`, `moderation`, `application`, `automod`, `stage`, "
                 "`soundboard`, `webhook`, `invite`, or `all`",
             )
             return
@@ -8966,29 +9006,16 @@ class YALC(DashboardIntegration, commands.Cog):
         # Define event categories
         categories = {
             "message": [k for k in self.event_descriptions if k.startswith("message_")],
-            "member": [k for k in self.event_descriptions if k.startswith("member_")],
-            "channel": [
-                k
-                for k in self.event_descriptions
-                if k.startswith(("channel_", "thread_", "forum_"))
-            ],
+            "member": [k for k in self.event_descriptions if k.startswith("member_") or k == "bot_add"],
+            "channel": [k for k in self.event_descriptions if k.startswith(("channel_", "overwrite_", "thread_", "forum_"))],
             "role": [k for k in self.event_descriptions if k.startswith("role_")],
-            "guild": [
-                k
-                for k in self.event_descriptions
-                if k.startswith(("guild_", "emoji_", "sticker_", "invite_"))
-            ],
+            "guild": [k for k in self.event_descriptions if k.startswith(("guild_", "emoji_", "sticker_", "invite_"))],
             "voice": [k for k in self.event_descriptions if k.startswith("voice_")],
-            "application": [
-                k
-                for k in self.event_descriptions
-                if k.startswith(("command_", "application_", "integration_"))
-            ],
+            "moderation": [k for k, group in self.EVENT_TO_SETUP_GROUP.items() if group == "moderation"],
+            "application": [k for k in self.event_descriptions if k.startswith(("command_", "application_", "integration_"))],
             "automod": [k for k in self.event_descriptions if k.startswith("automod_")],
             "stage": [k for k in self.event_descriptions if k.startswith("stage_")],
-            "soundboard": [
-                k for k in self.event_descriptions if k.startswith("soundboard_")
-            ],
+            "soundboard": [k for k in self.event_descriptions if k.startswith("soundboard_")],
             "webhook": [k for k in self.event_descriptions if k.startswith("webhook_")],
             "invite": [k for k in self.event_descriptions if k.startswith("invite_")],
             "all": list(self.event_descriptions.keys()),
@@ -9031,10 +9058,7 @@ class YALC(DashboardIntegration, commands.Cog):
             )
             embed.add_field(
                 name="What will be reset:",
-                value="• All event logging settings\n"
-                "• All channel configurations\n"
-                "• All ignore lists\n"
-                "• All advanced settings",
+                value="• All event logging settings\n• All channel configurations\n• All ignore lists\n• All advanced settings",
                 inline=False,
             )
             embed.add_field(
@@ -9062,9 +9086,7 @@ class YALC(DashboardIntegration, commands.Cog):
             warnings = []
 
             # Check for enabled events without channels
-            enabled_events = [
-                event for event, enabled in settings["events"].items() if enabled
-            ]
+            enabled_events = [event for event, enabled in settings["events"].items() if enabled]
             for event in enabled_events:
                 channel_id = settings["event_channels"].get(event)
                 if not channel_id:
@@ -9079,11 +9101,7 @@ class YALC(DashboardIntegration, commands.Cog):
                         )
 
             # Check for configured channels without enabled events
-            configured_channels = {
-                event: channel_id
-                for event, channel_id in settings["event_channels"].items()
-                if channel_id
-            }
+            configured_channels = {event: channel_id for event, channel_id in settings["event_channels"].items() if channel_id}
             for event, channel_id in configured_channels.items():
                 if not settings["events"].get(event, False):
                     warnings.append(
@@ -9098,25 +9116,18 @@ class YALC(DashboardIntegration, commands.Cog):
                     # Try to fetch user from API as fallback
                     try:
                         fetched_user = await self.bot.fetch_user(user_id)
-                        username_info = (
-                            f"{fetched_user} (ID: {user_id})"
-                            if fetched_user
-                            else f"ID: {user_id}"
-                        )
+                        username_info = f"{fetched_user} (ID: {user_id})" if fetched_user else f"ID: {user_id}"
                     except RECOVERABLE_EXCEPTIONS:
                         username_info = f"ID: {user_id}"
-                    warnings.append(
-                        f"Ignored user {username_info} not found in server")
+                    warnings.append(f"Ignored user {username_info} not found in server")
                 else:
                     username_info = f"{user} (ID: {user_id})"
-                    warnings.append(
-                        f"Ignored user {username_info} not found in server")
+                    warnings.append(f"Ignored user {username_info} not found in server")
 
             for role_id in settings.get("ignored_roles", []):
                 role = ctx.guild.get_role(role_id)
                 if not role:
-                    warnings.append(
-                        f"Ignored role ID {role_id} not found in server")
+                    warnings.append(f"Ignored role ID {role_id} not found in server")
 
             for channel_id in settings.get("ignored_channels", []):
                 channel = ctx.guild.get_channel(channel_id)
@@ -9130,9 +9141,7 @@ class YALC(DashboardIntegration, commands.Cog):
             for i, rule in enumerate(granular_ignores):
                 # Check if rule has required fields
                 required_fields = ["event_type", "user_id", "channel_id"]
-                missing_fields = [
-                    field for field in required_fields if field not in rule
-                ]
+                missing_fields = [field for field in required_fields if field not in rule]
                 if missing_fields:
                     issues.append(
                         f"Granular ignore rule #{i + 1} is missing required fields: {', '.join(missing_fields)}",
@@ -9192,32 +9201,21 @@ class YALC(DashboardIntegration, commands.Cog):
             if not issues and not warnings:
                 embed.description = "✅ Configuration is valid with no issues found!"
             else:
-                embed.description = (
-                    f"Found {len(issues)} issues and {len(warnings)} warnings"
-                )
+                embed.description = f"Found {len(issues)} issues and {len(warnings)} warnings"
 
             if issues:
                 embed.add_field(
                     name="❌ Issues (require attention)",
                     value="\n".join(f"• {issue}" for issue in issues[:10])
-                    + (
-                        f"\n• ...and {len(issues) - 10} more"
-                        if len(issues) > 10
-                        else ""
-                    ),
+                    + (f"\n• ...and {len(issues) - 10} more" if len(issues) > 10 else ""),
                     inline=False,
                 )
 
             if warnings:
                 embed.add_field(
                     name="⚠️ Warnings (recommended fixes)",
-                    value="\n".join(
-                        f"• {warning}" for warning in warnings[:10])
-                    + (
-                        f"\n• ...and {len(warnings) - 10} more"
-                        if len(warnings) > 10
-                        else ""
-                    ),
+                    value="\n".join(f"• {warning}" for warning in warnings[:10])
+                    + (f"\n• ...and {len(warnings) - 10} more" if len(warnings) > 10 else ""),
                     inline=False,
                 )
 
@@ -9253,13 +9251,11 @@ class YALC(DashboardIntegration, commands.Cog):
             embed = discord.Embed(
                 title="🏗️ YALC Full Setup",
                 description=(
-                    "This will create a complete logging category and route "
-                    "supported YALC events to dedicated log channels."
+                    "This will create a complete logging category and route supported YALC events to dedicated log channels."
                 ),
                 color=discord.Color.blue(),
             )
-            channel_lines = [f"• **#{name}**" for _,
-                name, _ in self.SETUP_LOG_CHANNELS]
+            channel_lines = [f"• **#{name}**" for _, name, _ in self.SETUP_LOG_CHANNELS]
             embed.add_field(
                 name="Created Category",
                 value="• **YALC Logs**",
@@ -9323,9 +9319,12 @@ class YALC(DashboardIntegration, commands.Cog):
                 event_mappings[event_type] = channel.id
 
             # Apply configuration
-            async with self.config.guild(ctx.guild).events() as events, self.config.guild(
-                ctx.guild,
-            ).event_channels() as event_channels:
+            async with (
+                self.config.guild(ctx.guild).events() as events,
+                self.config.guild(
+                    ctx.guild,
+                ).event_channels() as event_channels,
+            ):
                 for event_type, channel_id in event_mappings.items():
                     events[event_type] = True
                     event_channels[event_type] = channel_id
@@ -9353,8 +9352,7 @@ class YALC(DashboardIntegration, commands.Cog):
             embed.add_field(
                 name="📢 Created Channels",
                 value="\n".join(
-                    f"• {channels[key].mention} - {topic.removeprefix('YALC: ')}"
-                    for key, _, topic in self.SETUP_LOG_CHANNELS[:8]
+                    f"• {channels[key].mention} - {topic.removeprefix('YALC: ')}" for key, _, topic in self.SETUP_LOG_CHANNELS[:8]
                 ),
                 inline=False,
             )
@@ -9362,8 +9360,7 @@ class YALC(DashboardIntegration, commands.Cog):
             embed.add_field(
                 name="📢 Created Channels Continued",
                 value="\n".join(
-                    f"• {channels[key].mention} - {topic.removeprefix('YALC: ')}"
-                    for key, _, topic in self.SETUP_LOG_CHANNELS[8:]
+                    f"• {channels[key].mention} - {topic.removeprefix('YALC: ')}" for key, _, topic in self.SETUP_LOG_CHANNELS[8:]
                 ),
                 inline=False,
             )
@@ -9503,9 +9500,7 @@ class YALC(DashboardIntegration, commands.Cog):
                 for i in range(0, len(sorted_channels), channels_per_embed):
                     chunk = sorted_channels[i : i + channels_per_embed]
                     page_num = (i // channels_per_embed) + 1
-                    total_pages = (
-                        len(sorted_channels) + channels_per_embed - 1
-                    ) // channels_per_embed
+                    total_pages = (len(sorted_channels) + channels_per_embed - 1) // channels_per_embed
 
                     embed = discord.Embed(
                         title=f"📂 Detected Channels (Page {page_num}/{total_pages})",
@@ -9521,21 +9516,11 @@ class YALC(DashboardIntegration, commands.Cog):
 
                         # Use compact emoji representation to save characters
                         if len(events) <= 5:
-                            event_emojis = [
-                                self.event_descriptions[e][0]
-                                for e in events[:5]
-                                if e in self.event_descriptions
-                            ]
-                            event_text = "".join(
-                                event_emojis) if event_emojis else "📝"
+                            event_emojis = [self.event_descriptions[e][0] for e in events[:5] if e in self.event_descriptions]
+                            event_text = "".join(event_emojis) if event_emojis else "📝"
                         else:
-                            event_emojis = [
-                                self.event_descriptions[e][0]
-                                for e in events[:3]
-                                if e in self.event_descriptions
-                            ]
-                            event_text = "".join(
-                                event_emojis) + f"+{len(events) - 3}"
+                            event_emojis = [self.event_descriptions[e][0] for e in events[:3] if e in self.event_descriptions]
+                            event_text = "".join(event_emojis) + f"+{len(events) - 3}"
 
                         channel_lines.append(
                             f"📂 **{ch_name}** → {event_text} ({len(events)} events)",
@@ -9688,8 +9673,7 @@ class YALC(DashboardIntegration, commands.Cog):
                             yalc_registered = self.qualified_name in third_parties
 
                             if yalc_registered:
-                                pages = third_parties.get(
-                                    self.qualified_name, {})
+                                pages = third_parties.get(self.qualified_name, {})
                                 embed.add_field(
                                     name="✅ YALC Registration",
                                     value=f"YALC is registered as a third party with {len(pages)} page(s)",
@@ -9709,11 +9693,7 @@ class YALC(DashboardIntegration, commands.Cog):
                                 + "\n".join(
                                     [f"• {name}" for name in registered_names[:5]],
                                 )
-                                + (
-                                    f"\n• ...and {len(registered_names) - 5} more"
-                                    if len(registered_names) > 5
-                                    else ""
-                                ),
+                                + (f"\n• ...and {len(registered_names) - 5} more" if len(registered_names) > 5 else ""),
                                 inline=False,
                             )
                         except RECOVERABLE_EXCEPTIONS as e:
@@ -9812,8 +9792,7 @@ class YALC(DashboardIntegration, commands.Cog):
 
         # Check if the event type exists
         if event_type not in self.event_descriptions:
-            available_events = ", ".join(
-                list(self.event_descriptions.keys())[:10])
+            available_events = ", ".join(list(self.event_descriptions.keys())[:10])
             await interaction.response.send_message(
                 f"❌ Unknown event type: `{event_type}`.\n"
                 f"Available events: {available_events}{'...' if len(self.event_descriptions) > 10 else ''}",
@@ -9854,8 +9833,7 @@ class YALC(DashboardIntegration, commands.Cog):
 
         # Check if the event type exists
         if event_type not in self.event_descriptions:
-            available_events = ", ".join(
-                list(self.event_descriptions.keys())[:10])
+            available_events = ", ".join(list(self.event_descriptions.keys())[:10])
             await interaction.response.send_message(
                 f"❌ Unknown event type: `{event_type}`.\n"
                 f"Available events: {available_events}{'...' if len(self.event_descriptions) > 10 else ''}",
@@ -9900,8 +9878,7 @@ class YALC(DashboardIntegration, commands.Cog):
 
         # Check if the event type exists
         if event_type not in self.event_descriptions and event_type != "all":
-            available_events = ", ".join(
-                list(self.event_descriptions.keys())[:10])
+            available_events = ", ".join(list(self.event_descriptions.keys())[:10])
             await interaction.response.send_message(
                 f"❌ Unknown event type: `{event_type}`.\n"
                 f"Available events: {available_events}{'...' if len(self.event_descriptions) > 10 else ''}\n"
@@ -9987,6 +9964,9 @@ class YALC(DashboardIntegration, commands.Cog):
                 "channel_create",
                 "channel_delete",
                 "channel_update",
+                "overwrite_create",
+                "overwrite_update",
+                "overwrite_delete",
             ],
             "role": [
                 "role_create",
@@ -10020,6 +10000,8 @@ class YALC(DashboardIntegration, commands.Cog):
                 "member_unban",
                 "member_kick",
                 "member_timeout",
+                "member_prune",
+                "bot_add",
                 "automod_action",
                 "automod_rule_create",
                 "automod_rule_update",
@@ -10030,6 +10012,8 @@ class YALC(DashboardIntegration, commands.Cog):
                 "member_unban",
                 "member_kick",
                 "member_timeout",
+                "member_prune",
+                "bot_add",
                 "automod_action",
                 "automod_rule_create",
                 "automod_rule_update",
@@ -10075,7 +10059,9 @@ class YALC(DashboardIntegration, commands.Cog):
                 "soundboard_sound_delete",
             ],
             "webhook": [
+                "webhook_create",
                 "webhook_update",
+                "webhook_delete",
             ],
             "integration": [
                 "integration_create",
@@ -10083,7 +10069,10 @@ class YALC(DashboardIntegration, commands.Cog):
                 "integration_delete",
             ],
             "bot": [
+                "bot_add",
+                "webhook_create",
                 "webhook_update",
+                "webhook_delete",
                 "integration_create",
                 "integration_update",
                 "integration_delete",
@@ -10108,9 +10097,7 @@ class YALC(DashboardIntegration, commands.Cog):
         }
 
         detected_config = {}
-        text_channels = [
-            ch for ch in guild.channels if isinstance(ch, discord.TextChannel)
-        ]
+        text_channels = [ch for ch in guild.channels if isinstance(ch, discord.TextChannel)]
 
         for channel in text_channels:
             channel_name_lower = channel.name.lower()
@@ -10136,8 +10123,7 @@ class YALC(DashboardIntegration, commands.Cog):
                         continue
 
                     # Filter events to only include ones that exist in our descriptions
-                    valid_events = [
-                        e for e in events if e in self.event_descriptions]
+                    valid_events = [e for e in events if e in self.event_descriptions]
 
                     if valid_events:
                         detected_config[channel.name] = {
@@ -10151,18 +10137,14 @@ class YALC(DashboardIntegration, commands.Cog):
             if not found_match and "log" in channel_name_lower:
                 # Look for patterns like "mod-log-1", "message-logs-2", etc.
                 for pattern, events in patterns.items():
-                    if (
-                        pattern in channel_name_lower and len(pattern) > 2
-                    ):  # Avoid matching just "log"
-                            valid_events = [
-                                e for e in events if e in self.event_descriptions
-                            ]
-                            if valid_events:
-                                detected_config[channel.name] = {
-                                    "channel": channel,
-                                    "events": valid_events,
-                                }
-                                break
+                    if pattern in channel_name_lower and len(pattern) > 2:  # Avoid matching just "log"
+                        valid_events = [e for e in events if e in self.event_descriptions]
+                        if valid_events:
+                            detected_config[channel.name] = {
+                                "channel": channel,
+                                "events": valid_events,
+                            }
+                            break
 
         return detected_config
 
@@ -10189,11 +10171,7 @@ class YALC(DashboardIntegration, commands.Cog):
                 channel_info = ""
                 if channel_id:
                     channel = interaction.guild.get_channel(channel_id)
-                    channel_info = (
-                        f" → {channel.mention}"
-                        if channel
-                        else " → *Channel not found*"
-                    )
+                    channel_info = f" → {channel.mention}" if channel else " → *Channel not found*"
                 else:
                     channel_info = " → *No channel set*"
 
@@ -10206,11 +10184,7 @@ class YALC(DashboardIntegration, commands.Cog):
             embed.add_field(
                 name="📋 Enabled Events with Channels",
                 value="\n".join(enabled_events_with_channels[:12])
-                + (
-                    f"\n*...and {len(enabled_events_with_channels) - 12} more*"
-                    if len(enabled_events_with_channels) > 12
-                    else ""
-                ),
+                + (f"\n*...and {len(enabled_events_with_channels) - 12} more*" if len(enabled_events_with_channels) > 12 else ""),
                 inline=False,
             )
         else:
@@ -10234,11 +10208,7 @@ class YALC(DashboardIntegration, commands.Cog):
             embed.add_field(
                 name="📢 Event Channels",
                 value="\n".join(channel_mappings[:10])
-                + (
-                    f"\n*...and {len(channel_mappings) - 10} more*"
-                    if len(channel_mappings) > 10
-                    else ""
-                ),
+                + (f"\n*...and {len(channel_mappings) - 10} more*" if len(channel_mappings) > 10 else ""),
                 inline=False,
             )
         else:
@@ -10266,11 +10236,7 @@ class YALC(DashboardIntegration, commands.Cog):
             role_names = [f"<@&{role_id}>" for role_id in ignored_roles[:3]]
             ignore_settings.append(
                 f"🚫 Ignored Roles: {', '.join(role_names)}"
-                + (
-                    f" *and {len(ignored_roles) - 3} more*"
-                    if len(ignored_roles) > 3
-                    else ""
-                ),
+                + (f" *and {len(ignored_roles) - 3} more*" if len(ignored_roles) > 3 else ""),
             )
 
         ignored_users = settings.get("ignored_users", [])
@@ -10279,15 +10245,10 @@ class YALC(DashboardIntegration, commands.Cog):
 
         ignored_channels = settings.get("ignored_channels", [])
         if ignored_channels:
-            channel_names = [
-                f"<#{channel_id}>" for channel_id in ignored_channels[:3]]
+            channel_names = [f"<#{channel_id}>" for channel_id in ignored_channels[:3]]
             ignore_settings.append(
                 f"🚫 Ignored Channels: {', '.join(channel_names)}"
-                + (
-                    f" *and {len(ignored_channels) - 3} more*"
-                    if len(ignored_channels) > 3
-                    else ""
-                ),
+                + (f" *and {len(ignored_channels) - 3} more*" if len(ignored_channels) > 3 else ""),
             )
 
         if ignore_settings:
@@ -10432,10 +10393,7 @@ class YALC(DashboardIntegration, commands.Cog):
         # Webhook name detection for Tupperbox/Tupperhook
         if getattr(message, "webhook_id", None):
             webhook_name = getattr(message.author, "name", "") or ""
-            if (
-                "tupperbox" in webhook_name.lower()
-                or "tupperhook" in webhook_name.lower()
-            ):
+            if "tupperbox" in webhook_name.lower() or "tupperhook" in webhook_name.lower():
                 return True
 
         if message.author.bot:
@@ -10454,10 +10412,7 @@ class YALC(DashboardIntegration, commands.Cog):
                     referenced_message = await message.channel.fetch_message(
                         message.reference.message_id,
                     )
-                    if (
-                        referenced_message
-                        and referenced_message.author.id in tupperbox_ids
-                    ):
+                    if referenced_message and referenced_message.author.id in tupperbox_ids:
                         return True
                 except discord.NotFound:
                     pass  # Referenced message not found, ignore
@@ -10489,10 +10444,22 @@ class YALC(DashboardIntegration, commands.Cog):
         Optional[discord.Message]
             The sent message if successful, None otherwise
         """
+        event = kwargs.pop("yalc_event", None)
+        embed = kwargs.get("embed")
+        inferred_event_type = self._embed_event_types.pop(id(embed), None) if embed is not None else None
+        if event is None and inferred_event_type and channel is not None:
+            event = LogEvent(
+                guild_id=channel.guild.id,
+                event_type=inferred_event_type,
+                summary=str(getattr(embed, "description", None) or getattr(embed, "title", ""))[:1000],
+            )
+
         if not channel:
-            self.log.warning(
-                "Attempted to send a message to a nonexistent channel")
+            self.log.warning("Attempted to send a message to a nonexistent channel")
             return None
+
+        kwargs.setdefault("allowed_mentions", discord.AllowedMentions.none())
+        await self._apply_event_style(channel.guild, inferred_event_type, embed)
 
         max_retries = 3
         base_delay = 1
@@ -10500,7 +10467,9 @@ class YALC(DashboardIntegration, commands.Cog):
         for attempt in range(max_retries):
             try:
                 self._reset_send_files(kwargs)
-                return await channel.send(**kwargs)
+                sent = await channel.send(**kwargs)
+                await self._record_delivered_event(event, channel.id)
+                return sent
 
             except discord.Forbidden:
                 self.log.warning(
@@ -10512,8 +10481,7 @@ class YALC(DashboardIntegration, commands.Cog):
                         channel.guild,
                     )
                     if fallback_channel and fallback_channel != channel:
-                        self.log.info(
-                            f"Attempting fallback to {fallback_channel.name}")
+                        self.log.info(f"Attempting fallback to {fallback_channel.name}")
                         try:
                             fallback_embed = kwargs.get("embed")
                             if fallback_embed:
@@ -10523,23 +10491,22 @@ class YALC(DashboardIntegration, commands.Cog):
                                     inline=False,
                                 )
                             self._reset_send_files(kwargs)
-                            return await fallback_channel.send(**kwargs)
+                            sent = await fallback_channel.send(**kwargs)
+                            await self._record_delivered_event(event, fallback_channel.id)
+                            return sent
                         except RECOVERABLE_EXCEPTIONS as fallback_e:
-                            self.log.error(
-                                f"Fallback send also failed: {fallback_e}")
+                            self.log.error(f"Fallback send also failed: {fallback_e}")
                 break  # Don't retry permission errors
 
             except discord.HTTPException as e:
                 if e.status == 429:  # Rate limited
-                    retry_after = getattr(
-                        e, "retry_after", base_delay * (2**attempt))
+                    retry_after = getattr(e, "retry_after", base_delay * (2**attempt))
                     self.log.warning(
                         f"Rate limited when sending to channel {channel.id}, retrying after {retry_after}s",
                     )
                     await asyncio.sleep(retry_after)
                 elif e.code == 50013:  # Missing permissions
-                    self.log.warning(
-                        f"Missing permissions for channel {channel.id}")
+                    self.log.warning(f"Missing permissions for channel {channel.id}")
                     break
                 elif e.code == 50001:  # Missing access
                     self.log.warning(f"Missing access to channel {channel.id}")
@@ -10579,30 +10546,72 @@ class YALC(DashboardIntegration, commands.Cog):
         try:
             settings = await self._get_cached_settings(guild)
 
-            # Try to find any configured log channel that we can send to
-            for event_type, channel_id in settings.get("event_channels", {}).items():
-                if channel_id:
-                    channel = guild.get_channel(channel_id)
-                    if isinstance(channel, discord.TextChannel):
-                        # Test if we can send to this channel
-                        try:
-                            if channel.permissions_for(guild.me).send_messages:
-                                return channel
-                        except RECOVERABLE_EXCEPTIONS:
-                            continue
-
-            # Fallback to the first text channel we can send to
-            for channel in guild.text_channels:
-                try:
-                    if channel.permissions_for(guild.me).send_messages:
-                        return channel
-                except RECOVERABLE_EXCEPTIONS:
-                    continue
+            fallback_id = settings.get("fallback_channel_id")
+            if not fallback_id:
+                return None
+            channel = guild.get_channel(int(fallback_id))
+            if not isinstance(channel, discord.TextChannel):
+                return None
+            permissions = channel.permissions_for(guild.me)
+            if permissions.send_messages and permissions.embed_links:
+                return channel
 
         except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Error finding fallback log channel: {e}")
 
         return None
+
+    async def _apply_event_style(self, guild, event_type, embed) -> None:
+        if not event_type or embed is None:
+            return
+        settings = await self._get_cached_settings(guild)
+        raw_color = settings.get("event_colors", {}).get(event_type)
+        if raw_color is None:
+            return
+        try:
+            color = int(raw_color)
+        except (TypeError, ValueError):
+            return
+        if 0 <= color <= 0xFFFFFF:
+            embed.color = discord.Color(color)
+
+    async def _record_delivered_event(
+        self,
+        event: LogEvent | None,
+        destination_channel_id: int,
+    ) -> None:
+        if event is None or self._journal is None:
+            return
+        guild = self.bot.get_guild(event.guild_id)
+        if guild is None:
+            return
+        settings = await self._get_cached_settings(guild)
+        if not settings.get("journal_enabled", False):
+            return
+        event.details.setdefault("destination_channel_id", destination_channel_id)
+        try:
+            await self._journal.add(
+                event,
+                include_content=settings.get("journal_include_message_content", False),
+            )
+        except (OSError, sqlite3.Error, TypeError, ValueError) as error:
+            self.log.error("Could not journal %s event: %s", event.event_type, error)
+
+    async def _journal_cleanup_loop(self) -> None:
+        await self.bot.wait_until_red_ready()
+        while not self._processing_shutdown:
+            if self._journal is not None:
+                for guild in tuple(self.bot.guilds):
+                    settings = await self._get_cached_settings(guild)
+                    retention = max(1, min(int(settings.get("log_retention_days", 7)), 3650))
+                    try:
+                        await self._journal.prune(guild.id, retention)
+                    except (OSError, sqlite3.Error, TypeError, ValueError) as error:
+                        self.log.error("Could not prune YALC journal for %s: %s", guild.id, error)
+            try:
+                await asyncio.sleep(86400)
+            except asyncio.CancelledError:
+                break
 
     async def _handle_bulk_changes(
         self,
@@ -10637,9 +10646,7 @@ class YALC(DashboardIntegration, commands.Cog):
                 f"🔄 Bulk {change_type} operation detected",
                 affected_count=len(targets),
                 batches=total_batches,
-                moderator=f"{moderator.mention} ({moderator.id})"
-                if moderator
-                else "Unknown",
+                moderator=f"{moderator.mention} ({moderator.id})" if moderator else "Unknown",
             )
 
             if reason:
@@ -10675,197 +10682,6 @@ class YALC(DashboardIntegration, commands.Cog):
 
         except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Error handling bulk {change_type} operation: {e}")
-
-    async def _background_log_worker(self):
-        """Background worker task to process log queue asynchronously."""
-        self.log.info("Background log worker started")
-
-        while not self._processing_shutdown:
-            try:
-                # Wait for items with timeout to allow periodic cleanup
-                log_item = await asyncio.wait_for(self._log_queue.get(), timeout=30.0)
-                await self._process_log_item(log_item)
-                self._log_queue.task_done()
-
-            except asyncio.TimeoutError:
-                # Periodic cleanup of caches during quiet periods
-                await self._cleanup_expired_caches()
-                continue
-
-            except asyncio.CancelledError:
-                self.log.info("Background log worker cancelled")
-                break
-
-            except RECOVERABLE_EXCEPTIONS as e:
-                self.log.error(
-                    f"Error in background log worker: {e}", exc_info=True)
-                await asyncio.sleep(1)  # Prevent rapid error loops
-
-        self.log.info("Background log worker stopped")
-
-    async def _process_log_item(self, log_item):
-        """Process a single log item from the queue."""
-        try:
-            event_type, guild_id, event_data = log_item
-            guild = self.bot.get_guild(guild_id)
-
-            if not guild:
-                self.log.warning(
-                    f"Guild {guild_id} not found for background log processing",
-                )
-                return
-
-            # Route to appropriate handler based on event type
-            handler_map = {
-                "member_update_bg": self._process_member_update_background,
-                "voice_state_bg": self._process_voice_state_background,
-                "bulk_operation_bg": self._process_bulk_operation_background,
-            }
-
-            handler = handler_map.get(event_type)
-            if handler:
-                await handler(guild, event_data)
-            else:
-                self.log.warning(
-                    f"Unknown background event type: {event_type}")
-
-        except RECOVERABLE_EXCEPTIONS as e:
-            self.log.error(
-                f"Error processing background log item: {e}", exc_info=True)
-
-    async def _cleanup_expired_caches(self):
-        """Clean up expired cache entries."""
-        current_time = time.time()
-
-        # Clean up audit debounce cache
-        expired_debounce = [
-            key
-            for key, timestamp in self._audit_debounce_cache.items()
-            if current_time - timestamp > self._debounce_timeout
-        ]
-        for key in expired_debounce:
-            del self._audit_debounce_cache[key]
-
-        # Clean up settings cache
-        expired_settings = [
-            key
-            for key, data in self._settings_cache.items()
-            if current_time - data["timestamp"] > self._settings_cache_timeout
-        ]
-        for key in expired_settings:
-            del self._settings_cache[key]
-
-        if expired_debounce or expired_settings:
-            self.log.debug(
-                f"Cleaned up {len(expired_debounce)} debounce entries and {len(expired_settings)} settings cache entries",
-            )
-
-    async def _should_debounce_audit_fetch(
-        self,
-        guild_id: int,
-        action: discord.AuditLogAction,
-        target_id: int = None,
-    ) -> bool:
-        """Check if we should skip audit log fetch due to recent similar fetch."""
-        cache_key = f"{guild_id}_{action.name}_{target_id or 'none'}"
-        current_time = time.time()
-
-        if cache_key in self._audit_debounce_cache:
-            last_fetch = self._audit_debounce_cache[cache_key]
-            if current_time - last_fetch < self._debounce_timeout:
-                return True  # Should debounce (skip fetch)
-
-        # Record this fetch attempt
-        self._audit_debounce_cache[cache_key] = current_time
-        return False  # Should not debounce (proceed with fetch)
-
-    async def _get_audit_log_entry_debounced(
-        self,
-        guild: discord.Guild,
-        action: discord.AuditLogAction,
-        target=None,
-        timeout_seconds=30,
-    ):
-        """Get audit log entry with smart debouncing to reduce API calls."""
-        target_id = target.id if target and hasattr(target, "id") else None
-
-        # Check if we should skip this fetch due to recent similar request
-        if await self._should_debounce_audit_fetch(guild.id, action, target_id):
-            self.log.debug(
-                f"Debouncing audit log fetch for {action.name} in guild {guild.id}",
-            )
-            # Try to get from cache instead
-            if target_id:
-                cached_entry = await self._get_cached_audit_entry(
-                    guild,
-                    action,
-                    target_id,
-                )
-                if cached_entry:
-                    return cached_entry
-            return None
-
-        # Proceed with actual API fetch
-        return await self._get_audit_log_entry_with_retry(
-            guild,
-            action,
-            target,
-            timeout_seconds,
-        )
-
-    async def _queue_background_log(
-        self,
-        event_type: str,
-        guild: discord.Guild,
-        event_data: dict,
-        priority: bool = False,
-    ):
-        """Queue a log item for background processing."""
-        log_item = (event_type, guild.id, event_data)
-
-        try:
-            if priority:
-                # For high-priority items, add to front of queue if possible
-                temp_items = [log_item]
-                while not self._log_queue.empty():
-                    temp_items.append(self._log_queue.get_nowait())
-
-                for item in temp_items:
-                    await self._log_queue.put(item)
-            else:
-                await self._log_queue.put(log_item)
-
-        except asyncio.QueueFull:
-            self.log.warning(
-                f"Log queue full, dropping {event_type} event for guild {guild.id}",
-            )
-
-    async def _process_member_update_background(
-        self,
-        guild: discord.Guild,
-        event_data: dict,
-    ):
-        """Process member update in background for non-critical updates."""
-        # This would handle things like nickname changes that aren't urgent
-        pass  # Implementation would depend on specific needs
-
-    async def _process_voice_state_background(
-        self,
-        guild: discord.Guild,
-        event_data: dict,
-    ):
-        """Process voice state changes in background."""
-        # This could handle voice session analytics and summaries
-        pass  # Implementation would depend on specific needs
-
-    async def _process_bulk_operation_background(
-        self,
-        guild: discord.Guild,
-        event_data: dict,
-    ):
-        """Process bulk operations in background."""
-        # This could handle summarizing large role changes, etc.
-        pass  # Implementation would depend on specific needs
 
 
 async def setup(bot: Red) -> None:

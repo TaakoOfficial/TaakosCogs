@@ -2,17 +2,17 @@
   "$schema": "https://raw.githubusercontent.com/Cog-Creators/Red-DiscordBot/V3/develop/schema/red_cog.schema.json",
   "author": ["Taako"],
   "name": "yalc",
-  "version": "3.2.1",
-  "install_msg": "Thanks for installing yalc (Yet Another Logging Cog)! Use `[p]help YALC` or `/yalc` to get started. For full documentation, visit the repo.",
-  "short": "Comprehensive server logging with style!",
-  "description": "📝 A powerful Discord server logging cog with customizable events, channels, and filters. Supports both classic and slash commands.",
+  "version": "4.0.0",
+  "install_msg": "Thanks for installing YALC! Use `[p]yalc setup`, then open YALC in Red-Web-Dashboard for complete event routing, privacy, audit, and journal controls.",
+  "short": "Audit-aware server logging with complete dashboard control.",
+  "description": "A comprehensive Discord logger with strict audit attribution, cached and raw gateway coverage, fail-closed delivery, per-event routes and colors, advanced filters, and an optional searchable local journal.",
   "min_bot_version": "3.5.0",
-  "min_python_version": [3, 9, 0],
+  "min_python_version": [3, 10, 0],
   "hidden": false,
   "disabled": false,
   "required_cogs": {},
   "requirements": [],
   "tags": ["logging", "moderation", "utility", "admin", "dashboard", "audit"],
   "type": "COG",
-  "end_user_data_statement": "This cog stores guild-specific settings like log channels and event configurations. No personal user data is stored permanently."
+  "end_user_data_statement": "YALC stores guild logging settings, channel and role IDs, ignore-rule user IDs, and short voice-session history. Its optional local event journal stores event metadata such as actor/target IDs, timestamps, summaries, and audit IDs for the configured retention period; message content is excluded unless a guild administrator explicitly enables content storage. Journal data can be searched, exported, pruned, or cleared, and Red data-deletion requests remove references to the requesting user."
 }
