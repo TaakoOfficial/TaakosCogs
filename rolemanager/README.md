@@ -39,15 +39,15 @@ Combined role management tools for Red-DiscordBot.
 | `[p]rolemanager selfrole deny <role>` | Remove a role from self-role availability. |
 | `[p]rolemanager selfrole list` | List configured self roles. |
 | `[p]rolemanager required add <role> <required_roles...>` | Require prerequisite roles before a role can be assigned. |
-| `[p]rolemanager required any <role> <true|false>` | Require any prerequisite role instead of all prerequisite roles. |
+| `[p]rolemanager required any <role> <true/false>` | Require any prerequisite role instead of all prerequisite roles. |
 | `[p]rolemanager include add <role> <roles...>` | Add roles automatically when the main role is assigned. |
 | `[p]rolemanager exclude add <role> <roles...>` | Remove conflicting roles when the main role is assigned. |
-| `[p]rolemanager rule set <name> <add|remove> <trigger_role> --add role,role --remove role,role` | Create or replace a rule that reacts to any matching role change. |
-| `[p]rolemanager rule toggle <name> [true|false]` | Enable, disable, or toggle a role-change rule. |
+| `[p]rolemanager rule set <name> <add/remove> <trigger_role> --add role,role --remove role,role` | Create or replace a rule that reacts to any matching role change. |
+| `[p]rolemanager rule toggle <name> [true/false]` | Enable, disable, or toggle a role-change rule. |
 | `[p]rolemanager rule delete <name>` | Delete a role-change rule. |
 | `[p]rolemanager rule list` | List configured role-change rules. |
 | `[p]rolemanager cost <amount> <role>` | Set a Red bank credit cost for a self-assigned role. |
-| `[p]rolemanager atomic [true|false|clear]` | Configure guild atomic role assignment. |
+| `[p]rolemanager atomic [true/false/clear]` | Configure guild atomic role assignment. |
 | `[p]rolemanager role add <member> <role>` | Add a role to one member. |
 | `[p]rolemanager role remove <member> <role>` | Remove a role from one member. |
 | `[p]rolemanager role toggle <member> <role>` | Add or remove a role depending on current state. |
@@ -58,8 +58,8 @@ Combined role management tools for Red-DiscordBot.
 | `[p]rolemanager role create <name>` | Create a role. |
 | `[p]rolemanager role name <role> <new_name>` | Rename a role. |
 | `[p]rolemanager role color <role> <color>` | Change a role color. |
-| `[p]rolemanager role hoist <role> [true|false]` | Toggle whether a role is shown separately. |
-| `[p]rolemanager role mentionable <role> [true|false]` | Toggle whether a role can be mentioned by everyone. |
+| `[p]rolemanager role hoist <role> [true/false]` | Toggle whether a role is shown separately. |
+| `[p]rolemanager role mentionable <role> [true/false]` | Toggle whether a role can be mentioned by everyone. |
 | `[p]rolemanager role info <role>` | Show Discord and RoleManager details. |
 | `[p]rolemanager role members <role>` | List or export members with a role. |
 | `[p]rolemanager role colors` | Export the server role color palette. |
@@ -67,49 +67,49 @@ Combined role management tools for Red-DiscordBot.
 | `[p]rolemanager role clone <role> [name]` | Clone a role's appearance and permissions. |
 | `[p]rolemanager role delete <role> CONFIRM` | Safely delete a role with explicit confirmation. |
 | `[p]rolemanager role position <role> <position>` | Move a role in the hierarchy. |
-| `[p]rolemanager role permission <role> <permission> <true|false>` | Change one role permission. |
-| `[p]rolemanager role icon <role> [emoji|none]` | Set a role icon from emoji or an attachment. |
+| `[p]rolemanager role permission <role> <permission> <true/false>` | Change one role permission. |
+| `[p]rolemanager role icon <role> [emoji/none]` | Set a role icon from emoji or an attachment. |
 | `[p]rolemanager giverole <role> <targets...>` | Bulk-add a role. Targets can be members, roles, text channels, `everyone`, `here`, `humans`, or `bots`. |
 | `[p]rolemanager removerole <role> <targets...>` | Bulk-remove a role from the same target types. |
 | `[p]rolemanager dryrun add <role> <targets...>` | Preview a bulk add without changing roles. |
 | `[p]rolemanager dryrun remove <role> <targets...>` | Preview a bulk removal without changing roles. |
 | `[p]rolemanager target preview <query>` | Preview advanced `key=value` targeting. |
 | `[p]rolemanager target save <name> <query>` | Save a reusable targeting query. |
-| `[p]rolemanager target run <add|remove> <role> <name>` | Apply a saved target preset. |
-| `[p]rolemanager job start <add|remove> <role> <query>` | Start a persistent background role job. |
+| `[p]rolemanager target run <add/remove> <role> <name>` | Apply a saved target preset. |
+| `[p]rolemanager job start <add/remove> <role> <query>` | Start a persistent background role job. |
 | `[p]rolemanager job list [id]` | Show job progress and recent results. |
 | `[p]rolemanager job cancel <id>` | Cancel a running job. |
-| `[p]rolemanager autorole add <role> [all|humans|bots]` | Add an autorole target. |
-| `[p]rolemanager autorole toggle [true|false]` | Enable, disable, or toggle autoroles. |
+| `[p]rolemanager autorole add <role> [all/humans/bots]` | Add an autorole target. |
+| `[p]rolemanager autorole toggle [true/false]` | Enable, disable, or toggle autoroles. |
 | `[p]rolemanager autorole settings <delay> <account_age_hours> <retries> [list toggles...]` | Configure resilient delivery. |
-| `[p]rolemanager sticky set <role> [true|false]` | Mark a role as sticky for future rejoins. |
+| `[p]rolemanager sticky set <role> [true/false]` | Mark a role as sticky for future rejoins. |
 | `[p]rolemanager sticky add <member> <role>` | Force a sticky role onto one member. |
-| `[p]rolemanager temp give <member> <role> <duration> [| reason | notify]` | Give a temporary role with optional expiry notification. |
+| `[p]rolemanager temp give <member> <role> <specification>` | Give a temporary role; the specification accepts duration, optional reason, and notify flag separated by vertical bars. |
 | `[p]rolemanager temp setduration <role> [duration]` | Set or clear a default temp duration for assignments made by this cog. |
 | `[p]rolemanager temp list [member]` | List pending temporary roles. |
 | `[p]rolemanager temp extend <member> <role> <duration>` | Move a temporary expiry forward from now. |
 | `[p]rolemanager temp revoke <member> <role> [reason]` | Immediately revoke a temporary role. |
 | `[p]rolemanager reactrole bind <message> <emoji> <role> [remove_on_unreact]` | Bind an emoji on an existing message. |
-| `[p]rolemanager reactrole create [channel] <title> | <emoji>;<role> | ...` | Create a reaction-role panel. |
+| `[p]rolemanager reactrole create [channel] <panel specification>` | Create a reaction-role panel from a title and emoji-role bindings separated by vertical bars. |
 | `[p]rolemanager reactrole unbind <message> <emoji>` | Remove one emoji binding. |
 | `[p]rolemanager reactrole clear <message>` | Remove all bindings for a message. |
 | `[p]rolemanager reactrole cleanup` | Remove stale reaction-role records. |
 | `[p]rolemanager reactrole list` | List configured reaction roles. |
 | `[p]rolemanager reactrole reset <message> CONFIRM` | Clear and rebuild a panel's reactions. |
-| `[p]rolemanager reactrole sync [add|sync] [CONFIRM]` | Reconcile roles against live reactions; full sync requires confirmation. |
+| `[p]rolemanager reactrole sync [add/sync] [CONFIRM]` | Reconcile roles against live reactions; full sync requires confirmation. |
 | `[p]rolemanager button create <name> <role> [style] [emoji] [label]` | Save a persistent role button. |
 | `[p]rolemanager button policy <name> ...` | Configure button behavior, locks, cooldown, capacity, and duration. |
-| `[p]rolemanager select option create <name> <role> [emoji | label | description]` | Save a select-menu option. |
+| `[p]rolemanager select option create <name> <role> [option specification]` | Save an option whose emoji, label, and description are separated by vertical bars. |
 | `[p]rolemanager select create <name> <options_csv> [min] [max] [placeholder]` | Save a select menu. |
 | `[p]rolemanager select policy <name> ...` | Configure menu behavior, locks, cooldown, capacity, and duration. |
 | `[p]rolemanager message send <channel> <buttons_csv> [selects_csv] [text]` | Send a component role panel. |
 | `[p]rolemanager import roletools` | Import compatible settings from TrustyJAID RoleTools config. |
 | `[p]rolemanager import roleutils` | Import compatible settings from Seina RoleUtils config. |
-| `[p]rolemanager migration inspect <roletools|roleutils>` | Preview legacy records without changing configuration. |
+| `[p]rolemanager migration inspect <roletools/roleutils>` | Preview legacy records without changing configuration. |
 | `[p]rolemanager migration verify` | Validate imported/configured records. |
-| `[p]rolemanager migration reconcile [add|sync] [CONFIRM]` | Reapply roles from live panels; full sync requires confirmation. |
-| `[p]rolemanager migration backups|backup|rollback|export` | Manage migration safety and recovery. |
-| `[p]rolemanager audit channel|list|export|clear` | Configure and inspect the audit journal. |
+| `[p]rolemanager migration reconcile [add/sync] [CONFIRM]` | Reapply roles from live panels; full sync requires confirmation. |
+| `[p]rolemanager migration <backups/backup/rollback/export>` | Manage migration safety and recovery. |
+| `[p]rolemanager audit <channel/list/export/clear>` | Configure and inspect the audit journal. |
 
 Duration examples: `30m`, `2 hours`, `7d`, `1 week 2 days`.
 
