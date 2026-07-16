@@ -4,6 +4,7 @@
 
 - Added visibly animated wheel rendering inside Discord messages, including a smaller animated retry before the static-image upload fallback.
 - The channel message now announces that it is spinning, plays once, and settles into the exact final result image instead of looping forever.
+- Replaced the undersized boxed labels with adaptive radial typography, cross-platform TrueType font discovery, automatic contrast, and cleaner high-entry rendering.
 - Added secure random winner selection with independently randomized spin length.
 - Added instant and saved wheels through prefix and slash commands.
 - Added eight built-in color themes and custom hex palettes.

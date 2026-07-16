@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import math
+from functools import lru_cache
 from typing import TYPE_CHECKING
 
 from PIL import Image, ImageDraw, ImageFont
@@ -15,11 +16,33 @@ WHEEL_SIZE = 560
 BACKGROUND = "#111827"
 
 
+@lru_cache(maxsize=16)
 def _font(size: int, *, bold: bool = False) -> ImageFont.ImageFont:
-    name = "DejaVuSans-Bold.ttf" if bold else "DejaVuSans.ttf"
+    candidates = (
+        (
+            "DejaVuSans-Bold.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+            "/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf",
+            "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
+            "C:/Windows/Fonts/arialbd.ttf",
+        )
+        if bold
+        else (
+            "DejaVuSans.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+            "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
+            "/System/Library/Fonts/Supplemental/Arial.ttf",
+            "C:/Windows/Fonts/arial.ttf",
+        )
+    )
+    for candidate in candidates:
+        try:
+            return ImageFont.truetype(candidate, size=size)
+        except OSError:
+            continue
     try:
-        return ImageFont.truetype(name, size=size)
-    except OSError:
+        return ImageFont.load_default(size=size)
+    except TypeError:
         return ImageFont.load_default()
 
 
@@ -30,9 +53,49 @@ def _contrast(hex_color: str) -> str:
     return "#111827" if luminance > 165 else "#ffffff"
 
 
-def _short_label(label: str, count: int) -> str:
-    maximum = 20 if count <= 8 else 15 if count <= 16 else 10
-    return label if len(label) <= maximum else f"{label[: maximum - 1]}…"
+@lru_cache(maxsize=512)
+def _label_tile(
+    label: str,
+    maximum_width: int,
+    preferred_size: int,
+    text_color: str,
+) -> Image.Image:
+    """Build one reusable transparent label, shrinking or trimming as needed."""
+    measuring = ImageDraw.Draw(Image.new("RGB", (1, 1)))
+    font_size = preferred_size
+    rendered = label
+
+    while font_size > 10:
+        font = _font(font_size, bold=True)
+        box = measuring.textbbox((0, 0), rendered, font=font, stroke_width=2)
+        if box[2] - box[0] <= maximum_width:
+            break
+        font_size -= 1
+
+    font = _font(font_size, bold=True)
+    stroke_width = 2 if font_size >= 18 else 1
+    while len(rendered) > 2:
+        box = measuring.textbbox((0, 0), rendered, font=font, stroke_width=stroke_width)
+        if box[2] - box[0] <= maximum_width:
+            break
+        rendered = f"{rendered[:-2]}…"
+
+    stroke_color = "#f8fafc" if text_color == "#111827" else "#020617"
+    box = measuring.textbbox((0, 0), rendered, font=font, stroke_width=stroke_width)
+    width = box[2] - box[0]
+    height = box[3] - box[1]
+    padding = 5
+    tile = Image.new("RGBA", (width + (padding * 2), height + (padding * 2)), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(tile)
+    draw.text(
+        (padding - box[0], padding - box[1]),
+        rendered,
+        font=font,
+        fill=text_color,
+        stroke_fill=stroke_color,
+        stroke_width=stroke_width,
+    )
+    return tile
 
 
 def render_wheel(
@@ -73,32 +136,29 @@ def render_wheel(
         draw.pieslice(bounds, start=start, end=end, fill=fill, outline=outline, width=width)
 
         angle = math.radians(start + (segment / 2))
-        text_radius = radius * (0.61 if len(entries) <= 12 else 0.67)
+        text_radius = radius * (0.63 if len(entries) <= 16 else 0.67)
         x = center + (math.cos(angle) * text_radius)
         y = center + (math.sin(angle) * text_radius)
-        font_size = 22 if len(entries) <= 8 else 17 if len(entries) <= 16 else 13
-        font = _font(font_size, bold=True)
-        label = _short_label(entry, len(entries))
-        box = draw.textbbox((0, 0), label, font=font, stroke_width=1)
-        width_px = box[2] - box[0]
-        height_px = box[3] - box[1]
-        draw.rounded_rectangle(
-            (
-                int(x - (width_px / 2) - 5),
-                int(y - (height_px / 2) - 4),
-                int(x + (width_px / 2) + 5),
-                int(y + (height_px / 2) + 4),
-            ),
-            radius=5,
-            fill="#111827",
+        arc_width = math.radians(segment) * text_radius
+        preferred_size = min(30, max(10, int(arc_width * 0.72)))
+        label_tile = _label_tile(
+            entry,
+            int(radius * 0.72),
+            preferred_size,
+            _contrast(fill),
         )
-        draw.text(
-            (x - (width_px / 2), y - (height_px / 2) - 1),
-            label,
-            font=font,
-            fill="#ffffff",
-            stroke_fill="#000000",
-            stroke_width=1,
+        display_angle = (start + (segment / 2)) % 360
+        if 90 < display_angle < 270:
+            display_angle += 180
+        rotated_label = label_tile.rotate(
+            -display_angle,
+            resample=Image.Resampling.BICUBIC,
+            expand=True,
+        )
+        image.paste(
+            rotated_label,
+            (int(x - (rotated_label.width / 2)), int(y - (rotated_label.height / 2))),
+            rotated_label,
         )
 
     hub_radius = max(29, int(radius * 0.13))
