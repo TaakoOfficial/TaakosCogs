@@ -67,7 +67,7 @@ class Uppercase(DashboardIntegration, commands.Cog):
         await ctx.send(f"{action} {channel.mention} as `{formatted_name}`.")
 
     @commands.hybrid_command(
-        name="create-channel",
+        name="createchannel",
         description="Create a text channel with a visibly uppercase name.",
     )
     @app_commands.describe(
@@ -115,7 +115,29 @@ class Uppercase(DashboardIntegration, commands.Cog):
         await self._send_result(ctx, "Created", channel, formatted_name)
 
     @commands.hybrid_command(
-        name="rename-channel",
+        name="create-channel",
+        description="Legacy compatibility command for createchannel.",
+        hidden=True,
+    )
+    @app_commands.describe(
+        category="The category where the new text channel should be created.",
+        name="The channel name to convert to uppercase.",
+    )
+    @commands.guild_only()
+    @commands.admin_or_permissions(manage_channels=True)
+    @commands.cooldown(1, 5, commands.BucketType.user)
+    async def create_channel_legacy(
+        self,
+        ctx: commands.Context,
+        category: discord.CategoryChannel,
+        *,
+        name: str,
+    ) -> None:
+        """Keep the historical prefix and slash command name working."""
+        await self.create_channel.callback(self, ctx, category, name=name)
+
+    @commands.hybrid_command(
+        name="renamechannel",
         description="Rename a text channel with a visibly uppercase name.",
     )
     @app_commands.describe(
@@ -154,3 +176,25 @@ class Uppercase(DashboardIntegration, commands.Cog):
             return
 
         await self._send_result(ctx, "Renamed", channel, formatted_name)
+
+    @commands.hybrid_command(
+        name="rename-channel",
+        description="Legacy compatibility command for renamechannel.",
+        hidden=True,
+    )
+    @app_commands.describe(
+        channel="The text channel to rename.",
+        name="The new channel name to convert to uppercase.",
+    )
+    @commands.guild_only()
+    @commands.admin_or_permissions(manage_channels=True)
+    @commands.cooldown(1, 5, commands.BucketType.user)
+    async def rename_channel_legacy(
+        self,
+        ctx: commands.Context,
+        channel: discord.TextChannel,
+        *,
+        name: str,
+    ) -> None:
+        """Keep the historical prefix and slash command name working."""
+        await self.rename_channel.callback(self, ctx, channel, name=name)

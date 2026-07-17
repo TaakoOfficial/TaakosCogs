@@ -440,7 +440,7 @@ class InviteTracker(DashboardIntegration, commands.Cog):
     @commands.Cog.listener()
     async def on_invite_create(self, invite: discord.Invite) -> None:
         guild = invite.guild
-        if guild is None:
+        if guild is None or await self.bot.cog_disabled_in_guild(self, guild):
             return
         if not await self.config.guild(guild).enabled():
             return
@@ -451,7 +451,7 @@ class InviteTracker(DashboardIntegration, commands.Cog):
     @commands.Cog.listener()
     async def on_invite_delete(self, invite: discord.Invite) -> None:
         guild = invite.guild
-        if guild is None:
+        if guild is None or await self.bot.cog_disabled_in_guild(self, guild):
             return
         if not await self.config.guild(guild).enabled():
             return
@@ -461,6 +461,8 @@ class InviteTracker(DashboardIntegration, commands.Cog):
 
     @commands.Cog.listener()
     async def on_member_join(self, member: discord.Member) -> None:
+        if await self.bot.cog_disabled_in_guild(self, member.guild):
+            return
         try:
             await self._record_join(member)
         except Exception:
@@ -469,6 +471,8 @@ class InviteTracker(DashboardIntegration, commands.Cog):
 
     @commands.Cog.listener()
     async def on_member_remove(self, member: discord.Member) -> None:
+        if await self.bot.cog_disabled_in_guild(self, member.guild):
+            return
         try:
             await self._record_leave(member)
         except Exception:

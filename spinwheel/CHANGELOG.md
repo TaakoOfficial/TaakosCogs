@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.1 - 2026-07-16
+
+- Assigned a unique Config identifier and added an automatic, verified, one-time migration that preserves existing guild settings under the legacy identifier for rollback.
+
 ## 1.0.0
 
 - Added visibly animated wheel rendering inside Discord messages, including a smaller animated retry before the static-image upload fallback.

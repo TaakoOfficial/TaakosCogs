@@ -5,47 +5,49 @@ from datetime import datetime
 
 import discord
 
+TWEMOJI_BASE_URL = "https://cdn.jsdelivr.net/gh/jdecked/twemoji@v17.0.3/assets/72x72"
+
 # Moon phase definitions
 MOON_PHASES = {
     0: {
         "name": "New Moon 🌑",
         "emoji": "🌑",
-        "icon": "https://cdn-icons-png.flaticon.com/512/616/616465.png",
+        "icon": f"{TWEMOJI_BASE_URL}/1f311.png",
     },
     1: {
         "name": "Waxing Crescent 🌒",
         "emoji": "🌒",
-        "icon": "https://cdn-icons-png.flaticon.com/512/616/616467.png",
+        "icon": f"{TWEMOJI_BASE_URL}/1f312.png",
     },
     2: {
         "name": "First Quarter 🌓",
         "emoji": "🌓",
-        "icon": "https://cdn-icons-png.flaticon.com/512/616/616469.png",
+        "icon": f"{TWEMOJI_BASE_URL}/1f313.png",
     },
     3: {
         "name": "Waxing Gibbous 🌔",
         "emoji": "🌔",
-        "icon": "https://cdn-icons-png.flaticon.com/512/616/616471.png",
+        "icon": f"{TWEMOJI_BASE_URL}/1f314.png",
     },
     4: {
         "name": "Full Moon 🌕",
         "emoji": "🌕",
-        "icon": "https://cdn-icons-png.flaticon.com/512/616/616456.png",
+        "icon": f"{TWEMOJI_BASE_URL}/1f315.png",
     },
     5: {
         "name": "Waning Gibbous 🌖",
         "emoji": "🌖",
-        "icon": "https://cdn-icons-png.flaticon.com/512/616/616459.png",
+        "icon": f"{TWEMOJI_BASE_URL}/1f316.png",
     },
     6: {
         "name": "Last Quarter 🌗",
         "emoji": "🌗",
-        "icon": "https://cdn-icons-png.flaticon.com/512/616/616461.png",
+        "icon": f"{TWEMOJI_BASE_URL}/1f317.png",
     },
     7: {
         "name": "Waning Crescent 🌘",
         "emoji": "🌘",
-        "icon": "https://cdn-icons-png.flaticon.com/512/616/616463.png",
+        "icon": f"{TWEMOJI_BASE_URL}/1f318.png",
     },
 }
 
@@ -53,11 +55,7 @@ MOON_PHASES = {
 BLOOD_MOON = {
     "name": "Blood Moon 🔴",
     "emoji": "🔴",
-    "icon": (
-        "https://img.freepik.com/free-psd/"
-        "red-planet-mars-surface-texture-space-exploration_84443-38546.jpg"
-        "?semt=ais_hybrid&w=740"
-    ),
+    "icon": f"{TWEMOJI_BASE_URL}/1f534.png",
     "description": (
         "A rare Blood Moon has appeared in the night sky! Such events are often "
         "associated with mystical occurrences and heightened magical energies."
@@ -239,7 +237,7 @@ def create_moon_embed(moon_data: dict, guild_settings: dict) -> discord.Embed:
     if guild_settings.get("show_footer", True):
         embed.set_footer(
             text="RP Calendar Moon Phases",
-            icon_url="https://cdn-icons-png.flaticon.com/512/2456/2456533.png",
+            icon_url=f"{TWEMOJI_BASE_URL}/1f319.png",
         )
 
     return embed

@@ -14,7 +14,7 @@ from redbot.core import commands
 if TYPE_CHECKING:
     import discord
 
-log = logging.getLogger("red.YALC.dashboard")
+log = logging.getLogger("red.taakoscogs.yalc.dashboard")
 
 
 def dashboard_page(*args, **kwargs):

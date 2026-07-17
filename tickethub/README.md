@@ -164,15 +164,15 @@ closed ticket after a five-second grace period.
 TicketHub can read settings from AAA3A's loaded `Tickets` cog and map one profile into TicketHub:
 
 ```text
-[p]tickethubset data import-aaa3a main
-[p]tickethubset data import-aaa3a main confirm
+[p]tickethubset data importaaa3a main
+[p]tickethubset data importaaa3a main confirm
 ```
 
 To import every AAA3A profile at once:
 
 ```text
-[p]tickethubset data import-aaa3a-all
-[p]tickethubset data import-aaa3a-all confirm
+[p]tickethubset data importaaa3aall
+[p]tickethubset data importaaa3aall confirm
 ```
 
 The first command is a dry-run preview. The second applies the import. Import-all
@@ -232,8 +232,8 @@ Existing open ticket records, modlog cases, and forum tags are not imported.
 | `[p]ticketset threadparent <profile> [channel]`       | Set the parent channel for thread tickets.         |
 | `[p]ticketset logchannel <profile> [channel]`         | Set the ticket log channel.                        |
 | `[p]ticketset transcriptchannel <profile> [channel]`  | Set the transcript channel.                        |
-| `[p]ticketset roles support-add <profile> <role>`       | Add a support role.                                |
-| `[p]ticketset roles support-remove <profile> <role>`    | Remove a support role.                             |
+| `[p]ticketset roles supportadd <profile> <role>`       | Add a support role. Legacy alias: `support-add`.   |
+| `[p]ticketset roles supportremove <profile> <role>`    | Remove a support role. Legacy alias: `support-remove`. |
 | `[p]ticketset roles add <profile> <type> <role>`      | Add a support/speak/view/ping/access role.         |
 | `[p]ticketset roles remove <profile> <type> <role>`   | Remove a configured profile role.                  |
 | `[p]ticketset roles ticketrole <profile> [role]`            | Set or clear the role assigned to ticket openers.  |
@@ -258,9 +258,11 @@ Existing open ticket records, modlog cases, and forum tags are not imported.
 | `[p]ticket removemember <member> [ticket_id]`      | Remove a member from a ticket.                     |
 | `[p]ticket list [status] [owner]`                  | List open/claimed/unclaimed/closed/all tickets.     |
 | `[p]ticket show [ticket_id]`                       | Show a ticket's stored details.                    |
-| `[p]ticketset data import-aaa3a [profile] [confirm]`       | Preview or apply an AAA3A Tickets profile import.  |
-| `[p]ticketset data import-aaa3a-all [confirm]`       | Preview or apply all AAA3A Tickets profile imports. |
+| `[p]ticketset data importaaa3a [profile] [confirm]`       | Preview or apply an AAA3A Tickets profile import. Legacy alias: `import-aaa3a`. |
+| `[p]ticketset data importaaa3aall [confirm]`       | Preview or apply all AAA3A Tickets profile imports. Legacy alias: `import-aaa3a-all`. |
 | `[p]ticketset data export`                                 | Export TicketHub ticket records as CSV.            |
+
+The historical hyphenated support-role and AAA3A import names remain available through both prefix and slash invocation.
 
 ## Example Setup
 
@@ -275,7 +277,7 @@ Or configure directly:
 [p]ticketset closedcategory main "Closed Tickets"
 [p]ticketset logchannel main #ticket-logs
 [p]ticketset transcriptchannel main #ticket-transcripts
-[p]ticketset roles support-add main @Support
+[p]ticketset roles supportadd main @Support
 [p]ticketset panel main #support button
 ```
 

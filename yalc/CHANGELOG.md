@@ -1,5 +1,11 @@
 # 📝 YALC Changelog
 
+## [v4.1.0] - 2026-07-16
+
+- Replaced the Flaticon footer image with a pinned, centrally attributed Twemoji scroll graphic.
+- Standardized logging under `red.taakoscogs.yalc` and made event filtering, channel resolution, and final delivery respect Red's per-guild cog-disable state.
+- Added alphanumeric primary command names while retaining historical underscore names as hidden prefix and slash compatibility commands.
+
 ## [v4.0.2] - 2026-07-15
 
 - Rebuilt Tupperbox/proxy filtering around normalized application IDs and webhook attribution instead of proxy persona names or message-content guesses.

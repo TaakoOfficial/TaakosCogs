@@ -1,8 +1,9 @@
 # Changelog
 
-## Unreleased
+## 0.5.0 - 2026-07-16
 
 - Added standalone Red-Web-Dashboard integration for viewing visible commands and current server configuration.
+- Made role-triggered message listeners respect Red's per-guild cog-disable state.
 
 
 ## 0.4.5

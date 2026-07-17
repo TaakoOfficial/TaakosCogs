@@ -13,6 +13,7 @@ from .file_utils import read_last_posted
 from .timing_utils import has_already_posted_today
 
 _dashboard_available = True
+log = logging.getLogger("red.taakoscogs.rpcalander")
 
 RECOVERABLE_EXCEPTIONS = (
     discord.DiscordException,
@@ -64,7 +65,7 @@ class RPCAGroup(app_commands.Group):
                 tomorrow_obj = tomorrow_obj.replace(year=current_date_obj.year)
             tomorrow_str = tomorrow_obj.strftime("%A %m-%d-%Y")
         except RECOVERABLE_EXCEPTIONS as e:
-            logging.error(f"Error calculating tomorrow's date: {e}")
+            log.error("Error calculating tomorrow's date: %s", e)
             tomorrow_str = "Error"
         embed.add_field(name="Start Date", value=start_date, inline=False)
         embed.add_field(name="Current Date", value=current_date, inline=False)
@@ -129,11 +130,11 @@ class RPCAGroup(app_commands.Group):
                     inline=False,
                 )
             except RECOVERABLE_EXCEPTIONS as e:
-                logging.error(f"Error getting moon phase: {e}")
+                log.error("Error getting moon phase: %s", e)
 
         embed.set_footer(
             text="RP Calendar by Taako",
-            icon_url="https://cdn-icons-png.flaticon.com/512/869/869869.png",
+            icon_url="https://cdn.jsdelivr.net/gh/jdecked/twemoji@v17.0.3/assets/72x72/2600.png",
         )
         await interaction.followup.send(embed=embed, ephemeral=True)
 
@@ -589,7 +590,7 @@ class RPCalander(DashboardIntegration, commands.Cog):
 
     async def cog_load(self):
         """Start the daily update loop without triggering an immediate post."""
-        logging.debug("Starting cog_load method.")
+        log.debug("Starting cog_load method.")
         last_posted = read_last_posted()  # Read the last posted timestamp from the file
 
         # Skip starting the loop if already posted today
@@ -603,11 +604,11 @@ class RPCalander(DashboardIntegration, commands.Cog):
             )  # Start of today
 
             if last_posted_dt >= today:
-                logging.debug("Already posted today. Skipping loop start.")
+                log.debug("Already posted today. Skipping loop start.")
                 return
 
         if not self._daily_update_loop.is_running():
-            logging.debug("Starting daily update loop.")
+            log.debug("Starting daily update loop.")
             self._daily_update_loop.start()
 
         # Check for missed dates without sending an embed
@@ -711,7 +712,7 @@ class RPCalander(DashboardIntegration, commands.Cog):
                 if show_footer:
                     embed.set_footer(
                         text="RP Calendar by Taako",
-                        icon_url="https://cdn-icons-png.flaticon.com/512/869/869869.png",
+                        icon_url="https://cdn.jsdelivr.net/gh/jdecked/twemoji@v17.0.3/assets/72x72/2600.png",
                     )
                 channel = self.bot.get_channel(channel_id)
                 if channel:
@@ -724,15 +725,15 @@ class RPCalander(DashboardIntegration, commands.Cog):
                             if guild:
                                 await self._post_moon_update(guild)
                     except RECOVERABLE_EXCEPTIONS as e:
-                        logging.error(
+                        log.error(
                             f"Failed to send daily calendar update: {e}")
 
     @_daily_update_loop.error
     async def _daily_update_loop_error(self, error):
         """Handle errors in the daily update loop and restart it if necessary."""
-        logging.error(f"Error in daily update loop: {error}")
+        log.error("Error in daily update loop: %s", error)
         if not self._daily_update_loop.is_running():
-            logging.debug("Restarting daily update loop after error.")
+            log.debug("Restarting daily update loop after error.")
             self._daily_update_loop.start()
 
     @rpca_group_command.command(name="force")
@@ -787,7 +788,7 @@ class RPCalander(DashboardIntegration, commands.Cog):
             if show_footer:
                 embed.set_footer(
                     text="RP Calendar by Taako",
-                    icon_url="https://cdn-icons-png.flaticon.com/512/869/869869.png",
+                    icon_url="https://cdn.jsdelivr.net/gh/jdecked/twemoji@v17.0.3/assets/72x72/2600.png",
                 )
             channel = self.bot.get_channel(channel_id)
             if channel:
@@ -795,12 +796,12 @@ class RPCalander(DashboardIntegration, commands.Cog):
                     await channel.send(embed=embed)
                     return True, "Calendar update posted."
                 except RECOVERABLE_EXCEPTIONS as e:
-                    logging.error(f"Error in force post: {e}")
+                    log.error("Error in force post: %s", e)
                     return False, f"Failed to post calendar update: {e}"
             else:
                 return False, "Configured channel not found."
         except RECOVERABLE_EXCEPTIONS as e:
-            logging.error(f"Error in force post date calculation: {e}")
+            log.error("Error in force post date calculation: %s", e)
             return False, f"Failed to calculate current date: {e}"
 
     async def force_post_slash(self, guild: discord.Guild) -> tuple[bool, str]:
@@ -828,14 +829,14 @@ class RPCalander(DashboardIntegration, commands.Cog):
                 "moon_channel_id",
             ) or guild_settings.get("channel_id")
             if not moon_channel_id:
-                logging.error(
+                log.error(
                     f"No channel set for moon phase updates in guild {guild.name} ({guild.id})",
                 )
                 return
 
             channel = guild.get_channel(moon_channel_id)
             if not channel:
-                logging.error(
+                log.error(
                     "Could not find channel %s for moon phase updates in guild %s (%s)",
                     moon_channel_id,
                     guild.name,
@@ -846,7 +847,7 @@ class RPCalander(DashboardIntegration, commands.Cog):
             # Get the current date
             current_date_str = guild_settings.get("current_date")
             if not current_date_str:
-                logging.error(
+                log.error(
                     f"No current date set for guild {guild.name} ({guild.id})",
                 )
                 return
@@ -874,7 +875,7 @@ class RPCalander(DashboardIntegration, commands.Cog):
                 )
 
         except RECOVERABLE_EXCEPTIONS as e:
-            logging.error(
+            log.error(
                 f"Error posting moon phase update for guild {guild.name}: {str(e)}",
             )
 
@@ -941,7 +942,7 @@ class RPCalander(DashboardIntegration, commands.Cog):
                 tomorrow_obj = tomorrow_obj.replace(year=current_date_obj.year)
             tomorrow_str = tomorrow_obj.strftime("%A %m-%d-%Y")
         except RECOVERABLE_EXCEPTIONS as e:
-            logging.error(f"Error calculating tomorrow's date: {e}")
+            log.error("Error calculating tomorrow's date: %s", e)
             tomorrow_str = "Error"
         embed.add_field(name="Start Date", value=start_date, inline=False)
         embed.add_field(name="Current Date", value=current_date, inline=False)
@@ -1006,11 +1007,11 @@ class RPCalander(DashboardIntegration, commands.Cog):
                     inline=False,
                 )
             except RECOVERABLE_EXCEPTIONS as e:
-                logging.error(f"Error getting moon phase: {e}")
+                log.error("Error getting moon phase: %s", e)
 
         embed.set_footer(
             text="RP Calendar by Taako",
-            icon_url="https://cdn-icons-png.flaticon.com/512/869/869869.png",
+            icon_url="https://cdn.jsdelivr.net/gh/jdecked/twemoji@v17.0.3/assets/72x72/2600.png",
         )
         await ctx.send(embed=embed)
 

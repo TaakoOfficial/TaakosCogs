@@ -54,3 +54,7 @@ Slash command equivalents are available for the same core weather actions.
 ## Data
 
 RandomWeather does not persistently store or share end user data. Weather is generated for server use and settings are stored per guild.
+
+## Artwork
+
+Weather thumbnails use Twemoji v17.0.3 graphics under CC-BY 4.0. Full attribution and license links are in the repository's [third-party notices](../THIRD_PARTY_NOTICES.md).

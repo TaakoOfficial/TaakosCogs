@@ -168,7 +168,7 @@ class YALC(DashboardIntegration, commands.Cog):
 
         # Initialize config and logging before parent classes
         self.config = Config.get_conf(self, identifier=1234567890)
-        self.log = logging.getLogger("red.YALC")
+        self.log = logging.getLogger("red.taakoscogs.yalc")
 
         # Real-time audit log entry storage for role attribution
         self.recent_audit_entries = {}
@@ -801,7 +801,7 @@ class YALC(DashboardIntegration, commands.Cog):
         """
         try:
             # If no guild, we can't get settings, so don't log
-            if not guild:
+            if not guild or await self.bot.cog_disabled_in_guild(self, guild):
                 return False
 
             # Get cached settings to minimize database calls
@@ -949,6 +949,8 @@ class YALC(DashboardIntegration, commands.Cog):
         event_type: str,
     ) -> discord.TextChannel | None:
         """Get the appropriate logging channel for an event. Only event_channels is used."""
+        if await self.bot.cog_disabled_in_guild(self, guild):
+            return None
         settings = await self._get_cached_settings(guild)
         self.log.debug(
             f"[get_log_channel] Guild: {guild.id}, Event: {event_type}, Settings: {settings}",
@@ -1434,7 +1436,7 @@ class YALC(DashboardIntegration, commands.Cog):
         label: str = "YALC Logger",
     ) -> None:
         """
-        Set a standard footer for all log embeds, including a formatted time and logo.
+        Set a standard footer for all log embeds, including a formatted time and icon.
 
         Parameters
         ----------
@@ -1445,9 +1447,6 @@ class YALC(DashboardIntegration, commands.Cog):
         label: str
             Text label to show in the footer
 
-        Notes
-        -----
-        This preserves the existing embed logo URL as requested.
         """
         # Use current time if not specified
         if event_time is None:
@@ -1456,11 +1455,10 @@ class YALC(DashboardIntegration, commands.Cog):
         # Format time in a readable manner
         formatted_time = event_time.strftime("%B %d, %Y, %I:%M %p UTC")
 
-        # Set footer with the existing logo URL
+        # Use the repository's centrally attributed Twemoji artwork.
         embed.set_footer(
             text=f"{label} • {formatted_time}",
-            # Preserved existing logo
-            icon_url="https://cdn-icons-png.flaticon.com/512/928/928797.png",
+            icon_url="https://cdn.jsdelivr.net/gh/jdecked/twemoji@v17.0.3/assets/72x72/1f4dc.png",
         )
 
     async def cog_unload(self) -> None:
@@ -2950,6 +2948,9 @@ class YALC(DashboardIntegration, commands.Cog):
     async def on_audit_log_entry_create(self, entry):
         """Cache every audit entry and directly log audit-only actions."""
         try:
+            guild = getattr(entry, "guild", None)
+            if guild is None or await self.bot.cog_disabled_in_guild(self, guild):
+                return
             if not self._audit_correlator.record(entry):
                 return
 
@@ -3124,7 +3125,10 @@ class YALC(DashboardIntegration, commands.Cog):
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message) -> None:
         """Track proxy messages so later raw edit/delete events can be ignored."""
-        if message.guild is None:
+        if message.guild is None or await self.bot.cog_disabled_in_guild(
+            self,
+            message.guild,
+        ):
             return
         settings = await self._get_cached_settings(message.guild)
         if not settings.get("ignore_tupperbox", True):
@@ -4485,6 +4489,8 @@ class YALC(DashboardIntegration, commands.Cog):
         self.log.debug("Listener triggered: on_member_remove")
         if not member.guild:
             self.log.debug("No guild on member.")
+            return
+        if await self.bot.cog_disabled_in_guild(self, member.guild):
             return
 
         guild = member.guild
@@ -7975,7 +7981,7 @@ class YALC(DashboardIntegration, commands.Cog):
             # Add footer
             embed.set_footer(
                 text="YALC Diagnostic Report",
-                icon_url="https://cdn-icons-png.flaticon.com/512/928/928797.png",
+                icon_url="https://cdn.jsdelivr.net/gh/jdecked/twemoji@v17.0.3/assets/72x72/1f4dc.png",
             )
 
             await ctx.send(embed=embed)
@@ -8977,7 +8983,7 @@ class YALC(DashboardIntegration, commands.Cog):
 
         await ctx.send(embed=embed)
 
-    @yalc_group.command(name="bulk_enable")
+    @yalc_group.command(name="bulkenable")
     @commands.admin_or_permissions(manage_guild=True)
     async def yalc_bulk_enable(
         self,
@@ -9042,7 +9048,17 @@ class YALC(DashboardIntegration, commands.Cog):
             f"✅ Enabled {len(events_to_enable)} events in the **{category}** category.",
         )
 
-    @yalc_group.command(name="bulk_disable")
+    @yalc_group.command(name="bulk_enable", hidden=True)
+    @commands.admin_or_permissions(manage_guild=True)
+    async def yalc_bulk_enable_legacy(
+        self,
+        ctx: commands.Context,
+        category: str | None = None,
+    ) -> None:
+        """Keep the historical prefix and slash subcommand name working."""
+        await self.yalc_bulk_enable.callback(self, ctx, category)
+
+    @yalc_group.command(name="bulkdisable")
     @commands.admin_or_permissions(manage_guild=True)
     async def yalc_bulk_disable(
         self,
@@ -9106,6 +9122,16 @@ class YALC(DashboardIntegration, commands.Cog):
         await ctx.send(
             f"✅ Disabled {len(events_to_disable)} events in the **{category}** category.",
         )
+
+    @yalc_group.command(name="bulk_disable", hidden=True)
+    @commands.admin_or_permissions(manage_guild=True)
+    async def yalc_bulk_disable_legacy(
+        self,
+        ctx: commands.Context,
+        category: str | None = None,
+    ) -> None:
+        """Keep the historical prefix and slash subcommand name working."""
+        await self.yalc_bulk_disable.callback(self, ctx, category)
 
     @yalc_group.command(name="reset")
     @commands.admin_or_permissions(manage_guild=True)
@@ -9839,7 +9865,7 @@ class YALC(DashboardIntegration, commands.Cog):
     # --- Slash Commands ---
 
     @app_commands.command(
-        name="yalc_enable",
+        name="yalcenable",
         description="Enable logging for a specific event type",
     )
     @app_commands.describe(event_type="The event type to enable logging for")
@@ -9880,7 +9906,21 @@ class YALC(DashboardIntegration, commands.Cog):
         )
 
     @app_commands.command(
-        name="yalc_disable",
+        name="yalc_enable",
+        description="Legacy alias for /yalcenable",
+    )
+    @app_commands.describe(event_type="The event type to enable logging for")
+    @app_commands.guild_only()
+    async def slash_yalc_enable_legacy(
+        self,
+        interaction: discord.Interaction,
+        event_type: str,
+    ) -> None:
+        """Keep the historical slash-command name working."""
+        await self.slash_yalc_enable.callback(self, interaction, event_type)
+
+    @app_commands.command(
+        name="yalcdisable",
         description="Disable logging for a specific event type",
     )
     @app_commands.describe(event_type="The event type to disable logging for")
@@ -9921,7 +9961,21 @@ class YALC(DashboardIntegration, commands.Cog):
         )
 
     @app_commands.command(
-        name="yalc_setchannel",
+        name="yalc_disable",
+        description="Legacy alias for /yalcdisable",
+    )
+    @app_commands.describe(event_type="The event type to disable logging for")
+    @app_commands.guild_only()
+    async def slash_yalc_disable_legacy(
+        self,
+        interaction: discord.Interaction,
+        event_type: str,
+    ) -> None:
+        """Keep the historical slash-command name working."""
+        await self.slash_yalc_disable.callback(self, interaction, event_type)
+
+    @app_commands.command(
+        name="yalcsetchannel",
         description="Set the logging channel for a specific event type",
     )
     @app_commands.describe(
@@ -9980,6 +10034,29 @@ class YALC(DashboardIntegration, commands.Cog):
             await interaction.response.send_message(
                 f"✅ {emoji} Set {channel.mention} as the logging channel for **{description}** (`{event_type}`).",
             )
+
+    @app_commands.command(
+        name="yalc_setchannel",
+        description="Legacy alias for /yalcsetchannel",
+    )
+    @app_commands.describe(
+        event_type="The event type to set the channel for",
+        channel="The channel to log the events to",
+    )
+    @app_commands.guild_only()
+    async def slash_yalc_setchannel_legacy(
+        self,
+        interaction: discord.Interaction,
+        event_type: str,
+        channel: discord.TextChannel,
+    ) -> None:
+        """Keep the historical slash-command name working."""
+        await self.slash_yalc_setchannel.callback(
+            self,
+            interaction,
+            event_type,
+            channel,
+        )
 
     async def _scan_for_log_channels(self, guild: discord.Guild) -> dict:
         """
@@ -10217,7 +10294,7 @@ class YALC(DashboardIntegration, commands.Cog):
         return detected_config
 
     @app_commands.command(
-        name="yalc_settings",
+        name="yalcsettings",
         description="View current YALC settings for this server",
     )
     @app_commands.guild_only()
@@ -10330,7 +10407,19 @@ class YALC(DashboardIntegration, commands.Cog):
         await interaction.response.send_message(embed=embed)
 
     @app_commands.command(
-        name="yalc_quicksetup",
+        name="yalc_settings",
+        description="Legacy alias for /yalcsettings",
+    )
+    @app_commands.guild_only()
+    async def slash_yalc_settings_legacy(
+        self,
+        interaction: discord.Interaction,
+    ) -> None:
+        """Keep the historical slash-command name working."""
+        await self.slash_yalc_settings.callback(self, interaction)
+
+    @app_commands.command(
+        name="yalcquicksetup",
         description="Quick setup wizard for YALC logging",
     )
     @app_commands.describe(
@@ -10422,8 +10511,8 @@ class YALC(DashboardIntegration, commands.Cog):
 
             embed.add_field(
                 name="🔧 Next Steps",
-                value="Use `/yalc_settings` to view your configuration\n"
-                "Use `/yalc_enable` or `/yalc_disable` to adjust events\n"
+                value="Use `/yalcsettings` to view your configuration\n"
+                "Use `/yalcenable` or `/yalcdisable` to adjust events\n"
                 "Use the web dashboard for advanced configuration",
                 inline=False,
             )
@@ -10435,6 +10524,29 @@ class YALC(DashboardIntegration, commands.Cog):
                 f"❌ Error during quick setup: {e}",
                 ephemeral=True,
             )
+
+    @app_commands.command(
+        name="yalc_quicksetup",
+        description="Legacy alias for /yalcquicksetup",
+    )
+    @app_commands.describe(
+        log_channel="Channel to use for all logging",
+        enable_basic_events="Enable basic message and member events",
+    )
+    @app_commands.guild_only()
+    async def slash_yalc_quicksetup_legacy(
+        self,
+        interaction: discord.Interaction,
+        log_channel: discord.TextChannel,
+        enable_basic_events: bool = True,
+    ) -> None:
+        """Keep the historical slash-command name working."""
+        await self.slash_yalc_quicksetup.callback(
+            self,
+            interaction,
+            log_channel,
+            enable_basic_events,
+        )
 
     async def is_tupperbox_message(
         self,
@@ -10537,6 +10649,8 @@ class YALC(DashboardIntegration, commands.Cog):
 
         if not channel:
             self.log.warning("Attempted to send a message to a nonexistent channel")
+            return None
+        if await self.bot.cog_disabled_in_guild(self, channel.guild):
             return None
 
         kwargs.setdefault("allowed_mentions", discord.AllowedMentions.none())

@@ -6,7 +6,7 @@
     ],
     "version": "1.1.4",
     "description": "A Red DiscordBot cog for creating and renaming text channels with visibly uppercase names.",
-    "install_msg": "uppercase loaded. Use `[p]create-channel <category> <name>` or `/create-channel`, and `[p]rename-channel <channel> <name>` or `/rename-channel`.",
+    "install_msg": "uppercase loaded. Use `[p]createchannel <category> <name>` or `/createchannel`, and `[p]renamechannel <channel> <name>` or `/renamechannel`. Historical hyphenated prefix aliases remain available.",
     "short": "Create and rename visibly uppercase text channels.",
     "tags": [
         "channels",

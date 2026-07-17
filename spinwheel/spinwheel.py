@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import io
+import logging
 import re
 import secrets
 from dataclasses import dataclass
@@ -18,6 +19,8 @@ from .render import render_png, render_spin_gif, winner_rotation
 
 if TYPE_CHECKING:
     from redbot.core.bot import Red
+
+log = logging.getLogger("red.taakoscogs.spinwheel")
 
 THEMES: dict[str, tuple[str, ...]] = {
     "rainbow": ("#ef4444", "#f97316", "#eab308", "#22c55e", "#06b6d4", "#3b82f6", "#8b5cf6", "#ec4899"),
@@ -127,7 +130,9 @@ class WheelSlashGroup(app_commands.Group):
 class SpinWheel(DashboardIntegration, commands.Cog):
     """Create colorful wheels and animate cryptographically secure random spins."""
 
-    CONFIG_IDENTIFIER = 2026071501
+    CONFIG_IDENTIFIER = 4560534718017080534
+    LEGACY_CONFIG_IDENTIFIER = 2026071501
+    IDENTIFIER_MIGRATION_VERSION = 1
     ABSOLUTE_MAX_ENTRIES = 60
     MAX_LABEL_LENGTH = 80
     MAX_GIF_BYTES = 7_500_000
@@ -136,17 +141,59 @@ class SpinWheel(DashboardIntegration, commands.Cog):
     def __init__(self, bot: Red) -> None:
         self.bot = bot
         self.config = Config.get_conf(self, identifier=self.CONFIG_IDENTIFIER, force_registration=True)
-        self.config.register_guild(
-            wheels={},
-            default_wheel=None,
-            default_theme="rainbow",
-            allow_member_spins=True,
-            max_entries=40,
+        self._legacy_config = Config.get_conf(
+            self,
+            identifier=self.LEGACY_CONFIG_IDENTIFIER,
+            force_registration=True,
         )
+        default_guild = {
+            "wheels": {},
+            "default_wheel": None,
+            "default_theme": "rainbow",
+            "allow_member_spins": True,
+            "max_entries": 40,
+        }
+        self.config.register_global(identifier_migration_version=0)
+        self.config.register_guild(**default_guild)
+        self._legacy_config.register_guild(**default_guild)
         self.wheel_slash = WheelSlashGroup(self)
         self._render_slots = asyncio.Semaphore(2)
         self._guild_spin_locks: dict[int, asyncio.Lock] = {}
         self._settle_tasks: set[asyncio.Task] = set()
+
+    async def cog_load(self) -> None:
+        """Migrate settings from the legacy Config identifier before use."""
+        await self._migrate_config_identifier()
+
+    async def _migrate_config_identifier(self) -> None:
+        """Copy legacy guild data once, retaining the old namespace for rollback."""
+        if (
+            await self.config.identifier_migration_version()
+            >= self.IDENTIFIER_MIGRATION_VERSION
+        ):
+            return
+
+        legacy_guilds = await self._legacy_config.all_guilds()
+        destination_guild_ids = set((await self.config.all_guilds()).keys())
+        copied = 0
+        for guild_id, data in legacy_guilds.items():
+            if guild_id in destination_guild_ids:
+                continue
+            destination = self.config.guild_from_id(guild_id)
+            await destination.set(data)
+            if await destination.all() != data:
+                raise RuntimeError(
+                    f"SpinWheel Config migration verification failed for guild {guild_id}.",
+                )
+            copied += 1
+
+        await self.config.identifier_migration_version.set(
+            self.IDENTIFIER_MIGRATION_VERSION,
+        )
+        log.info(
+            "SpinWheel Config identifier migration completed for %d guild(s).",
+            copied,
+        )
 
     def cog_unload(self) -> None:
         """Stop pending result edits and unregister the custom slash group."""

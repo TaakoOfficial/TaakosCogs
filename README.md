@@ -52,7 +52,7 @@ Every configurable cog includes its own purpose-built Red-Web-Dashboard page wit
 | [tempvoice](./tempvoice)               | Voice channel automation | Join-to-create temporary voice channels, embedded owner controls, rename/lock/limit/transfer buttons, claiming, cleanup, and dashboard setup. |
 | [giveaway](./giveaway)                 | Community events         | Timed giveaways, reaction entry, rerolls, cancellation, attached giveaways, prefix/slash commands, and dashboard controls.                  |
 | [spinwheel](./spinwheel)               | Decisions and party games | Animated secure-random wheels, saved presets, themed/custom colors, optional winner removal, slash commands, and a visual dashboard.       |
-| [uppercase](./uppercase)               | Channel setup            | Create and rename text channels with uppercase-style names using `/create-channel` and `/rename-channel`.                                  |
+| [uppercase](./uppercase)               | Channel setup            | Create and rename text channels with uppercase-style names using `/createchannel` and `/renamechannel`.                                    |
 | [emojiporter](./emojiporter)           | Server migration         | Copy emojis and stickers between servers, list emoji/sticker inventory, skip duplicates automatically.                                      |
 | [rolekit](./rolekit)                   | Community roles & levels | Curated identity/interest role packs, cooldown-limited activity XP, rank cards, leaderboards, milestone roles, and dashboard setup.         |
 | [fivemstatus](./fivemstatus)           | FiveM communities        | Live server status panel with player counts, Join Server button, restart countdowns, uptime tracking, images, and link buttons.             |
@@ -264,4 +264,10 @@ once, and it will run these checks automatically on every commit.
 
 ## License
 
-This repository is licensed under the GNU AGPLv3 unless an individual cog states otherwise. See [LICENSE](./LICENSE) for details.
+This repository is licensed under the GNU AGPLv3 unless an individual cog states otherwise. The [LICENSE](./LICENSE) file contains the complete, verbatim AGPLv3 text.
+
+Project copyright information is in [COPYRIGHT](./COPYRIGHT). Artwork attribution, preserved third-party license notices, compatibility acknowledgements, and dependency notes are centralized in [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md).
+
+## Contributors
+
+Thanks to Evanroby for their repository contributions. Git history remains the authoritative record of individual authorship.

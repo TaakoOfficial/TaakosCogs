@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.9.1 - 2026-07-16
+
+- Added SSRF-resistant remote JSON fetching with public-address DNS filtering, redirect validation, and streaming size limits.
+- Made persistent component listeners respect Red's per-guild cog-disable state while retaining deletion cleanup.
+- Preserved Merlin Fuchs' complete upstream MIT notice in the repository's centralized third-party notices.
+
 ## 1.9.0 - 2026-07-13
 
 ### Simpler Builder Controls

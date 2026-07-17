@@ -6,7 +6,7 @@ import logging
 import re
 from typing import Any
 
-log = logging.getLogger("red.WHMCS.validation")
+log = logging.getLogger("red.taakoscogs.whmcs.validation")
 
 
 class ValidationError(Exception):

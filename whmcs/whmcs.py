@@ -30,7 +30,7 @@ __red_end_user_data_statement__ = (
     "No end user data is persistently stored beyond what is necessary for WHMCS integration."
 )
 
-log = logging.getLogger("red.WHMCS")
+log = logging.getLogger("red.taakoscogs.whmcs")
 
 RECOVERABLE_EXCEPTIONS = (
     discord.DiscordException,
@@ -63,7 +63,7 @@ class WHMCS(DashboardIntegration, commands.Cog):
             "api_config": {
                 "url": None,  # WHMCS installation URL
                 "identifier": None,  # API identifier
-                "secret": None,  # API secret (encrypted)
+                "secret": None,  # API secret stored in Red's guild Config
                 "access_key": None,  # Alternative auth method
             },
             "permissions": {
@@ -801,6 +801,8 @@ class WHMCS(DashboardIntegration, commands.Cog):
         # Ignore bot messages and DMs
         if not message.guild or message.author.bot:
             return
+        if await self.bot.cog_disabled_in_guild(self, message.guild):
+            return
 
         # Check if this is a ticket channel
         ticket_mappings = await self.config.guild(message.guild).ticket_mappings()
@@ -1395,6 +1397,24 @@ class WHMCS(DashboardIntegration, commands.Cog):
             action: Configuration action (view, set, url, identifier, secret, accesskey)
             value: Value to set (required for set actions)
         """
+        action = action.lower() if action else None
+        if action in {"secret", "accesskey"} and ctx.interaction is None:
+            try:
+                await ctx.message.delete()
+            except discord.NotFound:
+                pass
+            except discord.HTTPException:
+                await ctx.send(
+                    "❌ I could not remove the message containing that credential, so it was not stored. "
+                    "Delete it manually and use the Dashboard or private slash command.",
+                )
+                return
+            await ctx.send(
+                "For security, WHMCS secrets are not accepted through visible prefix messages. "
+                "Use the WHMCS Dashboard or `/whmcs admin config` slash command instead.",
+            )
+            return
+
         if not await self._check_permissions(ctx, "admin"):
             await self._send_error(
                 ctx,
@@ -1413,13 +1433,13 @@ class WHMCS(DashboardIntegration, commands.Cog):
                 "• `secret <api_secret>` - Set API secret\n"
                 "• `accesskey <access_key>` - Set access key (optional)\n"
                 "• `ratelimit <number>` - Set rate limit (requests per minute)\n\n"
+                "Secrets and access keys must be entered through this private slash "
+                "command or the WHMCS Dashboard; visible prefix submissions are rejected.\n\n"
                 "**Example:**\n"
                 "`[p]whmcs admin config url https://your-whmcs.com`",
             )
             await ctx.send(embed=embed)
             return
-
-        action = action.lower()
 
         if action == "view":
             # Show current configuration (without secrets)
@@ -2117,7 +2137,7 @@ class WHMCS(DashboardIntegration, commands.Cog):
         except RECOVERABLE_EXCEPTIONS as e:
             import logging
 
-            logging.getLogger("red.WHMCS").exception(
+            logging.getLogger("red.taakoscogs.whmcs").exception(
                 "Error in admin_showreplies command",
             )
             await ctx.send(f"❌ Error: {e}")
@@ -2853,7 +2873,7 @@ class WHMCS(DashboardIntegration, commands.Cog):
         except RECOVERABLE_EXCEPTIONS as e:
             import logging
 
-            logging.getLogger("red.WHMCS").exception(
+            logging.getLogger("red.taakoscogs.whmcs").exception(
                 "Error in support_ticket_channel command",
             )
             await self._send_error(ctx, f"An unexpected error occurred: {e}")
@@ -2942,7 +2962,7 @@ class WHMCS(DashboardIntegration, commands.Cog):
                     await self._send_error(ctx, "Failed to create ticket channel. Check category and permissions.")
             except RECOVERABLE_EXCEPTIONS as e:
                 import logging
-                logging.getLogger("red.WHMCS").exception("Error in support_ticket_channel command")
+                logging.getLogger("red.taakoscogs.whmcs").exception("Error in support_ticket_channel command")
                 await self._send_error(ctx, f"An unexpected error occurred: {e}")
                 page: Page number (default: 1)
         """

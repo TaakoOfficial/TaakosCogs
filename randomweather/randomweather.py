@@ -23,6 +23,8 @@ from .weather_utils import (
 if TYPE_CHECKING:
     from redbot.core.bot import Red
 
+log = logging.getLogger("red.taakoscogs.randomweather")
+
 RECOVERABLE_EXCEPTIONS = (
     discord.DiscordException,
     OSError,
@@ -410,7 +412,7 @@ class WeatherGroup(app_commands.Group):
             )
             await interaction.followup.send("Weather update posted.", ephemeral=True)
         except RECOVERABLE_EXCEPTIONS as e:
-            logging.error(f"Error in slash force weather update: {e}")
+            log.error("Error in slash force weather update: %s", e)
             await interaction.followup.send(
                 f"Failed to post weather update: {e}",
                 ephemeral=True,
@@ -449,7 +451,7 @@ class WeatherGroup(app_commands.Group):
                 ephemeral=True,
             )
         except RECOVERABLE_EXCEPTIONS as e:
-            logging.error(f"Error in slash force extreme weather update: {e}")
+            log.error("Error in slash force extreme weather update: %s", e)
             await interaction.followup.send(
                 f"Failed to post extreme weather update: {e}",
                 ephemeral=True,
@@ -459,11 +461,20 @@ class WeatherGroup(app_commands.Group):
 class WeatherCog(DashboardIntegration, commands.Cog):
     """A cog for generating random daily weather updates."""
 
+    CONFIG_IDENTIFIER = 4890611532651558640
+    LEGACY_CONFIG_IDENTIFIER = 1234567890
+    IDENTIFIER_MIGRATION_VERSION = 1
+
     def __init__(self, bot: Red) -> None:
         self.bot = bot
         self.config = Config.get_conf(
             self,
-            identifier=1234567890,
+            identifier=self.CONFIG_IDENTIFIER,
+            force_registration=True,
+        )
+        self._legacy_config = Config.get_conf(
+            self,
+            identifier=self.LEGACY_CONFIG_IDENTIFIER,
             force_registration=True,
         )
 
@@ -478,9 +489,47 @@ class WeatherCog(DashboardIntegration, commands.Cog):
             "last_refresh": 0,
             "time_zone": "America/Chicago",
         }
+        self.config.register_global(identifier_migration_version=0)
         self.config.register_guild(**default_guild)
-        self._task = self.weather_update_loop.start()
+        self._legacy_config.register_guild(**default_guild)
+        self._task = None
         self.weather_group = WeatherGroup(self)
+
+    async def cog_load(self) -> None:
+        """Migrate legacy settings before starting scheduled weather updates."""
+        await self._migrate_config_identifier()
+        if not self.weather_update_loop.is_running():
+            self._task = self.weather_update_loop.start()
+
+    async def _migrate_config_identifier(self) -> None:
+        """Copy legacy guild data once, retaining the old namespace for rollback."""
+        if (
+            await self.config.identifier_migration_version()
+            >= self.IDENTIFIER_MIGRATION_VERSION
+        ):
+            return
+
+        legacy_guilds = await self._legacy_config.all_guilds()
+        destination_guild_ids = set((await self.config.all_guilds()).keys())
+        copied = 0
+        for guild_id, data in legacy_guilds.items():
+            if guild_id in destination_guild_ids:
+                continue
+            destination = self.config.guild_from_id(guild_id)
+            await destination.set(data)
+            if await destination.all() != data:
+                raise RuntimeError(
+                    f"RandomWeather Config migration verification failed for guild {guild_id}.",
+                )
+            copied += 1
+
+        await self.config.identifier_migration_version.set(
+            self.IDENTIFIER_MIGRATION_VERSION,
+        )
+        log.info(
+            "RandomWeather Config identifier migration completed for %d guild(s).",
+            copied,
+        )
 
     async def cog_unload(self) -> None:
         """Cleanup tasks when the cog is unloaded."""
@@ -540,10 +589,10 @@ class WeatherCog(DashboardIntegration, commands.Cog):
                             scheduled_time=next_post_time.timestamp(),
                         )
                 except RECOVERABLE_EXCEPTIONS as e:
-                    logging.error(f"Error processing guild {guild_id}: {e}")
+                    log.error("Error processing guild %s: %s", guild_id, e)
 
         except RECOVERABLE_EXCEPTIONS as e:
-            logging.error(f"Error in weather update loop: {e}")
+            log.error("Error in weather update loop: %s", e)
 
     async def _post_weather_update(
         self,
@@ -578,7 +627,7 @@ class WeatherCog(DashboardIntegration, commands.Cog):
             write_last_posted()
 
         except RECOVERABLE_EXCEPTIONS as e:
-            logging.error(
+            log.error(
                 f"Error posting weather update for guild {guild_id}: {e}")
 
     async def _post_extreme_weather_update(
@@ -612,7 +661,7 @@ class WeatherCog(DashboardIntegration, commands.Cog):
             write_last_posted()
 
         except RECOVERABLE_EXCEPTIONS as e:
-            logging.error(
+            log.error(
                 f"Error posting extreme weather update for guild {guild_id}: {e}",
             )
 
@@ -868,7 +917,7 @@ class WeatherCog(DashboardIntegration, commands.Cog):
             )
             await ctx.send("Weather update posted.")
         except RECOVERABLE_EXCEPTIONS as e:
-            logging.error(f"Error in classic force weather update: {e}")
+            log.error("Error in classic force weather update: %s", e)
             await ctx.send(f"Failed to post weather update: {e}")
 
     @rweather.command(name="extreme")

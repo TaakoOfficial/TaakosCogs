@@ -6,7 +6,7 @@
     ],
     "version": "2.3.1",
     "description": "Comprehensive weather simulation system with realistic seasonal patterns, extreme weather events, and beautiful embeds. Perfect for roleplay servers and atmospheric immersion.",
-    "install_msg": "Thank you for installing randomweather! Use `[p]rweather` to get started. Configure your timezone with `[p]rweather settimezone` for accurate seasonal weather. Weather icons by Flaticon.",
+    "install_msg": "Thank you for installing randomweather! Use `[p]rweather` to get started. Configure your timezone with `[p]rweather settimezone` for accurate seasonal weather. Weather thumbnails use Twemoji graphics under CC-BY 4.0; attribution: https://github.com/TaakoOfficial/TaakosCogs/blob/main/THIRD_PARTY_NOTICES.md",
     "short": "Advanced weather simulation with seasonal accuracy and extreme events.",
     "tags": [
         "weather",

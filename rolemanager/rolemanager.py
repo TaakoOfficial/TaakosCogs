@@ -5533,7 +5533,7 @@ class RoleManager(DashboardIntegration, commands.Cog):
             )
 
     @app_commands.command(
-        name="rolemanager-selfrole",
+        name="rolemanagerselfrole",
         description="Add or remove one of this server's self roles.",
     )
     @app_commands.guild_only()
@@ -5570,7 +5570,20 @@ class RoleManager(DashboardIntegration, commands.Cog):
         await interaction.followup.send(message, ephemeral=True)
 
     @app_commands.command(
-        name="rolemanager-role-info",
+        name="rolemanager-selfrole",
+        description="Legacy alias for /rolemanagerselfrole.",
+    )
+    @app_commands.guild_only()
+    async def app_selfrole_legacy(
+        self,
+        interaction: discord.Interaction,
+        role: discord.Role,
+    ) -> None:
+        """Keep the historical slash-command name working."""
+        await self.app_selfrole.callback(self, interaction, role)
+
+    @app_commands.command(
+        name="rolemanagerroleinfo",
         description="Show information about a server role.",
     )
     @app_commands.guild_only()
@@ -5580,6 +5593,18 @@ class RoleManager(DashboardIntegration, commands.Cog):
         role: discord.Role,
     ) -> None:
         """Slash-command role report with Discord's native role picker."""
+        if interaction.guild is None:
+            await interaction.response.send_message(
+                "This can only be used in a server.",
+                ephemeral=True,
+            )
+            return
+        if await self.bot.cog_disabled_in_guild(self, interaction.guild):
+            await interaction.response.send_message(
+                "RoleManager is disabled here.",
+                ephemeral=True,
+            )
+            return
         data = await self.config.role(role).all()
         embed = discord.Embed(title=role.name, color=role.color)
         embed.description = (
@@ -5588,6 +5613,19 @@ class RoleManager(DashboardIntegration, commands.Cog):
             f"Self removable: `{bool(data.get('self_removable'))}`\nSticky: `{bool(data.get('sticky'))}`"
         )
         await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    @app_commands.command(
+        name="rolemanager-role-info",
+        description="Legacy alias for /rolemanagerroleinfo.",
+    )
+    @app_commands.guild_only()
+    async def app_role_info_legacy(
+        self,
+        interaction: discord.Interaction,
+        role: discord.Role,
+    ) -> None:
+        """Keep the historical slash-command name working."""
+        await self.app_role_info.callback(self, interaction, role)
 
     @commands.Cog.listener()
     async def on_raw_message_delete(

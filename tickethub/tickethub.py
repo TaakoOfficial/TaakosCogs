@@ -5691,7 +5691,7 @@ search.addEventListener('input', () => {{
                 f"`{set_command_root} panel main #tickets button`\n"
                 f"`{set_command_root} attachpanel main <message-link> dropdown`\n"
                 f"`{set_command_root} multipanel` for multi-profile panels\n"
-                f"`{set_command_root} data import-aaa3a-all` for migration preview"
+                f"`{set_command_root} data importaaa3aall` for migration preview"
             ),
             inline=False,
         )
@@ -7189,7 +7189,7 @@ search.addEventListener('input', () => {{
         """Manage support, speak, view, ping, whitelist, blacklist, and ticket roles."""
         await ctx.send_help(ctx.command)
 
-    @tickethub_roles.command(name="support-add")
+    @tickethub_roles.command(name="supportadd")
     @commands.admin_or_permissions(manage_guild=True)
     async def tickethub_support_role_add(
         self,
@@ -7207,7 +7207,23 @@ search.addEventListener('input', () => {{
         await self._set_profile(ctx.guild, profile_name, profile)
         await ctx.send(f"{role.mention} can now support `{profile_name}` tickets.")
 
-    @tickethub_roles.command(name="support-remove")
+    @tickethub_roles.command(name="support-add", hidden=True)
+    @commands.admin_or_permissions(manage_guild=True)
+    async def tickethub_support_role_add_legacy(
+        self,
+        ctx: commands.Context,
+        profile_name: str,
+        role: discord.Role,
+    ) -> None:
+        """Keep the historical prefix and slash subcommand name working."""
+        await self.tickethub_support_role_add.callback(
+            self,
+            ctx,
+            profile_name,
+            role,
+        )
+
+    @tickethub_roles.command(name="supportremove")
     @commands.admin_or_permissions(manage_guild=True)
     async def tickethub_support_role_remove(
         self,
@@ -7224,6 +7240,22 @@ search.addEventListener('input', () => {{
         profile["support_role_ids"] = sorted(role_ids)
         await self._set_profile(ctx.guild, profile_name, profile)
         await ctx.send(f"{role.mention} removed from `{profile_name}` support roles.")
+
+    @tickethub_roles.command(name="support-remove", hidden=True)
+    @commands.admin_or_permissions(manage_guild=True)
+    async def tickethub_support_role_remove_legacy(
+        self,
+        ctx: commands.Context,
+        profile_name: str,
+        role: discord.Role,
+    ) -> None:
+        """Keep the historical prefix and slash subcommand name working."""
+        await self.tickethub_support_role_remove.callback(
+            self,
+            ctx,
+            profile_name,
+            role,
+        )
 
     @staticmethod
     def _profile_role_field(role_type: str) -> str:
@@ -7979,7 +8011,7 @@ search.addEventListener('input', () => {{
             )
         return aaa_profiles
 
-    @tickethub_import.command(name="import-aaa3a")
+    @tickethub_import.command(name="importaaa3a")
     @commands.admin_or_permissions(manage_guild=True)
     async def tickethub_import_aaa3a(
         self,
@@ -8019,7 +8051,7 @@ search.addEventListener('input', () => {{
         if confirmation.lower() != "confirm":
             await ctx.send(
                 "AAA3A Tickets import preview. Nothing has been changed yet.\n"
-                f"Run `{self._prefixed_set_root(ctx)} data import-aaa3a {aaa3a_profile} confirm` to apply.\n\n"
+                f"Run `{self._prefixed_set_root(ctx)} data importaaa3a {aaa3a_profile} confirm` to apply.\n\n"
                 + box(preview[:1800]),
             )
             return
@@ -8036,7 +8068,23 @@ search.addEventListener('input', () => {{
             f"profile `{target_profile}`.{panel_note}",
         )
 
-    @tickethub_import.command(name="import-aaa3a-all")
+    @tickethub_import.command(name="import-aaa3a", hidden=True)
+    @commands.admin_or_permissions(manage_guild=True)
+    async def tickethub_import_aaa3a_legacy(
+        self,
+        ctx: commands.Context,
+        aaa3a_profile: str = "main",
+        confirmation: str = "",
+    ) -> None:
+        """Keep the historical prefix and slash subcommand name working."""
+        await self.tickethub_import_aaa3a.callback(
+            self,
+            ctx,
+            aaa3a_profile,
+            confirmation,
+        )
+
+    @tickethub_import.command(name="importaaa3aall")
     @commands.admin_or_permissions(manage_guild=True)
     async def tickethub_import_aaa3a_all(
         self,
@@ -8093,7 +8141,7 @@ search.addEventListener('input', () => {{
             f"{dropdown_count} dropdown option(s)",
         )
         preview_lines.append(
-            f"Run `{self._prefixed_set_root(ctx)} data import-aaa3a-all confirm` to apply.",
+            f"Run `{self._prefixed_set_root(ctx)} data importaaa3aall confirm` to apply.",
         )
         if confirmation.lower() != "confirm":
             for page in pagify("\n".join(preview_lines), page_length=1800):
@@ -8108,6 +8156,20 @@ search.addEventListener('input', () => {{
         await ctx.send(
             f"Imported {len(mapped_profiles)} AAA3A Tickets profile(s) into "
             f"TicketHub. Imported {len(saved_panels)} existing AAA3A panel message(s).",
+        )
+
+    @tickethub_import.command(name="import-aaa3a-all", hidden=True)
+    @commands.admin_or_permissions(manage_guild=True)
+    async def tickethub_import_aaa3a_all_legacy(
+        self,
+        ctx: commands.Context,
+        confirmation: str = "",
+    ) -> None:
+        """Keep the historical prefix and slash subcommand name working."""
+        await self.tickethub_import_aaa3a_all.callback(
+            self,
+            ctx,
+            confirmation,
         )
 
     async def _build_aaa3a_import(

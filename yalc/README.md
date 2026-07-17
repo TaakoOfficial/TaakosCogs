@@ -34,8 +34,8 @@ Yet Another Logging Cog: configurable server logging for Red-DiscordBot.
 | `[p]yalc enable [event_type]`                      | Enable an event or list available event types.    |
 | `[p]yalc disable <event_type>`                     | Disable an event type.                            |
 | `[p]yalc setchannel <event_type_or_all> [channel]` | Set where logs should post.                       |
-| `[p]yalc bulk_enable`                              | Enable multiple event types.                      |
-| `[p]yalc bulk_disable`                             | Disable multiple event types.                     |
+| `[p]yalc bulkenable`                              | Enable multiple event types. Legacy alias: `bulk_enable`. |
+| `[p]yalc bulkdisable`                             | Disable multiple event types. Legacy alias: `bulk_disable`. |
 | `[p]yalc validate`                                 | Validate configuration and permissions.           |
 | `[p]yalc test`                                     | Run diagnostics. Aliases: `diagnostics`, `debug`. |
 | `[p]yalc reset`                                    | Reset YALC settings for the server.               |
@@ -45,6 +45,8 @@ Yet Another Logging Cog: configurable server logging for Red-DiscordBot.
 | `[p]yalc journal export [csv/json] [event]`        | Export up to 500 recent journal records.           |
 | `[p]yalc journal prune`                            | Apply configured retention immediately.            |
 | `[p]yalc journal clear CONFIRM`                    | Permanently clear this server's journal.            |
+
+Canonical slash commands use alphanumeric names: `/yalcenable`, `/yalcdisable`, `/yalcsetchannel`, `/yalcsettings`, and `/yalcquicksetup`. The historical underscore names remain registered as compatibility commands. The `bulk_enable` and `bulk_disable` subcommands likewise remain available through both prefix and slash invocation.
 
 ## Setup Channels
 
@@ -88,3 +90,7 @@ The local journal is disabled by default. When enabled, it records delivered-eve
 ## Data and Privacy
 
 YALC stores guild-specific routes, enabled events, colors, filters, ignore rules, and limited voice-session state. Ignore rules may contain Discord user IDs. If the optional journal is enabled, YALC also stores delivered-event metadata such as actor/target IDs, channel IDs, timestamps, summaries, confidence, and audit IDs for the configured retention period. Message text is opt-in and off by default. Red data-deletion requests remove stored references to that user.
+
+## Artwork
+
+Footer icons use Twemoji v17.0.3 graphics under CC-BY 4.0. Full attribution and license links are in the repository's [third-party notices](../THIRD_PARTY_NOTICES.md).

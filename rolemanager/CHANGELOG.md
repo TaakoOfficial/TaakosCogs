@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.0 - 2026-07-16
+
+- Added alphanumeric `/rolemanagerselfrole` and `/rolemanagerroleinfo` slash commands while retaining the historical hyphenated names as compatibility aliases.
+
 ## 0.4.0
 
 - Added verified RoleTools/RoleUtils migrations with automatic pre-import backups, bounded backup history, health checks, JSON exports, rollback, and live reaction reconciliation in add-only or full-sync mode.

@@ -225,7 +225,7 @@ class Fable(DashboardIntegration, commands.Cog):
 
         embed.set_footer(
             text="Fable RP Tracker • Character Fields",
-            icon_url="https://cdn-icons-png.flaticon.com/512/3336/3336643.png",
+            icon_url="https://cdn.jsdelivr.net/gh/jdecked/twemoji@v17.0.3/assets/72x72/1f4d6.png",
         )
         await ctx.send(embed=embed)
 
@@ -546,7 +546,7 @@ class Fable(DashboardIntegration, commands.Cog):
 
         embed.set_footer(
             text="Fable RP Tracker • Character Creation",
-            icon_url="https://cdn-icons-png.flaticon.com/512/3336/3336643.png",
+            icon_url="https://cdn.jsdelivr.net/gh/jdecked/twemoji@v17.0.3/assets/72x72/1f4d6.png",
         )
         await ctx.send(embed=embed)
 
@@ -707,7 +707,7 @@ class Fable(DashboardIntegration, commands.Cog):
 
             embed.set_footer(
                 text="Fable RP Tracker • Character Edit",
-                icon_url="https://cdn-icons-png.flaticon.com/512/3336/3336643.png",
+                icon_url="https://cdn.jsdelivr.net/gh/jdecked/twemoji@v17.0.3/assets/72x72/1f4d6.png",
             )
             await ctx.send(embed=embed)
         else:
@@ -869,7 +869,7 @@ class Fable(DashboardIntegration, commands.Cog):
 
         embed.set_footer(
             text="Fable RP Tracker • Character Profile",
-            icon_url="https://cdn-icons-png.flaticon.com/512/3336/3336643.png",
+            icon_url="https://cdn.jsdelivr.net/gh/jdecked/twemoji@v17.0.3/assets/72x72/1f4d6.png",
         )
         await ctx.send(embed=embed)
 
@@ -958,7 +958,7 @@ class Fable(DashboardIntegration, commands.Cog):
                 )
             embed.set_footer(
                 text="Fable RP Tracker • Character List",
-                icon_url="https://cdn-icons-png.flaticon.com/512/3336/3336643.png",
+                icon_url="https://cdn.jsdelivr.net/gh/jdecked/twemoji@v17.0.3/assets/72x72/1f4d6.png",
             )
             await ctx.send(embed=embed)
 
@@ -1003,7 +1003,7 @@ class Fable(DashboardIntegration, commands.Cog):
         )
         embed.set_footer(
             text="Fable RP Tracker • Character Deleted",
-            icon_url="https://cdn-icons-png.flaticon.com/512/3336/3336643.png",
+            icon_url="https://cdn.jsdelivr.net/gh/jdecked/twemoji@v17.0.3/assets/72x72/1f4d6.png",
         )
         await ctx.send(embed=embed)
 
@@ -1074,7 +1074,7 @@ class Fable(DashboardIntegration, commands.Cog):
                 )
         embed.set_footer(
             text="Fable RP Tracker • Character Relationships",
-            icon_url="https://cdn-icons-png.flaticon.com/512/3336/3336643.png",
+            icon_url="https://cdn.jsdelivr.net/gh/jdecked/twemoji@v17.0.3/assets/72x72/1f4d6.png",
         )
         await ctx.send(embed=embed)
 
@@ -1457,7 +1457,7 @@ class Fable(DashboardIntegration, commands.Cog):
                         value=new_description, inline=False)
         embed.set_footer(
             text="Fable RP Tracker • Event Edit",
-            icon_url="https://cdn-icons-png.flaticon.com/512/3336/3336643.png",
+            icon_url="https://cdn.jsdelivr.net/gh/jdecked/twemoji@v17.0.3/assets/72x72/1f4d6.png",
         )
         await ctx.send(embed=embed)
 
@@ -1502,7 +1502,7 @@ class Fable(DashboardIntegration, commands.Cog):
         )
         embed.set_footer(
             text="Fable RP Tracker • Event Deleted",
-            icon_url="https://cdn-icons-png.flaticon.com/512/3336/3336643.png",
+            icon_url="https://cdn.jsdelivr.net/gh/jdecked/twemoji@v17.0.3/assets/72x72/1f4d6.png",
         )
         await ctx.send(embed=embed)
 
@@ -1869,7 +1869,8 @@ class Fable(DashboardIntegration, commands.Cog):
                 "2. Enable Google Sheets & Docs APIs\n"
                 "3. Create a Service Account\n"
                 "4. Download a JSON key\n"
-                "5. Add the key to Fable using `/fable setapikey` or the command below.\n\n"
+                "5. Add the key with the private `/fable setapikey` slash command. "
+                "Visible prefix-message credentials are rejected.\n\n"
                 "See the full guide in the cog folder: `GOOGLE_API_SETUP.md`"
             ),
             color=0x7289DA,
@@ -1881,7 +1882,7 @@ class Fable(DashboardIntegration, commands.Cog):
         )
         embed.set_footer(
             text="Fable RP Tracker • Google API",
-            icon_url="https://cdn-icons-png.flaticon.com/512/3336/3336643.png",
+            icon_url="https://cdn.jsdelivr.net/gh/jdecked/twemoji@v17.0.3/assets/72x72/1f4d6.png",
         )
         # Show current key status
         key = await self.config.guild(ctx.guild).settings.get_raw(
@@ -1917,25 +1918,46 @@ class Fable(DashboardIntegration, commands.Cog):
         apikey : str
             The full JSON string of your Google service account key.
         """
+        if ctx.interaction is None:
+            try:
+                await ctx.message.delete()
+            except discord.NotFound:
+                pass
+            except discord.HTTPException:
+                await ctx.send(
+                    "❌ I could not remove the message containing that credential, so it was not stored. "
+                    "Delete it manually and use the private `/fable setapikey` slash command.",
+                )
+                return
+            await ctx.send(
+                "For security, Google service-account keys are not accepted through visible prefix "
+                "messages. Use the private `/fable setapikey` slash command instead.",
+            )
+            return
+
         try:
-            json.loads(apikey)
+            parsed_key = json.loads(apikey)
         except json.JSONDecodeError:
             await ctx.send(
                 "❌ That doesn't look like a valid JSON key. Please paste the full JSON string.",
+                ephemeral=True,
             )
+            return
+        if not isinstance(parsed_key, dict):
+            await ctx.send("❌ The service-account key must be a JSON object.", ephemeral=True)
             return
         await self.config.guild(ctx.guild).settings.set_raw(
             "google_api_key",
-            value=apikey,
+            value=json.dumps(parsed_key, separators=(",", ":")),
         )
         embed = discord.Embed(
             title="✅ Google API Key Set",
-            description="Your Google service account key has been securely saved for this server.",
+            description="Your Google service account key has been stored in this server's Red Config.",
             color=0x43B581,
         )
         embed.set_footer(
             text="Fable RP Tracker • Google API",
-            icon_url="https://cdn-icons-png.flaticon.com/512/3336/3336643.png",
+            icon_url="https://cdn.jsdelivr.net/gh/jdecked/twemoji@v17.0.3/assets/72x72/1f4d6.png",
         )
         # Show current key status
         embed.add_field(
@@ -1943,7 +1965,7 @@ class Fable(DashboardIntegration, commands.Cog):
             value="✅ Set for this server.",
             inline=False,
         )
-        await ctx.send(embed=embed)
+        await ctx.send(embed=embed, ephemeral=True)
 
     @fable.command(
         name="showapikey",
@@ -1972,7 +1994,7 @@ class Fable(DashboardIntegration, commands.Cog):
         )
         embed.set_footer(
             text="Fable RP Tracker • Google API",
-            icon_url="https://cdn-icons-png.flaticon.com/512/3336/3336643.png",
+            icon_url="https://cdn.jsdelivr.net/gh/jdecked/twemoji@v17.0.3/assets/72x72/1f4d6.png",
         )
         await ctx.send(embed=embed)
 
@@ -2033,7 +2055,7 @@ class Fable(DashboardIntegration, commands.Cog):
 
         embed.set_footer(
             text="Fable RP Tracker • Character Template",
-            icon_url="https://cdn-icons-png.flaticon.com/512/3336/3336643.png",
+            icon_url="https://cdn.jsdelivr.net/gh/jdecked/twemoji@v17.0.3/assets/72x72/1f4d6.png",
         )
         await ctx.send(embed=embed)
 
@@ -2139,7 +2161,7 @@ class Fable(DashboardIntegration, commands.Cog):
 
         embed.set_footer(
             text="Fable RP Tracker • Quick Character Creation",
-            icon_url="https://cdn-icons-png.flaticon.com/512/3336/3336643.png",
+            icon_url="https://cdn.jsdelivr.net/gh/jdecked/twemoji@v17.0.3/assets/72x72/1f4d6.png",
         )
         await ctx.send(embed=embed)
 

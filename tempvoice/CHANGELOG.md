@@ -1,8 +1,9 @@
 # Changelog
 
-## Unreleased
+## 1.3.0 - 2026-07-16
 
 - Reorganized the dashboard into responsive Active Channels, Settings, and Maintenance tabs that remain selected after form submissions.
+- Made voice-state automation respect Red's per-guild cog-disable state.
 
 ## 1.2.0
 

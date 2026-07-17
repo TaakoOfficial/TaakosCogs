@@ -46,6 +46,8 @@ Avatar overlay coordinates are percentages of the cached image. For a banner lik
 example with a circle on the right, start with `[p]welcome avataroverlay true 82 52 17`
 and adjust from there.
 
+Image downloads accept only public HTTP(S) destinations. Welcome rejects local, loopback, link-local, and private-network addresses before connecting, revalidates every redirect, requires an image content type, and stops streaming after 8 MB.
+
 ## Dashboard
 
 Welcome includes a Red-Web-Dashboard third-party page when the Dashboard cog is loaded.

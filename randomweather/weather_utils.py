@@ -22,6 +22,30 @@ RECOVERABLE_EXCEPTIONS = (
     AttributeError,
 )
 
+TWEMOJI_BASE_URL = "https://cdn.jsdelivr.net/gh/jdecked/twemoji@v17.0.3/assets/72x72"
+WEATHER_ICON_URLS = {
+    "Sunny ☀️": f"{TWEMOJI_BASE_URL}/2600.png",
+    "Partly Cloudy 🌤️": f"{TWEMOJI_BASE_URL}/1f324.png",
+    "Cloudy ☁️": f"{TWEMOJI_BASE_URL}/2601.png",
+    "Rainy 🌧️": f"{TWEMOJI_BASE_URL}/1f327.png",
+    "Thunderstorm ⛈️": f"{TWEMOJI_BASE_URL}/26c8.png",
+    "Light Snow ❄️": f"{TWEMOJI_BASE_URL}/2744.png",
+    "Snowy 🌨️": f"{TWEMOJI_BASE_URL}/1f328.png",
+    "Windy 🌬️": f"{TWEMOJI_BASE_URL}/1f32c.png",
+    "Foggy 🌫️": f"{TWEMOJI_BASE_URL}/1f32b.png",
+    "Typhoon 🌀": f"{TWEMOJI_BASE_URL}/1f300.png",
+    "Hurricane 🌀": f"{TWEMOJI_BASE_URL}/1f300.png",
+    "Flash Flooding 🌊": f"{TWEMOJI_BASE_URL}/1f30a.png",
+    "Acid Rain ☢️": f"{TWEMOJI_BASE_URL}/2622.png",
+    "Tornado 🌪️": f"{TWEMOJI_BASE_URL}/1f32a.png",
+    "Ice Storm 🧊": f"{TWEMOJI_BASE_URL}/1f9ca.png",
+    "Flash Freeze 🥶": f"{TWEMOJI_BASE_URL}/1f976.png",
+    "Heavy Smog 🟣": f"{TWEMOJI_BASE_URL}/1f7e3.png",
+    "Blood Fog 🔴": f"{TWEMOJI_BASE_URL}/1f534.png",
+    "Lightning Storm ⚡": f"{TWEMOJI_BASE_URL}/26a1.png",
+    "Noxious Gas ☁️": f"{TWEMOJI_BASE_URL}/2601.png",
+}
+
 
 def get_seasonal_ranges(month: int) -> tuple[int, int, list[tuple[str, float]]]:
     """Get temperature ranges and weighted conditions for the season."""
@@ -263,46 +287,14 @@ def create_weather_embed(
     if is_extreme_weather(weather_data["condition"]):
         return create_extreme_weather_alert(weather_data, guild_settings)
 
-    # Define weather condition icons
-    condition_icons = {
-        # Normal weather conditions
-        "Sunny ☀️": "https://cdn-icons-png.flaticon.com/512/869/869869.png",  # Sun icon
-        # Sun with cloud icon
-        "Partly Cloudy 🌤️": "https://cdn-icons-png.flaticon.com/512/1163/1163661.png",
-        "Cloudy ☁️": "https://cdn-icons-png.flaticon.com/512/414/414825.png",  # Cloud icon
-        "Rainy 🌧️": "https://cdn-icons-png.flaticon.com/512/3351/3351979.png",  # Rain icon
-        "Thunderstorm ⛈️": "https://cdn-icons-png.flaticon.com/512/1146/1146860.png",  # Thunder icon
-        # Light snow icon
-        "Light Snow ❄️": "https://cdn-icons-png.flaticon.com/512/2204/2204350.png",
-        "Snowy 🌨️": "https://cdn-icons-png.flaticon.com/512/2315/2315309.png",  # Heavy snow icon
-        "Windy 🌬️": "https://cdn-icons-png.flaticon.com/512/17640214/17640214.png",  # Wind icon
-        "Foggy 🌫️": "https://cdn-icons-png.flaticon.com/512/4005/4005901.png",  # Fog icon
-        # Extreme weather conditions - same icons as in create_extreme_weather_alert
-        # Typhoon/cyclone icon
-        "Typhoon 🌀": "https://cdn-icons-png.flaticon.com/512/7469/7469118.png",
-        "Hurricane 🌀": "https://cdn-icons-png.flaticon.com/512/18370/18370248.png",  # Hurricane icon
-        "Flash Flooding 🌊": "https://cdn-icons-png.flaticon.com/512/15788/15788723.png",  # Flood icon
-        "Acid Rain ☢️": "https://cdn-icons-png.flaticon.com/512/13748/13748298.png",  # Acid rain icon
-        "Tornado 🌪️": "https://cdn-icons-png.flaticon.com/512/4165/4165988.png",  # Tornado icon
-        "Ice Storm 🧊": "https://cdn-icons-png.flaticon.com/512/13753/13753017.png",  # Ice storm icon
-        "Flash Freeze 🥶": "https://cdn-icons-png.flaticon.com/512/13748/13748308.png",  # Freeze icon
-        # Smog/pollution icon
-        "Heavy Smog 🟣": "https://cdn-icons-png.flaticon.com/512/5782/5782192.png",
-        "Blood Fog 🔴": "https://cdn-icons-png.flaticon.com/512/13748/13748627.png",  # Red fog icon
-        # Lightning icon
-        "Lightning Storm ⚡": "https://cdn-icons-png.flaticon.com/512/3032/3032738.png",
-        # Toxic gas icon
-        "Noxious Gas ☁️": "https://cdn-icons-png.flaticon.com/512/13748/13748288.png",
-    }
-
     embed = discord.Embed(
         title="☀️ Today's Weather",
         color=discord.Color(guild_settings.get("embed_color", 0xFF0000)),
     )
 
     # Set thumbnail based on weather condition
-    if weather_data["condition"] in condition_icons:
-        embed.set_thumbnail(url=condition_icons[weather_data["condition"]])
+    if weather_data["condition"] in WEATHER_ICON_URLS:
+        embed.set_thumbnail(url=WEATHER_ICON_URLS[weather_data["condition"]])
 
     # Temperature and Feels Like (show both only if different)
     temp = weather_data["temperature_f"]
@@ -352,26 +344,6 @@ def create_extreme_weather_alert(
     guild_settings: dict[str, any],
 ) -> discord.Embed:
     """Create a dramatic and eye-catching alert embed for extreme weather conditions."""
-    # Define weather condition icons
-    condition_icons = {
-        # Extreme weather conditions with icons matching their names/effects
-        # Typhoon/cyclone icon
-        "Typhoon 🌀": "https://cdn-icons-png.flaticon.com/512/7469/7469118.png",
-        "Hurricane 🌀": "https://cdn-icons-png.flaticon.com/512/18370/18370248.png",  # Hurricane icon
-        "Flash Flooding 🌊": "https://cdn-icons-png.flaticon.com/512/15788/15788723.png",  # Flood icon
-        "Acid Rain ☢️": "https://cdn-icons-png.flaticon.com/512/13748/13748298.png",  # Acid rain icon
-        "Tornado 🌪️": "https://cdn-icons-png.flaticon.com/512/4165/4165988.png",  # Tornado icon
-        "Ice Storm 🧊": "https://cdn-icons-png.flaticon.com/512/13753/13753017.png",  # Ice storm icon
-        "Flash Freeze 🥶": "https://cdn-icons-png.flaticon.com/512/13748/13748308.png",  # Freeze icon
-        # Smog/pollution icon
-        "Heavy Smog 🟣": "https://cdn-icons-png.flaticon.com/512/5782/5782192.png",
-        "Blood Fog 🔴": "https://cdn-icons-png.flaticon.com/512/13748/13748627.png",  # Red fog icon
-        # Lightning icon
-        "Lightning Storm ⚡": "https://cdn-icons-png.flaticon.com/512/3032/3032738.png",
-        # Toxic gas icon
-        "Noxious Gas ☁️": "https://cdn-icons-png.flaticon.com/512/13748/13748288.png",
-    }
-
     # Use the guild's configured embed color instead of condition-specific colors
     condition = weather_data["condition"]
 
@@ -385,8 +357,8 @@ def create_extreme_weather_alert(
     embed.timestamp = datetime.datetime.now(datetime.timezone.utc)
 
     # Set thumbnail based on condition
-    if condition in condition_icons:
-        embed.set_thumbnail(url=condition_icons[condition])
+    if condition in WEATHER_ICON_URLS:
+        embed.set_thumbnail(url=WEATHER_ICON_URLS[condition])
 
     # Add an image for visual impact - dramatic severe weather warning banner
     embed.set_image(

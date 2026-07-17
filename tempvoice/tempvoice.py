@@ -912,6 +912,8 @@ class TempVoice(DashboardIntegration, commands.Cog):
         """Create temp channels from the trigger channel and remove empty ones."""
         if member.bot or before.channel == after.channel:
             return
+        if await self.bot.cog_disabled_in_guild(self, member.guild):
+            return
 
         if isinstance(after.channel, discord.VoiceChannel):
             self._cancel_cleanup(after.channel.id)

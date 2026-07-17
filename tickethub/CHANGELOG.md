@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.17.1 - 2026-07-16
+
+- Added alphanumeric primary names for support-role and AAA3A import commands while retaining the historical hyphenated names as hidden prefix and slash compatibility commands.
+
 ## 1.17.0
 
 - Restyled dashboard replies in Discord with the staff member's name, avatar, and clear TicketHub attribution, and added inline image previews to Ticket Desk conversations.

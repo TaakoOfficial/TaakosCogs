@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.2.0 - 2026-07-16
 
 - Reorganized the dashboard into responsive Overview, Create, and Manage tabs that remain selected after form submissions.
 

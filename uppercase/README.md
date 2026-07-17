@@ -28,8 +28,10 @@ This cog includes standalone Red-Web-Dashboard integration. Server managers can 
 
 | Command                                           | Description                                                 |
 | ------------------------------------------------- | ----------------------------------------------------------- |
-| `[p]create-channel <category> <name>` or `/create-channel` | Create a text channel in a category with a visibly uppercase name. |
-| `[p]rename-channel <channel> <name>` or `/rename-channel` | Rename a text channel with a visibly uppercase name. |
+| `[p]createchannel <category> <name>` or `/createchannel` | Create a text channel in a category with a visibly uppercase name. |
+| `[p]renamechannel <channel> <name>` or `/renamechannel` | Rename a text channel with a visibly uppercase name. |
+
+The historical `[p]create-channel`, `[p]rename-channel`, `/create-channel`, and `/rename-channel` names remain available as compatibility commands.
 
 ## Requirements
 

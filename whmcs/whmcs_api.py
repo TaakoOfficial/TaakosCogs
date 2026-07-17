@@ -5,13 +5,12 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import logging
-import traceback
 from typing import Any
 from urllib.parse import urljoin
 
 import aiohttp
 
-log = logging.getLogger("red.WHMCS.api")
+log = logging.getLogger("red.taakoscogs.whmcs.api")
 
 RECOVERABLE_API_EXCEPTIONS = (
     aiohttp.ClientError,
@@ -78,40 +77,21 @@ class WHMCSAPIClient:
 
     async def __aenter__(self):
         """Async context manager entry."""
-        stack = "".join(traceback.format_stack())
         if hasattr(self, "_entered") and self._entered:
-            log.warning(
-                "WHMCSAPIClient: __aenter__ called while already entered. Stack:\n%s\nState: %r",
-                stack,
-                self.__dict__,
-            )
+            log.warning("WHMCSAPIClient entered while it was already active.")
             raise RuntimeError("WHMCSAPIClient context already entered.")
         self.session = aiohttp.ClientSession(timeout=self.timeout)
         self._entered = True
-        log.info(
-            "WHMCSAPIClient: Async context manager entered, session initialized. Stack:\n%s\nState: %r",
-            stack,
-            self.__dict__,
-        )
+        log.debug("WHMCS API session initialized.")
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         """Async context manager exit."""
-        stack = "".join(traceback.format_stack())
         if self.session:
             await self.session.close()
-            log.info(
-                "WHMCSAPIClient: Session closed on context exit. Stack:\n%s\nState: %r",
-                stack,
-                self.__dict__,
-            )
         self.session = None
         self._entered = False
-        log.info(
-            "WHMCSAPIClient: Async context manager exited, state reset. Stack:\n%s\nState: %r",
-            stack,
-            self.__dict__,
-        )
+        log.debug("WHMCS API session closed.")
 
     def set_api_credentials(
         self,
@@ -227,12 +207,7 @@ class WHMCSAPIClient:
             WHMCSRateLimitError: If rate limit is exceeded
         """
         if not self._entered or not self.session:
-            stack = "".join(traceback.format_stack())
-            log.error(
-                "WHMCSAPIClient: Attempted API call outside async context manager. Stack:\n%s\nState: %r",
-                stack,
-                self.__dict__,
-            )
+            log.error("WHMCS API call attempted outside an active client context.")
             raise WHMCSAPIError(
                 "WHMCSAPIClient session not initialized. "
                 "All API calls must be made within an 'async with' block. "
@@ -244,8 +219,11 @@ class WHMCSAPIClient:
         await self._check_rate_limit()
 
         data = self._build_request_data(action, parameters)
-        log.info(
-            f"WHMCS API: Full request payload for action '{action}': {data}")
+        log.debug(
+            "WHMCS API request action=%s parameter_names=%s",
+            action,
+            sorted((parameters or {}).keys()),
+        )
 
         try:
             async with self.session.post(self.api_url, data=data) as response:

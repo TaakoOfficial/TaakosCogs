@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [2.0.0] - 2026-07-16
 
 - Renamed the package and cog from `zodiaccolorroles` / `ZodiacColorRoles` to `rolekit` / `RoleKit`.
 - Preserved the legacy Config namespace and identifier so existing leveling settings and XP survive the rename.

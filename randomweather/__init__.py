@@ -9,6 +9,8 @@ from redbot.core import commands
 
 from .randomweather import WeatherCog
 
+log = logging.getLogger("red.taakoscogs.randomweather")
+
 
 def ensure_pytz_installed() -> bool:
     """Ensure pytz is installed on the system."""
@@ -24,7 +26,7 @@ def ensure_pytz_installed() -> bool:
         )
         return importlib.util.find_spec("pytz") is not None
     except subprocess.SubprocessError as e:
-        logging.error(f"Failed to install pytz: {e}")
+        log.error("Failed to install pytz: %s", e)
         return False
 
 
