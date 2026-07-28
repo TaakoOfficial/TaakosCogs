@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import copy
 import io
 import json
 import logging
 import random
+from collections.abc import Mapping
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -811,7 +813,7 @@ class DeepDelve(DashboardIntegration, commands.Cog):
     """An old-school persistent text RPG built for Discord."""
 
     __author__ = "Taako"
-    __version__ = "4.3.5"
+    __version__ = "4.3.6"
 
     def __init__(self, bot: Red) -> None:
         self.bot = bot
@@ -1031,6 +1033,26 @@ class DeepDelve(DashboardIntegration, commands.Cog):
     def _guild_lock_for(self, guild_id: int) -> asyncio.Lock:
         return self._guild_locks.setdefault(guild_id, asyncio.Lock())
 
+    @classmethod
+    def _safe_config_merge(cls, defaults: Any, current: Any) -> Any:
+        """Overlay raw Config data without recursing into ``None`` defaults."""
+        if not isinstance(current, Mapping):
+            return copy.deepcopy(current)
+        result = copy.deepcopy(defaults) if isinstance(defaults, Mapping) else {}
+        for key, value in current.items():
+            if isinstance(value, Mapping):
+                result[key] = cls._safe_config_merge(result.get(key, {}), value)
+            else:
+                result[key] = copy.deepcopy(value)
+        return result
+
+    async def _raw_member_profile(self, guild_id: int, user_id: int) -> tuple[Any, dict[str, Any]]:
+        """Read member data without Red's unsafe nested ``None`` merge."""
+        proxy = self.config.member_from_ids(guild_id, user_id)
+        raw = await proxy.get_raw(default=None)
+        profile = self._safe_config_merge(proxy.defaults, raw or {})
+        return proxy, profile
+
     @staticmethod
     async def _persistent_error(interaction: discord.Interaction, message: str) -> None:
         if interaction.response.is_done():
@@ -1201,8 +1223,7 @@ class DeepDelve(DashboardIntegration, commands.Cog):
     async def _sync_party_bonuses(self, guild_id: int, member_ids: list[int]) -> None:
         bonus = party_bonus(len(member_ids))
         for member_id in member_ids:
-            proxy = self.config.member_from_ids(guild_id, member_id)
-            profile = await proxy.all()
+            proxy, profile = await self._raw_member_profile(guild_id, member_id)
             if profile.get("created"):
                 profile["party_bonus"] = bonus
                 await proxy.set(profile)
@@ -1220,15 +1241,13 @@ class DeepDelve(DashboardIntegration, commands.Cog):
             "worldboss_percent": 5 if level >= 5 else 0,
         }
         for member_id in member_ids:
-            proxy = self.config.member_from_ids(guild_id, member_id)
-            profile = await proxy.all()
+            proxy, profile = await self._raw_member_profile(guild_id, member_id)
             if profile.get("created"):
                 profile["guild_bonus"] = bonus
                 await proxy.set(profile)
 
     async def _get_profile(self, guild_id: int, user_id: int, *, refresh: bool = True) -> dict[str, Any]:
-        proxy = self.config.member_from_ids(guild_id, user_id)
-        profile = await proxy.all()
+        proxy, profile = await self._raw_member_profile(guild_id, user_id)
         dirty = migrate_profile(profile)
         guild_proxy = self.config.guild_from_id(guild_id)
         guild_data = await guild_proxy.all()
@@ -1339,8 +1358,7 @@ class DeepDelve(DashboardIntegration, commands.Cog):
         class_key: str,
     ) -> bool:
         async with self._lock_for(guild_id, user_id):
-            proxy = self.config.member_from_ids(guild_id, user_id)
-            current = await proxy.all()
+            proxy, current = await self._raw_member_profile(guild_id, user_id)
             if current["created"] or class_key not in GAME_CLASSES:
                 return False
             details = GAME_CLASSES[class_key]

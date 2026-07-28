@@ -168,3 +168,25 @@ def test_cog_load_purges_legacy_message_bound_player_views() -> None:
     )
     DeepDelve._purge_live_player_views(SimpleNamespace(bot=bot))
     assert removed == [player_view]
+
+
+def test_raw_config_merge_accepts_items_under_none_equipment_defaults() -> None:
+    defaults = {
+        "created": False,
+        "equipment": {"weapon": None, "armor": None, "charm": None},
+    }
+    stored = {
+        "created": True,
+        "equipment": {
+            "weapon": {
+                "id": "origin",
+                "name": "Watchman's Spear",
+                "slot": "weapon",
+            },
+        },
+    }
+    merged = DeepDelve._safe_config_merge(defaults, stored)
+    assert merged["created"] is True
+    assert merged["equipment"]["weapon"]["name"] == "Watchman's Spear"
+    assert merged["equipment"]["armor"] is None
+    assert defaults["equipment"]["weapon"] is None

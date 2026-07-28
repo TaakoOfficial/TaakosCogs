@@ -2,6 +2,13 @@
 
 All notable changes to `deepdelve` are documented here.
 
+## 4.3.6
+
+- Bypassed Red Config's unsafe recursive merge for member profiles, which crashed
+  when a saved equipment item was overlaid onto a registered `None` slot.
+- Added a non-mutating raw-data/default overlay and routed every direct member-profile
+  read through it, including commands, character creation, and social bonus syncs.
+
 ## 4.3.5
 
 - Replaced the finished-view workaround with discord.py's supported fully dynamic
