@@ -2,6 +2,13 @@
 
 All notable changes to `deepdelve` are documented here.
 
+## 4.3.4
+
+- Made legacy live-view cleanup optional and non-fatal across differing Red and
+  discord.py internal view-store implementations.
+- Isolated per-view cleanup failures so compatibility differences cannot prevent the
+  cog from loading.
+
 ## 4.3.3
 
 - Made dynamic routing the sole handler for all player buttons and selectors instead

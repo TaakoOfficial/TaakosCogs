@@ -811,7 +811,7 @@ class DeepDelve(DashboardIntegration, commands.Cog):
     """An old-school persistent text RPG built for Discord."""
 
     __author__ = "Taako"
-    __version__ = "4.3.3"
+    __version__ = "4.3.4"
 
     def __init__(self, bot: Red) -> None:
         self.bot = bot
@@ -983,20 +983,35 @@ class DeepDelve(DashboardIntegration, commands.Cog):
 
     def _purge_live_player_views(self) -> None:
         """Remove legacy message-bound views so only dynamic recovery handles clicks."""
-        connection = getattr(self.bot, "_connection", None)
-        store = getattr(connection, "_view_store", None)
-        buckets = getattr(store, "_views", {})
-        stale_views: set[discord.ui.View] = set()
-        for items in list(buckets.values()):
-            for item in list(items.values()):
-                custom_id = str(getattr(item, "custom_id", ""))
-                view = getattr(item, "view", None)
-                if custom_id.startswith(("deepdelve:b:", "deepdelve:s:")) and view is not None:
-                    stale_views.add(view)
-        for view in stale_views:
-            self.bot.remove_view(view)
-        if stale_views:
-            LOGGER.info("Removed %s legacy message-bound DeepDelve view(s).", len(stale_views))
+        try:
+            connection = getattr(self.bot, "_connection", None)
+            store = getattr(connection, "_view_store", None)
+            buckets = getattr(store, "_views", {})
+            if not isinstance(buckets, dict):
+                return
+            stale_views: dict[int, discord.ui.View] = {}
+            for items in list(buckets.values()):
+                if not isinstance(items, dict):
+                    continue
+                for item in list(items.values()):
+                    custom_id = str(getattr(item, "custom_id", ""))
+                    view = getattr(item, "view", None)
+                    if custom_id.startswith(("deepdelve:b:", "deepdelve:s:")) and view is not None:
+                        stale_views[id(view)] = view
+            remove_view = getattr(self.bot, "remove_view", None)
+            if not callable(remove_view):
+                return
+            for view in stale_views.values():
+                try:
+                    remove_view(view)
+                except Exception:  # noqa: BLE001 - optional cross-version cleanup
+                    LOGGER.debug("Could not remove one legacy DeepDelve view.", exc_info=True)
+            if stale_views:
+                LOGGER.info("Removed %s legacy message-bound DeepDelve view(s).", len(stale_views))
+        except Exception:  # noqa: BLE001 - discord.py private internals vary
+            # This cleanup uses discord.py's private view-store shape and must remain
+            # optional when Red ships a different compatible library version.
+            LOGGER.warning("Skipped legacy DeepDelve view cleanup for this runtime.", exc_info=True)
 
     async def _migrate_all_data(self) -> None:
         """Run idempotent schema upgrades for every stored guild and character."""
