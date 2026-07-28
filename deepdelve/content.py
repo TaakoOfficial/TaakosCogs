@@ -481,10 +481,13 @@ def apply_affix(enemy: dict[str, Any], floor: int, rng: random.Random = random) 
         enemy["affix"] = {}
         return enemy
     affix = dict(rng.choice(AFFIXES))
+    enemy.setdefault("base_name", enemy["name"])
+    enemy.setdefault("codex_key", f"creature:{enemy['base_name'].lower().replace(' ', '_')}")
     enemy["name"] = f"{affix['name']} {enemy['name']}"
     enemy["emoji"] = affix["emoji"]
     for field in ("hp", "attack", "defense"):
-        enemy[field] = max(1, round(enemy[field] * affix[field]))
+        endurance = max(1.25, 1.5 - max(0, floor - 1) * 0.01) if field == "hp" else 1.0
+        enemy[field] = max(1, round(enemy[field] * affix[field] * endurance))
     enemy["max_hp"] = enemy["hp"]
     enemy["gold"] = round(enemy["gold"] * 1.5)
     enemy["xp"] = round(enemy["xp"] * 1.4)
@@ -505,11 +508,20 @@ def enemy_for_floor(floor: int, rng: random.Random = random) -> dict[str, Any]:
     scale = 1 + max(0, floor - 1) * 0.085
     variance = rng.uniform(0.92, 1.08)
     for field in ("hp", "attack", "defense"):
-        multiplier = 2.0 if field == "hp" else 1.0
+        multiplier = max(2.4, 2.85 - max(1, floor) * 0.012) if field == "hp" else 1.0
         base[field] = max(1, round(base[field] * scale * variance * multiplier))
     base["gold"] = max(1, round(base["gold"] * (1 + max(0, floor - 1) * 0.045) * variance))
     base["xp"] = max(1, round(base["xp"] * (1 + max(0, floor - 1) * 0.07) * variance))
-    base.update({"max_hp": base["hp"], "boss": False, "floor": floor, "weakened": 0})
+    base.update(
+        {
+            "max_hp": base["hp"],
+            "boss": False,
+            "floor": floor,
+            "weakened": 0,
+            "base_name": base["name"],
+            "codex_key": f"creature:{base['name'].lower().replace(' ', '_')}",
+        },
+    )
     return base
 
 
@@ -517,6 +529,7 @@ def boss_for_floor(floor: int) -> dict[str, Any]:
     """Build a boss on a monotonic curve beyond the authored encounters."""
     boss_number = max(1, floor // 5)
     identity = dict(BOSSES[(boss_number - 1) % len(BOSSES)])
+    identity_name = identity["name"]
     if boss_number <= len(BOSSES):
         base = identity
     else:
@@ -533,9 +546,19 @@ def boss_for_floor(floor: int) -> dict[str, Any]:
         for field, scale in scales.items():
             base[field] = max(int(anchor[field]) + 1, round(int(anchor[field]) * scale))
         base["name"] = f"Ascended {base['name']}"
-    base["hp"] = round(int(base["hp"]) * 2.9)
+    boss_endurance = max(3.5, 3.9 - max(0, floor - 5) * 0.012)
+    base["hp"] = round(int(base["hp"]) * boss_endurance)
     base["attack"] = round(int(base["attack"]) * 1.4)
-    base.update({"max_hp": base["hp"], "boss": True, "floor": floor, "weakened": 0})
+    base.update(
+        {
+            "max_hp": base["hp"],
+            "boss": True,
+            "floor": floor,
+            "weakened": 0,
+            "base_name": identity_name,
+            "codex_key": f"boss:{identity_name.lower().replace(' ', '_')}",
+        },
+    )
     return base
 
 
@@ -562,11 +585,12 @@ def generate_item(
     luck: int,
     rng: random.Random = random,
     slot: str | None = None,
+    rarity_index: int | None = None,
 ) -> dict[str, Any]:
     """Generate a serializable equipment item."""
     if slot not in {"weapon", "armor", "charm"}:
         slot = rng.choice(("weapon", "armor", "charm"))
-    rarity_index = roll_rarity(floor, luck, rng)
+    rarity_index = roll_rarity(floor, luck, rng) if rarity_index is None else max(0, min(4, rarity_index))
     rarity = RARITIES[rarity_index]
     region_index = min(len(REGIONAL_BASES) - 1, max(0, (max(1, floor) - 1) // 5))
     noun = rng.choice(REGIONAL_BASES[region_index][slot])

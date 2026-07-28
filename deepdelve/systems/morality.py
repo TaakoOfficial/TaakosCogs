@@ -191,6 +191,7 @@ def ensure_morality(profile: dict[str, Any]) -> None:
         convictions.setdefault(conviction, 0)
     profile.setdefault("moral_deeds", [])
     profile.setdefault("deed_counts", {})
+    profile.setdefault("conviction_fatigue", 0)
 
 
 def morality_path(profile: dict[str, Any]) -> dict[str, Any]:
@@ -334,44 +335,55 @@ def moral_power(profile: dict[str, Any]) -> dict[str, Any]:
     path = morality_path(profile)
     score = int(profile["morality"])
     motive = dominant_conviction(profile)
+    fatigue = max(0, int(profile.get("conviction_fatigue", 0)))
     if score >= 30:
-        return {
-            "available": True,
+        power = {
+            "unlocked": True,
             "key": "grace",
             "name": "Lantern Grace",
             "emoji": "☀️",
             "description": f"Heal, cleanse conditions, and gain guard once per battle. Strongest motive: {motive.title()}.",
             "greater": score >= 70,
         }
-    if score <= -30:
-        return {
-            "available": True,
+    elif score <= -30:
+        power = {
+            "unlocked": True,
             "key": "claim",
             "name": "Dread Claim",
             "emoji": "🌑",
             "description": f"Wound through armor and steal part of the damage. Strongest motive: {motive.title()}.",
             "greater": score <= -70,
         }
-    established = len(profile.get("moral_deeds", [])) >= 3
-    return {
-        "available": established,
-        "key": "gambit",
-        "name": "Measured Gambit",
-        "emoji": path["emoji"],
-        "description": f"Rewrite an intention, recover mana, and gain guard. Strongest motive: {motive.title()}.",
-        "greater": len(profile.get("moral_deeds", [])) >= 12,
-    }
+    else:
+        established = len(profile.get("moral_deeds", [])) >= 3
+        power = {
+            "unlocked": established,
+            "key": "gambit",
+            "name": "Measured Gambit",
+            "emoji": path["emoji"],
+            "description": f"Rewrite an intention, recover mana, and gain guard. Strongest motive: {motive.title()}.",
+            "greater": len(profile.get("moral_deeds", [])) >= 12,
+        }
+    power["fatigue"] = fatigue
+    power["available"] = bool(power["unlocked"] and fatigue <= 0)
+    return power
 
 
 def use_moral_power(profile: dict[str, Any], enemy: dict[str, Any], stats: dict[str, int]) -> dict[str, Any]:
     """Apply a moral power once during the current encounter."""
     power = moral_power(profile)
     flags = profile.setdefault("combat_flags", {})
-    if not power["available"]:
+    if not power["unlocked"]:
         return {"ok": False, "message": "Your convictions have not yet become strong enough to answer in battle."}
+    if power["fatigue"]:
+        return {
+            "ok": False,
+            "message": f"Conviction Fatigue remains for **{power['fatigue']} more victory/victories**.",
+        }
     if flags.get("moral_power_used"):
         return {"ok": False, "message": "Your conviction has already answered once in this battle."}
     flags["moral_power_used"] = True
+    profile["conviction_fatigue"] = 2
     if power["key"] == "grace":
         mercy = max(0, int(profile["convictions"].get("mercy", 0)))
         rate = (0.22 if power["greater"] else 0.14) + min(0.05, mercy * 0.001)

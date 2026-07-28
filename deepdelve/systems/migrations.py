@@ -4,11 +4,107 @@ from __future__ import annotations
 
 from typing import Any
 
-from deepdelve.loot_content import STORY_RELICS
+from deepdelve.advanced_content import ITEM_SUFFIXES, LEGENDARIES
+from deepdelve.content import AFFIXES
+from deepdelve.loot_content import RECIPES, STARTER_WEAPONS, STORY_RELICS
 from deepdelve.systems.morality import origin_morality, record_campaign_deed
 
-PROFILE_SCHEMA_VERSION = 6
-GUILD_SCHEMA_VERSION = 4
+PROFILE_SCHEMA_VERSION = 7
+GUILD_SCHEMA_VERSION = 5
+
+
+def _migrate_item_enchantment(item: dict[str, Any] | None) -> bool:
+    """Separate legacy enchantments from the item's recoverable native identity."""
+    if not item or not item.get("enchant") or item.get("enchant_effect"):
+        return False
+    item["enchant_effect"] = item.get("unique_effect", "")
+    item["enchant_description"] = item.get("effect_description", "")
+    native_effect = ""
+    native_description = ""
+    native_definitions = [
+        definition
+        for options in STARTER_WEAPONS.values()
+        for definition in options.values()
+    ] + list(LEGENDARIES)
+    native = next(
+        (definition for definition in native_definitions if definition["name"] == item.get("name")),
+        None,
+    )
+    if native:
+        native_effect = native["effect"]
+        native_description = native["description"]
+    elif item.get("source"):
+        recipe = next(
+            (
+                definition
+                for definition in RECIPES.values()
+                if definition["name"] == item.get("source")
+            ),
+            None,
+        )
+        if recipe:
+            native_effect = recipe["effect"]
+            native_description = f"Pattern effect: {recipe['name']}."
+    elif item.get("suffix"):
+        suffix = next(
+            (
+                definition
+                for definition in ITEM_SUFFIXES
+                if definition["name"] == item.get("suffix")
+            ),
+            None,
+        )
+        if suffix:
+            native_effect = suffix["effect"]
+            native_description = suffix["description"]
+    item["unique_effect"] = native_effect
+    item["effect_description"] = native_description
+    return True
+
+
+def _migrate_bestiary(profile: dict[str, Any]) -> bool:
+    """Merge legacy affixed creatures and add variant/floor metadata."""
+    old = profile.get("bestiary", {})
+    normalized: dict[str, dict[str, Any]] = {}
+    changed = False
+    affix_names = tuple(affix["name"] for affix in AFFIXES)
+    for old_key, raw in old.items():
+        entry = dict(raw)
+        name = str(entry.get("name") or old_key)
+        matched_affix = next((affix for affix in affix_names if name.startswith(f"{affix} ")), "")
+        base_name = name.removeprefix(f"{matched_affix} ") if matched_affix else name
+        key = old_key
+        if matched_affix:
+            key = f"creature:{base_name.lower().replace(' ', '_')}"
+            changed = True
+        target = normalized.setdefault(
+            key,
+            {
+                "name": base_name,
+                "kills": 0,
+                "mastery": 0,
+                "affixes": {},
+                "min_floor": int(profile.get("floor", 1)),
+                "max_floor": int(profile.get("floor", 1)),
+                "kind": entry.get("kind", "creature"),
+            },
+        )
+        target["kills"] += int(entry.get("kills", 0))
+        target["mastery"] = max(int(target["mastery"]), int(entry.get("mastery", 0)))
+        target["min_floor"] = min(int(target["min_floor"]), int(entry.get("min_floor", profile.get("floor", 1))))
+        target["max_floor"] = max(int(target["max_floor"]), int(entry.get("max_floor", profile.get("floor", 1))))
+        for affix, count in entry.get("affixes", {}).items():
+            target["affixes"][affix] = int(target["affixes"].get(affix, 0)) + int(count)
+        if matched_affix:
+            target["affixes"][matched_affix] = int(target["affixes"].get(matched_affix, 0)) + int(
+                entry.get("kills", 0),
+            )
+        if any(field not in entry for field in ("affixes", "min_floor", "max_floor", "kind")):
+            changed = True
+    if normalized != old:
+        profile["bestiary"] = normalized
+        changed = True
+    return changed
 
 
 def migrate_profile(profile: dict[str, Any]) -> bool:
@@ -54,6 +150,11 @@ def migrate_profile(profile: dict[str, Any]) -> bool:
         "convictions": {"mercy": 0, "honesty": 0, "ambition": 0, "ruthlessness": 0},
         "moral_deeds": [],
         "deed_counts": {},
+        "conviction_fatigue": 0,
+        "set_pity": 0,
+        "set_discoveries": {},
+        "set_fragments": {},
+        "legendary_codex": [],
     }
     for key, value in defaults.items():
         if key not in profile:
@@ -76,6 +177,27 @@ def migrate_profile(profile: dict[str, Any]) -> bool:
         if conviction not in profile["convictions"]:
             profile["convictions"][conviction] = 0
             changed = True
+    owned_items = [
+        *profile.get("inventory", []),
+        *profile.get("stash", []),
+        *(item for item in profile.get("equipment", {}).values() if item),
+    ]
+    for item in owned_items:
+        if item.get("legendary") and item.get("name") not in profile["legendary_codex"]:
+            profile["legendary_codex"].append(item["name"])
+            changed = True
+        set_key = item.get("set", "")
+        slot = item.get("slot", "")
+        if set_key and slot in {"weapon", "armor", "charm"}:
+            discoveries = profile["set_discoveries"].setdefault(set_key, [])
+            if slot not in discoveries:
+                discoveries.append(slot)
+                changed = True
+    for item in owned_items:
+        if _migrate_item_enchantment(item):
+            changed = True
+    if _migrate_bestiary(profile):
+        changed = True
     profession = profile["profession"]
     for key, value in defaults["profession"].items():
         if key not in profession:
@@ -114,6 +236,18 @@ def migrate_guild(data: dict[str, Any]) -> bool:
     for key, value in defaults["town"]["buildings"].items():
         if key not in buildings:
             buildings[key] = value
+            changed = True
+    stored_items = [
+        record.get("item")
+        for record in data.get("auctions", {}).values()
+    ]
+    stored_items.extend(
+        item
+        for record in data.get("player_guilds", {}).values()
+        for item in record.get("vault", [])
+    )
+    for item in stored_items:
+        if _migrate_item_enchantment(item):
             changed = True
     if int(data.get("schema_version", 0)) != GUILD_SCHEMA_VERSION:
         data["schema_version"] = GUILD_SCHEMA_VERSION

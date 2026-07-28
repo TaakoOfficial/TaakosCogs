@@ -27,8 +27,10 @@ from .endgame import current_season, daily_dungeon, restore_challenge_origin, sc
 from .items import (
     apply_advanced_itemization,
     dismantle_rewards,
+    equipment_effects,
     equipment_set_bonuses,
     item_detail,
+    item_effects,
     item_sale_value,
     upgrade_cost,
 )
@@ -70,8 +72,10 @@ __all__ = [
     "dismantle_rewards",
     "ensure_enemy_intent",
     "equipment_set_bonuses",
+    "equipment_effects",
     "intent_description",
     "item_detail",
+    "item_effects",
     "item_sale_value",
     "npc_progress",
     "guild_perks",

@@ -110,7 +110,7 @@ def test_choice_deeds_use_the_same_anti_farming_ledger() -> None:
     assert profile["deed_counts"]["event:lost_delver:aid"] == 3
 
 
-def test_schema_six_backfills_completed_campaign_morality_once() -> None:
+def test_current_schema_backfills_completed_campaign_morality_once() -> None:
     old = {
         "created": True,
         "alignment": "Radiant",
@@ -123,7 +123,7 @@ def test_schema_six_backfills_completed_campaign_morality_once() -> None:
         },
     }
     assert migrate_profile(old)
-    assert old["schema_version"] == PROFILE_SCHEMA_VERSION == 6
+    assert old["schema_version"] == PROFILE_SCHEMA_VERSION == 7
     assert old["morality"] == 23
     assert old["convictions"]["honesty"] == 5
     assert not migrate_profile(old)

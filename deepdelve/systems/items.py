@@ -19,6 +19,8 @@ def apply_advanced_itemization(
     """Add affixes, sets, legendary identities, and upgrade metadata."""
     item.setdefault("upgrade", 0)
     item.setdefault("enchant", "")
+    item.setdefault("enchant_effect", "")
+    item.setdefault("enchant_description", "")
     item.setdefault("identified", True)
     item.setdefault("bound", False)
     item.setdefault("set", "")
@@ -105,6 +107,22 @@ def equipment_set_bonuses(equipment: dict[str, Any]) -> tuple[dict[str, int], li
     return bonuses, effects
 
 
+def item_effects(item: dict[str, Any] | None) -> set[str]:
+    """Return every independent power carried by one item."""
+    if not item:
+        return set()
+    return {
+        effect
+        for effect in (item.get("unique_effect", ""), item.get("enchant_effect", ""))
+        if effect
+    }
+
+
+def equipment_effects(equipment: dict[str, Any]) -> set[str]:
+    """Return unique and enchanted powers across equipped items."""
+    return set().union(*(item_effects(item) for item in equipment.values()))
+
+
 def upgrade_cost(item: dict[str, Any]) -> tuple[int, int]:
     """Return currency and shard costs for the next equipment upgrade."""
     level = int(item.get("upgrade", 0))
@@ -151,7 +169,8 @@ def item_detail(item: dict[str, Any]) -> str:
         if details:
             lines.append(f"🧩 **Set: {details['name']}**")
     if item.get("enchant"):
-        lines.append(f"🔯 Enchantment: **{item['enchant']}**")
+        description = item.get("enchant_description", "An additional sigil power is active.")
+        lines.append(f"🔯 Enchantment: **{item['enchant']}** — {description}")
     if item.get("bound"):
         lines.append("🔒 Bound")
     if item.get("cursed"):

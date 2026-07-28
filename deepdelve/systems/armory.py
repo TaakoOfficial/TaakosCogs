@@ -56,8 +56,9 @@ def item_power(item: dict[str, Any]) -> int:
     """Estimate comparable item power without treating utility as free raw stats."""
     raw = int(item.get("attack", 0)) * 4 + int(item.get("defense", 0)) * 4 + int(item.get("hp", 0)) + int(item.get("luck", 0)) * 3
     effect = 8 + int(item.get("floor", 1)) // 2 if item.get("unique_effect") else 0
+    enchant = 4 + int(item.get("floor", 1)) // 4 if item.get("enchant_effect") else 0
     set_value = 6 + int(item.get("floor", 1)) // 3 if item.get("set") else 0
-    return max(1, raw + effect + set_value)
+    return max(1, raw + effect + enchant + set_value)
 
 
 def comparison_line(item: dict[str, Any], equipped: dict[str, Any] | None) -> str:

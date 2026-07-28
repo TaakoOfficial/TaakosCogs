@@ -8,6 +8,7 @@ from deepdelve.loot_content import CONSUMABLES, RECIPES, REGIONAL_BASES, STARTER
 from deepdelve.systems.armory import (
     boss_relic_for,
     create_starter_item,
+    item_power,
     should_auto_dismantle,
     use_consumable,
 )
@@ -117,3 +118,77 @@ def test_floor_mutators_are_deterministic_and_migration_is_safe() -> None:
     assert old["schema_version"] == PROFILE_SCHEMA_VERSION
     assert old["origin_complete"] is True
     assert old["stash"] == [] and old["bestiary"] == {}
+
+
+def test_legacy_enchantments_restore_native_identity_and_keep_enchant_power() -> None:
+    old = {
+        "created": True,
+        "inventory": [
+            {
+                "id": "origin",
+                "name": "Serpent Dirk",
+                "slot": "weapon",
+                "origin": True,
+                "floor": 1,
+                "attack": 3,
+                "enchant": "Ember Sigil",
+                "unique_effect": "burn",
+                "effect_description": "Critical hits may Burn.",
+            },
+        ],
+    }
+    migrate_profile(old)
+    item = old["inventory"][0]
+    assert item["unique_effect"] == "origin_dirk"
+    assert item["enchant_effect"] == "burn"
+    assert item_power(item) > item["attack"] * 4
+
+    legendary = {
+        "created": True,
+        "inventory": [
+            {
+                "name": "Crown of No Kingdom",
+                "slot": "armor",
+                "legendary": True,
+                "enchant": "Warden Sigil",
+                "unique_effect": "warding",
+                "effect_description": "Elite damage is reduced.",
+            },
+        ],
+    }
+    migrate_profile(legendary)
+    crown = legendary["inventory"][0]
+    assert crown["unique_effect"] == "crown"
+    assert crown["enchant_effect"] == "warding"
+
+
+def test_bestiary_migration_merges_affixed_variants_and_tracks_floors() -> None:
+    old = {
+        "created": True,
+        "floor": 12,
+        "bestiary": {
+            "Armored Cave Rat": {"name": "Armored Cave Rat", "kills": 3, "mastery": 0},
+            "creature:cave_rat": {
+                "name": "Cave Rat",
+                "kills": 4,
+                "mastery": 0,
+                "min_floor": 1,
+                "max_floor": 3,
+            },
+        },
+    }
+    migrate_profile(old)
+    entry = old["bestiary"]["creature:cave_rat"]
+    assert entry["kills"] == 7
+    assert entry["affixes"]["Armored"] == 3
+    assert entry["min_floor"] == 1 and entry["max_floor"] == 12
+
+
+def test_migration_backfills_permanent_set_discoveries() -> None:
+    old = {
+        "created": True,
+        "inventory": [{"name": "Citadel Blade", "slot": "weapon", "set": "citadel"}],
+        "stash": [{"name": "Citadel Plate", "slot": "armor", "set": "citadel"}],
+    }
+    migrate_profile(old)
+    assert set(old["set_discoveries"]["citadel"]) == {"weapon", "armor"}

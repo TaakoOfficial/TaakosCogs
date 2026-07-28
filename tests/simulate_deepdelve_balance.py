@@ -6,6 +6,7 @@ Run directly from the repository root:
 
 from __future__ import annotations
 
+import argparse
 import random
 import sys
 from pathlib import Path
@@ -14,12 +15,19 @@ from statistics import mean
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from deepdelve.advanced_content import ABILITIES
-from deepdelve.content import GAME_CLASSES, RARITIES, boss_for_floor, enemy_for_floor
+from deepdelve.content import AFFIXES, GAME_CLASSES, RARITIES, boss_for_floor, enemy_for_floor
 from deepdelve.deepdelve import DeepDelve
 from deepdelve.systems.combat import ensure_enemy_intent
+from deepdelve.systems.dungeon_depth import apply_miniboss
 
 LEVELS = {5: 4, 10: 7, 20: 16, 30: 24, 40: 31}
 SUBCLASSES = {"vanguard": "guardian", "shadow": "assassin", "arcanist": "elementalist"}
+TURN_BANDS = {
+    "normal": (3, 6),
+    "elite": (5, 9),
+    "miniboss": (7, 12),
+    "boss": (10, 16),
+}
 
 
 def _equipment(floor: int) -> dict:
@@ -151,13 +159,32 @@ def _choose_ability(profile: dict, enemy: dict) -> dict | None:
     return None
 
 
-def battle(class_key: str, floor: int, boss: bool) -> tuple[bool, int, float, int]:
+def enemy_for_kind(floor: int, kind: str) -> dict:
+    """Create each encounter tier without relying on the live elite roll chance."""
+    if kind == "boss":
+        return boss_for_floor(floor)
+    enemy = enemy_for_floor(floor)
+    if kind == "elite":
+        affix = dict(random.choice(AFFIXES))
+        enemy["name"] = f"{affix['name']} {enemy['name']}"
+        enemy["affix"] = affix
+        for field in ("hp", "attack", "defense"):
+            endurance = max(1.25, 1.5 - max(0, floor - 1) * 0.01) if field == "hp" else 1.0
+            enemy[field] = max(1, round(enemy[field] * affix[field] * endurance))
+        enemy["max_hp"] = enemy["hp"]
+    elif kind == "miniboss":
+        enemy = apply_miniboss(enemy, floor)
+    return enemy
+
+
+def fight(profile: dict, enemy: dict) -> tuple[bool, int, float, int]:
+    """Resolve one fight while preserving expedition health, mana, and potions."""
     cog = DeepDelve.__new__(DeepDelve)
-    profile = profile_for(class_key, floor)
-    enemy = ensure_enemy_intent(boss_for_floor(floor) if boss else enemy_for_floor(floor))
+    enemy = ensure_enemy_intent(enemy)
+    profile["combat_flags"] = {}
     turns = 0
     starting_potions = profile["potions"]
-    while profile["hp"] > 0 and enemy["hp"] > 0 and turns < 50:
+    while profile["hp"] > 0 and enemy["hp"] > 0 and turns < 60:
         turns += 1
         stats = cog._stats(profile)
         for condition in ("poison", "burn"):
@@ -172,7 +199,7 @@ def battle(class_key: str, floor: int, boss: bool) -> tuple[bool, int, float, in
         if enemy["hp"] <= 0:
             break
         cast_key = ""
-        if profile["hp"] < stats["max_hp"] * 0.32 and profile["potions"]:
+        if profile["hp"] < stats["max_hp"] * 0.45 and profile["potions"]:
             profile["potions"] -= 1
             profile["hp"] = min(stats["max_hp"], profile["hp"] + 35 + profile["level"] * 5)
         elif ability := _choose_ability(profile, enemy):
@@ -196,21 +223,73 @@ def battle(class_key: str, floor: int, boss: bool) -> tuple[bool, int, float, in
     )
 
 
-def run(samples: int = 10) -> None:
+def battle(class_key: str, floor: int, kind: str) -> tuple[bool, int, float, int]:
+    return fight(profile_for(class_key, floor), enemy_for_kind(floor, kind))
+
+
+def expedition(class_key: str, floor: int) -> tuple[bool, int, float, int, int]:
+    """Run a five-encounter boss-floor gauntlet with real resource attrition."""
+    profile = profile_for(class_key, floor)
+    profile["potions"] = 5
+    total_turns = 0
+    cleared = 0
+    starting_potions = profile["potions"]
+    for kind in ("normal", "normal", "elite", "miniboss", "boss"):
+        won, turns, _hp, _potions = fight(profile, enemy_for_kind(floor, kind))
+        total_turns += turns
+        if not won:
+            break
+        cleared += 1
+        if kind != "boss":
+            stats = DeepDelve._stats(DeepDelve.__new__(DeepDelve), profile)
+            profile["mana"] = min(
+                stats["max_mana"],
+                profile["mana"] + max(1, round(stats["max_mana"] * 0.04)),
+            )
+    stats = DeepDelve._stats(DeepDelve.__new__(DeepDelve), profile)
+    return (
+        cleared == 5,
+        cleared,
+        max(0, profile["hp"]) / stats["max_hp"] * 100,
+        starting_potions - profile["potions"],
+        total_turns,
+    )
+
+
+def run(samples: int = 3) -> None:
     random.seed(7331)
-    print("floor class     fight  win% turns hp% pots")
+    print("SINGLE ENCOUNTERS")
+    print("floor class     fight     win% turns target  hp% pots")
     for floor in LEVELS:
         for class_key in GAME_CLASSES:
-            for boss in (False, True):
-                results = [battle(class_key, floor, boss) for _ in range(samples)]
+            for kind in ("normal", "elite", "miniboss", "boss"):
+                results = [battle(class_key, floor, kind) for _ in range(samples)]
+                average_turns = mean(row[1] for row in results)
+                low, high = TURN_BANDS[kind]
+                target = "OK" if low <= average_turns <= high else "FAST" if average_turns < low else "SLOW"
                 print(
-                    f"{floor:>5} {class_key:<9} {'boss' if boss else 'normal':<6} "
+                    f"{floor:>5} {class_key:<9} {kind:<8} "
                     f"{mean(row[0] for row in results) * 100:>5.1f} "
-                    f"{mean(row[1] for row in results):>5.2f} "
+                    f"{average_turns:>5.2f} {target:>6} "
                     f"{mean(row[2] for row in results):>5.1f} "
                     f"{mean(row[3] for row in results):>4.2f}",
                 )
+    print("\nPREPARED FIVE-COMBAT ATTRITION STRESS TEST")
+    print("floor class      clear% rooms  hp% pots turns")
+    for floor in LEVELS:
+        for class_key in GAME_CLASSES:
+            results = [expedition(class_key, floor) for _ in range(samples)]
+            print(
+                f"{floor:>5} {class_key:<9} "
+                f"{mean(row[0] for row in results) * 100:>6.1f} "
+                f"{mean(row[1] for row in results):>5.2f} "
+                f"{mean(row[2] for row in results):>4.1f} "
+                f"{mean(row[3] for row in results):>4.2f} "
+                f"{mean(row[4] for row in results):>5.1f}",
+            )
 
 
 if __name__ == "__main__":
-    run()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--samples", type=int, default=3, help="Trials per class, floor, and encounter.")
+    run(max(1, parser.parse_args().samples))

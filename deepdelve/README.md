@@ -87,6 +87,7 @@ a background, moral alignment, and one of three class-specific origin weapons.
 - Five attributes, class talent trees, nine subclasses, backgrounds, alignments, titles, scars, and blessings.
 - 45 authored regional equipment bases with prefixes, suffixes, subclass sets, curses, and identification.
 - 21 source-matched boss relics, protected favorites, loot comparison, drop pity, and collection tracking.
+- Permanent legendary and set records, set-drop pity, duplicate fragments, and missing-piece forging.
 - Fifteen tactical consumables, five rumor-unlocked forge patterns, a 60-slot vault, and three loadouts.
 - Five deterministic floor conditions, named minibosses, hidden rooms, impossible camps, and personal hunts.
 - Common, Uncommon, Rare, Epic, and Legendary equipment.
@@ -181,7 +182,9 @@ delver changes, their character-sheet color, aura description, NPC dialogue, shr
 wanderer encounters, available titles, and certain dungeon solutions change with
 them.
 
-Established characters unlock one once-per-battle Conviction power:
+Established characters unlock a Conviction power. Using it creates Conviction
+Fatigue; two later victories recharge it, while bosses, camps, the inn, and Ascension
+clear the fatigue immediately:
 
 - Radiant: Lantern Grace heals, cleanses, and protects.
 - Uncommitted: Measured Gambit rewrites an enemy intention and restores resources.
@@ -244,6 +247,12 @@ The expanded armory supports protected favorites, rarity-based auto-dismantling,
 60-slot Lastlight vault, three named equipment loadouts, collection summaries, and
 five guaranteed-effect patterns learned by resolving regional rumors. Origin weapons
 are bound keepsakes with a +3 ceiling and cannot be sold or dismantled.
+
+Native relic powers and enchantment powers coexist, so enchanting never erases an
+origin, pattern, suffix, boss, or legendary identity. Pattern forging always produces
+its advertised power. Discovering two slots of a set and converting a weaker duplicate
+into a fragment unlocks deterministic missing-piece forging with
+`[p]deepdelve item completeset <set>`.
 
 ## Multiplayer and Endgame
 

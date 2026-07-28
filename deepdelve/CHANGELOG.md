@@ -2,6 +2,24 @@
 
 All notable changes to `deepdelve` are documented here.
 
+## 4.3.0
+
+- Split native item powers from enchantment powers and added schema-v7 profile and
+  schema-v5 guild migrations for inventories, equipment, stashes, auctions, and guild vaults.
+- Made forge patterns deterministic and protected origin, legendary, boss, set, and
+  bound identities from destructive rerolls.
+- Added permanent legendary/set records, set-drop pity, weaker-duplicate conversion,
+  set fragments, and deterministic missing-piece forging.
+- Added two-victory Conviction Fatigue with boss, camp, inn, and Ascension recovery.
+- Normalized bestiary entries by authored identity while retaining elite variants,
+  encounter depth ranges, and separate boss/miniboss sections.
+- Extended normal, elite, miniboss, and early-boss durability and added modest
+  post-victory mana recovery for tactical pacing without removing resource pressure.
+- Improved item inspection, collections, loadouts, and morality panels with permanent
+  discoveries, real item names, enchantment details, and visible fatigue state.
+- Expanded the balance harness with normal, elite, miniboss, and boss target bands
+  plus a prepared five-combat attrition stress test across milestone floors and every class.
+
 ## 4.2.0
 
 - Replaced static good-and-evil labeling with Living Morality from −100 Umbral to

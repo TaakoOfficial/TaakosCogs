@@ -26,9 +26,11 @@ def apply_miniboss(enemy: dict[str, Any], floor: int, rng: random.Random = rando
     definition = MINIBOSSES[region_index(floor)]
     enemy["original_name"] = enemy["name"]
     enemy["name"] = definition["name"]
+    enemy["base_name"] = definition["name"]
     enemy["emoji"] = definition["emoji"]
     for stat in ("hp", "attack", "defense"):
-        enemy[stat] = max(1, round(int(enemy[stat]) * float(definition[stat])))
+        endurance = max(1.18, 1.45 - max(0, floor - 1) * 0.008) if stat == "hp" else 1.0
+        enemy[stat] = max(1, round(int(enemy[stat]) * float(definition[stat]) * endurance))
     enemy["max_hp"] = enemy["hp"]
     enemy["gold"] = round(int(enemy["gold"]) * 2)
     enemy["xp"] = round(int(enemy["xp"]) * 1.8)
@@ -40,11 +42,27 @@ def apply_miniboss(enemy: dict[str, Any], floor: int, rng: random.Random = rando
 
 def record_bestiary_kill(profile: dict[str, Any], enemy: dict[str, Any]) -> list[str]:
     """Record kills and announce non-power mastery milestones."""
-    key = str(enemy.get("codex_key") or enemy.get("original_name") or enemy["name"]).lower()
+    key = str(enemy.get("codex_key") or enemy.get("base_name") or enemy.get("original_name") or enemy["name"]).lower()
+    display_name = enemy.get("base_name") or enemy.get("original_name") or enemy["name"]
     entry = profile.setdefault("bestiary", {}).setdefault(
         key,
-        {"name": enemy.get("original_name", enemy["name"]), "kills": 0, "mastery": 0},
+        {
+            "name": display_name,
+            "kills": 0,
+            "mastery": 0,
+            "affixes": {},
+            "min_floor": int(enemy.get("floor", profile.get("floor", 1))),
+            "max_floor": int(enemy.get("floor", profile.get("floor", 1))),
+            "kind": "boss" if enemy.get("boss") else "miniboss" if enemy.get("miniboss") else "creature",
+        },
     )
+    entry.setdefault("affixes", {})
+    floor = int(enemy.get("floor", profile.get("floor", 1)))
+    entry["min_floor"] = min(floor, int(entry.get("min_floor", floor)))
+    entry["max_floor"] = max(floor, int(entry.get("max_floor", floor)))
+    affix_name = (enemy.get("affix") or {}).get("name")
+    if affix_name:
+        entry["affixes"][affix_name] = int(entry["affixes"].get(affix_name, 0)) + 1
     entry["kills"] = int(entry.get("kills", 0)) + 1
     milestones = (5, 15, 30)
     lines = []
