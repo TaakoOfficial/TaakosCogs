@@ -2,6 +2,13 @@
 
 All notable changes to `deepdelve` are documented here.
 
+## 4.3.2
+
+- Replaced the response-timing heuristic with an exact message-bound view-registry
+  check, preventing restart recovery from racing any live button or selector.
+- Added a narrow safeguard for Discord's harmless `InteractionResponded` exception
+  without suppressing genuine component failures.
+
 ## 4.3.1
 
 - Fixed every live component interaction being dispatched a second time through

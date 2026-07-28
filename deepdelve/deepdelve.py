@@ -197,6 +197,9 @@ class OwnedView(discord.ui.View):
         item: discord.ui.Item[Any],
     ) -> None:
         """Acknowledge component failures so Discord does not show a silent timeout."""
+        if isinstance(error, discord.InteractionResponded):
+            LOGGER.debug("Ignored duplicate DeepDelve response for %s", type(item).__name__)
+            return
         LOGGER.error(
             "DeepDelve view callback failed for %s",
             type(item).__name__,
@@ -787,7 +790,7 @@ class DeepDelve(DashboardIntegration, commands.Cog):
     """An old-school persistent text RPG built for Discord."""
 
     __author__ = "Taako"
-    __version__ = "4.3.1"
+    __version__ = "4.3.2"
 
     def __init__(self, bot: Red) -> None:
         self.bot = bot

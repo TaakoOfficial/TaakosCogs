@@ -83,13 +83,22 @@ def test_dynamic_component_templates_reconstruct_routes() -> None:
     asyncio.run(check())
 
 
-def test_dynamic_recovery_yields_to_a_live_view_that_already_responded() -> None:
+def test_dynamic_recovery_yields_to_the_exact_registered_live_view() -> None:
     async def check() -> None:
         dispatch = AsyncMock()
         cog = SimpleNamespace(_dispatch_persistent_button=dispatch)
+        custom_id = "deepdelve:b:123456789:adventure:explore"
+        live_items = {(2, custom_id): object()}
         interaction = SimpleNamespace(
             response=SimpleNamespace(is_done=lambda: True),
-            client=SimpleNamespace(get_cog=lambda _name: cog),
+            client=SimpleNamespace(
+                get_cog=lambda _name: cog,
+                _connection=SimpleNamespace(
+                    _view_store=SimpleNamespace(_views={42: live_items}),
+                ),
+            ),
+            message=SimpleNamespace(id=42, interaction_metadata=None),
+            data={"component_type": 2, "custom_id": custom_id},
         )
         item = next(iter(_views()[0].children))
         dynamic = DeepDelveDynamicButton(item, 123456789, "adventure:explore")
@@ -105,7 +114,17 @@ def test_dynamic_recovery_dispatches_an_orphaned_message_after_handoff() -> None
         cog = SimpleNamespace(_dispatch_persistent_button=dispatch)
         interaction = SimpleNamespace(
             response=SimpleNamespace(is_done=lambda: False),
-            client=SimpleNamespace(get_cog=lambda _name: cog),
+            client=SimpleNamespace(
+                get_cog=lambda _name: cog,
+                _connection=SimpleNamespace(
+                    _view_store=SimpleNamespace(_views={}),
+                ),
+            ),
+            message=SimpleNamespace(id=42, interaction_metadata=None),
+            data={
+                "component_type": 2,
+                "custom_id": "deepdelve:b:123456789:adventure:explore",
+            },
         )
         item = next(iter(_views()[0].children))
         dynamic = DeepDelveDynamicButton(item, 123456789, "adventure:explore")

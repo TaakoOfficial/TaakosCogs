@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import re
 from typing import TYPE_CHECKING, Any
@@ -15,7 +14,6 @@ if TYPE_CHECKING:
 BUTTON_TEMPLATE = re.compile(r"deepdelve:b:(?P<user_id>[0-9]+):(?P<route>[a-z0-9_:-]+)")
 SELECT_TEMPLATE = re.compile(r"deepdelve:s:(?P<user_id>[0-9]+):(?P<route>[a-z0-9_:-]+)")
 LOGGER = logging.getLogger("red.taakoscogs.deepdelve")
-LIVE_VIEW_HANDOFF_SECONDS = 0.1
 
 
 def persistent_custom_id(kind: str, user_id: int, route: str) -> str:
@@ -35,16 +33,28 @@ def _resolve_cog(interaction: discord.Interaction) -> DeepDelve | None:
     return cog if cog is not None else None
 
 
-async def _handled_by_live_view(interaction: discord.Interaction) -> bool:
-    """Give a message-bound view first refusal before using restart recovery.
+def _handled_by_live_view(interaction: discord.Interaction) -> bool:
+    """Return whether this exact message has a stateful component registered."""
+    message = interaction.message
+    if message is None:
+        return False
+    connection = getattr(interaction.client, "_connection", None)
+    store = getattr(connection, "_view_store", None)
+    views = getattr(store, "_views", {})
+    data = interaction.data or {}
+    component_type = int(data.get("component_type", 0))
+    custom_id = str(data.get("custom_id", ""))
+    key = (component_type, custom_id)
+    entity_ids = [message.id]
+    metadata = getattr(message, "interaction_metadata", None)
+    if metadata is not None:
+        entity_ids.append(metadata.id)
+    return any(key in views.get(entity_id, {}) for entity_id in entity_ids)
 
-    Discord.py schedules matching dynamic items even when the same message still has
-    a live, stateful view registered. That would otherwise execute every click twice.
-    Live callbacks acknowledge immediately; restored messages remain unanswered and
-    fall through to the dynamic route after this short handoff.
-    """
-    await asyncio.sleep(LIVE_VIEW_HANDOFF_SECONDS)
-    return interaction.response.is_done()
+
+def _duplicate_response(error: Exception) -> bool:
+    """Identify the harmless second-response exception from duplicate dispatch."""
+    return isinstance(error, discord.InteractionResponded)
 
 
 class DeepDelveDynamicButton(
@@ -80,7 +90,7 @@ class DeepDelveDynamicButton(
         return False
 
     async def callback(self, interaction: discord.Interaction) -> None:
-        if await _handled_by_live_view(interaction):
+        if _handled_by_live_view(interaction):
             return
         cog = _resolve_cog(interaction)
         if cog is None:
@@ -94,10 +104,11 @@ class DeepDelveDynamicButton(
                 self.route,
                 exc_info=(type(error), error, error.__traceback__),
             )
-            await _reject(
-                interaction,
-                "DeepDelve hit an unexpected snag. Your progress is safe; reopen the current screen and try again.",
-            )
+            if not _duplicate_response(error):
+                await _reject(
+                    interaction,
+                    "DeepDelve hit an unexpected snag. Your progress is safe; reopen the current screen and try again.",
+                )
 
 
 class DeepDelveDynamicSelect(
@@ -133,7 +144,7 @@ class DeepDelveDynamicSelect(
         return False
 
     async def callback(self, interaction: discord.Interaction) -> None:
-        if await _handled_by_live_view(interaction):
+        if _handled_by_live_view(interaction):
             return
         cog = _resolve_cog(interaction)
         if cog is None:
@@ -147,7 +158,8 @@ class DeepDelveDynamicSelect(
                 self.route,
                 exc_info=(type(error), error, error.__traceback__),
             )
-            await _reject(
-                interaction,
-                "DeepDelve hit an unexpected snag. Your progress is safe; reopen the current screen and try again.",
-            )
+            if not _duplicate_response(error):
+                await _reject(
+                    interaction,
+                    "DeepDelve hit an unexpected snag. Your progress is safe; reopen the current screen and try again.",
+                )
