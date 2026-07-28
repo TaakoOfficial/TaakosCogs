@@ -55,6 +55,7 @@ To update installed cogs:
 | [randomweather](./randomweather)       | RP atmosphere            | Seasonal weather simulation, extreme weather events, automatic updates, role notifications, timezone-aware generation.                      |
 | [rpcalander](./rpcalander)             | RP timekeeping           | Daily RP calendar posts, custom timelines, moon phases, blood moon events, separate moon channels.                                          |
 | [fable](./fable)                       | RP worldbuilding         | Character profiles, relationships, locations, timelines, visualizations, lore tracking, export tools.                                       |
+| [deepdelve](./deepdelve)               | Full-scale text RPG      | Tactical combat, builds, subclasses, advanced loot, NPC stories, parties, auctions, guilds, arenas, raids, rifts, seasons, and Red bank support. |
 | [paranoia](./paranoia)                 | Social games             | Discord version of paranoia with secret DM questions, custom questions, status tracking, and Tupperbox support.                             |
 | [flipper](./flipper)                   | Simple fun               | Lightweight coin flip command with embeds.                                                                                                  |
 | [whmcs](./whmcs)                       | Hosting/business support | WHMCS clients, billing, support tickets, role permissions, API configuration, and Discord ticket channels.                                  |
@@ -97,6 +98,19 @@ Install these for immersive RP communities:
 - `randomweather` adds seasonal weather and extreme events.
 - `rpcalander` keeps your in-world calendar and moons moving.
 - `paranoia` gives players an easy social game between scenes.
+
+### Games and Community Fun
+
+Install these for interactive events, persistent progression, and party games:
+
+```text
+[p]cog install taakoscogs deepdelve paranoia flipper giveaway
+```
+
+- `deepdelve` is a full-scale old-school text RPG with tactical combat, character builds, advanced itemization, NPC stories, parties, auctions, player guilds, arena wagers, server raids, rifts, seasons, Hardcore mode, Ascension, and optional Red bank integration.
+- `paranoia` is a social party game built around secret questions and public reveals.
+- `flipper` provides quick coin flips.
+- `giveaway` runs timed community giveaways and rerolls.
 
 ### Server Setup and Migration
 
@@ -186,7 +200,8 @@ Each cog includes its own data statement in `info.json`. In short:
 - `toolz` stores per-guild role-message settings such as role IDs, channel IDs, and message templates.
 - `rolemanager` stores role configuration, role-policy and role-change-rule settings, role costs, reaction/button/select message/channel IDs, emoji keys, temporary-role expiry timestamps, and Discord user IDs for sticky and temporary role assignment.
 - `captcha` stores panel message/channel IDs, role IDs, and button labels; verification challenges are transient in memory.
-- `YALC`, `applications`, `welcome`, `invitetracker`, `suggestionbox`, `repboard`, `reviewhub`, `tickethub`, `tempvoice`, `giveaway`, `fivemstatus`, `fable`, `paranoia`, `rpcalander`, and `whmcs` store the settings or records needed for their features.
+- `YALC`, `applications`, `welcome`, `invitetracker`, `suggestionbox`, `repboard`, `reviewhub`, `tickethub`, `tempvoice`, `giveaway`, `fivemstatus`, `fable`, `deepdelve`, `paranoia`, `rpcalander`, and `whmcs` store the settings or records needed for their features.
+- `deepdelve` stores persistent characters, builds, inventory, social memberships and records, multiplayer activity, progression, encounters, stories, endgame and seasonal data, and Discord user IDs. In bank mode it reads and changes Red bank balances for game transactions.
 - `invitetracker` stores invite cache metadata, inviter stats, tracked member join-source records, Discord user IDs, invite codes, timestamps, fake-join flags, and unknown join counts.
 - `suggestionbox` stores suggestion text, author IDs, voter IDs, staff reviewer IDs, message/channel/thread IDs, votes, statuses, staff notes, review reasons, and timestamps.
 - `repboard` stores reputation settings, giver/receiver/moderator IDs, reasons, message/channel IDs, timestamps, active/removed state, cooldown metadata, daily limit metadata, and aggregate reputation statistics.
@@ -224,6 +239,7 @@ Start with each cog's README:
 - [randomweather README](./randomweather/README.md)
 - [rpcalander README](./rpcalander/README.md)
 - [fable README](./fable/README.md)
+- [deepdelve README](./deepdelve/README.md)
 - [paranoia README](./paranoia/README.md)
 - [flipper README](./flipper/README.md)
 - [whmcs README](./whmcs/README.md)

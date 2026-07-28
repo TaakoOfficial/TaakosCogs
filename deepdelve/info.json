@@ -1,0 +1,37 @@
+{
+    "author": [
+        "Taako"
+    ],
+    "name": "deepdelve",
+    "short": "A persistent, button-driven old-school dungeon crawler.",
+    "description": "A full-scale Discord text RPG with tactical telegraphed combat, abilities, attributes, talents, subclasses, backgrounds, advanced loot, sets, legendaries, crafting, NPC stories, parties, auctions, player guilds, arena wagers, world bosses, rifts, daily challenges, Hardcore mode, Ascension, seasons, and optional Red bank integration.",
+    "end_user_data_statement": "This cog stores per-server Discord user IDs and persistent RPG profiles including character identity and background, attributes, talents, subclass, statistics, inventory, equipment, codex, currency cache, progression, encounters, choices, conditions, materials, contracts, reputation, NPC story progress, lore, journal entries, titles, scars, blessings, achievements, social memberships, arena records, endgame and seasonal progress. Guild configuration may also store user IDs in parties, auctions, player guilds, shared vaults, arena challenges, world-boss contributions, and server-first records. When Red bank integration is enabled, the cog reads and changes the user's Red bank balance for game transactions. This data is used only for DeepDelve gameplay and is covered by Red's data export and deletion tools.",
+    "install_msg": "DeepDelve awaits! Load the cog, then use `[p]deepdelve create` or `/deepdelve create` to begin. Administrators can use `[p]deepdelve set` to configure the game.",
+    "tags": [
+        "game",
+        "rpg",
+        "dungeon",
+        "adventure",
+        "combat",
+        "loot",
+        "economy",
+        "crafting",
+        "lore",
+        "multiplayer",
+        "auction",
+        "seasons",
+        "hardcore",
+        "buttons",
+        "leaderboard"
+    ],
+    "requirements": [],
+    "version": "3.0.0",
+    "hidden": false,
+    "min_bot_version": "3.5.0",
+    "min_python_version": [
+        3,
+        9,
+        0
+    ],
+    "type": "COG"
+}

@@ -1,0 +1,4724 @@
+"""A persistent, button-driven dungeon crawler for Red-DiscordBot."""
+
+from __future__ import annotations
+
+import asyncio
+import contextlib
+import io
+import json
+import random
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
+
+import discord
+from redbot.core import Config, bank, commands
+from redbot.core.utils.chat_formatting import humanize_list
+
+from .advanced_content import (
+    BACKGROUNDS,
+    BLESSINGS,
+    NPCS,
+    SCARS,
+    SUBCLASSES,
+    TALENT_TREES,
+    TITLES,
+)
+from .content import (
+    ACHIEVEMENTS,
+    AFFIXES,
+    CHOICES,
+    GAME_CLASSES,
+    LORE_FRAGMENTS,
+    MATERIALS,
+    RARITIES,
+    apply_affix,
+    boss_for_floor,
+    enemy_for_floor,
+    generate_item,
+    item_stat_line,
+    region_for_floor,
+    xp_for_level,
+)
+from .dashboard_integration import DashboardIntegration
+from .systems import (
+    apply_advanced_itemization,
+    arena_power,
+    available_abilities,
+    current_season,
+    daily_dungeon,
+    dismantle_rewards,
+    ensure_enemy_intent,
+    equipment_set_bonuses,
+    guild_perks,
+    intent_description,
+    item_detail,
+    npc_progress,
+    party_bonus,
+    progression_bonuses,
+    refresh_titles,
+    roll_enemy_intent,
+    short_code,
+    subclass_options,
+    upgrade_cost,
+)
+from .systems.progression import talent_definition
+
+if TYPE_CHECKING:
+    from redbot.core.bot import Red
+
+EMBED_COLOR = 0x6C3483
+SUCCESS_COLOR = 0x2ECC71
+DANGER_COLOR = 0xC0392B
+GOLD_COLOR = 0xF1C40F
+
+
+def progress_bar(current: int, maximum: int, length: int = 10) -> str:
+    """Render a compact, safe progress bar."""
+    maximum = max(1, maximum)
+    filled = max(0, min(length, round(length * max(0, current) / maximum)))
+    return "█" * filled + "░" * (length - filled)
+
+
+class OwnedView(discord.ui.View):
+    """A view that only its owning player may use."""
+
+    def __init__(self, cog: DeepDelve, user_id: int, *, timeout: float = 180) -> None:
+        super().__init__(timeout=timeout)
+        self.cog = cog
+        self.user_id = user_id
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id == self.user_id:
+            return True
+        await interaction.response.send_message(
+            "This adventure belongs to another delver. Use `/deepdelve adventure` to open yours.",
+            ephemeral=True,
+        )
+        return False
+
+    async def on_timeout(self) -> None:
+        for child in self.children:
+            child.disabled = True
+
+
+class ClassSelect(discord.ui.Select):
+    """Character class selector."""
+
+    def __init__(self) -> None:
+        options = [
+            discord.SelectOption(
+                label=details["name"],
+                value=key,
+                emoji=details["emoji"],
+                description=details["description"][:100],
+            )
+            for key, details in GAME_CLASSES.items()
+        ]
+        super().__init__(placeholder="Choose your path…", options=options)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        view = self.view
+        if not isinstance(view, ClassSelectView) or not interaction.guild:
+            return
+        class_key = self.values[0]
+        await interaction.response.defer()
+        created = await view.cog._create_character(
+            interaction.guild.id,
+            interaction.user.id,
+            interaction.user.display_name,
+            class_key,
+        )
+        if not created:
+            await interaction.followup.send(
+                "You already have a character. Use `/deepdelve retire` before starting over.",
+                ephemeral=True,
+            )
+            return
+        profile = await view.cog._get_profile(interaction.guild.id, interaction.user.id)
+        embed = view.cog._profile_embed(interaction.user, profile)
+        embed.title = "⚔️ Your legend begins"
+        await interaction.edit_original_response(
+            embed=embed,
+            view=AdventureView(view.cog, interaction.user.id),
+        )
+
+
+class ClassSelectView(OwnedView):
+    """View used during character creation."""
+
+    def __init__(self, cog: DeepDelve, user_id: int) -> None:
+        super().__init__(cog, user_id, timeout=300)
+        self.add_item(ClassSelect())
+
+
+class AdventureView(OwnedView):
+    """Primary exploration controls."""
+
+    @discord.ui.button(label="Explore", emoji="🧭", style=discord.ButtonStyle.primary)
+    async def explore(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        await self.cog._handle_explore_interaction(interaction)
+
+    @discord.ui.button(label="Character", emoji="🧑‍🚀", style=discord.ButtonStyle.secondary)
+    async def character(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        if not interaction.guild:
+            return
+        await interaction.response.defer()
+        profile = await self.cog._get_profile(interaction.guild.id, interaction.user.id)
+        await interaction.edit_original_response(
+            embed=self.cog._profile_embed(interaction.user, profile),
+            view=AdventureView(self.cog, self.user_id),
+        )
+
+    @discord.ui.button(label="Inventory", emoji="🎒", style=discord.ButtonStyle.secondary)
+    async def inventory(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        await self.cog._show_inventory_interaction(interaction)
+
+    @discord.ui.button(label="Town", emoji="🏘️", style=discord.ButtonStyle.success)
+    async def town(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        if not interaction.guild:
+            return
+        await interaction.response.defer()
+        profile = await self.cog._get_profile(interaction.guild.id, interaction.user.id)
+        await interaction.edit_original_response(
+            embed=self.cog._town_embed(profile),
+            view=TownView(self.cog, self.user_id),
+        )
+
+
+class AbilitySelect(discord.ui.Select):
+    """Select one of the character's unlocked combat abilities."""
+
+    def __init__(self, profile: dict[str, Any]) -> None:
+        cooldowns = profile.get("skill_cooldowns", {})
+        options = []
+        for ability in available_abilities(profile):
+            remaining = int(cooldowns.get(ability["key"], 0))
+            suffix = f" • Cooldown {remaining}" if remaining else ""
+            options.append(
+                discord.SelectOption(
+                    label=ability["name"],
+                    value=ability["key"],
+                    emoji=ability["emoji"],
+                    description=(f"{ability['mana']} mana • {ability['description']}{suffix}")[:100],
+                ),
+            )
+        super().__init__(placeholder="Choose an ability…", options=options, row=0)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        view = self.view
+        if isinstance(view, CombatView):
+            await view.cog._combat_interaction(interaction, f"ability:{self.values[0]}")
+
+
+class CombatView(OwnedView):
+    """Turn-based combat controls with an ability selector."""
+
+    def __init__(self, cog: DeepDelve, user_id: int, profile: dict[str, Any]) -> None:
+        super().__init__(cog, user_id)
+        self.add_item(AbilitySelect(profile))
+
+    @discord.ui.button(label="Attack", emoji="⚔️", style=discord.ButtonStyle.danger, row=1)
+    async def attack(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        await self.cog._combat_interaction(interaction, "attack")
+
+    @discord.ui.button(label="Defend", emoji="🛡️", style=discord.ButtonStyle.primary, row=1)
+    async def defend(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        await self.cog._combat_interaction(interaction, "defend")
+
+    @discord.ui.button(label="Potion", emoji="🧪", style=discord.ButtonStyle.success, row=1)
+    async def potion(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        await self.cog._combat_interaction(interaction, "potion")
+
+    @discord.ui.button(label="Flee", emoji="💨", style=discord.ButtonStyle.secondary, row=1)
+    async def flee(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        await self.cog._combat_interaction(interaction, "flee")
+
+
+class TownView(OwnedView):
+    """Town service controls."""
+
+    @discord.ui.button(label="Rest", emoji="🛏️", style=discord.ButtonStyle.success, row=0)
+    async def rest(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        await self.cog._town_interaction(interaction, "rest")
+
+    @discord.ui.button(label="Buy Potion", emoji="🧪", style=discord.ButtonStyle.primary, row=0)
+    async def potion(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        await self.cog._town_interaction(interaction, "potion")
+
+    @discord.ui.button(label="Meditate", emoji="🕯️", style=discord.ButtonStyle.primary, row=0)
+    async def meditate(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        await self.cog._town_interaction(interaction, "meditate")
+
+    @discord.ui.button(label="Contract", emoji="📜", style=discord.ButtonStyle.secondary, row=1)
+    async def contract(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        await self.cog._contract_interaction(interaction)
+
+    @discord.ui.button(label="Forge", emoji="⚒️", style=discord.ButtonStyle.secondary, row=1)
+    async def forge(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        await self.cog._show_crafting_interaction(interaction)
+
+    @discord.ui.button(label="Return", emoji="↩️", style=discord.ButtonStyle.secondary, row=1)
+    async def back(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        if not interaction.guild:
+            return
+        await interaction.response.defer()
+        profile = await self.cog._get_profile(interaction.guild.id, interaction.user.id)
+        await interaction.edit_original_response(
+            embed=self.cog._adventure_embed(profile),
+            view=AdventureView(self.cog, self.user_id),
+        )
+
+
+class ChoiceButton(discord.ui.Button):
+    """One consequence-bearing narrative choice."""
+
+    def __init__(self, action: str, label: str, emoji: str, row: int = 0) -> None:
+        super().__init__(
+            label=label,
+            emoji=emoji,
+            style=discord.ButtonStyle.primary if action != "leave" else discord.ButtonStyle.secondary,
+            custom_id=f"deepdelve:choice:{action}",
+            row=row,
+        )
+        self.action = action
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        view = self.view
+        if isinstance(view, ChoiceView):
+            await view.cog._choice_interaction(interaction, self.action)
+
+
+class ChoiceView(OwnedView):
+    """Dynamic controls for authored dungeon decisions."""
+
+    def __init__(self, cog: DeepDelve, user_id: int, choice: dict[str, Any]) -> None:
+        super().__init__(cog, user_id)
+        for action, label, emoji in choice.get("options", ()):
+            self.add_item(ChoiceButton(action, label, emoji))
+
+
+class CraftView(OwnedView):
+    """Lastlight forge controls."""
+
+    @discord.ui.button(label="Forge Weapon", emoji="⚔️", style=discord.ButtonStyle.danger)
+    async def weapon(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        await self.cog._craft_interaction(interaction, "weapon")
+
+    @discord.ui.button(label="Forge Armor", emoji="🛡️", style=discord.ButtonStyle.primary)
+    async def armor(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        await self.cog._craft_interaction(interaction, "armor")
+
+    @discord.ui.button(label="Forge Charm", emoji="📿", style=discord.ButtonStyle.success)
+    async def charm(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        await self.cog._craft_interaction(interaction, "charm")
+
+    @discord.ui.button(label="Return", emoji="↩️", style=discord.ButtonStyle.secondary)
+    async def back(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        if not interaction.guild:
+            return
+        await interaction.response.defer()
+        profile = await self.cog._get_profile(interaction.guild.id, interaction.user.id)
+        await interaction.edit_original_response(
+            embed=self.cog._town_embed(profile),
+            view=TownView(self.cog, self.user_id),
+        )
+
+
+class InventorySelect(discord.ui.Select):
+    """Select an inventory item for management."""
+
+    def __init__(self, profile: dict[str, Any]) -> None:
+        inventory = profile.get("inventory", [])
+        options = []
+        for index, item in enumerate(inventory[:25], start=1):
+            rarity = RARITIES[int(item.get("rarity_index", 0))]
+            options.append(
+                discord.SelectOption(
+                    label=f"{index}. {item['name']}"[:100],
+                    value=str(item["id"]),
+                    emoji=rarity["emoji"],
+                    description=item_stat_line(item)[:100],
+                ),
+            )
+        if not options:
+            options.append(
+                discord.SelectOption(
+                    label="Your pack is empty",
+                    value="empty",
+                    emoji="🎒",
+                    description="Defeat enemies and explore treasure rooms to find gear.",
+                ),
+            )
+        super().__init__(placeholder="Select an item…", options=options)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        view = self.view
+        if not isinstance(view, InventoryView):
+            return
+        view.selected_id = self.values[0]
+        await interaction.response.defer()
+        if interaction.guild:
+            profile = await view.cog._get_profile(interaction.guild.id, interaction.user.id)
+            await interaction.edit_original_response(
+                embed=view.cog._inventory_embed(profile, view.selected_id),
+                view=view,
+            )
+
+
+class InventoryView(OwnedView):
+    """Equipment management controls."""
+
+    def __init__(self, cog: DeepDelve, user_id: int, profile: dict[str, Any]) -> None:
+        super().__init__(cog, user_id)
+        self.selected_id: str | None = None
+        self.add_item(InventorySelect(profile))
+
+    @discord.ui.button(label="Equip", emoji="🛡️", style=discord.ButtonStyle.primary, row=1)
+    async def equip(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        await self.cog._inventory_interaction(interaction, self.selected_id, "equip")
+
+    @discord.ui.button(label="Upgrade", emoji="⬆️", style=discord.ButtonStyle.success, row=1)
+    async def upgrade(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        await self.cog._inventory_interaction(interaction, self.selected_id, "upgrade")
+
+    @discord.ui.button(label="Dismantle", emoji="🔨", style=discord.ButtonStyle.danger, row=1)
+    async def dismantle(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        await self.cog._inventory_interaction(interaction, self.selected_id, "dismantle")
+
+    @discord.ui.button(label="Sell", emoji="🪙", style=discord.ButtonStyle.danger, row=1)
+    async def sell(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        await self.cog._inventory_interaction(interaction, self.selected_id, "sell")
+
+    @discord.ui.button(label="Enchant", emoji="🔯", style=discord.ButtonStyle.primary, row=2)
+    async def enchant(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        await self.cog._inventory_interaction(interaction, self.selected_id, "enchant")
+
+    @discord.ui.button(label="Reroll", emoji="🎲", style=discord.ButtonStyle.secondary, row=2)
+    async def reroll(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        await self.cog._inventory_interaction(interaction, self.selected_id, "reroll")
+
+    @discord.ui.button(label="Return", emoji="↩️", style=discord.ButtonStyle.secondary, row=2)
+    async def back(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        if not interaction.guild:
+            return
+        await interaction.response.defer()
+        profile = await self.cog._get_profile(interaction.guild.id, interaction.user.id)
+        await interaction.edit_original_response(
+            embed=self.cog._adventure_embed(profile),
+            view=AdventureView(self.cog, self.user_id),
+        )
+
+
+class RetireConfirmView(OwnedView):
+    """Destructive character retirement confirmation."""
+
+    @discord.ui.button(label="Retire Character", emoji="🪦", style=discord.ButtonStyle.danger)
+    async def confirm(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        if not interaction.guild:
+            return
+        await interaction.response.defer()
+        await self.cog.config.member_from_ids(interaction.guild.id, interaction.user.id).clear()
+        embed = discord.Embed(
+            title="🪦 The chronicle closes",
+            description=(
+                "Your character and all of their progress have been permanently retired.\n"
+                "Use `/deepdelve create` whenever you are ready to begin a new legend."
+            ),
+            color=DANGER_COLOR,
+        )
+        await interaction.edit_original_response(embed=embed, view=None)
+
+    @discord.ui.button(label="Keep Adventuring", style=discord.ButtonStyle.secondary)
+    async def cancel(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        if not interaction.guild:
+            return
+        await interaction.response.defer()
+        profile = await self.cog._get_profile(interaction.guild.id, interaction.user.id)
+        await interaction.edit_original_response(
+            embed=self.cog._profile_embed(interaction.user, profile),
+            view=AdventureView(self.cog, self.user_id),
+        )
+
+
+class WorldBossView(discord.ui.View):
+    """Server-wide raid control usable by every delver."""
+
+    def __init__(self, cog: DeepDelve) -> None:
+        super().__init__(timeout=300)
+        self.cog = cog
+
+    @discord.ui.button(label="Raid Strike", emoji="⚔️", style=discord.ButtonStyle.danger)
+    async def strike(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        await self.cog._world_boss_strike(interaction)
+
+    @discord.ui.button(label="Inspect", emoji="🔎", style=discord.ButtonStyle.secondary)
+    async def inspect(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        if not interaction.guild:
+            return
+        await interaction.response.defer()
+        record = await self.cog.config.guild(interaction.guild).world_boss()
+        await interaction.edit_original_response(
+            embed=self.cog._world_boss_embed(record),
+            view=WorldBossView(self.cog),
+        )
+
+
+class DeepDelve(DashboardIntegration, commands.Cog):
+    """An old-school persistent text RPG built for Discord."""
+
+    __author__ = "Taako"
+    __version__ = "3.0.0"
+
+    def __init__(self, bot: Red) -> None:
+        self.bot = bot
+        self.config = Config.get_conf(self, identifier=3847291056, force_registration=True)
+        self.config.register_guild(
+            enabled=True,
+            adventure_channel=0,
+            daily_turns=24,
+            economy_mode="internal",
+            parties={},
+            auctions={},
+            player_guilds={},
+            arenas={},
+            world_boss={},
+            world_boss_defeated_at="",
+            auction_counter=0,
+            server_firsts={},
+        )
+        self.config.register_member(
+            created=False,
+            character_name="",
+            class_key="",
+            level=1,
+            xp=0,
+            gold=40,
+            hp=0,
+            mana=0,
+            potions=2,
+            floor=1,
+            rooms_cleared=0,
+            turns=24,
+            turn_date="",
+            encounter={},
+            inventory=[],
+            equipment={"weapon": None, "armor": None, "charm": None},
+            kills=0,
+            deaths=0,
+            bosses=0,
+            deepest_floor=1,
+            achievements=[],
+            discovered=[],
+            status={},
+            choice={},
+            materials={"iron": 0, "silk": 0, "ember": 0, "essence": 0, "voidglass": 0},
+            lore=[],
+            journal=[],
+            active_contract={},
+            contracts_completed=0,
+            crafted=0,
+            reputation=0,
+            currency_name="gold",
+            background="",
+            alignment="Unwritten",
+            attributes={"might": 0, "finesse": 0, "insight": 0, "vitality": 0, "fortune": 0},
+            attribute_points=0,
+            talent_points=0,
+            talents={},
+            subclass="",
+            skill_cooldowns={},
+            combat_flags={},
+            titles=[],
+            current_title="",
+            scars=[],
+            blessings=[],
+            npc_reputation={"orra": 0, "mara": 0, "vesper": 0, "rook": 0},
+            story_flags=[],
+            item_codex=[],
+            arcane_shards=0,
+            party_id="",
+            party_bonus={},
+            party_role="",
+            player_guild_id="",
+            guild_bonus={},
+            arena_wins=0,
+            arena_losses=0,
+            prestige=0,
+            ascensions=0,
+            rifts_completed=0,
+            hardcore=False,
+            hardcore_dead=False,
+            season_id="",
+            season_points=0,
+            daily_date="",
+            daily_score=0,
+            rift_state={},
+            ability_casts=0,
+            free_revive=True,
+            pending_server_first="",
+            progression_migrated=False,
+            map_nodes=[],
+            created_at="",
+        )
+        self._locks: dict[tuple[int, int], asyncio.Lock] = {}
+        self._guild_locks: dict[int, asyncio.Lock] = {}
+        self._currency_names: dict[int, str] = {}
+
+    def _lock_for(self, guild_id: int, user_id: int) -> asyncio.Lock:
+        return self._locks.setdefault((guild_id, user_id), asyncio.Lock())
+
+    def _guild_lock_for(self, guild_id: int) -> asyncio.Lock:
+        return self._guild_locks.setdefault(guild_id, asyncio.Lock())
+
+    async def _sync_party_bonuses(self, guild_id: int, member_ids: list[int]) -> None:
+        bonus = party_bonus(len(member_ids))
+        for member_id in member_ids:
+            proxy = self.config.member_from_ids(guild_id, member_id)
+            profile = await proxy.all()
+            if profile.get("created"):
+                profile["party_bonus"] = bonus
+                await proxy.set(profile)
+
+    async def _sync_player_guild_bonuses(
+        self,
+        guild_id: int,
+        member_ids: list[int],
+        level: int,
+    ) -> None:
+        bonus = {
+            "currency_percent": 2 if level >= 2 else 0,
+            "luck": 2 if level >= 3 else 0,
+            "daily_turns": 1 if level >= 4 else 0,
+            "worldboss_percent": 5 if level >= 5 else 0,
+        }
+        for member_id in member_ids:
+            proxy = self.config.member_from_ids(guild_id, member_id)
+            profile = await proxy.all()
+            if profile.get("created"):
+                profile["guild_bonus"] = bonus
+                await proxy.set(profile)
+
+    async def _get_profile(self, guild_id: int, user_id: int, *, refresh: bool = True) -> dict[str, Any]:
+        proxy = self.config.member_from_ids(guild_id, user_id)
+        profile = await proxy.all()
+        guild = self.bot.get_guild(guild_id)
+        economy_mode = await self.config.guild_from_id(guild_id).economy_mode()
+        if economy_mode == "bank" and guild:
+            member = guild.get_member(user_id)
+            if member:
+                profile["gold"] = await bank.get_balance(member)
+                currency_name = await bank.get_currency_name(guild)
+                profile["currency_name"] = currency_name
+                self._currency_names[guild_id] = currency_name
+        else:
+            profile["currency_name"] = "gold"
+        if refresh and profile["created"]:
+            dirty = False
+            if not profile.get("progression_migrated"):
+                profile["attribute_points"] += 5 + max(0, profile["level"] - 1) * 2
+                profile["talent_points"] += 1 + max(0, profile["level"] - 1) // 2
+                profile["progression_migrated"] = True
+                dirty = True
+            season = current_season()
+            if profile.get("season_id") != season["id"]:
+                profile["season_id"] = season["id"]
+                profile["season_points"] = 0
+                dirty = True
+            today = datetime.now(timezone.utc).date().isoformat()
+            if profile.get("turn_date") != today:
+                daily_turns = await self.config.guild_from_id(guild_id).daily_turns()
+                profile["turns"] = daily_turns + int(
+                    profile.get("guild_bonus", {}).get("daily_turns", 0),
+                )
+                profile["turn_date"] = today
+                dirty = True
+            if dirty:
+                await proxy.set(profile)
+        return profile
+
+    async def _save_profile(
+        self,
+        guild_id: int,
+        user_id: int,
+        profile: dict[str, Any],
+        starting_gold: int,
+    ) -> dict[str, Any]:
+        """Persist a profile and apply its gold delta to Red's bank when enabled."""
+        refresh_titles(profile)
+        economy_mode = await self.config.guild_from_id(guild_id).economy_mode()
+        if economy_mode == "bank":
+            guild = self.bot.get_guild(guild_id)
+            member = guild.get_member(user_id) if guild else None
+            if member:
+                current = await bank.get_balance(member)
+                desired = max(0, current + int(profile["gold"]) - int(starting_gold))
+                maximum = await bank.get_max_balance(guild)
+                profile["gold"] = await bank.set_balance(member, min(desired, maximum))
+                self._currency_names[guild_id] = await bank.get_currency_name(guild)
+        await self.config.member_from_ids(guild_id, user_id).set(profile)
+        return profile
+
+    def _currency(self, guild_id: int | None = None) -> str:
+        if guild_id is None:
+            return "gold"
+        return self._currency_names.get(guild_id, "gold")
+
+    @staticmethod
+    def _money(profile: dict[str, Any], amount: int | None = None) -> str:
+        currency = profile.get("currency_name", "gold")
+        return currency if amount is None else f"{amount} {currency}"
+
+    async def _create_character(
+        self,
+        guild_id: int,
+        user_id: int,
+        display_name: str,
+        class_key: str,
+    ) -> bool:
+        async with self._lock_for(guild_id, user_id):
+            proxy = self.config.member_from_ids(guild_id, user_id)
+            current = await proxy.all()
+            if current["created"] or class_key not in GAME_CLASSES:
+                return False
+            details = GAME_CLASSES[class_key]
+            daily_turns = await self.config.guild_from_id(guild_id).daily_turns()
+            current.update(
+                {
+                    "created": True,
+                    "character_name": display_name[:32],
+                    "class_key": class_key,
+                    "hp": details["max_hp"],
+                    "mana": details["max_mana"],
+                    "turns": daily_turns,
+                    "turn_date": datetime.now(timezone.utc).date().isoformat(),
+                    "attribute_points": 5,
+                    "talent_points": 1,
+                    "titles": ["delver"],
+                    "current_title": "delver",
+                    "progression_migrated": True,
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                },
+            )
+            await proxy.set(current)
+            return True
+
+    @staticmethod
+    def _equipment_totals(profile: dict[str, Any]) -> dict[str, int]:
+        totals = {"attack": 0, "defense": 0, "hp": 0, "luck": 0}
+        for item in profile.get("equipment", {}).values():
+            if not item:
+                continue
+            for stat in totals:
+                totals[stat] += int(item.get(stat, 0))
+        return totals
+
+    def _stats(self, profile: dict[str, Any]) -> dict[str, int]:
+        details = GAME_CLASSES[profile["class_key"]]
+        level = int(profile["level"])
+        gear = self._equipment_totals(profile)
+        set_bonuses, _effects = equipment_set_bonuses(profile.get("equipment", {}))
+        progression = progression_bonuses(profile)
+        stats = {
+            "max_hp": details["max_hp"] + (level - 1) * 7 + gear["hp"],
+            "max_mana": details["max_mana"] + (level - 1) * 3,
+            "attack": details["attack"] + (level - 1) * 2 + gear["attack"],
+            "defense": details["defense"] + (level - 1) + gear["defense"],
+            "luck": details["luck"] + (level - 1) // 3 + gear["luck"],
+        }
+        for stat in ("attack", "defense", "luck"):
+            stats[stat] += set_bonuses.get(stat, 0) + progression.get(stat, 0)
+        stats["max_hp"] += set_bonuses.get("hp", 0) + progression.get("hp", 0)
+        stats["max_mana"] += set_bonuses.get("mana", 0) + progression.get("mana", 0)
+        stats["max_hp"] = round(stats["max_hp"] * (1 + progression.get("hp_percent", 0) / 100))
+        stats["max_mana"] = round(
+            stats["max_mana"] * (1 + progression.get("mana_percent", 0) / 100),
+        )
+        stats["attack"] = round(
+            stats["attack"] * (1 + progression.get("attack_percent", 0) / 100),
+        )
+        stats["critical_bonus"] = progression.get("critical", 0)
+        stats["ability_percent"] = progression.get("ability_percent", 0)
+        subclass = profile.get("subclass")
+        if subclass == "berserker" and profile.get("hp", stats["max_hp"]) <= stats["max_hp"] // 2:
+            stats["attack"] = round(stats["attack"] * 1.25)
+        elif subclass == "trickster":
+            stats["luck"] += 5
+            stats["critical_bonus"] += 5
+        elif subclass == "warlord" and profile.get("party_id"):
+            stats["attack"] += 2
+            stats["defense"] += 2
+        equipped_effects = {item.get("unique_effect") for item in profile.get("equipment", {}).values() if item}
+        if "crown" in equipped_effects:
+            condition_count = len(profile.get("status", {}))
+            stats["attack"] += condition_count * 3
+            stats["defense"] += condition_count * 2
+        return stats
+
+    def _generate_item(
+        self,
+        profile: dict[str, Any],
+        floor: int,
+        luck: int,
+        *,
+        slot: str | None = None,
+    ) -> dict[str, Any]:
+        item = generate_item(floor, luck, slot=slot)
+        item = apply_advanced_itemization(item, floor, profile["class_key"])
+        self._record_item(profile, item)
+        return item
+
+    @staticmethod
+    def _apply_challenge_enemy_modifier(
+        enemy: dict[str, Any],
+        challenge_name: str,
+        rng: random.Random = random,
+    ) -> dict[str, Any]:
+        if "Blood Moon" in challenge_name:
+            enemy["attack"] = round(enemy["attack"] * 1.25)
+        elif "Glass Labyrinth" in challenge_name:
+            enemy["attack"] = round(enemy["attack"] * 1.4)
+        elif "Royal Hunt" in challenge_name and not enemy.get("affix"):
+            affix = dict(rng.choice(AFFIXES))
+            enemy["name"] = f"{affix['name']} {enemy['name']}"
+            enemy["emoji"] = affix["emoji"]
+            for field in ("hp", "attack", "defense"):
+                enemy[field] = max(1, round(enemy[field] * affix[field]))
+            enemy["max_hp"] = enemy["hp"]
+            enemy["gold"] = round(enemy["gold"] * 1.5)
+            enemy["xp"] = round(enemy["xp"] * 1.4)
+            enemy["affix"] = affix
+        return enemy
+
+    @staticmethod
+    def _record_item(profile: dict[str, Any], item: dict[str, Any]) -> None:
+        if not item.get("identified", True):
+            return
+        key = item.get("codex_key", item["name"].lower().replace(" ", "_"))
+        if key not in profile["item_codex"]:
+            profile["item_codex"].append(key)
+
+    @staticmethod
+    def _class_details(profile: dict[str, Any]) -> dict[str, Any]:
+        return GAME_CLASSES[profile["class_key"]]
+
+    def _profile_embed(self, user: discord.abc.User, profile: dict[str, Any]) -> discord.Embed:
+        if not profile.get("created"):
+            return self._not_created_embed()
+        details = self._class_details(profile)
+        stats = self._stats(profile)
+        xp_needed = xp_for_level(profile["level"])
+        title_text = ""
+        if profile.get("current_title"):
+            title_key = profile["current_title"]
+            title_text = f" • {TITLES.get(title_key, (title_key, ''))[0]}"
+        subclass = SUBCLASSES.get(profile["class_key"], {}).get(profile.get("subclass", ""))
+        class_name = subclass["name"] if subclass else details["name"]
+        embed = discord.Embed(
+            title=(f"{details['emoji']} {profile['character_name']} — Level {profile['level']} {class_name}{title_text}"),
+            description=details["description"],
+            color=EMBED_COLOR,
+        )
+        embed.set_thumbnail(url=user.display_avatar.url)
+        embed.add_field(
+            name="Vitality",
+            value=(
+                f"❤️ `{profile['hp']}/{stats['max_hp']}` {progress_bar(profile['hp'], stats['max_hp'])}\n"
+                f"🔷 `{profile['mana']}/{stats['max_mana']}` {progress_bar(profile['mana'], stats['max_mana'])}"
+            ),
+            inline=False,
+        )
+        embed.add_field(
+            name="Attributes",
+            value=(f"⚔️ **{stats['attack']}** ATK\n🛡️ **{stats['defense']}** DEF\n🍀 **{stats['luck']}** LUCK"),
+        )
+        embed.add_field(
+            name="Progress",
+            value=(
+                f"✨ `{profile['xp']}/{xp_needed}` XP\n"
+                f"🏰 Floor **{profile['floor']}** · Room **{profile['rooms_cleared'] + 1}/5**\n"
+                f"🧭 **{profile['turns']}** turns\n"
+                f"🤝 **{profile.get('reputation', 0)}** Lastlight reputation"
+            ),
+        )
+        equip_lines = []
+        for slot, emoji in (("weapon", "⚔️"), ("armor", "🛡️"), ("charm", "📿")):
+            item = profile["equipment"].get(slot)
+            equip_lines.append(f"{emoji} **{slot.title()}:** {item['name'] if item else 'Empty'}")
+        embed.add_field(name="Equipment", value="\n".join(equip_lines), inline=False)
+        attributes = profile.get("attributes", {})
+        embed.add_field(
+            name="Build",
+            value=(
+                f"💪 MGT {attributes.get('might', 0)} • "
+                f"🦶 FIN {attributes.get('finesse', 0)} • "
+                f"🧠 INS {attributes.get('insight', 0)}\n"
+                f"❤️ VIT {attributes.get('vitality', 0)} • "
+                f"🎲 FOR {attributes.get('fortune', 0)}\n"
+                f"**{profile.get('attribute_points', 0)} attribute** and "
+                f"**{profile.get('talent_points', 0)} talent points** available"
+            ),
+            inline=False,
+        )
+        if profile.get("scars") or profile.get("blessings"):
+            embed.add_field(
+                name="Marks of the Journey",
+                value=(
+                    f"🩸 **Scars:** {humanize_list(profile['scars']) if profile['scars'] else 'None'}\n"
+                    f"✨ **Blessings:** "
+                    f"{humanize_list(profile['blessings']) if profile['blessings'] else 'None'}"
+                ),
+                inline=False,
+            )
+        embed.set_footer(
+            text=(
+                f"🪙 {self._money(profile, profile['gold'])}  •  🧪 {profile['potions']} potions  •  "
+                f"☠️ {profile['kills']} kills  •  🏆 {profile['bosses']} bosses"
+            ),
+        )
+        return embed
+
+    def _adventure_embed(self, profile: dict[str, Any], narrative: str | None = None) -> discord.Embed:
+        if not profile.get("created"):
+            return self._not_created_embed()
+        stats = self._stats(profile)
+        region = region_for_floor(profile["floor"])
+        description = narrative or random.choice(region["rooms"])
+        embed = discord.Embed(
+            title=f"{region['emoji']} {region['name']} — Floor {profile['floor']}",
+            description=f"*{region['description']}*\n\n{description}",
+            color=region["color"],
+        )
+        embed.add_field(
+            name="Delver",
+            value=(
+                f"❤️ {profile['hp']}/{stats['max_hp']}  •  🔷 {profile['mana']}/{stats['max_mana']}  •  🧪 {profile['potions']}"
+            ),
+            inline=False,
+        )
+        embed.add_field(
+            name="Expedition",
+            value=(
+                f"🚪 Room **{profile['rooms_cleared'] + 1}/5**\n"
+                f"🧭 **{profile['turns']}** turns remain\n"
+                f"🎒 **{len(profile['inventory'])}/25** pack slots"
+            ),
+        )
+        embed.add_field(
+            name="Spoils",
+            value=(f"🪙 **{self._money(profile, profile['gold'])}**\n✨ **{profile['xp']}/{xp_for_level(profile['level'])}** XP"),
+        )
+        nodes = profile.get("map_nodes", [])
+        unexplored = max(0, 5 - len(nodes))
+        embed.add_field(
+            name="Dungeon Map",
+            value=" — ".join(nodes + ["◈"] + ["·"] * unexplored),
+            inline=False,
+        )
+        embed.set_footer(text="Choose Explore to enter the next room. Daily turns reset at 00:00 UTC.")
+        return embed
+
+    def _progression_embed(self, profile: dict[str, Any]) -> discord.Embed:
+        details = GAME_CLASSES[profile["class_key"]]
+        subclass = subclass_options(profile).get(profile.get("subclass", ""))
+        attributes = profile.get("attributes", {})
+        embed = discord.Embed(
+            title=f"🌟 {profile['character_name']}'s Path",
+            description=(
+                f"**Base Class:** {details['emoji']} {details['name']}\n**Subclass:** {subclass['emoji']} {subclass['name']}"
+                if subclass
+                else f"**Base Class:** {details['emoji']} {details['name']}\n**Subclass:** Unlocks at level 10"
+            ),
+            color=EMBED_COLOR,
+        )
+        embed.add_field(
+            name=f"Attributes • {profile.get('attribute_points', 0)} points",
+            value=(
+                f"💪 **Might {attributes.get('might', 0)}** — physical power\n"
+                f"🦶 **Finesse {attributes.get('finesse', 0)}** — precision and luck\n"
+                f"🧠 **Insight {attributes.get('insight', 0)}** — mana reserves\n"
+                f"❤️ **Vitality {attributes.get('vitality', 0)}** — health and defense\n"
+                f"🎲 **Fortune {attributes.get('fortune', 0)}** — criticals and discoveries"
+            ),
+            inline=False,
+        )
+        talent_lines = []
+        for talent in TALENT_TREES[profile["class_key"]]:
+            rank = profile.get("talents", {}).get(talent["key"], 0)
+            talent_lines.append(
+                f"◆ **{talent['name']} {rank}/{talent['max']}** — {talent['description']}",
+            )
+        embed.add_field(
+            name=f"Talents • {profile.get('talent_points', 0)} points",
+            value="\n".join(talent_lines),
+            inline=False,
+        )
+        ability_lines = [
+            f"{ability['emoji']} **{ability['name']}** — {ability['description']}" for ability in available_abilities(profile)
+        ]
+        embed.add_field(name="Unlocked Abilities", value="\n".join(ability_lines), inline=False)
+        background = BACKGROUNDS.get(profile.get("background", ""))
+        embed.set_footer(
+            text=(
+                f"Background: {background['name'] if background else 'Unchosen'} • "
+                f"Alignment: {profile.get('alignment', 'Unwritten')}"
+            ),
+        )
+        return embed
+
+    def _choice_embed(self, profile: dict[str, Any]) -> discord.Embed:
+        choice = profile["choice"]
+        region = region_for_floor(profile["floor"])
+        embed = discord.Embed(
+            title=f"{choice['emoji']} {choice['title']}",
+            description=f"*{region['name']}*\n\n{choice['text']}\n\n**What do you do?**",
+            color=region["color"],
+        )
+        embed.set_footer(
+            text="Your decision is saved. Different classes and attributes can change the outcome.",
+        )
+        return embed
+
+    @staticmethod
+    def _not_created_embed() -> discord.Embed:
+        return discord.Embed(
+            title="🕯️ No chronicle found",
+            description="Create a character with `/deepdelve create` to enter the dungeon.",
+            color=DANGER_COLOR,
+        )
+
+    @staticmethod
+    def _hardcore_death_embed(profile: dict[str, Any]) -> discord.Embed:
+        return discord.Embed(
+            title=f"🪦 The Chronicle of {profile['character_name']} Has Ended",
+            description=(
+                f"This Hardcore delver reached floor **{profile['deepest_floor']}**, "
+                f"defeated **{profile['kills']} enemies** and **{profile['bosses']} bosses**, "
+                "then died permanently.\n\nUse `/deepdelve retire` to archive this character "
+                "and begin another legend."
+            ),
+            color=0x1B1B1B,
+        )
+
+    def _combat_embed(self, profile: dict[str, Any], narrative: str | None = None) -> discord.Embed:
+        enemy = profile["encounter"]
+        stats = self._stats(profile)
+        title_prefix = "👑 BOSS — " if enemy.get("boss") else ""
+        embed = discord.Embed(
+            title=f"{enemy['emoji']} {title_prefix}{enemy['name']}",
+            description=narrative or enemy.get("description", "Steel yourself—the creature advances!"),
+            color=DANGER_COLOR if enemy.get("boss") else 0xD35400,
+        )
+        embed.add_field(
+            name="Enemy",
+            value=(
+                f"❤️ `{enemy['hp']}/{enemy['max_hp']}` {progress_bar(enemy['hp'], enemy['max_hp'])}\n"
+                f"⚔️ {enemy['attack']} ATK  •  🛡️ {enemy['defense']} DEF"
+            ),
+            inline=False,
+        )
+        embed.add_field(
+            name=profile["character_name"],
+            value=(
+                f"❤️ `{profile['hp']}/{stats['max_hp']}` {progress_bar(profile['hp'], stats['max_hp'])}\n"
+                f"🔷 `{profile['mana']}/{stats['max_mana']}`  •  🧪 `{profile['potions']}`"
+            ),
+            inline=False,
+        )
+        embed.add_field(
+            name="🎯 Enemy Intention",
+            value=intent_description(enemy),
+            inline=False,
+        )
+        ability_lines = []
+        cooldowns = profile.get("skill_cooldowns", {})
+        for ability in available_abilities(profile):
+            cooldown = int(cooldowns.get(ability["key"], 0))
+            state = f"CD {cooldown}" if cooldown else f"{ability['mana']} mana"
+            ability_lines.append(f"{ability['emoji']} **{ability['name']}** — {state}")
+        embed.add_field(name="Abilities", value="\n".join(ability_lines), inline=False)
+        affix = enemy.get("affix") or {}
+        if affix:
+            effect = affix.get("effect") or "enhanced combat attributes"
+            embed.add_field(
+                name=f"{affix['emoji']} Elite Affix: {affix['name']}",
+                value=f"This creature possesses {effect}. Rewards are substantially increased.",
+                inline=False,
+            )
+        if profile.get("status"):
+            status_lines = [
+                f"☠️ **{name.title()}** — {turns} turn{'s' if turns != 1 else ''}"
+                for name, turns in profile["status"].items()
+                if turns > 0
+            ]
+            if status_lines:
+                embed.add_field(name="Conditions", value="\n".join(status_lines), inline=False)
+        embed.set_footer(text="Combat progress is saved. You can resume it with /deepdelve adventure.")
+        return embed
+
+    def _inventory_embed(
+        self,
+        profile: dict[str, Any],
+        selected_id: str | None = None,
+    ) -> discord.Embed:
+        embed = discord.Embed(
+            title=f"🎒 {profile['character_name']}'s Pack",
+            description="Select an item, then equip or sell it.",
+            color=EMBED_COLOR,
+        )
+        inventory = profile.get("inventory", [])
+        if not inventory:
+            embed.description = "Your pack is empty. The dungeon is full of equipment waiting to be found."
+        else:
+            lines = []
+            for index, item in enumerate(inventory, start=1):
+                rarity = RARITIES[int(item.get("rarity_index", 0))]
+                selected = " ◀" if str(item["id"]) == selected_id else ""
+                lines.append(
+                    f"{rarity['emoji']} **{index}. {item['name']}** `{item['id']}`{selected}\n"
+                    f"└ {item_stat_line(item)} • 🪙 {item['value']}",
+                )
+            embed.description = "\n".join(lines)
+        equip_lines = []
+        for slot in ("weapon", "armor", "charm"):
+            item = profile["equipment"].get(slot)
+            equip_lines.append(f"**{slot.title()}:** {item['name'] if item else 'Empty'}")
+        embed.add_field(name="Currently Equipped", value="\n".join(equip_lines), inline=False)
+        selected = next(
+            (item for item in inventory if str(item["id"]) == selected_id),
+            None,
+        )
+        if selected:
+            currency_cost, shard_cost = upgrade_cost(selected)
+            equipped = profile["equipment"].get(selected["slot"])
+            comparison = ""
+            if equipped:
+                deltas = []
+                for stat, label in (
+                    ("attack", "ATK"),
+                    ("defense", "DEF"),
+                    ("hp", "HP"),
+                    ("luck", "LUCK"),
+                ):
+                    delta = int(selected.get(stat, 0)) - int(equipped.get(stat, 0))
+                    if delta:
+                        deltas.append(f"{delta:+} {label}")
+                comparison = f"\n↔️ vs. **{equipped['name']}**: " + (" • ".join(deltas) if deltas else "equal base attributes")
+            embed.add_field(
+                name="Item Inspection",
+                value=(
+                    f"{item_detail(selected)}\n"
+                    f"⬆️ Next upgrade: {self._money(profile, currency_cost)} + "
+                    f"{shard_cost} shards{comparison}"
+                ),
+                inline=False,
+            )
+        _set_stats, set_effects = equipment_set_bonuses(profile.get("equipment", {}))
+        if set_effects:
+            embed.add_field(name="Active Set Bonuses", value="\n".join(set_effects), inline=False)
+        embed.set_footer(
+            text=(
+                f"{len(inventory)}/25 pack slots • {self._money(profile, profile['gold'])} • "
+                f"{profile.get('arcane_shards', 0)} arcane shards"
+            ),
+        )
+        return embed
+
+    def _town_embed(self, profile: dict[str, Any], narrative: str | None = None) -> discord.Embed:
+        stats = self._stats(profile)
+        embed = discord.Embed(
+            title="🏘️ Lastlight Outpost",
+            description=narrative or "Lanterns glow behind sturdy walls. For a moment, the Deep feels far away.",
+            color=SUCCESS_COLOR,
+        )
+        embed.add_field(
+            name="The Gilded Cot",
+            value=(
+                f"Restore all health for **{self._money(profile, self._rest_price(profile))}**.\n"
+                f"❤️ {profile['hp']}/{stats['max_hp']}"
+            ),
+        )
+        embed.add_field(
+            name="Apothecary",
+            value=(
+                f"Buy one healing potion for **{self._money(profile, self._potion_price(profile))}**.\n"
+                f"🧪 {profile['potions']} owned"
+            ),
+        )
+        embed.add_field(
+            name="Silent Chapel",
+            value=(
+                f"Restore all mana for **{self._money(profile, max(5, profile['level'] * 3))}**.\n"
+                f"🔷 {profile['mana']}/{stats['max_mana']}"
+            ),
+            inline=False,
+        )
+        contract = profile.get("active_contract") or {}
+        if contract:
+            contract_text = (
+                f"**{contract['title']}**\n"
+                f"{contract['progress']}/{contract['target']} enemies • "
+                f"{self._money(profile, contract['gold'])} + {contract['xp']} XP"
+            )
+        else:
+            contract_text = "No active contract. Take one from the notice board."
+        embed.add_field(name="Contract Board", value=contract_text, inline=False)
+        embed.set_footer(text=f"You carry {self._money(profile, profile['gold'])}.")
+        return embed
+
+    def _craft_embed(self, profile: dict[str, Any], narrative: str | None = None) -> discord.Embed:
+        region = region_for_floor(profile["floor"])
+        material_key = region["material"]
+        material = MATERIALS[material_key]
+        cost = self._craft_cost(profile)
+        embed = discord.Embed(
+            title="⚒️ Orra's Deepforge",
+            description=(
+                narrative
+                or "The smith studies every scar on your equipment before speaking. "
+                "“The Deep remembers what it makes. Let us give it something worth remembering.”"
+            ),
+            color=0xA04000,
+        )
+        lines = []
+        for key, details in MATERIALS.items():
+            lines.append(f"{details['emoji']} **{details['name']}:** {profile['materials'].get(key, 0)}")
+        embed.add_field(name="Materials", value="\n".join(lines), inline=False)
+        embed.add_field(
+            name="Current Recipe",
+            value=(
+                f"Each item costs **3 {material['name']}** and "
+                f"**{self._money(profile, cost)}**.\n"
+                f"Your current depth produces floor **{profile['floor'] + 2}** quality equipment."
+            ),
+            inline=False,
+        )
+        embed.set_footer(text="Crafted gear is placed in your pack. Three open slots are recommended.")
+        return embed
+
+    @staticmethod
+    def _world_boss_embed(record: dict[str, Any]) -> discord.Embed:
+        if not record:
+            return discord.Embed(
+                title="🌌 The World Is Quiet",
+                description="No world boss currently threatens Lastlight.",
+                color=SUCCESS_COLOR,
+            )
+        hp = int(record["hp"])
+        maximum = int(record["max_hp"])
+        contributions = sorted(
+            record.get("contributions", {}).items(),
+            key=lambda entry: entry[1],
+            reverse=True,
+        )
+        leaders = (
+            "\n".join(f"<@{user_id}> — **{damage} damage**" for user_id, damage in contributions[:5])
+            or "No delver has struck yet."
+        )
+        embed = discord.Embed(
+            title=f"{record['emoji']} WORLD BOSS — {record['name']}",
+            description=(
+                f"*{record['description']}*\n\n"
+                f"❤️ `{hp}/{maximum}` {progress_bar(hp, maximum, 16)}\n"
+                "Every delver may strike once every 30 seconds."
+            ),
+            color=DANGER_COLOR,
+        )
+        embed.add_field(name="Raid Leaders", value=leaders, inline=False)
+        embed.set_footer(text="World-boss victories award currency, XP, season points, and guild renown.")
+        return embed
+
+    @staticmethod
+    def _rest_price(profile: dict[str, Any]) -> int:
+        base = 10 + int(profile["level"]) * 2
+        discount = min(0.15, int(profile.get("reputation", 0)) * 0.002)
+        return max(1, round(base * (1 - discount)))
+
+    @staticmethod
+    def _potion_price(profile: dict[str, Any]) -> int:
+        base = 25 + int(profile["level"]) * 2
+        discount = min(0.15, int(profile.get("reputation", 0)) * 0.002)
+        return max(1, round(base * (1 - discount)))
+
+    @staticmethod
+    def _craft_cost(profile: dict[str, Any]) -> int:
+        base = 45 + int(profile["level"]) * 8
+        orra_reputation = int(profile.get("npc_reputation", {}).get("orra", 0))
+        return max(1, round(base * (1 - min(0.25, orra_reputation * 0.01))))
+
+    async def _channel_allowed(self, ctx: commands.Context) -> bool:
+        if not ctx.guild:
+            await ctx.send("DeepDelve can only be played inside a server.")
+            return False
+        guild_data = await self.config.guild(ctx.guild).all()
+        if not guild_data["enabled"]:
+            await ctx.send("DeepDelve is currently disabled in this server.")
+            return False
+        channel_id = int(guild_data["adventure_channel"])
+        if channel_id and ctx.channel.id != channel_id:
+            channel = ctx.guild.get_channel(channel_id)
+            destination = channel.mention if channel else f"<#{channel_id}>"
+            await ctx.send(f"Adventures are restricted to {destination}.")
+            return False
+        return True
+
+    async def _require_character(self, ctx: commands.Context) -> dict[str, Any] | None:
+        if not await self._channel_allowed(ctx):
+            return None
+        profile = await self._get_profile(ctx.guild.id, ctx.author.id)
+        if not profile["created"]:
+            await ctx.send(embed=self._not_created_embed())
+            return None
+        if profile.get("hardcore_dead"):
+            await ctx.send(
+                "🪦 This Hardcore chronicle has ended permanently. Use `/deepdelve retire` to begin a new character.",
+            )
+            return None
+        return profile
+
+    async def _handle_explore_interaction(self, interaction: discord.Interaction) -> None:
+        if not interaction.guild:
+            return
+        await interaction.response.defer()
+        guild_data = await self.config.guild(interaction.guild).all()
+        if not guild_data["enabled"]:
+            await interaction.followup.send("DeepDelve is currently disabled here.", ephemeral=True)
+            return
+        channel_id = int(guild_data["adventure_channel"])
+        if channel_id and interaction.channel_id != channel_id:
+            await interaction.followup.send(
+                f"Adventures are restricted to <#{channel_id}>.",
+                ephemeral=True,
+            )
+            return
+        profile, narrative = await self._explore(interaction.guild.id, interaction.user.id)
+        if not profile["created"]:
+            await interaction.edit_original_response(embed=self._not_created_embed(), view=None)
+        elif profile.get("hardcore_dead"):
+            await interaction.edit_original_response(
+                embed=self._hardcore_death_embed(profile),
+                view=None,
+            )
+        elif profile["encounter"]:
+            await interaction.edit_original_response(
+                embed=self._combat_embed(profile, narrative),
+                view=CombatView(self, interaction.user.id, profile),
+            )
+        elif profile["choice"]:
+            await interaction.edit_original_response(
+                embed=self._choice_embed(profile),
+                view=ChoiceView(self, interaction.user.id, profile["choice"]),
+            )
+        else:
+            await interaction.edit_original_response(
+                embed=self._adventure_embed(profile, narrative),
+                view=AdventureView(self, interaction.user.id),
+            )
+
+    async def _explore(self, guild_id: int, user_id: int) -> tuple[dict[str, Any], str]:
+        async with self._lock_for(guild_id, user_id):
+            profile = await self._get_profile(guild_id, user_id)
+            starting_gold = profile["gold"]
+            if not profile["created"]:
+                return profile, ""
+            if profile.get("hardcore_dead"):
+                return profile, "This Hardcore chronicle has ended."
+            if profile["encounter"]:
+                return profile, "The battle is still waiting for you."
+            if profile["choice"]:
+                return profile, "The dungeon is waiting for your decision."
+            if profile["turns"] <= 0:
+                return profile, "You are too exhausted to continue. Your turns reset at **00:00 UTC**."
+
+            descent = ""
+            if profile["rooms_cleared"] >= 5:
+                profile["floor"] += 1
+                profile["rooms_cleared"] = 0
+                profile["map_nodes"] = []
+                profile["free_revive"] = True
+                profile["combat_flags"].pop("legendary_rebirth", None)
+                profile["deepest_floor"] = max(profile["deepest_floor"], profile["floor"])
+                descent = f"You descend to **floor {profile['floor']}**. "
+
+            profile["turns"] -= 1
+            floor = int(profile["floor"])
+
+            if profile["rooms_cleared"] == 4 and floor % 5 == 0:
+                self._map_node(profile, "👑")
+                profile["combat_flags"] = {}
+                profile["encounter"] = ensure_enemy_intent(boss_for_floor(floor))
+                profile["discovered"] = self._append_unique(
+                    profile["discovered"],
+                    profile["encounter"]["name"],
+                )
+                await self._save_profile(guild_id, user_id, profile, starting_gold)
+                return profile, descent + profile["encounter"]["description"]
+
+            roll = random.random()
+            if roll < 0.58:
+                self._map_node(profile, "⚔️")
+                profile["combat_flags"] = {}
+                profile["encounter"] = ensure_enemy_intent(
+                    apply_affix(enemy_for_floor(floor), floor),
+                )
+                profile["discovered"] = self._append_unique(
+                    profile["discovered"],
+                    profile["encounter"]["name"],
+                )
+                await self._save_profile(guild_id, user_id, profile, starting_gold)
+                region = region_for_floor(floor)
+                return profile, descent + random.choice(region["rooms"])
+
+            if roll < 0.70:
+                profile["rooms_cleared"] += 1
+                self._map_node(profile, "🎁")
+                narrative = self._treasure_event(profile)
+            elif roll < 0.79:
+                profile["rooms_cleared"] += 1
+                self._map_node(profile, "✨")
+                narrative = self._shrine_event(profile)
+            elif roll < 0.91:
+                self._map_node(profile, "❔")
+                choice = dict(random.choice(CHOICES))
+                choice["options"] = [list(option) for option in choice["options"]]
+                profile["choice"] = choice
+                narrative = choice["text"]
+            elif roll < 0.97:
+                profile["rooms_cleared"] += 1
+                self._map_node(profile, "⚠️")
+                narrative = self._trap_event(profile)
+                if profile["hp"] <= 0:
+                    narrative += "\n\n" + self._apply_death(profile, "the dungeon's traps")
+            else:
+                profile["rooms_cleared"] += 1
+                self._map_node(profile, "🧙")
+                narrative = self._wanderer_event(profile)
+
+            achievement_text = self._award_achievements(profile)
+            if achievement_text:
+                narrative += f"\n\n{achievement_text}"
+            await self._save_profile(guild_id, user_id, profile, starting_gold)
+            return profile, descent + narrative
+
+    def _treasure_event(self, profile: dict[str, Any]) -> str:
+        stats = self._stats(profile)
+        if len(profile["inventory"]) < 25 and random.random() < 0.68:
+            item = self._generate_item(profile, profile["floor"], stats["luck"])
+            profile["inventory"].append(item)
+            rarity = RARITIES[item["rarity_index"]]
+            return (
+                "A half-buried chest clicks open beneath your hand.\n"
+                f"You found {rarity['emoji']} **{item['rarity']} {item['name']}** "
+                f"({item_stat_line(item)})."
+            )
+        gold = random.randint(12, 25) + profile["floor"] * random.randint(3, 6)
+        profile["gold"] += gold
+        return f"A stone coffer contains **{self._money(profile, gold)}**. Not every treasure needs a curse."
+
+    def _shrine_event(self, profile: dict[str, Any]) -> str:
+        stats = self._stats(profile)
+        if random.random() < 0.5:
+            healed = min(stats["max_hp"] - profile["hp"], max(12, round(stats["max_hp"] * 0.35)))
+            profile["hp"] += healed
+            return f"A forgotten shrine answers your touch. Warm light restores **{healed} health**."
+        restored = min(stats["max_mana"] - profile["mana"], max(8, round(stats["max_mana"] * 0.45)))
+        profile["mana"] += restored
+        return f"Silver fire rises from an ancient brazier, restoring **{restored} mana**."
+
+    def _trap_event(self, profile: dict[str, Any]) -> str:
+        stats = self._stats(profile)
+        dodge_chance = min(45, 12 + stats["luck"] * 2)
+        if random.randint(1, 100) <= dodge_chance:
+            return "A pressure plate sinks beneath your boot—but you spring clear before the blades fall."
+        damage = max(3, random.randint(7, 14) + profile["floor"] * 2 - stats["defense"] // 3)
+        profile["hp"] -= damage
+        return f"Hidden darts tear from the walls. You suffer **{damage} damage**."
+
+    def _wanderer_event(self, profile: dict[str, Any]) -> str:
+        if random.random() < 0.55:
+            profile["potions"] += 1
+            return (
+                "A masked wanderer shares a fire with you, then vanishes without a word.\n"
+                "Beside the ashes rests **one healing potion**."
+            )
+        gold = 20 + profile["floor"] * 5
+        if profile["gold"] >= gold:
+            profile["gold"] -= gold
+            profile["turns"] += 2
+            return (
+                f"A cartographer sells you a shortcut for **{self._money(profile, gold)}**. "
+                "The map grants **two additional turns**."
+            )
+        return "A cartographer offers a valuable map, but its price is beyond your purse."
+
+    @staticmethod
+    def _append_unique(values: list[str], value: str) -> list[str]:
+        if value not in values:
+            values.append(value)
+        return values
+
+    @staticmethod
+    def _map_node(profile: dict[str, Any], symbol: str) -> None:
+        profile["map_nodes"] = (profile.get("map_nodes", []) + [symbol])[-5:]
+
+    @staticmethod
+    def _passes_test(profile: dict[str, Any], chance: int) -> bool:
+        rolls = 2 if any(item and item.get("unique_effect") == "key" for item in profile.get("equipment", {}).values()) else 1
+        return any(random.randint(1, 100) <= chance for _ in range(rolls))
+
+    @staticmethod
+    def _journal(profile: dict[str, Any], text: str) -> None:
+        entry = f"Floor {profile['floor']} — {text}"
+        profile["journal"] = (profile.get("journal", []) + [entry])[-30:]
+
+    def _discover_lore(self, profile: dict[str, Any]) -> str:
+        undiscovered = [fragment for fragment in LORE_FRAGMENTS if fragment["title"] not in profile["lore"]]
+        if not undiscovered:
+            gold = 35 + profile["floor"] * 3
+            profile["gold"] += gold
+            return f"The inscription repeats a known secret. You recover **{self._money(profile, gold)}** nearby."
+        fragment = random.choice(undiscovered)
+        profile["lore"].append(fragment["title"])
+        self._journal(profile, f"Recovered the lore fragment “{fragment['title']}.”")
+        return f"📜 **Lore Recovered: {fragment['title']}**\n*{fragment['text']}*"
+
+    async def _choice_interaction(self, interaction: discord.Interaction, action: str) -> None:
+        if not interaction.guild:
+            return
+        await interaction.response.defer()
+        guild_id = interaction.guild.id
+        user_id = interaction.user.id
+        async with self._lock_for(guild_id, user_id):
+            profile = await self._get_profile(guild_id, user_id)
+            starting_gold = profile["gold"]
+            choice = profile.get("choice") or {}
+            if not choice:
+                await interaction.followup.send("That decision has already been resolved.", ephemeral=True)
+                return
+            valid_actions = {option[0] for option in choice.get("options", [])}
+            if action not in valid_actions:
+                await interaction.followup.send("That path is no longer available.", ephemeral=True)
+                return
+            deaths_before = profile["deaths"]
+            narrative = self._resolve_choice(profile, choice["key"], action)
+            profile["choice"] = {}
+            if not profile["encounter"] and profile["deaths"] == deaths_before:
+                profile["rooms_cleared"] += 1
+            level_lines = self._apply_level_ups(profile)
+            if level_lines:
+                narrative += "\n\n" + "\n".join(level_lines)
+            achievement_text = self._award_achievements(profile)
+            if achievement_text:
+                narrative += f"\n\n{achievement_text}"
+            self._journal(profile, narrative.splitlines()[0].replace("*", ""))
+            await self._save_profile(guild_id, user_id, profile, starting_gold)
+
+        if profile.get("hardcore_dead"):
+            await interaction.edit_original_response(
+                embed=self._hardcore_death_embed(profile),
+                view=None,
+            )
+        elif profile["encounter"]:
+            await interaction.edit_original_response(
+                embed=self._combat_embed(profile, narrative),
+                view=CombatView(self, user_id, profile),
+            )
+        else:
+            await interaction.edit_original_response(
+                embed=self._adventure_embed(profile, narrative),
+                view=AdventureView(self, user_id),
+            )
+
+    def _resolve_choice(self, profile: dict[str, Any], key: str, action: str) -> str:
+        stats = self._stats(profile)
+        floor = int(profile["floor"])
+        if action == "leave":
+            profile["reputation"] = max(0, profile["reputation"] - 1)
+            return "You leave the mystery untouched. Behind you, stone grinds softly against stone."
+
+        if key == "sealed_door":
+            if action == "force":
+                chance = min(85, 42 + stats["attack"] * 2)
+                if self._passes_test(profile, chance):
+                    item = self._generate_item(profile, floor + 2, stats["luck"] + 3)
+                    if len(profile["inventory"]) < 25:
+                        profile["inventory"].append(item)
+                        return (
+                            f"The final lock breaks. Inside rests **{item['rarity']} {item['name']}** — {item_stat_line(item)}."
+                        )
+                    gold = int(item["value"])
+                    profile["gold"] += gold
+                    return f"The relic is too large for your pack, so you recover **{self._money(profile, gold)}**."
+                damage = max(5, floor * 3 - stats["defense"] // 2)
+                profile["hp"] -= damage
+                if profile["hp"] <= 0:
+                    return f"The door's ward explodes for **{damage} damage**.\n" + self._apply_death(profile, "an ancient ward")
+                return f"The ward rejects you in a flash of white fire. You suffer **{damage} damage**."
+            chance = min(92, 45 + stats["luck"] * 3 + (25 if profile["class_key"] == "arcanist" else 0))
+            if self._passes_test(profile, chance):
+                profile["xp"] += 25 + floor * 5
+                return self._discover_lore(profile)
+            profile["status"]["curse"] = 3
+            return "The runes read you in return. A three-turn **curse** settles over your thoughts."
+
+        if key == "dark_altar":
+            if action == "offer":
+                cost = 25 + floor * 5
+                if profile["gold"] < cost:
+                    profile["status"]["curse"] = 2
+                    return "The altar finds your offering insufficient and brands you with a **curse**."
+                profile["gold"] -= cost
+                profile["xp"] += 30 + floor * 6
+                profile["hp"] = min(stats["max_hp"], profile["hp"] + round(stats["max_hp"] * 0.4))
+                return (
+                    f"The altar accepts **{self._money(profile, cost)}**. "
+                    "Power floods your body, healing wounds and granting experience."
+                )
+            enemy = apply_affix(enemy_for_floor(floor + 1), floor + 4)
+            enemy["name"] = f"Altar-Born {enemy['name']}"
+            profile["combat_flags"] = {}
+            profile["encounter"] = ensure_enemy_intent(enemy)
+            return "The altar cracks. Something furious and half-formed crawls from the wound."
+
+        if action == "aid":
+            if profile["potions"] <= 0:
+                return "You search your satchel, but have no potion to give. The delver turns away."
+            profile["potions"] -= 1
+            reward = 45 + floor * 7
+            profile["gold"] += reward
+            profile["reputation"] += 3
+            return (
+                "The stranger drinks and reveals themselves as a Lastlight scout. "
+                f"Your kindness earns **{self._money(profile, reward)}** and **3 reputation**."
+            )
+        if profile["turns"] > 0:
+            profile["turns"] -= 1
+        profile["reputation"] += 2
+        profile["potions"] += 1
+        return (
+            "You guide the wounded delver through a maze of listening walls. "
+            "They press a potion into your hand before departing. **+2 reputation**"
+        )
+
+    async def _combat_interaction(self, interaction: discord.Interaction, action: str) -> None:
+        if not interaction.guild:
+            return
+        await interaction.response.defer()
+        profile, narrative = await self._combat_turn(interaction.guild.id, interaction.user.id, action)
+        if not profile["created"]:
+            await interaction.edit_original_response(embed=self._not_created_embed(), view=None)
+        elif profile.get("hardcore_dead"):
+            await interaction.edit_original_response(
+                embed=self._hardcore_death_embed(profile),
+                view=None,
+            )
+        elif profile["encounter"]:
+            await interaction.edit_original_response(
+                embed=self._combat_embed(profile, narrative),
+                view=CombatView(self, interaction.user.id, profile),
+            )
+        else:
+            await interaction.edit_original_response(
+                embed=self._adventure_embed(profile, narrative),
+                view=AdventureView(self, interaction.user.id),
+            )
+
+    async def _combat_turn(
+        self,
+        guild_id: int,
+        user_id: int,
+        action: str,
+    ) -> tuple[dict[str, Any], str]:
+        async with self._lock_for(guild_id, user_id):
+            profile = await self._get_profile(guild_id, user_id)
+            starting_gold = profile["gold"]
+            enemy = profile.get("encounter")
+            if not profile["created"] or not enemy:
+                return profile, "There is nothing here to fight."
+
+            enemy = ensure_enemy_intent(enemy)
+            stats = self._stats(profile)
+            challenge_name = (profile.get("rift_state") or {}).get("name", "")
+            if "Glass Labyrinth" in challenge_name:
+                stats["attack"] = round(stats["attack"] * 1.4)
+            lines: list[str] = []
+            enemy_turn = True
+            for ability_key, remaining in list(profile["skill_cooldowns"].items()):
+                reduction = 2 if profile.get("subclass") == "chronomancer" else 1
+                if remaining <= reduction:
+                    profile["skill_cooldowns"].pop(ability_key, None)
+                else:
+                    profile["skill_cooldowns"][ability_key] = remaining - reduction
+
+            for condition in ("poison", "burn"):
+                turns = int(enemy["status"].get(condition, 0))
+                if not turns:
+                    continue
+                base = 4 + profile["level"]
+                if condition == "poison":
+                    base += int(profile.get("talents", {}).get("toxicology", 0)) * 2
+                elif profile.get("subclass") == "elementalist":
+                    base = round(base * 1.5)
+                damage = max(1, base)
+                enemy["hp"] -= damage
+                enemy["status"][condition] = turns - 1
+                if enemy["status"][condition] <= 0:
+                    enemy["status"].pop(condition, None)
+                lines.append(
+                    f"{'☠️' if condition == 'poison' else '🔥'} {enemy['name']} suffers **{damage} {condition} damage**.",
+                )
+            if enemy["hp"] <= 0:
+                enemy_turn = False
+                lines.extend(self._victory(profile, enemy))
+
+            poison_turns = int(profile.get("status", {}).get("poison", 0))
+            if poison_turns:
+                poison_damage = 4 + max(1, profile["floor"] // 2)
+                profile["hp"] -= poison_damage
+                profile["status"]["poison"] = poison_turns - 1
+                lines.append(f"☠️ Poison burns through you for **{poison_damage} damage**.")
+                if profile["status"]["poison"] <= 0:
+                    profile["status"].pop("poison", None)
+            curse_turns = int(profile.get("status", {}).get("curse", 0))
+            if curse_turns:
+                stats["attack"] = max(1, round(stats["attack"] * 0.75))
+                stats["luck"] = max(0, round(stats["luck"] * 0.6))
+                profile["status"]["curse"] = curse_turns - 1
+                if profile["status"]["curse"] <= 0:
+                    profile["status"].pop("curse", None)
+            if profile["hp"] <= 0:
+                lines.append(self._apply_death(profile, "venom in your blood"))
+                await self._save_profile(guild_id, user_id, profile, starting_gold)
+                return profile, "\n".join(lines)
+
+            if not enemy_turn:
+                pass
+            elif action == "potion":
+                if "Starvation" in challenge_name:
+                    return profile, "The **Starvation** modifier prevents potion use."
+                if profile["potions"] <= 0:
+                    return profile, "Your potion satchel is empty."
+                if profile["hp"] >= stats["max_hp"]:
+                    return profile, "You are already at full health."
+                healing = min(stats["max_hp"] - profile["hp"], 35 + profile["level"] * 5)
+                profile["potions"] -= 1
+                profile["hp"] += healing
+                lines.append(f"🧪 You recover **{healing} health**.")
+            elif action == "flee":
+                penalty = 20 if "Fool's Gold" in challenge_name else 0
+                flee_chance = min(
+                    82,
+                    42 + stats["luck"] * 3 - (12 if enemy.get("boss") else 0) - penalty,
+                )
+                if random.randint(1, 100) <= flee_chance:
+                    profile["encounter"] = {}
+                    profile["rooms_cleared"] += 1
+                    enemy_turn = False
+                    lines.append("💨 You escape through a narrow passage. Pride is cheaper than a funeral.")
+                else:
+                    lines.append("💨 Your escape route is cut off!")
+            elif action == "defend":
+                guard = 0.55 + min(0.2, stats["defense"] * 0.008)
+                profile["combat_flags"]["guard"] = guard
+                profile["mana"] = min(stats["max_mana"], profile["mana"] + 3)
+                lines.append(
+                    f"🛡️ You brace for **{round(guard * 100)}% damage reduction** and recover **3 mana**.",
+                )
+            elif action.startswith("ability:"):
+                ability_key = action.partition(":")[2]
+                ability = next(
+                    (entry for entry in available_abilities(profile) if entry["key"] == ability_key),
+                    None,
+                )
+                if not ability:
+                    return profile, "That ability is not unlocked."
+                if profile["skill_cooldowns"].get(ability_key, 0):
+                    return profile, (
+                        f"**{ability['name']}** is cooling down for {profile['skill_cooldowns'][ability_key]} more turn(s)."
+                    )
+                set_counts: dict[str, int] = {}
+                for equipped in profile["equipment"].values():
+                    if equipped and equipped.get("set"):
+                        set_counts[equipped["set"]] = set_counts.get(equipped["set"], 0) + 1
+                starweaver_free = set_counts.get("starweaver", 0) >= 3 and (profile["ability_casts"] + 1) % 3 == 0
+                mana_cost = 0 if starweaver_free else ability["mana"]
+                if profile["mana"] < mana_cost:
+                    return profile, f"You need **{ability['mana']} mana** to use {ability['name']}."
+                profile["mana"] -= mana_cost
+                profile["ability_casts"] += 1
+                damage, skill_lines = self._ability_damage(
+                    profile,
+                    enemy,
+                    stats,
+                    ability_key,
+                )
+                overchannel = (
+                    profile["class_key"] == "arcanist" and profile["talents"].get("overchannel", 0) and random.random() < 0.2
+                )
+                if not overchannel:
+                    profile["skill_cooldowns"][ability_key] = ability["cooldown"]
+                else:
+                    skill_lines.append("🌌 **Overchannel** prevents the ability from entering cooldown.")
+                if starweaver_free:
+                    skill_lines.append("🌠 **Starweaver** makes the ability cost no mana.")
+                enemy["hp"] -= damage
+                lines.extend(skill_lines)
+            else:
+                if profile["combat_flags"].pop("next_crit", False):
+                    stats["luck"] += 30
+                damage, critical = self._player_damage(stats, int(enemy["defense"]))
+                if enemy.get("guarded", 0):
+                    damage = max(1, round(damage * 0.5))
+                    enemy["guarded"] = 0
+                    lines.append("🛡️ The enemy's defensive stance absorbs half the blow.")
+                enemy["hp"] -= damage
+                prefix = "💥 **CRITICAL!** " if critical else "⚔️ "
+                lines.append(f"{prefix}You deal **{damage} damage**.")
+                if critical:
+                    self._apply_item_critical_effects(profile, enemy, lines)
+                    if profile["talents"].get("opportunist", 0) and profile["skill_cooldowns"]:
+                        cooldown_key = random.choice(list(profile["skill_cooldowns"]))
+                        profile["skill_cooldowns"][cooldown_key] = max(
+                            0,
+                            profile["skill_cooldowns"][cooldown_key] - 1,
+                        )
+
+            if enemy and enemy.get("hp", 0) <= 0:
+                enemy_turn = False
+                lines.extend(self._victory(profile, enemy))
+
+            if enemy_turn and profile["encounter"]:
+                lines.extend(self._resolve_enemy_intent(profile, enemy, stats))
+                if enemy["hp"] <= 0 and profile["hp"] > 0:
+                    lines.extend(self._victory(profile, enemy))
+                if enemy.get("weakened", 0):
+                    enemy["weakened"] = max(0, int(enemy["weakened"]) - 1)
+                if profile["hp"] <= 0:
+                    lines.append(self._apply_death(profile, enemy["name"]))
+
+            pending_first = profile.pop("pending_server_first", "")
+            if pending_first:
+                firsts = await self.config.guild_from_id(guild_id).server_firsts()
+                if pending_first not in firsts:
+                    firsts[pending_first] = {
+                        "user_id": user_id,
+                        "date": datetime.now(timezone.utc).isoformat(),
+                    }
+                    await self.config.guild_from_id(guild_id).server_firsts.set(firsts)
+                    lines.append(
+                        f"📣 **SERVER FIRST!** <@{user_id}> is the first delver to defeat **{pending_first}**.",
+                    )
+
+            achievement_text = self._award_achievements(profile)
+            if achievement_text:
+                lines.append(achievement_text)
+            await self._save_profile(guild_id, user_id, profile, starting_gold)
+            return profile, "\n".join(lines)
+
+    @staticmethod
+    def _player_damage(stats: dict[str, int], enemy_defense: int) -> tuple[int, bool]:
+        critical_chance = min(55, 5 + stats["luck"] * 2 + stats.get("critical_bonus", 0))
+        critical = random.randint(1, 100) <= critical_chance
+        base = random.randint(max(1, stats["attack"] - 3), stats["attack"] + 4)
+        damage = max(1, base - enemy_defense // 2)
+        if critical:
+            damage = round(damage * 1.75)
+        return damage, critical
+
+    def _skill_damage(
+        self,
+        profile: dict[str, Any],
+        enemy: dict[str, Any],
+        stats: dict[str, int],
+    ) -> tuple[int, list[str]]:
+        class_key = profile["class_key"]
+        if class_key == "vanguard":
+            base, critical = self._player_damage(stats, int(enemy["defense"]))
+            damage = round(base * 1.65)
+            enemy["weakened"] = 2
+            return damage, [
+                f"🛡️ **Shield Bash** crashes home for **{damage} damage**{'—a critical blow!' if critical else '!'}",
+                "The enemy is weakened for its next attack.",
+            ]
+        if class_key == "shadow":
+            total = 0
+            criticals = 0
+            boosted = dict(stats)
+            boosted["luck"] += 7
+            for _ in range(2):
+                damage, critical = self._player_damage(boosted, int(enemy["defense"]))
+                total += max(1, round(damage * 0.72))
+                criticals += int(critical)
+            return total, [
+                f"🗡️ **Twin Fang** strikes twice for **{total} total damage** "
+                f"with **{criticals} critical hit{'s' if criticals != 1 else ''}.",
+            ]
+        base = random.randint(stats["attack"] + 3, stats["attack"] + 10)
+        damage = max(1, round(base * 1.55) - int(enemy["defense"]) // 6)
+        return damage, [f"🔮 **Arcane Lance** tears through armor for **{damage} damage**."]
+
+    def _ability_damage(
+        self,
+        profile: dict[str, Any],
+        enemy: dict[str, Any],
+        stats: dict[str, int],
+        ability_key: str,
+    ) -> tuple[int, list[str]]:
+        if ability_key in {"shield_bash", "twin_fang", "arcane_lance"}:
+            damage, lines = self._skill_damage(profile, enemy, stats)
+        elif ability_key == "iron_wall":
+            profile["combat_flags"]["guard"] = 0.82
+            profile["combat_flags"]["retaliate"] = max(3, stats["defense"])
+            damage, lines = 0, ["🏰 **Iron Wall** locks into place. The next attack will be crushed."]
+        elif ability_key == "sunder":
+            damage = max(1, round(stats["attack"] * 1.55) - enemy["defense"] // 3)
+            removed = max(1, round(enemy["defense"] * 0.3))
+            enemy["defense"] = max(0, enemy["defense"] - removed)
+            lines = [f"🔨 **Sunder** deals **{damage} damage** and destroys **{removed} armor**."]
+        elif ability_key == "last_stand":
+            missing = max(0, stats["max_hp"] - profile["hp"])
+            healed = min(missing, round(stats["max_hp"] * 0.3))
+            profile["hp"] += healed
+            profile["combat_flags"]["guard"] = 0.5
+            damage = max(1, round(stats["attack"] * (1.3 + missing / stats["max_hp"])))
+            lines = [
+                f"🚩 **Last Stand** restores **{healed} health** and deals **{damage} damage**.",
+            ]
+        elif ability_key == "venom_edge":
+            damage = max(1, round(stats["attack"] * 1.15) - enemy["defense"] // 3)
+            enemy["status"]["poison"] = max(enemy["status"].get("poison", 0), 4)
+            lines = [f"☠️ **Venom Edge** deals **{damage} damage** and inflicts Poison."]
+        elif ability_key == "smoke_bomb":
+            profile["combat_flags"]["evade"] = True
+            profile["combat_flags"]["next_crit"] = True
+            damage, lines = 0, ["💨 **Smoke Bomb** guarantees an evasion and empowers your next critical."]
+        elif ability_key == "execution":
+            multiplier = 2.75 if enemy["hp"] <= enemy["max_hp"] / 2 else 1.25
+            damage = max(1, round(stats["attack"] * multiplier) - enemy["defense"] // 2)
+            lines = [f"🦂 **Execution** strikes for **{damage} damage**."]
+        elif ability_key == "frost_ward":
+            profile["combat_flags"]["guard"] = 0.7
+            enemy["weakened"] = max(enemy.get("weakened", 0), 2)
+            damage, lines = 0, ["❄️ **Frost Ward** shields you and weakens the enemy."]
+        elif ability_key == "starfire":
+            damage = max(1, round(stats["attack"] * 1.75) - enemy["defense"] // 5)
+            enemy["status"]["burn"] = max(enemy["status"].get("burn", 0), 4)
+            lines = [f"🔥 **Starfire** erupts for **{damage} damage** and ignites the enemy."]
+        else:
+            damage = max(1, round(stats["attack"] * 1.45) - enemy["defense"] // 5)
+            enemy["intent"] = roll_enemy_intent(enemy)
+            for key in list(profile["skill_cooldowns"]):
+                profile["skill_cooldowns"][key] = max(0, profile["skill_cooldowns"][key] - 2)
+            lines = [
+                f"⏳ **Time Fracture** deals **{damage} damage**, cancels the intention, and advances your cooldowns.",
+            ]
+        ability_bonus = stats.get("ability_percent", 0)
+        if profile.get("subclass") == "assassin" and enemy.get("status", {}).get("poison") and damage:
+            bonus = round(damage * 0.2)
+            damage += bonus
+            lines.append(f"🦂 Deathmark adds **{bonus} damage** against the poisoned target.")
+        if damage and ability_bonus:
+            bonus = round(damage * ability_bonus / 100)
+            damage += bonus
+            lines.append(f"🌌 Spellpower adds **{bonus} damage**.")
+        if enemy.get("guarded", 0) and damage:
+            damage = max(1, round(damage * 0.5))
+            enemy["guarded"] = 0
+            lines.append("🛡️ The enemy's guard absorbs half the ability's damage.")
+        return damage, lines
+
+    @staticmethod
+    def _apply_item_critical_effects(
+        profile: dict[str, Any],
+        enemy: dict[str, Any],
+        lines: list[str],
+    ) -> None:
+        effects = {item.get("unique_effect") for item in profile.get("equipment", {}).values() if item}
+        nightstalker = sum(1 for item in profile.get("equipment", {}).values() if item and item.get("set") == "nightstalker")
+        duration = 4 if nightstalker >= 3 else 3
+        if "burn" in effects and random.random() < 0.35:
+            enemy["status"]["burn"] = max(enemy["status"].get("burn", 0), duration)
+            lines.append("🔥 Your equipment ignites the target.")
+        if "poison" in effects and random.random() < 0.35:
+            enemy["status"]["poison"] = max(enemy["status"].get("poison", 0), duration)
+            lines.append("☠️ Your equipment poisons the target.")
+        if "silence" in effects and random.random() < 0.25:
+            enemy["intent"] = roll_enemy_intent(enemy)
+            lines.append("🔕 Bellower's Silence disrupts the enemy's intention.")
+
+    def _resolve_enemy_intent(
+        self,
+        profile: dict[str, Any],
+        enemy: dict[str, Any],
+        stats: dict[str, int],
+    ) -> list[str]:
+        intent = ensure_enemy_intent(enemy)["intent"]
+        lines: list[str] = []
+        equipped_effects = {item.get("unique_effect") for item in profile.get("equipment", {}).values() if item}
+        if "web" in equipped_effects and not profile["combat_flags"].get("web_used"):
+            profile["combat_flags"]["web_used"] = True
+            lines.append("🕸️ **Arachne's Promise** entangles the first incoming attack.")
+            enemy["intent"] = roll_enemy_intent(enemy)
+            return lines
+        if profile["combat_flags"].pop("evade", False):
+            lines.append(f"💨 You evade **{intent['name']}** completely.")
+            enemy["intent"] = roll_enemy_intent(enemy)
+            return lines
+        evasion_rank = int(profile.get("talents", {}).get("evasion", 0))
+        if evasion_rank and random.random() < evasion_rank * 0.06:
+            lines.append(f"🃏 **Evasion** avoids {intent['name']}.")
+            enemy["intent"] = roll_enemy_intent(enemy)
+            return lines
+        if profile.get("subclass") == "duelist" and random.random() < 0.12:
+            counter = max(1, round(stats["attack"] * 0.7))
+            enemy["hp"] -= counter
+            lines.append(f"🤺 **Riposte** avoids the attack and counters for **{counter} damage**.")
+            enemy["intent"] = roll_enemy_intent(enemy)
+            return lines
+
+        hits = int(intent.get("hits", 1))
+        total = 0
+        for _ in range(hits):
+            base_damage = self._enemy_damage(enemy, stats)
+            total += max(1, round(base_damage * float(intent["power"])))
+        if "warding" in equipped_effects and enemy.get("affix"):
+            total = round(total * 0.85)
+        guard = float(profile["combat_flags"].pop("guard", 0))
+        if guard:
+            prevented = round(total * guard)
+            total -= prevented
+            lines.append(f"🛡️ Your guard prevents **{prevented} damage**.")
+        mana_shield = int(profile.get("talents", {}).get("mana_shield", 0))
+        if mana_shield and profile["mana"] and total:
+            absorbed = min(profile["mana"], round(total * mana_shield * 0.1))
+            profile["mana"] -= absorbed
+            total -= absorbed
+            lines.append(f"🔷 Mana Shield absorbs **{absorbed} damage**.")
+        profile["hp"] -= max(0, total)
+        lines.append(
+            f"{intent['emoji']} **{enemy['name']} uses {intent['name']}** for **{max(0, total)} damage**.",
+        )
+
+        retaliation = int(profile["combat_flags"].pop("retaliate", 0))
+        if retaliation:
+            bulwark_count = sum(1 for item in profile.get("equipment", {}).values() if item and item.get("set") == "bulwark")
+            if profile.get("subclass") == "guardian" or bulwark_count >= 3:
+                retaliation *= 2
+            enemy["hp"] -= retaliation
+            lines.append(f"🛡️ You retaliate for **{retaliation} damage**.")
+        if intent["key"] == "guard":
+            enemy["guarded"] = 1
+            lines.append("🛡️ The enemy gains a defensive stance.")
+        elif intent["key"] == "hex" and random.random() < 0.55:
+            profile["status"]["curse"] = max(profile["status"].get("curse", 0), 3)
+            lines.append("🕸️ The hex inflicts **Curse**.")
+        elif intent["key"] == "recover":
+            healing = max(1, round(enemy["max_hp"] * 0.08))
+            enemy["hp"] = min(enemy["max_hp"], enemy["hp"] + healing)
+            lines.append(f"🩸 The enemy restores **{healing} health**.")
+
+        affix_effect = (enemy.get("affix") or {}).get("effect")
+        if affix_effect == "poison" and random.random() < 0.35:
+            profile["status"]["poison"] = max(profile["status"].get("poison", 0), 3)
+            lines.append("☠️ Venom enters the wound. You are **poisoned for three turns**.")
+        elif affix_effect == "drain" and total:
+            healing = max(1, total // 2)
+            enemy["hp"] = min(enemy["max_hp"], enemy["hp"] + healing)
+            lines.append(f"🩸 The creature drains your life and restores **{healing} health**.")
+        enemy["intent"] = roll_enemy_intent(enemy)
+        return lines
+
+    @staticmethod
+    def _enemy_damage(enemy: dict[str, Any], stats: dict[str, int]) -> int:
+        attack = int(enemy["attack"])
+        if enemy.get("weakened", 0):
+            attack = round(attack * 0.68)
+        base = random.randint(max(1, attack - 2), attack + 3)
+        return max(1, base - stats["defense"] // 2)
+
+    def _victory(self, profile: dict[str, Any], enemy: dict[str, Any]) -> list[str]:
+        gold = int(enemy["gold"])
+        equipped_effects = {item.get("unique_effect") for item in profile.get("equipment", {}).values() if item}
+        if "fortune" in equipped_effects:
+            gold = round(gold * 1.12)
+        gold = round(
+            gold * (1 + int(profile.get("guild_bonus", {}).get("currency_percent", 0)) / 100),
+        )
+        xp = int(enemy["xp"])
+        profile["gold"] += gold
+        profile["xp"] += xp
+        profile["kills"] += 1
+        profile["rooms_cleared"] += 1
+        profile["encounter"] = {}
+        if enemy.get("boss"):
+            profile["bosses"] += 1
+            profile["pending_server_first"] = enemy["name"]
+        self._journal(profile, f"Defeated {enemy['name']} and claimed {self._money(profile, gold)}.")
+        lines = [
+            f"🏆 **{enemy['name']} is defeated!**",
+            f"You gain **{xp} XP** and **{self._money(profile, gold)}**.",
+        ]
+        if "mending" in equipped_effects or profile.get("subclass") == "necromancer":
+            stats_now = self._stats(profile)
+            healing = min(
+                stats_now["max_hp"] - profile["hp"],
+                max(3, round(stats_now["max_hp"] * 0.08)),
+            )
+            profile["hp"] += healing
+            if healing:
+                lines.append(f"💚 Soul energy restores **{healing} health**.")
+
+        stats = self._stats(profile)
+        rook_bonus = min(10, int(profile["npc_reputation"].get("rook", 0)) // 2)
+        drop_chance = min(
+            75,
+            20 + stats["luck"] * 2 + rook_bonus + (35 if enemy.get("boss") else 0),
+        )
+        if random.randint(1, 100) <= drop_chance:
+            if len(profile["inventory"]) < 25:
+                item = self._generate_item(profile, profile["floor"], stats["luck"])
+                if enemy.get("boss"):
+                    item = self._generate_item(
+                        profile,
+                        profile["floor"] + 3,
+                        stats["luck"] + 5,
+                    )
+                profile["inventory"].append(item)
+                rarity = RARITIES[item["rarity_index"]]
+                lines.append(
+                    f"{rarity['emoji']} Loot: **{item['rarity']} {item['name']}** — {item_stat_line(item)}.",
+                )
+            else:
+                bonus = 20 + profile["floor"] * 5
+                profile["gold"] += bonus
+                lines.append(
+                    f"Your pack is full, so the spoils are exchanged for **{self._money(profile, bonus)}**.",
+                )
+
+        level_lines = self._apply_level_ups(profile)
+        lines.extend(level_lines)
+        if enemy.get("boss"):
+            profile["floor"] += 1
+            profile["rooms_cleared"] = 0
+            profile["deepest_floor"] = max(profile["deepest_floor"], profile["floor"])
+            profile["hp"] = min(self._stats(profile)["max_hp"], profile["hp"] + 30)
+            profile["mana"] = min(self._stats(profile)["max_mana"], profile["mana"] + 15)
+            lines.append(f"🔓 The sealed stair opens. **Floor {profile['floor']}** awaits.")
+
+        region = region_for_floor(enemy.get("floor", profile["floor"]))
+        material_key = region["material"]
+        material_chance = 0.9 if enemy.get("boss") else 0.55
+        if random.random() <= material_chance:
+            amount = random.randint(2, 4) if enemy.get("boss") else 1
+            profile["materials"][material_key] = profile["materials"].get(material_key, 0) + amount
+            material = MATERIALS[material_key]
+            lines.append(f"{material['emoji']} You recover **{amount} {material['name']}**.")
+
+        contract = profile.get("active_contract") or {}
+        if contract:
+            contract["progress"] = min(contract["target"], contract["progress"] + 1)
+            if contract["progress"] >= contract["target"]:
+                profile["gold"] += contract["gold"]
+                profile["xp"] += contract["xp"]
+                profile["contracts_completed"] += 1
+                profile["reputation"] += 2
+                lines.append(
+                    f"📜 **Contract complete: {contract['title']}** — "
+                    f"{self._money(profile, contract['gold'])}, {contract['xp']} XP, and 2 reputation.",
+                )
+                self._journal(profile, f"Completed the contract “{contract['title']}.”")
+                profile["active_contract"] = {}
+                lines.extend(self._apply_level_ups(profile))
+        rift = profile.get("rift_state") or {}
+        if rift:
+            profile["rooms_cleared"] = max(0, profile["rooms_cleared"] - 1)
+            rift["wave"] += 1
+            if rift["wave"] < rift["waves"]:
+                wave_seed = int(rift.get("seed", 0)) + rift["wave"]
+                wave_rng = random.Random(wave_seed) if wave_seed else random
+                next_enemy = enemy_for_floor(
+                    rift["challenge_floor"] + rift["wave"],
+                    wave_rng,
+                )
+                next_enemy = apply_affix(
+                    next_enemy,
+                    rift["challenge_floor"] + 10,
+                    wave_rng,
+                )
+                next_enemy = self._apply_challenge_enemy_modifier(
+                    next_enemy,
+                    rift.get("name", ""),
+                    wave_rng,
+                )
+                next_enemy["name"] = f"Riftbound {next_enemy['name']}"
+                profile["combat_flags"].pop("web_used", None)
+                profile["encounter"] = ensure_enemy_intent(next_enemy)
+                lines.append(
+                    f"🌀 **Rift Wave {rift['wave'] + 1}/{rift['waves']}** tears itself open.",
+                )
+            else:
+                reward = round(
+                    (250 + rift["challenge_floor"] * 25) * float(rift.get("reward_multiplier", 1.0)),
+                )
+                profile["gold"] += reward
+                profile["season_points"] += 50 if rift["kind"] == "rift" else 30
+                if rift["kind"] == "rift":
+                    profile["rifts_completed"] += 1
+                else:
+                    profile["daily_date"] = rift["date"]
+                    profile["daily_score"] = max(profile["daily_score"], rift["challenge_floor"])
+                profile["floor"] = rift["original_floor"]
+                profile["rooms_cleared"] = rift["original_rooms"]
+                profile["rift_state"] = {}
+                lines.append(
+                    f"🌀 **Challenge complete!** {self._money(profile, reward)} and "
+                    f"{'50' if rift['kind'] == 'rift' else '30'} season points awarded.",
+                )
+        return lines
+
+    def _apply_level_ups(self, profile: dict[str, Any]) -> list[str]:
+        lines = []
+        while profile["xp"] >= xp_for_level(profile["level"]):
+            required = xp_for_level(profile["level"])
+            old_stats = self._stats(profile)
+            profile["xp"] -= required
+            profile["level"] += 1
+            profile["attribute_points"] += 2
+            if profile["level"] % 2 == 0:
+                profile["talent_points"] += 1
+            new_stats = self._stats(profile)
+            profile["hp"] += new_stats["max_hp"] - old_stats["max_hp"]
+            profile["mana"] = new_stats["max_mana"]
+            lines.append(
+                f"🌟 **LEVEL UP!** You are now level **{profile['level']}**. Your wounds mend and your power grows.",
+            )
+        return lines
+
+    def _apply_death(self, profile: dict[str, Any], cause: str) -> str:
+        equipped_effects = {item.get("unique_effect") for item in profile.get("equipment", {}).values() if item}
+        if profile.get("talents", {}).get("second_wind", 0) and profile.get("free_revive", True):
+            profile["free_revive"] = False
+            profile["hp"] = 1
+            return "🚩 **Second Wind** refuses death. You remain standing at **1 health**."
+        if "rebirth" in equipped_effects and not profile.get("combat_flags", {}).get("legendary_rebirth"):
+            profile["combat_flags"]["legendary_rebirth"] = True
+            profile["hp"] = max(1, round(self._stats(profile)["max_hp"] * 0.3))
+            if profile.get("encounter"):
+                profile["encounter"]["status"]["burn"] = 5
+            return "🔥 **Embermaw's Last Scale** resurrects you and ignites your enemy."
+        if profile.get("hardcore"):
+            profile["deaths"] += 1
+            profile["hardcore_dead"] = True
+            profile["encounter"] = {}
+            profile["choice"] = {}
+            profile["hp"] = 0
+            return f"☠️ **HARDCORE DEATH.** {profile['character_name']} falls to {cause}. This chronicle is permanently sealed."
+        loss = min(profile["gold"], max(10, round(profile["gold"] * 0.15)))
+        profile["gold"] -= loss
+        profile["deaths"] += 1
+        profile["encounter"] = {}
+        profile["choice"] = {}
+        profile["status"] = {}
+        profile["rooms_cleared"] = 0
+        profile["floor"] = max(1, profile["floor"] - 1)
+        stats = self._stats(profile)
+        profile["hp"] = stats["max_hp"]
+        profile["mana"] = stats["max_mana"]
+        if len(profile["scars"]) < 5:
+            scar = random.choice([entry for entry in SCARS if entry not in profile["scars"]] or list(SCARS))
+            if scar not in profile["scars"]:
+                profile["scars"].append(scar)
+        return (
+            f"☠️ You fall to **{cause}**. Outpost scouts drag you back from the dark.\n"
+            f"You lose **{self._money(profile, loss)}** and retreat to floor **{profile['floor']}**."
+        )
+
+    @staticmethod
+    def _award_achievements(profile: dict[str, Any]) -> str:
+        earned = set(profile["achievements"])
+        eligible = {
+            "first_blood": profile["kills"] >= 1,
+            "delver_five": profile["deepest_floor"] >= 5,
+            "boss_slayer": profile["bosses"] >= 1,
+            "wealthy": profile["gold"] >= 1000,
+            "veteran": profile["kills"] >= 100,
+            "deep_twenty": profile["deepest_floor"] >= 20,
+            "contractor": profile.get("contracts_completed", 0) >= 1,
+            "lorekeeper": len(profile.get("lore", [])) >= 5,
+            "master_smith": profile.get("crafted", 0) >= 10,
+        }
+        messages = []
+        for key, condition in eligible.items():
+            if not condition or key in earned:
+                continue
+            achievement = ACHIEVEMENTS[key]
+            profile["achievements"].append(key)
+            profile["gold"] += achievement["gold"]
+            messages.append(
+                f"🏅 **Achievement: {achievement['name']}** — {achievement['description']} "
+                f"(+{DeepDelve._money(profile, achievement['gold'])})",
+            )
+        return "\n".join(messages)
+
+    async def _town_interaction(self, interaction: discord.Interaction, action: str) -> None:
+        if not interaction.guild:
+            return
+        await interaction.response.defer()
+        async with self._lock_for(interaction.guild.id, interaction.user.id):
+            profile = await self._get_profile(interaction.guild.id, interaction.user.id)
+            starting_gold = profile["gold"]
+            if not profile["created"]:
+                await interaction.edit_original_response(embed=self._not_created_embed(), view=None)
+                return
+            if profile["encounter"]:
+                await interaction.followup.send(
+                    "You cannot use town services while an enemy is chasing you.",
+                    ephemeral=True,
+                )
+                return
+
+            stats = self._stats(profile)
+            if action == "rest":
+                cost = self._rest_price(profile)
+                if profile["hp"] >= stats["max_hp"]:
+                    narrative = "The innkeeper glances at you. “You look rested enough already.”"
+                elif profile["gold"] < cost:
+                    narrative = f"A bed costs **{self._money(profile, cost)}**, and the innkeeper does not offer credit."
+                else:
+                    profile["gold"] -= cost
+                    profile["hp"] = stats["max_hp"]
+                    profile["status"] = {}
+                    narrative = f"You sleep without dreams and awaken at full health. **-{self._money(profile, cost)}**"
+            elif action == "potion":
+                cost = self._potion_price(profile)
+                if profile["gold"] < cost:
+                    narrative = f"The apothecary asks **{self._money(profile, cost)}**. Your purse comes up short."
+                elif profile["potions"] >= 10:
+                    narrative = "Your potion satchel is full. Ten glass bottles are enough to worry about."
+                else:
+                    profile["gold"] -= cost
+                    profile["potions"] += 1
+                    narrative = f"You purchase a crimson healing potion. **-{self._money(profile, cost)}**"
+            else:
+                cost = max(5, profile["level"] * 3)
+                if profile["mana"] >= stats["max_mana"]:
+                    narrative = "Your mind is already clear and your mana is full."
+                elif profile["gold"] < cost:
+                    narrative = f"The chapel requests a **{self._money(profile, cost)}** offering."
+                else:
+                    profile["gold"] -= cost
+                    profile["mana"] = stats["max_mana"]
+                    narrative = f"The chapel's flame restores your mana. **-{self._money(profile, cost)}**"
+
+            await self._save_profile(
+                interaction.guild.id,
+                interaction.user.id,
+                profile,
+                starting_gold,
+            )
+        await interaction.edit_original_response(
+            embed=self._town_embed(profile, narrative),
+            view=TownView(self, interaction.user.id),
+        )
+
+    async def _contract_interaction(self, interaction: discord.Interaction) -> None:
+        if not interaction.guild:
+            return
+        await interaction.response.defer()
+        guild_id = interaction.guild.id
+        user_id = interaction.user.id
+        async with self._lock_for(guild_id, user_id):
+            profile = await self._get_profile(guild_id, user_id)
+            starting_gold = profile["gold"]
+            contract = profile.get("active_contract") or {}
+            if contract:
+                narrative = (
+                    f"📜 **{contract['title']}** remains active: "
+                    f"**{contract['progress']}/{contract['target']}** enemies defeated. "
+                    f"Reward: **{self._money(profile, contract['gold'])}** and **{contract['xp']} XP**."
+                )
+            else:
+                region = region_for_floor(profile["floor"])
+                target = min(10, 3 + profile["level"] // 3)
+                reward_gold = 50 + profile["floor"] * 12 + target * 8
+                mara_reputation = int(profile["npc_reputation"].get("mara", 0))
+                reward_gold = round(
+                    reward_gold * (1 + min(0.2, mara_reputation * 0.01)),
+                )
+                reward_xp = 35 + profile["floor"] * 9
+                contract = {
+                    "title": f"Thin the Shadows of {region['name']}",
+                    "region": region["name"],
+                    "target": target,
+                    "progress": 0,
+                    "gold": reward_gold,
+                    "xp": reward_xp,
+                }
+                profile["active_contract"] = contract
+                self._journal(profile, f"Accepted the contract “{contract['title']}.”")
+                narrative = (
+                    f"📜 **New Contract: {contract['title']}**\n"
+                    f"Defeat **{target} enemies** anywhere in the Deep.\n"
+                    f"Reward: **{self._money(profile, reward_gold)}**, **{reward_xp} XP**, "
+                    "and **2 Lastlight reputation**."
+                )
+                await self._save_profile(guild_id, user_id, profile, starting_gold)
+        await interaction.edit_original_response(
+            embed=self._town_embed(profile, narrative),
+            view=TownView(self, user_id),
+        )
+
+    async def _show_crafting_interaction(self, interaction: discord.Interaction) -> None:
+        if not interaction.guild:
+            return
+        await interaction.response.defer()
+        profile = await self._get_profile(interaction.guild.id, interaction.user.id)
+        await interaction.edit_original_response(
+            embed=self._craft_embed(profile),
+            view=CraftView(self, interaction.user.id),
+        )
+
+    async def _craft_interaction(self, interaction: discord.Interaction, slot: str) -> None:
+        if not interaction.guild:
+            return
+        await interaction.response.defer()
+        guild_id = interaction.guild.id
+        user_id = interaction.user.id
+        async with self._lock_for(guild_id, user_id):
+            profile = await self._get_profile(guild_id, user_id)
+            starting_gold = profile["gold"]
+            region = region_for_floor(profile["floor"])
+            material_key = region["material"]
+            material = MATERIALS[material_key]
+            cost = self._craft_cost(profile)
+            narrative: str
+            if len(profile["inventory"]) >= 25:
+                narrative = "Orra refuses to work while your pack is full."
+            elif profile["materials"].get(material_key, 0) < 3:
+                narrative = f"You need **3 {material['name']}** to forge at your current depth."
+            elif profile["gold"] < cost:
+                narrative = f"Orra requires **{self._money(profile, cost)}** for the work."
+            else:
+                profile["materials"][material_key] -= 3
+                profile["gold"] -= cost
+                stats = self._stats(profile)
+                item = self._generate_item(
+                    profile,
+                    profile["floor"] + 2,
+                    stats["luck"] + 4,
+                    slot=slot,
+                )
+                profile["inventory"].append(item)
+                profile["crafted"] += 1
+                self._journal(profile, f"Orra forged {item['name']} from {material['name']}.")
+                narrative = (
+                    f"Flame bends toward Orra's hammer. You receive "
+                    f"**{item['rarity']} {item['name']}** — {item_stat_line(item)}.\n"
+                    f"**-3 {material['name']} • -{self._money(profile, cost)}**"
+                )
+                achievement_text = self._award_achievements(profile)
+                if achievement_text:
+                    narrative += f"\n\n{achievement_text}"
+                await self._save_profile(guild_id, user_id, profile, starting_gold)
+        await interaction.edit_original_response(
+            embed=self._craft_embed(profile, narrative),
+            view=CraftView(self, user_id),
+        )
+
+    async def _show_inventory_interaction(self, interaction: discord.Interaction) -> None:
+        if not interaction.guild:
+            return
+        await interaction.response.defer()
+        profile = await self._get_profile(interaction.guild.id, interaction.user.id)
+        if not profile["created"]:
+            await interaction.edit_original_response(embed=self._not_created_embed(), view=None)
+            return
+        await interaction.edit_original_response(
+            embed=self._inventory_embed(profile),
+            view=InventoryView(self, interaction.user.id, profile),
+        )
+
+    async def _inventory_interaction(
+        self,
+        interaction: discord.Interaction,
+        selected_id: str | None,
+        action: str,
+    ) -> None:
+        if not interaction.guild:
+            return
+        if not selected_id or selected_id == "empty":
+            await interaction.response.send_message("Select an item first.", ephemeral=True)
+            return
+        await interaction.response.defer()
+        async with self._lock_for(interaction.guild.id, interaction.user.id):
+            profile = await self._get_profile(interaction.guild.id, interaction.user.id)
+            starting_gold = profile["gold"]
+            index = next(
+                (index for index, item in enumerate(profile["inventory"]) if str(item["id"]) == selected_id),
+                None,
+            )
+            if index is None:
+                await interaction.followup.send(
+                    "That item is no longer in your pack.",
+                    ephemeral=True,
+                )
+                return
+            item = profile["inventory"][index]
+            if action == "equip":
+                old_item = profile["equipment"].get(item["slot"])
+                if not item.get("identified", True):
+                    await interaction.followup.send(
+                        "Identify that relic before equipping it.",
+                        ephemeral=True,
+                    )
+                    return
+                if old_item and old_item.get("cursed"):
+                    await interaction.followup.send(
+                        "Your equipped item is cursed and must be cleansed before replacement.",
+                        ephemeral=True,
+                    )
+                    return
+                profile["inventory"].pop(index)
+                profile["equipment"][item["slot"]] = item
+                if old_item:
+                    profile["inventory"].append(old_item)
+                stats = self._stats(profile)
+                profile["hp"] = min(profile["hp"], stats["max_hp"])
+                narrative = f"Equipped **{item['name']}** in your {item['slot']} slot."
+            elif action == "sell":
+                if item.get("bound"):
+                    await interaction.followup.send(
+                        "Bound equipment cannot be sold. It can still be dismantled.",
+                        ephemeral=True,
+                    )
+                    return
+                profile["inventory"].pop(index)
+                profile["gold"] += int(item["value"])
+                narrative = f"Sold **{item['name']}** for **{self._money(profile, item['value'])}**."
+            elif action == "dismantle":
+                profile["inventory"].pop(index)
+                currency, shards = dismantle_rewards(item)
+                profile["gold"] += currency
+                profile["arcane_shards"] += shards
+                narrative = (
+                    f"Dismantled **{item['name']}** into **{shards} arcane shards** and **{self._money(profile, currency)}**."
+                )
+            elif action == "upgrade":
+                if int(item.get("upgrade", 0)) >= 10:
+                    await interaction.followup.send(
+                        "That item has reached its +10 upgrade limit.",
+                        ephemeral=True,
+                    )
+                    return
+                currency, shards = upgrade_cost(item)
+                if profile["gold"] < currency or profile["arcane_shards"] < shards:
+                    await interaction.followup.send(
+                        f"Upgrading requires {self._money(profile, currency)} and {shards} arcane shards.",
+                        ephemeral=True,
+                    )
+                    return
+                profile["gold"] -= currency
+                profile["arcane_shards"] -= shards
+                item["upgrade"] = int(item.get("upgrade", 0)) + 1
+                for stat in ("attack", "defense", "hp", "luck"):
+                    if item.get(stat):
+                        item[stat] = max(item[stat] + 1, round(item[stat] * 1.12))
+                item["value"] = round(item["value"] * 1.18)
+                narrative = f"Upgraded **{item['name']}** to **+{item['upgrade']}**."
+            elif action == "enchant":
+                shard_cost = 5 + int(item.get("rarity_index", 0)) * 2
+                if profile["arcane_shards"] < shard_cost:
+                    await interaction.followup.send(
+                        f"Enchanting requires **{shard_cost} arcane shards**.",
+                        ephemeral=True,
+                    )
+                    return
+                enchantments = (
+                    ("Ember Sigil", "burn", "Critical hits may Burn."),
+                    ("Serpent Sigil", "poison", "Critical hits may Poison."),
+                    ("Mender Sigil", "mending", "Victories restore additional health."),
+                    ("Fortune Sigil", "fortune", "Victory currency is increased."),
+                    ("Warden Sigil", "warding", "Elite damage is reduced."),
+                )
+                name, effect, description = random.choice(enchantments)
+                profile["arcane_shards"] -= shard_cost
+                item["enchant"] = name
+                item["unique_effect"] = effect
+                item["effect_description"] = description
+                narrative = f"Inscribed **{name}** onto **{item['name']}**."
+            else:
+                shard_cost = 3 + int(item.get("rarity_index", 0))
+                currency_cost = max(25, int(item.get("value", 1)) // 2)
+                if profile["arcane_shards"] < shard_cost or profile["gold"] < currency_cost:
+                    await interaction.followup.send(
+                        f"Rerolling requires {self._money(profile, currency_cost)} and {shard_cost} arcane shards.",
+                        ephemeral=True,
+                    )
+                    return
+                profile["arcane_shards"] -= shard_cost
+                profile["gold"] -= currency_cost
+                replacement = self._generate_item(
+                    profile,
+                    int(item.get("floor", profile["floor"])),
+                    self._stats(profile)["luck"] + 2,
+                    slot=item["slot"],
+                )
+                replacement["id"] = item["id"]
+                profile["inventory"][index] = replacement
+                narrative = f"Rerolled **{item['name']}** into **{replacement['name']}**."
+            await self._save_profile(
+                interaction.guild.id,
+                interaction.user.id,
+                profile,
+                starting_gold,
+            )
+
+        embed = self._inventory_embed(profile)
+        embed.description = f"{narrative}\n\n" + (embed.description or "")
+        await interaction.edit_original_response(
+            embed=embed,
+            view=InventoryView(self, interaction.user.id, profile),
+        )
+
+    async def _world_boss_strike(self, interaction: discord.Interaction) -> None:
+        if not interaction.guild:
+            return
+        await interaction.response.defer()
+        guild_id = interaction.guild.id
+        user_id = interaction.user.id
+        async with self._guild_lock_for(guild_id):
+            record = await self.config.guild(interaction.guild).world_boss()
+            if not record:
+                await interaction.followup.send("The world boss has already fallen.", ephemeral=True)
+                return
+            profile = await self._get_profile(guild_id, user_id)
+            if not profile["created"] or profile.get("hardcore_dead"):
+                await interaction.followup.send(
+                    "You need a living DeepDelve character to join the raid.",
+                    ephemeral=True,
+                )
+                return
+            now = datetime.now(timezone.utc)
+            last_text = record.get("last_attacks", {}).get(str(user_id))
+            if last_text:
+                elapsed = (now - datetime.fromisoformat(last_text)).total_seconds()
+                if elapsed < 30:
+                    await interaction.followup.send(
+                        f"Recover for **{round(30 - elapsed)} more seconds**.",
+                        ephemeral=True,
+                    )
+                    return
+            stats = self._stats(profile)
+            damage = random.randint(stats["attack"] * 2, stats["attack"] * 3 + stats["luck"])
+            damage = round(
+                damage * (1 + int(profile.get("guild_bonus", {}).get("worldboss_percent", 0)) / 100),
+            )
+            record["hp"] = max(0, int(record["hp"]) - damage)
+            record.setdefault("contributions", {})[str(user_id)] = (
+                int(record.get("contributions", {}).get(str(user_id), 0)) + damage
+            )
+            record.setdefault("last_attacks", {})[str(user_id)] = now.isoformat()
+            defeated = record["hp"] <= 0
+            if defeated:
+                contributions = record["contributions"]
+                total_damage = max(1, sum(int(value) for value in contributions.values()))
+                reward_lines = []
+                guild_renown: dict[str, int] = {}
+                for member_id_text, contribution in contributions.items():
+                    member_id = int(member_id_text)
+                    member = interaction.guild.get_member(member_id)
+                    if not member:
+                        continue
+                    member_profile = await self._get_profile(guild_id, member_id)
+                    starting_gold = member_profile["gold"]
+                    share = int(contribution) / total_damage
+                    reward = 200 + round(record["max_hp"] * 0.12 * share)
+                    member_profile["gold"] += reward
+                    member_profile["xp"] += 150 + round(250 * share)
+                    member_profile["season_points"] += 75
+                    if member_profile.get("player_guild_id"):
+                        guild_code = member_profile["player_guild_id"]
+                        guild_renown[guild_code] = guild_renown.get(guild_code, 0) + max(
+                            1,
+                            round(int(contribution) / 10),
+                        )
+                    levels = self._apply_level_ups(member_profile)
+                    await self._save_profile(
+                        guild_id,
+                        member_id,
+                        member_profile,
+                        starting_gold,
+                    )
+                    reward_lines.append(
+                        f"<@{member_id}> — {self._money(member_profile, reward)}"
+                        + (f" • {len(levels)} level-up(s)" if levels else ""),
+                    )
+                if guild_renown:
+                    player_guilds = await self.config.guild(interaction.guild).player_guilds()
+                    for guild_code, renown in guild_renown.items():
+                        if guild_code in player_guilds:
+                            player_guilds[guild_code]["renown"] += renown
+                    await self.config.guild(interaction.guild).player_guilds.set(player_guilds)
+                await self.config.guild(interaction.guild).world_boss.set({})
+                await self.config.guild(interaction.guild).world_boss_defeated_at.set(
+                    datetime.now(timezone.utc).isoformat(),
+                )
+                embed = discord.Embed(
+                    title=f"🏆 WORLD BOSS DEFEATED — {record['name']}",
+                    description=(f"<@{user_id}> delivers the final **{damage} damage**!\n\n" + "\n".join(reward_lines[:15])),
+                    color=GOLD_COLOR,
+                )
+                await interaction.edit_original_response(embed=embed, view=None)
+                return
+            await self.config.guild(interaction.guild).world_boss.set(record)
+        embed = self._world_boss_embed(record)
+        embed.description = f"<@{user_id}> deals **{damage} raid damage**!\n\n" + embed.description
+        await interaction.edit_original_response(embed=embed, view=WorldBossView(self))
+
+    @commands.hybrid_group(name="deepdelve", aliases=["delve"], invoke_without_command=True)
+    @commands.guild_only()
+    async def deepdelve(self, ctx: commands.Context) -> None:
+        """Enter a persistent old-school dungeon-crawling adventure."""
+        if not await self._channel_allowed(ctx):
+            return
+        profile = await self._get_profile(ctx.guild.id, ctx.author.id)
+        if not profile["created"]:
+            embed = discord.Embed(
+                title="⚔️ DeepDelve",
+                description=(
+                    "Beneath Lastlight Outpost lies a dungeon without an end.\n\n"
+                    "Choose a class, battle monsters, collect procedural equipment, "
+                    "defeat bosses, and carve your name into the server leaderboard.\n\n"
+                    "Begin with `/deepdelve create`."
+                ),
+                color=EMBED_COLOR,
+            )
+            art_path = Path(__file__).parent / "assets" / "deepdelve-key-art.png"
+            if art_path.is_file():
+                embed.set_image(url="attachment://deepdelve-key-art.png")
+                await ctx.send(
+                    embed=embed,
+                    file=discord.File(art_path, filename="deepdelve-key-art.png"),
+                )
+            else:
+                await ctx.send(embed=embed)
+            return
+        if profile.get("hardcore_dead"):
+            await ctx.send(embed=self._hardcore_death_embed(profile))
+            return
+        view: discord.ui.View
+        embed: discord.Embed
+        if profile["encounter"]:
+            view = CombatView(self, ctx.author.id, profile)
+            embed = self._combat_embed(profile, "Your unfinished battle resumes.")
+        elif profile["choice"]:
+            view = ChoiceView(self, ctx.author.id, profile["choice"])
+            embed = self._choice_embed(profile)
+        else:
+            view = AdventureView(self, ctx.author.id)
+            embed = self._adventure_embed(profile)
+        await ctx.send(embed=embed, view=view)
+
+    @deepdelve.command(name="create")
+    @commands.guild_only()
+    async def create(
+        self,
+        ctx: commands.Context,
+        class_name: str | None = None,
+        *,
+        character_name: str | None = None,
+    ) -> None:
+        """Create your delver, optionally providing a class and character name.
+
+        Available classes: Vanguard, Shadow, and Arcanist.
+        """
+        if not await self._channel_allowed(ctx):
+            return
+        profile = await self._get_profile(ctx.guild.id, ctx.author.id)
+        if profile["created"]:
+            await ctx.send(
+                "You already have a character. Use `/deepdelve retire` if you truly want to start over.",
+            )
+            return
+        if class_name:
+            class_key = class_name.lower().strip()
+            aliases = {
+                "warrior": "vanguard",
+                "fighter": "vanguard",
+                "rogue": "shadow",
+                "thief": "shadow",
+                "mage": "arcanist",
+                "wizard": "arcanist",
+            }
+            class_key = aliases.get(class_key, class_key)
+            if class_key not in GAME_CLASSES:
+                await ctx.send(
+                    f"Unknown class. Choose {humanize_list([details['name'] for details in GAME_CLASSES.values()])}.",
+                )
+                return
+            name = (character_name or ctx.author.display_name).strip()[:32]
+            if not name:
+                name = ctx.author.display_name[:32]
+            created = await self._create_character(ctx.guild.id, ctx.author.id, name, class_key)
+            if not created:
+                await ctx.send("Your character could not be created.")
+                return
+            profile = await self._get_profile(ctx.guild.id, ctx.author.id)
+            embed = self._profile_embed(ctx.author, profile)
+            embed.title = "⚔️ Your legend begins"
+            await ctx.send(embed=embed, view=AdventureView(self, ctx.author.id))
+            return
+
+        embed = discord.Embed(
+            title="⚔️ Choose Your Path",
+            description=(
+                "Your class determines your starting attributes and signature combat skill. "
+                "Equipment and levels will let you shape the character from there."
+            ),
+            color=EMBED_COLOR,
+        )
+        for details in GAME_CLASSES.values():
+            embed.add_field(
+                name=f"{details['emoji']} {details['name']}",
+                value=(
+                    f"{details['description']}\n"
+                    f"❤️ {details['max_hp']}  •  🔷 {details['max_mana']}  •  "
+                    f"⚔️ {details['attack']}  •  🛡️ {details['defense']}  •  🍀 {details['luck']}\n"
+                    f"**Skill:** {details['skill']}"
+                ),
+                inline=False,
+            )
+        await ctx.send(embed=embed, view=ClassSelectView(self, ctx.author.id))
+
+    @deepdelve.command(name="adventure", aliases=["explore"])
+    @commands.guild_only()
+    @commands.cooldown(1, 2, commands.BucketType.user)
+    async def adventure(self, ctx: commands.Context) -> None:
+        """Explore the next room or resume an active battle."""
+        profile = await self._require_character(ctx)
+        if not profile:
+            return
+        if profile["encounter"]:
+            await ctx.send(
+                embed=self._combat_embed(profile, "Your unfinished battle resumes."),
+                view=CombatView(self, ctx.author.id, profile),
+            )
+            return
+        if profile["choice"]:
+            await ctx.send(
+                embed=self._choice_embed(profile),
+                view=ChoiceView(self, ctx.author.id, profile["choice"]),
+            )
+            return
+        profile, narrative = await self._explore(ctx.guild.id, ctx.author.id)
+        if profile["encounter"]:
+            await ctx.send(
+                embed=self._combat_embed(profile, narrative),
+                view=CombatView(self, ctx.author.id, profile),
+            )
+        elif profile["choice"]:
+            await ctx.send(
+                embed=self._choice_embed(profile),
+                view=ChoiceView(self, ctx.author.id, profile["choice"]),
+            )
+        else:
+            await ctx.send(
+                embed=self._adventure_embed(profile, narrative),
+                view=AdventureView(self, ctx.author.id),
+            )
+
+    @deepdelve.command(name="profile", aliases=["character"])
+    @commands.guild_only()
+    async def profile(
+        self,
+        ctx: commands.Context,
+        member: discord.Member | None = None,
+    ) -> None:
+        """View your character or another member's character."""
+        if not await self._channel_allowed(ctx):
+            return
+        member = member or ctx.author
+        profile = await self._get_profile(ctx.guild.id, member.id)
+        if not profile["created"]:
+            await ctx.send(f"{member.display_name} has not created a DeepDelve character.")
+            return
+        await ctx.send(embed=self._profile_embed(member, profile))
+
+    @deepdelve.group(name="progression", aliases=["path"], invoke_without_command=True)
+    @commands.guild_only()
+    async def progression(self, ctx: commands.Context) -> None:
+        """Manage attributes, talents, subclass, background, alignment, and titles."""
+        profile = await self._require_character(ctx)
+        if profile:
+            refresh_titles(profile)
+            await ctx.send(embed=self._progression_embed(profile))
+
+    @progression.command(name="spend")
+    @commands.guild_only()
+    async def progression_spend(
+        self,
+        ctx: commands.Context,
+        attribute: str,
+        amount: int = 1,
+    ) -> None:
+        """Spend attribute points on might, finesse, insight, vitality, or fortune."""
+        profile = await self._require_character(ctx)
+        if not profile:
+            return
+        attribute = attribute.lower()
+        if attribute not in profile["attributes"]:
+            await ctx.send("Choose `might`, `finesse`, `insight`, `vitality`, or `fortune`.")
+            return
+        if amount < 1 or amount > profile["attribute_points"]:
+            await ctx.send(f"Choose an amount from 1 to {profile['attribute_points']}.")
+            return
+        async with self._lock_for(ctx.guild.id, ctx.author.id):
+            profile = await self._get_profile(ctx.guild.id, ctx.author.id)
+            starting_gold = profile["gold"]
+            if amount > profile["attribute_points"]:
+                await ctx.send("Your available points changed. Try again.")
+                return
+            profile["attribute_points"] -= amount
+            profile["attributes"][attribute] += amount
+            await self._save_profile(ctx.guild.id, ctx.author.id, profile, starting_gold)
+        await ctx.send(f"Added **{amount} point(s)** to **{attribute.title()}**.")
+
+    @progression.command(name="talent")
+    @commands.guild_only()
+    async def progression_talent(self, ctx: commands.Context, talent: str) -> None:
+        """Invest one point in a class talent using its displayed key or name."""
+        profile = await self._require_character(ctx)
+        if not profile:
+            return
+        talent_key = talent.lower().replace(" ", "_")
+        definition = talent_definition(profile, talent_key)
+        if not definition:
+            names = [entry["key"] for entry in TALENT_TREES[profile["class_key"]]]
+            await ctx.send(f"Choose one of: {humanize_list(names)}.")
+            return
+        if profile["talent_points"] < 1:
+            await ctx.send("You have no unspent talent points.")
+            return
+        rank = int(profile["talents"].get(talent_key, 0))
+        if rank >= definition["max"]:
+            await ctx.send("That talent is already at its maximum rank.")
+            return
+        async with self._lock_for(ctx.guild.id, ctx.author.id):
+            profile = await self._get_profile(ctx.guild.id, ctx.author.id)
+            starting_gold = profile["gold"]
+            profile["talent_points"] -= 1
+            profile["talents"][talent_key] = rank + 1
+            await self._save_profile(ctx.guild.id, ctx.author.id, profile, starting_gold)
+        await ctx.send(
+            f"◆ **{definition['name']}** is now rank **{rank + 1}/{definition['max']}**.",
+        )
+
+    @progression.command(name="subclass")
+    @commands.guild_only()
+    async def progression_subclass(self, ctx: commands.Context, subclass: str | None = None) -> None:
+        """Choose a permanent subclass at level 10."""
+        profile = await self._require_character(ctx)
+        if not profile:
+            return
+        options = subclass_options(profile)
+        if profile["subclass"]:
+            current = options[profile["subclass"]]
+            await ctx.send(f"You are already a {current['emoji']} **{current['name']}**.")
+            return
+        if profile["level"] < 10:
+            await ctx.send(f"Subclasses unlock at level 10. You are level {profile['level']}.")
+            return
+        if not subclass:
+            lines = [
+                f"{details['emoji']} **{key}** — {details['description']}\nPassive: {details['passive']}"
+                for key, details in options.items()
+            ]
+            await ctx.send(
+                embed=discord.Embed(
+                    title="🌠 Choose Your Subclass",
+                    description="\n\n".join(lines),
+                    color=GOLD_COLOR,
+                ),
+            )
+            return
+        subclass = subclass.lower()
+        if subclass not in options:
+            await ctx.send(f"Choose: {humanize_list(list(options))}.")
+            return
+        async with self._lock_for(ctx.guild.id, ctx.author.id):
+            profile = await self._get_profile(ctx.guild.id, ctx.author.id)
+            starting_gold = profile["gold"]
+            if profile["subclass"]:
+                await ctx.send("Your subclass was already chosen.")
+                return
+            profile["subclass"] = subclass
+            await self._save_profile(ctx.guild.id, ctx.author.id, profile, starting_gold)
+        chosen = options[subclass]
+        await ctx.send(
+            f"{chosen['emoji']} **Your path becomes {chosen['name']}.**\n{chosen['description']}",
+        )
+
+    @progression.command(name="background")
+    @commands.guild_only()
+    async def progression_background(self, ctx: commands.Context, background: str | None = None) -> None:
+        """Choose a background before defeating your first enemy."""
+        profile = await self._require_character(ctx)
+        if not profile:
+            return
+        if profile["background"]:
+            details = BACKGROUNDS[profile["background"]]
+            await ctx.send(f"Your background is **{details['name']}**.")
+            return
+        if profile["kills"] or profile["deepest_floor"] > 1:
+            await ctx.send("Your history is already being written; a background can no longer be chosen.")
+            return
+        if not background:
+            lines = [f"{details['emoji']} **{key}** — {details['description']}" for key, details in BACKGROUNDS.items()]
+            await ctx.send(
+                embed=discord.Embed(
+                    title="📖 Choose Your Background",
+                    description="\n\n".join(lines),
+                    color=EMBED_COLOR,
+                ),
+            )
+            return
+        background = background.lower()
+        if background not in BACKGROUNDS:
+            await ctx.send(f"Choose: {humanize_list(list(BACKGROUNDS))}.")
+            return
+        async with self._lock_for(ctx.guild.id, ctx.author.id):
+            profile = await self._get_profile(ctx.guild.id, ctx.author.id)
+            starting_gold = profile["gold"]
+            details = BACKGROUNDS[background]
+            profile["background"] = background
+            for attribute, amount in details["attributes"].items():
+                profile["attributes"][attribute] += amount
+            profile["gold"] += details["gold"]
+            profile["potions"] += details["potions"]
+            await self._save_profile(ctx.guild.id, ctx.author.id, profile, starting_gold)
+        await ctx.send(f"{details['emoji']} Your history: **{details['name']}**.\n{details['description']}")
+
+    @progression.command(name="alignment")
+    @commands.guild_only()
+    async def progression_alignment(self, ctx: commands.Context, alignment: str) -> None:
+        """Set a roleplaying alignment: Radiant, Pragmatic, or Umbral."""
+        profile = await self._require_character(ctx)
+        if not profile:
+            return
+        options = {"radiant": "Radiant", "pragmatic": "Pragmatic", "umbral": "Umbral"}
+        key = alignment.lower()
+        if key not in options:
+            await ctx.send("Choose `Radiant`, `Pragmatic`, or `Umbral`.")
+            return
+        async with self._lock_for(ctx.guild.id, ctx.author.id):
+            profile = await self._get_profile(ctx.guild.id, ctx.author.id)
+            starting_gold = profile["gold"]
+            profile["alignment"] = options[key]
+            await self._save_profile(ctx.guild.id, ctx.author.id, profile, starting_gold)
+        await ctx.send(f"Your chronicle now follows the **{options[key]}** path.")
+
+    @progression.command(name="title")
+    @commands.guild_only()
+    async def progression_title(self, ctx: commands.Context, title: str | None = None) -> None:
+        """View or equip an unlocked character title."""
+        profile = await self._require_character(ctx)
+        if not profile:
+            return
+        refresh_titles(profile)
+        if not title:
+            lines = [f"`{key}` — **{TITLES[key][0]}**: {TITLES[key][1]}" for key in profile["titles"]]
+            await ctx.send("\n".join(lines))
+            return
+        key = title.lower().replace(" ", "_")
+        if key not in profile["titles"]:
+            await ctx.send("You have not unlocked that title.")
+            return
+        async with self._lock_for(ctx.guild.id, ctx.author.id):
+            profile = await self._get_profile(ctx.guild.id, ctx.author.id)
+            starting_gold = profile["gold"]
+            profile["current_title"] = key
+            await self._save_profile(ctx.guild.id, ctx.author.id, profile, starting_gold)
+        await ctx.send(f"Equipped the title **{TITLES[key][0]}**.")
+
+    @progression.command(name="respec")
+    @commands.guild_only()
+    async def progression_respec(self, ctx: commands.Context) -> None:
+        """Reset attributes and talents for a scaling currency cost."""
+        profile = await self._require_character(ctx)
+        if not profile:
+            return
+        cost = 250 + profile["level"] * 75
+        if profile["gold"] < cost:
+            await ctx.send(f"Respecialization costs **{self._money(profile, cost)}**.")
+            return
+        async with self._lock_for(ctx.guild.id, ctx.author.id):
+            profile = await self._get_profile(ctx.guild.id, ctx.author.id)
+            starting_gold = profile["gold"]
+            profile["gold"] -= cost
+            base_attributes = {"might": 0, "finesse": 0, "insight": 0, "vitality": 0, "fortune": 0}
+            background = BACKGROUNDS.get(profile["background"])
+            if background:
+                base_attributes.update(background["attributes"])
+            profile["attributes"] = base_attributes
+            profile["attribute_points"] = 5 + max(0, profile["level"] - 1) * 2
+            profile["talents"] = {}
+            profile["talent_points"] = 1 + max(0, profile["level"] - 1) // 2
+            await self._save_profile(ctx.guild.id, ctx.author.id, profile, starting_gold)
+        await ctx.send(f"Your build has been reset for **{self._money(profile, cost)}**.")
+
+    @deepdelve.command(name="inventory", aliases=["pack"])
+    @commands.guild_only()
+    async def inventory(self, ctx: commands.Context) -> None:
+        """Open your equipment pack."""
+        profile = await self._require_character(ctx)
+        if not profile:
+            return
+        await ctx.send(
+            embed=self._inventory_embed(profile),
+            view=InventoryView(self, ctx.author.id, profile),
+        )
+
+    @deepdelve.command(name="town")
+    @commands.guild_only()
+    async def town(self, ctx: commands.Context) -> None:
+        """Visit Lastlight Outpost for healing and supplies."""
+        profile = await self._require_character(ctx)
+        if not profile:
+            return
+        if profile["encounter"]:
+            await ctx.send("You cannot return to town in the middle of a battle.")
+            return
+        await ctx.send(embed=self._town_embed(profile), view=TownView(self, ctx.author.id))
+
+    @deepdelve.command(name="achievements")
+    @commands.guild_only()
+    async def achievements(
+        self,
+        ctx: commands.Context,
+        member: discord.Member | None = None,
+    ) -> None:
+        """View achievement progress."""
+        if not await self._channel_allowed(ctx):
+            return
+        member = member or ctx.author
+        profile = await self._get_profile(ctx.guild.id, member.id)
+        if not profile["created"]:
+            await ctx.send(f"{member.display_name} has not created a character.")
+            return
+        earned = set(profile["achievements"])
+        lines = []
+        for key, details in ACHIEVEMENTS.items():
+            icon = "🏅" if key in earned else "🔒"
+            lines.append(
+                f"{icon} **{details['name']}** — {details['description']} (*{self._money(profile, details['gold'])}*)",
+            )
+        embed = discord.Embed(
+            title=f"🏅 {member.display_name}'s Achievements",
+            description="\n".join(lines),
+            color=GOLD_COLOR,
+        )
+        embed.set_footer(text=f"{len(earned)}/{len(ACHIEVEMENTS)} unlocked")
+        await ctx.send(embed=embed)
+
+    @deepdelve.command(name="bestiary")
+    @commands.guild_only()
+    async def bestiary(self, ctx: commands.Context) -> None:
+        """View creatures you have encountered."""
+        profile = await self._require_character(ctx)
+        if not profile:
+            return
+        discovered = profile["discovered"]
+        if not discovered:
+            description = "No creatures recorded. Explore the dungeon to begin your bestiary."
+        else:
+            description = "\n".join(f"• {name}" for name in discovered)
+        await ctx.send(
+            embed=discord.Embed(
+                title="📖 Dungeon Bestiary",
+                description=description,
+                color=EMBED_COLOR,
+            ),
+        )
+
+    @deepdelve.command(name="lore")
+    @commands.guild_only()
+    async def lore(self, ctx: commands.Context) -> None:
+        """Read lore fragments recovered from the Deep."""
+        profile = await self._require_character(ctx)
+        if not profile:
+            return
+        fragments = [fragment for fragment in LORE_FRAGMENTS if fragment["title"] in profile["lore"]]
+        if not fragments:
+            description = "Your chronicle contains no recovered lore. Study strange runes and search hidden rooms."
+        else:
+            description = "\n\n".join(f"📜 **{fragment['title']}**\n*{fragment['text']}*" for fragment in fragments)
+        embed = discord.Embed(
+            title="📚 Whispers of the Deep",
+            description=description,
+            color=EMBED_COLOR,
+        )
+        embed.set_footer(text=f"{len(fragments)}/{len(LORE_FRAGMENTS)} fragments recovered")
+        await ctx.send(embed=embed)
+
+    @deepdelve.command(name="journal")
+    @commands.guild_only()
+    async def journal(self, ctx: commands.Context) -> None:
+        """Read the latest entries in your personal expedition journal."""
+        profile = await self._require_character(ctx)
+        if not profile:
+            return
+        entries = profile.get("journal", [])
+        description = "\n".join(f"• {entry}" for entry in entries[-20:])
+        if not description:
+            description = "The pages are blank. The Deep will provide the ink."
+        await ctx.send(
+            embed=discord.Embed(
+                title=f"📓 {profile['character_name']}'s Expedition Journal",
+                description=description,
+                color=0x7D6608,
+            ),
+        )
+
+    @deepdelve.command(name="materials")
+    @commands.guild_only()
+    async def materials(self, ctx: commands.Context) -> None:
+        """View rare materials recovered for crafting."""
+        profile = await self._require_character(ctx)
+        if not profile:
+            return
+        lines = [
+            f"{details['emoji']} **{details['name']}:** {profile['materials'].get(key, 0)}" for key, details in MATERIALS.items()
+        ]
+        await ctx.send(
+            embed=discord.Embed(
+                title="🧰 Crafting Materials",
+                description="\n".join(lines),
+                color=0xA04000,
+            ),
+        )
+
+    @deepdelve.command(name="contract")
+    @commands.guild_only()
+    async def contract(self, ctx: commands.Context) -> None:
+        """Visit the contract board to accept or review a bounty."""
+        profile = await self._require_character(ctx)
+        if not profile:
+            return
+        if profile["encounter"]:
+            await ctx.send("The contract board is in town, and you are currently fighting for your life.")
+            return
+        await ctx.send(embed=self._town_embed(profile), view=TownView(self, ctx.author.id))
+
+    @deepdelve.command(name="craft")
+    @commands.guild_only()
+    async def craft(self, ctx: commands.Context) -> None:
+        """Forge depth-scaled equipment from recovered materials."""
+        profile = await self._require_character(ctx)
+        if not profile:
+            return
+        if profile["encounter"]:
+            await ctx.send("Orra's forge is back in town. Finish your battle first.")
+            return
+        await ctx.send(embed=self._craft_embed(profile), view=CraftView(self, ctx.author.id))
+
+    @deepdelve.command(name="regions", aliases=["world"])
+    @commands.guild_only()
+    async def regions(self, ctx: commands.Context) -> None:
+        """View the known regions of the Deep."""
+        profile = await self._require_character(ctx)
+        if not profile:
+            return
+        lines = []
+        for region in (
+            region_for_floor(1),
+            region_for_floor(6),
+            region_for_floor(11),
+            region_for_floor(16),
+            region_for_floor(21),
+        ):
+            known = profile["deepest_floor"] >= int(region["floors"].split("–")[0].rstrip("+"))
+            if known:
+                lines.append(
+                    f"{region['emoji']} **{region['name']}** — Floors {region['floors']}\n*{region['description']}*",
+                )
+            else:
+                lines.append(f"❔ **Unknown Region** — Floors {region['floors']}")
+        await ctx.send(
+            embed=discord.Embed(
+                title="🗺️ Cartography of the Deep",
+                description="\n\n".join(lines),
+                color=EMBED_COLOR,
+            ),
+        )
+
+    @deepdelve.group(name="item", invoke_without_command=True)
+    @commands.guild_only()
+    async def item_group(self, ctx: commands.Context) -> None:
+        """Inspect the equipment codex and advanced item systems."""
+        await ctx.send_help(ctx.command)
+
+    @item_group.command(name="inspect")
+    @commands.guild_only()
+    async def item_inspect(self, ctx: commands.Context, item_id: str) -> None:
+        """Inspect an inventory or equipped item by its displayed ID."""
+        profile = await self._require_character(ctx)
+        if not profile:
+            return
+        items = list(profile["inventory"]) + [item for item in profile["equipment"].values() if item]
+        item = next(
+            (entry for entry in items if str(entry["id"]) == item_id or entry["name"].lower() == item_id.lower()),
+            None,
+        )
+        if not item:
+            await ctx.send("No carried or equipped item matches that ID.")
+            return
+        currency_cost, shard_cost = upgrade_cost(item)
+        embed = discord.Embed(
+            title="🔎 Equipment Inspection",
+            description=item_detail(item),
+            color=RARITIES[int(item.get("rarity_index", 0))]["color"],
+        )
+        embed.add_field(
+            name="Value",
+            value=f"{self._money(profile, item['value'])}",
+        )
+        embed.add_field(
+            name="Next Upgrade",
+            value=f"{self._money(profile, currency_cost)} + {shard_cost} shards",
+        )
+        await ctx.send(embed=embed)
+
+    @item_group.command(name="codex")
+    @commands.guild_only()
+    async def item_codex(self, ctx: commands.Context) -> None:
+        """View equipment discoveries and legendary collection progress."""
+        profile = await self._require_character(ctx)
+        if not profile:
+            return
+        discovered = profile.get("item_codex", [])
+        legendary_names = {
+            item["name"]
+            for item in list(profile["inventory"]) + [item for item in profile["equipment"].values() if item]
+            if item.get("legendary")
+        }
+        description = (
+            f"📚 **Unique equipment discovered:** {len(discovered)}\n"
+            f"🟠 **Legendary relics currently owned:** {len(legendary_names)}\n"
+            f"🔷 **Arcane shards:** {profile.get('arcane_shards', 0)}\n\n"
+            + (
+                "\n".join(f"• {name}" for name in sorted(legendary_names))
+                if legendary_names
+                else "*No legendary relic has answered your call yet.*"
+            )
+        )
+        await ctx.send(
+            embed=discord.Embed(
+                title="📕 The Relic Codex",
+                description=description,
+                color=GOLD_COLOR,
+            ),
+        )
+
+    @item_group.command(name="sets")
+    @commands.guild_only()
+    async def item_sets(self, ctx: commands.Context) -> None:
+        """View currently active equipment-set bonuses."""
+        profile = await self._require_character(ctx)
+        if not profile:
+            return
+        _bonuses, effects = equipment_set_bonuses(profile["equipment"])
+        description = "\n".join(effects) if effects else "No equipment-set bonuses are active."
+        await ctx.send(
+            embed=discord.Embed(
+                title="🧩 Equipment Sets",
+                description=description,
+                color=EMBED_COLOR,
+            ),
+        )
+
+    @item_group.command(name="identify")
+    @commands.guild_only()
+    async def item_identify(self, ctx: commands.Context, item_id: str) -> None:
+        """Reveal an unidentified relic for arcane shards."""
+        profile = await self._require_character(ctx)
+        if not profile:
+            return
+        item = next(
+            (entry for entry in profile["inventory"] if str(entry["id"]) == item_id),
+            None,
+        )
+        if not item or item.get("identified", True):
+            await ctx.send("No unidentified inventory item matches that ID.")
+            return
+        cost = 3 + int(item.get("rarity_index", 0))
+        if profile["arcane_shards"] < cost:
+            await ctx.send(f"Identification requires **{cost} arcane shards**.")
+            return
+        async with self._lock_for(ctx.guild.id, ctx.author.id):
+            profile = await self._get_profile(ctx.guild.id, ctx.author.id)
+            starting_gold = profile["gold"]
+            item = next(entry for entry in profile["inventory"] if str(entry["id"]) == item_id)
+            profile["arcane_shards"] -= cost
+            item["identified"] = True
+            item["name"] = item.pop("hidden_name", item["name"])
+            item["codex_key"] = item["name"].lower().replace(" ", "_")
+            self._record_item(profile, item)
+            await self._save_profile(ctx.guild.id, ctx.author.id, profile, starting_gold)
+        await ctx.send(f"🔮 The relic is revealed:\n{item_detail(item)}")
+
+    @item_group.command(name="cleanse")
+    @commands.guild_only()
+    async def item_cleanse(self, ctx: commands.Context, item_id: str) -> None:
+        """Remove a curse from carried or equipped gear."""
+        profile = await self._require_character(ctx)
+        if not profile:
+            return
+        items = profile["inventory"] + [item for item in profile["equipment"].values() if item]
+        item = next((entry for entry in items if str(entry["id"]) == item_id), None)
+        if not item or not item.get("cursed"):
+            await ctx.send("No cursed carried or equipped item matches that ID.")
+            return
+        cost = 10 + int(item.get("rarity_index", 0)) * 4
+        if profile["arcane_shards"] < cost:
+            await ctx.send(f"Cleansing requires **{cost} arcane shards**.")
+            return
+        async with self._lock_for(ctx.guild.id, ctx.author.id):
+            profile = await self._get_profile(ctx.guild.id, ctx.author.id)
+            starting_gold = profile["gold"]
+            items = profile["inventory"] + [equipped for equipped in profile["equipment"].values() if equipped]
+            item = next(entry for entry in items if str(entry["id"]) == item_id)
+            profile["arcane_shards"] -= cost
+            item["cursed"] = False
+            if not item.get("legendary"):
+                item["bound"] = False
+            await self._save_profile(ctx.guild.id, ctx.author.id, profile, starting_gold)
+        await ctx.send(f"✨ **{item['name']}** has been cleansed.")
+
+    @deepdelve.group(name="npc", invoke_without_command=True)
+    @commands.guild_only()
+    async def npc_group(self, ctx: commands.Context) -> None:
+        """Meet Lastlight's recurring characters and advance their stories."""
+        profile = await self._require_character(ctx)
+        if not profile:
+            return
+        lines = []
+        for key in NPCS:
+            progress = npc_progress(profile, key)
+            npc = progress["npc"]
+            lines.append(
+                f"{npc['emoji']} **{key} — {npc['name']}**, {npc['role']}\n"
+                f"{progress['relationship']} • Reputation {progress['reputation']}",
+            )
+        await ctx.send(
+            embed=discord.Embed(
+                title="🏘️ People of Lastlight",
+                description="\n\n".join(lines),
+                color=SUCCESS_COLOR,
+            ),
+        )
+
+    @npc_group.command(name="talk")
+    @commands.guild_only()
+    async def npc_talk(self, ctx: commands.Context, npc: str) -> None:
+        """Speak with Orra, Mara, Vesper, or Rook."""
+        profile = await self._require_character(ctx)
+        if not profile:
+            return
+        npc = npc.lower()
+        if npc not in NPCS:
+            await ctx.send(f"Choose: {humanize_list(list(NPCS))}.")
+            return
+        progress = npc_progress(profile, npc)
+        details = progress["npc"]
+        quest_lines = []
+        for quest in progress["quests"]:
+            marker = "✅" if quest["completed"] else "⭐" if quest["eligible"] else "🔒"
+            quest_lines.append(
+                f"{marker} **{quest['name']}** — {quest['description']}",
+            )
+        embed = discord.Embed(
+            title=f"{details['emoji']} {details['name']} — {details['role']}",
+            description=f"*{details['introduction']}*",
+            color=EMBED_COLOR,
+        )
+        embed.add_field(
+            name=f"Relationship: {progress['relationship']}",
+            value=f"Reputation: **{progress['reputation']}**",
+            inline=False,
+        )
+        embed.add_field(name="Story Quests", value="\n".join(quest_lines), inline=False)
+        await ctx.send(embed=embed)
+
+    @npc_group.command(name="quest")
+    @commands.guild_only()
+    async def npc_quest(self, ctx: commands.Context, npc: str) -> None:
+        """Claim the next completed story quest for an NPC."""
+        profile = await self._require_character(ctx)
+        if not profile:
+            return
+        npc = npc.lower()
+        if npc not in NPCS:
+            await ctx.send(f"Choose: {humanize_list(list(NPCS))}.")
+            return
+        progress = npc_progress(profile, npc)
+        quest = next(
+            (entry for entry in progress["quests"] if entry["eligible"] and not entry["completed"]),
+            None,
+        )
+        if not quest:
+            await ctx.send("You have no completed, unclaimed story quest for that character.")
+            return
+        async with self._lock_for(ctx.guild.id, ctx.author.id):
+            profile = await self._get_profile(ctx.guild.id, ctx.author.id)
+            starting_gold = profile["gold"]
+            reward_gold = 100 + profile["level"] * 20
+            reward_xp = 75 + profile["level"] * 15
+            profile["story_flags"].append(quest["flag"])
+            profile["npc_reputation"][npc] += 5
+            profile["gold"] += reward_gold
+            profile["xp"] += reward_xp
+            if quest["flag"].endswith(":3"):
+                available = [blessing["name"] for blessing in BLESSINGS if blessing["name"] not in profile["blessings"]]
+                if available:
+                    profile["blessings"].append(random.choice(available))
+            level_lines = self._apply_level_ups(profile)
+            await self._save_profile(ctx.guild.id, ctx.author.id, profile, starting_gold)
+        text = (
+            f"⭐ **Story Quest Complete: {quest['name']}**\n"
+            f"{self._money(profile, reward_gold)} • {reward_xp} XP • 5 relationship reputation"
+        )
+        if level_lines:
+            text += "\n" + "\n".join(level_lines)
+        await ctx.send(text)
+
+    @deepdelve.group(name="party", invoke_without_command=True)
+    @commands.guild_only()
+    async def party_group(self, ctx: commands.Context) -> None:
+        """Create a cooperative party with up to four delvers."""
+        profile = await self._require_character(ctx)
+        if not profile:
+            return
+        if not profile["party_id"]:
+            await ctx.send("You are not in a party. Use `/deepdelve party create` or `join`.")
+            return
+        parties = await self.config.guild(ctx.guild).parties()
+        party = parties.get(profile["party_id"])
+        if not party:
+            await ctx.send("Your former party no longer exists.")
+            return
+        mentions = [f"<@{member_id}>" for member_id in party["members"]]
+        await ctx.send(
+            embed=discord.Embed(
+                title=f"🧭 Party {profile['party_id']}",
+                description=(
+                    f"**Leader:** <@{party['leader']}>\n"
+                    f"**Members:** {humanize_list(mentions)}\n\n"
+                    "Party members receive cooperative HP, Attack, and Luck bonuses."
+                ),
+                color=SUCCESS_COLOR,
+            ),
+        )
+
+    @party_group.command(name="create")
+    @commands.guild_only()
+    async def party_create(self, ctx: commands.Context) -> None:
+        """Create a new cooperative party."""
+        profile = await self._require_character(ctx)
+        if not profile:
+            return
+        if profile["party_id"]:
+            await ctx.send("Leave your current party first.")
+            return
+        async with self._guild_lock_for(ctx.guild.id):
+            parties = await self.config.guild(ctx.guild).parties()
+            code = short_code("P", parties)
+            parties[code] = {"leader": ctx.author.id, "members": [ctx.author.id]}
+            await self.config.guild(ctx.guild).parties.set(parties)
+            profile["party_id"] = code
+            profile["party_bonus"] = party_bonus(1)
+            await self.config.member(ctx.author).set(profile)
+        await ctx.send(f"🧭 Created party **{code}**. Others can join with `/deepdelve party join {code}`.")
+
+    @party_group.command(name="join")
+    @commands.guild_only()
+    async def party_join(self, ctx: commands.Context, code: str) -> None:
+        """Join an existing party by code."""
+        profile = await self._require_character(ctx)
+        if not profile:
+            return
+        if profile["party_id"]:
+            await ctx.send("Leave your current party first.")
+            return
+        code = code.upper()
+        async with self._guild_lock_for(ctx.guild.id):
+            parties = await self.config.guild(ctx.guild).parties()
+            party = parties.get(code)
+            if not party:
+                await ctx.send("No party uses that code.")
+                return
+            if len(party["members"]) >= 4:
+                await ctx.send("That party already has four members.")
+                return
+            party["members"].append(ctx.author.id)
+            parties[code] = party
+            await self.config.guild(ctx.guild).parties.set(parties)
+            profile["party_id"] = code
+            await self.config.member(ctx.author).set(profile)
+            await self._sync_party_bonuses(ctx.guild.id, party["members"])
+        await ctx.send(f"🧭 Joined party **{code}** with {len(party['members'])} members.")
+
+    @party_group.command(name="leave")
+    @commands.guild_only()
+    async def party_leave(self, ctx: commands.Context) -> None:
+        """Leave your current party."""
+        profile = await self._require_character(ctx)
+        if not profile or not profile["party_id"]:
+            await ctx.send("You are not in a party.")
+            return
+        async with self._guild_lock_for(ctx.guild.id):
+            parties = await self.config.guild(ctx.guild).parties()
+            code = profile["party_id"]
+            party = parties.get(code)
+            if party:
+                party["members"] = [member_id for member_id in party["members"] if member_id != ctx.author.id]
+                if not party["members"]:
+                    parties.pop(code, None)
+                else:
+                    if party["leader"] == ctx.author.id:
+                        party["leader"] = party["members"][0]
+                    parties[code] = party
+                    await self._sync_party_bonuses(ctx.guild.id, party["members"])
+                await self.config.guild(ctx.guild).parties.set(parties)
+            profile["party_id"] = ""
+            profile["party_bonus"] = {}
+            profile["party_role"] = ""
+            await self.config.member(ctx.author).set(profile)
+        await ctx.send("You leave the party and continue alone.")
+
+    @party_group.command(name="role")
+    @commands.guild_only()
+    async def party_role(self, ctx: commands.Context, role: str) -> None:
+        """Choose Guardian, Striker, Support, or Scout cooperative specialization."""
+        profile = await self._require_character(ctx)
+        if not profile or not profile["party_id"]:
+            await ctx.send("Join a party before selecting a cooperative role.")
+            return
+        roles = {
+            "guardian": "+3 DEF",
+            "striker": "+3 ATK",
+            "support": "+10 HP",
+            "scout": "+4 LUCK",
+        }
+        role = role.lower()
+        if role not in roles:
+            await ctx.send(f"Choose: {humanize_list(list(roles))}.")
+            return
+        profile["party_role"] = role
+        await self.config.member(ctx.author).set(profile)
+        await ctx.send(f"🧭 Party role set to **{role.title()}** ({roles[role]}).")
+
+    @deepdelve.group(name="auction", invoke_without_command=True)
+    @commands.guild_only()
+    async def auction_group(self, ctx: commands.Context) -> None:
+        """Trade equipment through the server auction house."""
+        await self.auction_browse(ctx)
+
+    @auction_group.command(name="browse")
+    @commands.guild_only()
+    async def auction_browse(self, ctx: commands.Context) -> None:
+        """Browse current equipment listings."""
+        if not await self._channel_allowed(ctx):
+            return
+        auctions = await self.config.guild(ctx.guild).auctions()
+        if not auctions:
+            await ctx.send("The auction board is empty.")
+            return
+        currency = (
+            await bank.get_currency_name(ctx.guild) if await self.config.guild(ctx.guild).economy_mode() == "bank" else "gold"
+        )
+        lines = []
+        for auction_id, record in list(auctions.items())[:20]:
+            item = record["item"]
+            lines.append(
+                f"`{auction_id}` {RARITIES[item.get('rarity_index', 0)]['emoji']} "
+                f"**{item['name']}** — {record['price']} {currency} • Seller <@{record['seller']}>",
+            )
+        await ctx.send(
+            embed=discord.Embed(
+                title="🏛️ Lastlight Auction House",
+                description="\n".join(lines),
+                color=GOLD_COLOR,
+            ),
+        )
+
+    @auction_group.command(name="list")
+    @commands.guild_only()
+    async def auction_list(self, ctx: commands.Context, item_id: str, price: int) -> None:
+        """List an inventory item for a fixed price."""
+        profile = await self._require_character(ctx)
+        if not profile:
+            return
+        if price < 1:
+            await ctx.send("The listing price must be positive.")
+            return
+        index = next(
+            (index for index, item in enumerate(profile["inventory"]) if str(item["id"]) == item_id),
+            None,
+        )
+        if index is None:
+            await ctx.send("No inventory item matches that ID.")
+            return
+        if profile["inventory"][index].get("bound"):
+            await ctx.send("Bound equipment cannot be traded.")
+            return
+        async with self._guild_lock_for(ctx.guild.id):
+            auctions = await self.config.guild(ctx.guild).auctions()
+            if len(auctions) >= 100:
+                await ctx.send("The auction house has reached its 100-listing limit.")
+                return
+            auction_id = short_code("A", auctions)
+            item = profile["inventory"].pop(index)
+            auctions[auction_id] = {
+                "seller": ctx.author.id,
+                "item": item,
+                "price": price,
+                "created": datetime.now(timezone.utc).isoformat(),
+            }
+            await self.config.guild(ctx.guild).auctions.set(auctions)
+            await self.config.member(ctx.author).set(profile)
+        await ctx.send(f"Listed **{item['name']}** as `{auction_id}` for **{self._money(profile, price)}**.")
+
+    @auction_group.command(name="buy")
+    @commands.guild_only()
+    async def auction_buy(self, ctx: commands.Context, auction_id: str) -> None:
+        """Purchase an auction listing."""
+        buyer = await self._require_character(ctx)
+        if not buyer:
+            return
+        auction_id = auction_id.upper()
+        async with self._guild_lock_for(ctx.guild.id):
+            auctions = await self.config.guild(ctx.guild).auctions()
+            record = auctions.get(auction_id)
+            if not record:
+                await ctx.send("That auction no longer exists.")
+                return
+            if record["seller"] == ctx.author.id:
+                await ctx.send("You cannot buy your own listing.")
+                return
+            seller_member = ctx.guild.get_member(int(record["seller"]))
+            if not seller_member:
+                await ctx.send("The seller is no longer available in this server.")
+                return
+            buyer = await self._get_profile(ctx.guild.id, ctx.author.id)
+            seller = await self._get_profile(ctx.guild.id, seller_member.id)
+            if len(buyer["inventory"]) >= 25:
+                await ctx.send("Your inventory is full.")
+                return
+            if buyer["gold"] < record["price"]:
+                await ctx.send(f"You need **{self._money(buyer, record['price'])}**.")
+                return
+            buyer_start = buyer["gold"]
+            seller_start = seller["gold"]
+            buyer["gold"] -= record["price"]
+            seller["gold"] += record["price"]
+            buyer["inventory"].append(record["item"])
+            self._record_item(buyer, record["item"])
+            auctions.pop(auction_id)
+            await self.config.guild(ctx.guild).auctions.set(auctions)
+            await self._save_profile(ctx.guild.id, ctx.author.id, buyer, buyer_start)
+            await self._save_profile(ctx.guild.id, seller_member.id, seller, seller_start)
+        await ctx.send(
+            f"Purchased **{record['item']['name']}** for **{self._money(buyer, record['price'])}**.",
+        )
+
+    @auction_group.command(name="cancel")
+    @commands.guild_only()
+    async def auction_cancel(self, ctx: commands.Context, auction_id: str) -> None:
+        """Cancel your listing and recover its item."""
+        profile = await self._require_character(ctx)
+        if not profile:
+            return
+        auction_id = auction_id.upper()
+        async with self._guild_lock_for(ctx.guild.id):
+            auctions = await self.config.guild(ctx.guild).auctions()
+            record = auctions.get(auction_id)
+            if not record or record["seller"] != ctx.author.id:
+                await ctx.send("That is not one of your active listings.")
+                return
+            if len(profile["inventory"]) >= 25:
+                await ctx.send("Make room in your inventory before cancelling.")
+                return
+            profile["inventory"].append(record["item"])
+            auctions.pop(auction_id)
+            await self.config.guild(ctx.guild).auctions.set(auctions)
+            await self.config.member(ctx.author).set(profile)
+        await ctx.send(f"Cancelled `{auction_id}` and recovered **{record['item']['name']}**.")
+
+    @deepdelve.group(name="guild", invoke_without_command=True)
+    @commands.guild_only()
+    async def player_guild_group(self, ctx: commands.Context) -> None:
+        """Create and grow a persistent player guild."""
+        profile = await self._require_character(ctx)
+        if not profile:
+            return
+        guilds = await self.config.guild(ctx.guild).player_guilds()
+        record = guilds.get(profile["player_guild_id"])
+        if not record:
+            await ctx.send("You are guildless. Use `/deepdelve guild create` or `join`.")
+            return
+        members = humanize_list([f"<@{member_id}>" for member_id in record["members"]])
+        embed = discord.Embed(
+            title=f"🏰 {record['name']} • Level {record['level']}",
+            description=(
+                f"**Code:** `{profile['player_guild_id']}`\n"
+                f"**Guildmaster:** <@{record['owner']}>\n"
+                f"**Members:** {members}\n"
+                f"**Treasury:** {record['treasury']}\n"
+                f"**Renown:** {record['renown']}/{record['level'] * 1000}"
+            ),
+            color=GOLD_COLOR,
+        )
+        embed.add_field(name="Perks", value="\n".join(f"• {perk}" for perk in guild_perks(record)))
+        await ctx.send(embed=embed)
+
+    @player_guild_group.command(name="create")
+    @commands.guild_only()
+    async def player_guild_create(self, ctx: commands.Context, *, name: str) -> None:
+        """Found a player guild for 1,000 currency."""
+        profile = await self._require_character(ctx)
+        if not profile:
+            return
+        if profile["player_guild_id"]:
+            await ctx.send("Leave your current guild first.")
+            return
+        if not 3 <= len(name.strip()) <= 32:
+            await ctx.send("Guild names must contain 3–32 characters.")
+            return
+        cost = 1000
+        if profile["gold"] < cost:
+            await ctx.send(f"Founding a guild costs **{self._money(profile, cost)}**.")
+            return
+        async with self._guild_lock_for(ctx.guild.id):
+            guilds = await self.config.guild(ctx.guild).player_guilds()
+            if any(record["name"].casefold() == name.strip().casefold() for record in guilds.values()):
+                await ctx.send("A player guild already uses that name.")
+                return
+            code = short_code("G", guilds)
+            starting_gold = profile["gold"]
+            profile["gold"] -= cost
+            profile["player_guild_id"] = code
+            guilds[code] = {
+                "name": name.strip(),
+                "owner": ctx.author.id,
+                "members": [ctx.author.id],
+                "treasury": 0,
+                "renown": 0,
+                "level": 1,
+                "vault": [],
+            }
+            await self.config.guild(ctx.guild).player_guilds.set(guilds)
+            await self._save_profile(ctx.guild.id, ctx.author.id, profile, starting_gold)
+            await self._sync_player_guild_bonuses(ctx.guild.id, [ctx.author.id], 1)
+        await ctx.send(f"🏰 Founded **{name.strip()}** with recruitment code `{code}`.")
+
+    @player_guild_group.command(name="join")
+    @commands.guild_only()
+    async def player_guild_join(self, ctx: commands.Context, code: str) -> None:
+        """Join a player guild using its recruitment code."""
+        profile = await self._require_character(ctx)
+        if not profile:
+            return
+        if profile["player_guild_id"]:
+            await ctx.send("Leave your current guild first.")
+            return
+        code = code.upper()
+        async with self._guild_lock_for(ctx.guild.id):
+            guilds = await self.config.guild(ctx.guild).player_guilds()
+            record = guilds.get(code)
+            if not record:
+                await ctx.send("No player guild uses that code.")
+                return
+            if len(record["members"]) >= 50:
+                await ctx.send("That guild has reached its 50-member limit.")
+                return
+            record["members"].append(ctx.author.id)
+            guilds[code] = record
+            profile["player_guild_id"] = code
+            await self.config.guild(ctx.guild).player_guilds.set(guilds)
+            await self.config.member(ctx.author).set(profile)
+            await self._sync_player_guild_bonuses(
+                ctx.guild.id,
+                record["members"],
+                record["level"],
+            )
+        await ctx.send(f"🏰 Joined **{record['name']}**.")
+
+    @player_guild_group.command(name="contribute")
+    @commands.guild_only()
+    async def player_guild_contribute(self, ctx: commands.Context, amount: int) -> None:
+        """Contribute currency to guild renown and upgrades."""
+        profile = await self._require_character(ctx)
+        if not profile or not profile["player_guild_id"]:
+            await ctx.send("You are not in a player guild.")
+            return
+        if amount < 1 or profile["gold"] < amount:
+            await ctx.send("Choose a positive amount you can afford.")
+            return
+        async with self._guild_lock_for(ctx.guild.id):
+            guilds = await self.config.guild(ctx.guild).player_guilds()
+            record = guilds.get(profile["player_guild_id"])
+            if not record:
+                await ctx.send("Your guild record no longer exists.")
+                return
+            starting_gold = profile["gold"]
+            profile["gold"] -= amount
+            record["treasury"] += amount
+            record["renown"] += amount
+            levels = []
+            while record["level"] < 5 and record["renown"] >= record["level"] * 1000:
+                record["renown"] -= record["level"] * 1000
+                record["level"] += 1
+                levels.append(record["level"])
+            guilds[profile["player_guild_id"]] = record
+            await self.config.guild(ctx.guild).player_guilds.set(guilds)
+            await self._save_profile(ctx.guild.id, ctx.author.id, profile, starting_gold)
+            await self._sync_player_guild_bonuses(
+                ctx.guild.id,
+                record["members"],
+                record["level"],
+            )
+        message = f"Contributed **{self._money(profile, amount)}** to **{record['name']}**."
+        if levels:
+            message += f"\n🌟 The guild reached level **{levels[-1]}**!"
+        await ctx.send(message)
+
+    @player_guild_group.command(name="leave")
+    @commands.guild_only()
+    async def player_guild_leave(self, ctx: commands.Context) -> None:
+        """Leave your player guild; ownership transfers automatically."""
+        profile = await self._require_character(ctx)
+        if not profile or not profile["player_guild_id"]:
+            await ctx.send("You are not in a player guild.")
+            return
+        async with self._guild_lock_for(ctx.guild.id):
+            guilds = await self.config.guild(ctx.guild).player_guilds()
+            code = profile["player_guild_id"]
+            record = guilds.get(code)
+            if record:
+                record["members"] = [member_id for member_id in record["members"] if member_id != ctx.author.id]
+                if not record["members"]:
+                    guilds.pop(code, None)
+                else:
+                    if record["owner"] == ctx.author.id:
+                        record["owner"] = record["members"][0]
+                    guilds[code] = record
+                await self.config.guild(ctx.guild).player_guilds.set(guilds)
+            profile["player_guild_id"] = ""
+            profile["guild_bonus"] = {}
+            await self.config.member(ctx.author).set(profile)
+        await ctx.send("You leave your player guild.")
+
+    @player_guild_group.command(name="leaderboard")
+    @commands.guild_only()
+    async def player_guild_leaderboard(self, ctx: commands.Context) -> None:
+        """Rank player guilds by level, renown, and treasury."""
+        if not await self._channel_allowed(ctx):
+            return
+        guilds = await self.config.guild(ctx.guild).player_guilds()
+        rankings = sorted(
+            guilds.items(),
+            key=lambda entry: (
+                int(entry[1]["level"]),
+                int(entry[1]["renown"]),
+                int(entry[1]["treasury"]),
+            ),
+            reverse=True,
+        )[:10]
+        lines = [
+            f"`#{index}` **{record['name']}** — Level {record['level']} • "
+            f"{record['renown']} renown • {len(record['members'])} members"
+            for index, (_code, record) in enumerate(rankings, start=1)
+        ]
+        await ctx.send(
+            embed=discord.Embed(
+                title="🏰 Player Guild Rankings",
+                description="\n".join(lines) or "No player guilds have been founded.",
+                color=GOLD_COLOR,
+            ),
+        )
+
+    @player_guild_group.command(name="vault")
+    @commands.guild_only()
+    async def player_guild_vault(self, ctx: commands.Context) -> None:
+        """View equipment stored in the shared guild vault."""
+        profile = await self._require_character(ctx)
+        if not profile or not profile["player_guild_id"]:
+            await ctx.send("You are not in a player guild.")
+            return
+        guilds = await self.config.guild(ctx.guild).player_guilds()
+        record = guilds.get(profile["player_guild_id"], {})
+        vault = record.get("vault", [])
+        lines = [f"`{item['id']}` {RARITIES[item.get('rarity_index', 0)]['emoji']} **{item['name']}**" for item in vault]
+        await ctx.send(
+            embed=discord.Embed(
+                title=f"🔐 {record.get('name', 'Guild')} Vault",
+                description="\n".join(lines) or "The shared vault is empty.",
+                color=EMBED_COLOR,
+            ),
+        )
+
+    @player_guild_group.command(name="deposit")
+    @commands.guild_only()
+    async def player_guild_deposit(self, ctx: commands.Context, item_id: str) -> None:
+        """Deposit a tradable inventory item into the guild vault."""
+        profile = await self._require_character(ctx)
+        if not profile or not profile["player_guild_id"]:
+            await ctx.send("You are not in a player guild.")
+            return
+        index = next(
+            (index for index, item in enumerate(profile["inventory"]) if str(item["id"]) == item_id),
+            None,
+        )
+        if index is None or profile["inventory"][index].get("bound"):
+            await ctx.send("No tradable inventory item matches that ID.")
+            return
+        async with self._guild_lock_for(ctx.guild.id):
+            guilds = await self.config.guild(ctx.guild).player_guilds()
+            record = guilds.get(profile["player_guild_id"])
+            if not record:
+                await ctx.send("Your guild record no longer exists.")
+                return
+            vault = record.setdefault("vault", [])
+            if len(vault) >= 30:
+                await ctx.send("The guild vault is full.")
+                return
+            item = profile["inventory"].pop(index)
+            vault.append(item)
+            guilds[profile["player_guild_id"]] = record
+            await self.config.guild(ctx.guild).player_guilds.set(guilds)
+            await self.config.member(ctx.author).set(profile)
+        await ctx.send(f"🔐 Deposited **{item['name']}** into the guild vault.")
+
+    @player_guild_group.command(name="withdraw")
+    @commands.guild_only()
+    async def player_guild_withdraw(self, ctx: commands.Context, item_id: str) -> None:
+        """Withdraw an item; only the guildmaster controls the shared vault."""
+        profile = await self._require_character(ctx)
+        if not profile or not profile["player_guild_id"]:
+            await ctx.send("You are not in a player guild.")
+            return
+        if len(profile["inventory"]) >= 25:
+            await ctx.send("Your inventory is full.")
+            return
+        async with self._guild_lock_for(ctx.guild.id):
+            guilds = await self.config.guild(ctx.guild).player_guilds()
+            record = guilds.get(profile["player_guild_id"])
+            if not record or record["owner"] != ctx.author.id:
+                await ctx.send("Only the guildmaster can withdraw shared equipment.")
+                return
+            vault = record.setdefault("vault", [])
+            index = next(
+                (index for index, item in enumerate(vault) if str(item["id"]) == item_id),
+                None,
+            )
+            if index is None:
+                await ctx.send("No vault item matches that ID.")
+                return
+            item = vault.pop(index)
+            profile["inventory"].append(item)
+            guilds[profile["player_guild_id"]] = record
+            await self.config.guild(ctx.guild).player_guilds.set(guilds)
+            await self.config.member(ctx.author).set(profile)
+        await ctx.send(f"🔓 Withdrew **{item['name']}** from the guild vault.")
+
+    @deepdelve.group(name="arena", invoke_without_command=True)
+    @commands.guild_only()
+    async def arena_group(self, ctx: commands.Context) -> None:
+        """Challenge other delvers to consensual arena matches."""
+        profile = await self._require_character(ctx)
+        if profile:
+            await ctx.send(
+                f"⚔️ Arena record: **{profile['arena_wins']} wins** and **{profile['arena_losses']} losses**.",
+            )
+
+    @arena_group.command(name="challenge")
+    @commands.guild_only()
+    async def arena_challenge(
+        self,
+        ctx: commands.Context,
+        opponent: discord.Member,
+        wager: int = 0,
+    ) -> None:
+        """Challenge a delver; optional wagers are escrowed and require acceptance."""
+        challenger = await self._require_character(ctx)
+        if not challenger:
+            return
+        if opponent.id == ctx.author.id or opponent.bot:
+            await ctx.send("Choose another human member.")
+            return
+        defender = await self._get_profile(ctx.guild.id, opponent.id)
+        if not defender["created"]:
+            await ctx.send("That member has no DeepDelve character.")
+            return
+        if wager < 0 or challenger["gold"] < wager:
+            await ctx.send("Choose a wager you can currently afford.")
+            return
+        async with self._guild_lock_for(ctx.guild.id):
+            arenas = await self.config.guild(ctx.guild).arenas()
+            duel_id = short_code("D", arenas)
+            starting_gold = challenger["gold"]
+            challenger["gold"] -= wager
+            arenas[duel_id] = {
+                "challenger": ctx.author.id,
+                "opponent": opponent.id,
+                "wager": wager,
+                "status": "pending",
+            }
+            await self.config.guild(ctx.guild).arenas.set(arenas)
+            await self._save_profile(ctx.guild.id, ctx.author.id, challenger, starting_gold)
+        await ctx.send(
+            f"⚔️ {opponent.mention}, **{ctx.author.display_name}** challenges you as `{duel_id}` "
+            f"for **{self._money(challenger, wager)}**.\n"
+            f"Accept with `/deepdelve arena accept {duel_id}`.",
+        )
+
+    @arena_group.command(name="accept")
+    @commands.guild_only()
+    async def arena_accept(self, ctx: commands.Context, duel_id: str) -> None:
+        """Accept and resolve a pending arena challenge."""
+        duel_id = duel_id.upper()
+        async with self._guild_lock_for(ctx.guild.id):
+            arenas = await self.config.guild(ctx.guild).arenas()
+            duel = arenas.get(duel_id)
+            if not duel or duel["status"] != "pending" or duel["opponent"] != ctx.author.id:
+                await ctx.send("That is not a pending challenge addressed to you.")
+                return
+            challenger_member = ctx.guild.get_member(int(duel["challenger"]))
+            if not challenger_member:
+                await ctx.send("The challenger is no longer available.")
+                return
+            challenger = await self._get_profile(ctx.guild.id, challenger_member.id)
+            defender = await self._get_profile(ctx.guild.id, ctx.author.id)
+            if defender["gold"] < duel["wager"]:
+                await ctx.send("You cannot currently cover the wager.")
+                return
+            defender_start = defender["gold"]
+            challenger_start = challenger["gold"]
+            defender["gold"] -= duel["wager"]
+            challenger_power = arena_power(challenger, self._stats(challenger))
+            defender_power = arena_power(defender, self._stats(defender))
+            total = max(2, challenger_power + defender_power)
+            challenger_wins = random.randint(1, total) <= challenger_power
+            winner = challenger if challenger_wins else defender
+            loser = defender if challenger_wins else challenger
+            winner_member = challenger_member if challenger_wins else ctx.author
+            loser_member = ctx.author if challenger_wins else challenger_member
+            winner["arena_wins"] += 1
+            loser["arena_losses"] += 1
+            winner["season_points"] += 15
+            winner["gold"] += duel["wager"] * 2
+            arenas.pop(duel_id)
+            await self.config.guild(ctx.guild).arenas.set(arenas)
+            await self._save_profile(
+                ctx.guild.id,
+                challenger_member.id,
+                challenger,
+                challenger_start,
+            )
+            await self._save_profile(
+                ctx.guild.id,
+                ctx.author.id,
+                defender,
+                defender_start,
+            )
+        await ctx.send(
+            embed=discord.Embed(
+                title="⚔️ Arena Result",
+                description=(
+                    f"**{winner_member.display_name}** defeats **{loser_member.display_name}**!\n"
+                    f"Prize: **{self._money(winner, duel['wager'] * 2)}** • **15 season points**\n\n"
+                    f"Power rating: {challenger_member.display_name} {challenger_power} "
+                    f"vs. {ctx.author.display_name} {defender_power}"
+                ),
+                color=GOLD_COLOR,
+            ),
+        )
+
+    @arena_group.command(name="decline")
+    @commands.guild_only()
+    async def arena_decline(self, ctx: commands.Context, duel_id: str) -> None:
+        """Decline a pending challenge and refund its wager."""
+        duel_id = duel_id.upper()
+        async with self._guild_lock_for(ctx.guild.id):
+            arenas = await self.config.guild(ctx.guild).arenas()
+            duel = arenas.get(duel_id)
+            if not duel or duel["opponent"] != ctx.author.id:
+                await ctx.send("That is not a pending challenge addressed to you.")
+                return
+            challenger_member = ctx.guild.get_member(int(duel["challenger"]))
+            if challenger_member:
+                challenger = await self._get_profile(ctx.guild.id, challenger_member.id)
+                starting_gold = challenger["gold"]
+                challenger["gold"] += duel["wager"]
+                await self._save_profile(
+                    ctx.guild.id,
+                    challenger_member.id,
+                    challenger,
+                    starting_gold,
+                )
+            arenas.pop(duel_id)
+            await self.config.guild(ctx.guild).arenas.set(arenas)
+        await ctx.send("The challenge is declined and its wager refunded.")
+
+    @arena_group.command(name="cancel")
+    @commands.guild_only()
+    async def arena_cancel(self, ctx: commands.Context, duel_id: str) -> None:
+        """Cancel your pending challenge and recover its escrowed wager."""
+        duel_id = duel_id.upper()
+        async with self._guild_lock_for(ctx.guild.id):
+            arenas = await self.config.guild(ctx.guild).arenas()
+            duel = arenas.get(duel_id)
+            if not duel or duel["challenger"] != ctx.author.id:
+                await ctx.send("That is not one of your pending challenges.")
+                return
+            profile = await self._get_profile(ctx.guild.id, ctx.author.id)
+            starting_gold = profile["gold"]
+            profile["gold"] += duel["wager"]
+            arenas.pop(duel_id)
+            await self.config.guild(ctx.guild).arenas.set(arenas)
+            await self._save_profile(ctx.guild.id, ctx.author.id, profile, starting_gold)
+        await ctx.send("The challenge is cancelled and its wager refunded.")
+
+    @deepdelve.group(name="endgame", invoke_without_command=True)
+    @commands.guild_only()
+    async def endgame_group(self, ctx: commands.Context) -> None:
+        """Enter rifts, daily dungeons, seasons, ascension, and world raids."""
+        profile = await self._require_character(ctx)
+        if not profile:
+            return
+        season = current_season()
+        embed = discord.Embed(
+            title=f"🌌 {season['name']}",
+            description=(
+                f"**Season:** {season['id']}\n"
+                f"**Season Points:** {profile['season_points']}\n"
+                f"**Ascensions:** {profile['ascensions']}\n"
+                f"**Prestige:** {profile['prestige']}\n"
+                f"**Challenge Rifts:** {profile['rifts_completed']}\n"
+                f"**Hardcore:** {'Dead' if profile['hardcore_dead'] else 'Active' if profile['hardcore'] else 'Off'}"
+            ),
+            color=0x4A235A,
+        )
+        await ctx.send(embed=embed)
+
+    async def _start_challenge(
+        self,
+        ctx: commands.Context,
+        profile: dict[str, Any],
+        *,
+        kind: str,
+        challenge_floor: int,
+        waves: int,
+        multiplier: float,
+        challenge_date: str = "",
+        name: str,
+        seed: int = 0,
+    ) -> None:
+        if profile["encounter"] or profile["choice"] or profile.get("rift_state"):
+            await ctx.send("Finish your current encounter before opening another challenge.")
+            return
+        async with self._lock_for(ctx.guild.id, ctx.author.id):
+            profile = await self._get_profile(ctx.guild.id, ctx.author.id)
+            starting_gold = profile["gold"]
+            profile["rift_state"] = {
+                "kind": kind,
+                "name": name,
+                "wave": 0,
+                "waves": waves,
+                "challenge_floor": challenge_floor,
+                "reward_multiplier": multiplier,
+                "date": challenge_date,
+                "seed": seed,
+                "original_floor": profile["floor"],
+                "original_rooms": profile["rooms_cleared"],
+            }
+            profile["floor"] = challenge_floor
+            challenge_rng = random.Random(seed) if seed else random
+            enemy = apply_affix(
+                enemy_for_floor(challenge_floor, challenge_rng),
+                challenge_floor + 10,
+                challenge_rng,
+            )
+            enemy = self._apply_challenge_enemy_modifier(enemy, name, challenge_rng)
+            enemy["name"] = f"Riftbound {enemy['name']}"
+            profile["encounter"] = ensure_enemy_intent(enemy)
+            await self._save_profile(ctx.guild.id, ctx.author.id, profile, starting_gold)
+        await ctx.send(
+            embed=self._combat_embed(
+                profile,
+                f"🌀 **{name} — Wave 1/{waves}**\nReality seals behind you.",
+            ),
+            view=CombatView(self, ctx.author.id, profile),
+        )
+
+    @endgame_group.command(name="rift")
+    @commands.guild_only()
+    async def endgame_rift(self, ctx: commands.Context, difficulty: int = 1) -> None:
+        """Open a five-wave challenge rift at difficulty 1–10."""
+        profile = await self._require_character(ctx)
+        if not profile:
+            return
+        if profile["deepest_floor"] < 10:
+            await ctx.send("Challenge rifts unlock after reaching floor 10.")
+            return
+        if not 1 <= difficulty <= 10:
+            await ctx.send("Difficulty must be between 1 and 10.")
+            return
+        challenge_floor = profile["deepest_floor"] + difficulty * 2
+        await self._start_challenge(
+            ctx,
+            profile,
+            kind="rift",
+            challenge_floor=challenge_floor,
+            waves=5,
+            multiplier=1 + difficulty * 0.15,
+            name=f"Rift Tier {difficulty}",
+        )
+
+    @endgame_group.command(name="daily")
+    @commands.guild_only()
+    async def endgame_daily(self, ctx: commands.Context) -> None:
+        """Enter the shared UTC daily dungeon."""
+        profile = await self._require_character(ctx)
+        if not profile:
+            return
+        challenge = daily_dungeon()
+        if profile["daily_date"] == challenge["date"]:
+            await ctx.send("You have already completed today's daily dungeon.")
+            return
+        await self._start_challenge(
+            ctx,
+            profile,
+            kind="daily",
+            challenge_floor=challenge["floor"],
+            waves=3,
+            multiplier=challenge["reward_multiplier"],
+            challenge_date=challenge["date"],
+            name=f"Daily: {challenge['name']}",
+            seed=challenge["seed"],
+        )
+
+    @endgame_group.command(name="hardcore")
+    @commands.guild_only()
+    async def endgame_hardcore(self, ctx: commands.Context, enabled: bool) -> None:
+        """Enable irreversible Hardcore death before beginning an adventure."""
+        profile = await self._require_character(ctx)
+        if not profile:
+            return
+        if profile["kills"] or profile["deepest_floor"] > 1:
+            await ctx.send("Hardcore mode can only be changed before the first kill.")
+            return
+        async with self._lock_for(ctx.guild.id, ctx.author.id):
+            profile = await self._get_profile(ctx.guild.id, ctx.author.id)
+            starting_gold = profile["gold"]
+            profile["hardcore"] = enabled
+            await self._save_profile(ctx.guild.id, ctx.author.id, profile, starting_gold)
+        await ctx.send(
+            "☠️ Hardcore mode enabled. **Combat death permanently seals this character.**"
+            if enabled
+            else "Hardcore mode disabled.",
+        )
+
+    @endgame_group.command(name="ascend")
+    @commands.guild_only()
+    async def endgame_ascend(self, ctx: commands.Context, confirm: bool = False) -> None:
+        """Reset combat progression for permanent prestige after floor 20."""
+        profile = await self._require_character(ctx)
+        if not profile:
+            return
+        if profile["deepest_floor"] < 20 or profile["bosses"] < 4:
+            await ctx.send("Ascension requires floor 20 and at least four defeated bosses.")
+            return
+        if not confirm:
+            await ctx.send(
+                "Ascension resets level, XP, floor, attributes, talents, inventory, equipment, "
+                "materials, and combat records. Lore, codex, titles, currency, achievements, "
+                "reputation, and social memberships remain.\n"
+                "Run `/deepdelve endgame ascend confirm:true` to proceed.",
+            )
+            return
+        async with self._lock_for(ctx.guild.id, ctx.author.id):
+            profile = await self._get_profile(ctx.guild.id, ctx.author.id)
+            starting_gold = profile["gold"]
+            details = GAME_CLASSES[profile["class_key"]]
+            profile.update(
+                {
+                    "level": 1,
+                    "xp": 0,
+                    "hp": details["max_hp"],
+                    "mana": details["max_mana"],
+                    "floor": 1,
+                    "rooms_cleared": 0,
+                    "deepest_floor": 1,
+                    "encounter": {},
+                    "choice": {},
+                    "status": {},
+                    "inventory": [],
+                    "equipment": {"weapon": None, "armor": None, "charm": None},
+                    "materials": dict.fromkeys(MATERIALS, 0),
+                    "kills": 0,
+                    "bosses": 0,
+                    "attributes": dict.fromkeys(profile["attributes"], 0),
+                    "attribute_points": 7,
+                    "talents": {},
+                    "talent_points": 2,
+                    "skill_cooldowns": {},
+                    "subclass": "",
+                    "map_nodes": [],
+                    "rift_state": {},
+                    "ascensions": profile["ascensions"] + 1,
+                    "prestige": profile["prestige"] + 1,
+                },
+            )
+            background = BACKGROUNDS.get(profile.get("background", ""))
+            if background:
+                for attribute, amount in background["attributes"].items():
+                    profile["attributes"][attribute] += amount
+            available = [blessing["name"] for blessing in BLESSINGS if blessing["name"] not in profile["blessings"]]
+            if available:
+                profile["blessings"].append(random.choice(available))
+            await self._save_profile(ctx.guild.id, ctx.author.id, profile, starting_gold)
+        await ctx.send(
+            f"🌠 **ASCENSION {profile['ascensions']}** — The Deep remembers you. "
+            "Permanent prestige strengthens every future incarnation.",
+        )
+
+    @endgame_group.command(name="season")
+    @commands.guild_only()
+    async def endgame_season(self, ctx: commands.Context) -> None:
+        """View the current seasonal leaderboard."""
+        if not await self._channel_allowed(ctx):
+            return
+        season = current_season()
+        all_members = await self.config.all_members(ctx.guild)
+        rankings = sorted(
+            (
+                (member_id, data)
+                for member_id, data in all_members.items()
+                if data.get("created") and data.get("season_id") == season["id"]
+            ),
+            key=lambda entry: int(entry[1].get("season_points", 0)),
+            reverse=True,
+        )[:10]
+        lines = [
+            f"`#{index}` <@{member_id}> — **{data.get('season_points', 0)} points**"
+            for index, (member_id, data) in enumerate(rankings, start=1)
+        ]
+        await ctx.send(
+            embed=discord.Embed(
+                title=f"🏆 {season['name']}",
+                description="\n".join(lines) or "No seasonal points have been earned.",
+                color=GOLD_COLOR,
+            ),
+        )
+
+    @endgame_group.command(name="worldboss")
+    @commands.guild_only()
+    async def endgame_worldboss(self, ctx: commands.Context) -> None:
+        """Summon or inspect the persistent server-wide world boss."""
+        if not await self._channel_allowed(ctx):
+            return
+        async with self._guild_lock_for(ctx.guild.id):
+            record = await self.config.guild(ctx.guild).world_boss()
+            if not record:
+                defeated_at = await self.config.guild(ctx.guild).world_boss_defeated_at()
+                if defeated_at:
+                    elapsed = datetime.now(timezone.utc) - datetime.fromisoformat(defeated_at)
+                    if elapsed.total_seconds() < 86400:
+                        remaining = round((86400 - elapsed.total_seconds()) / 3600, 1)
+                        await ctx.send(
+                            f"Lastlight is safe. The next world threat may emerge in **{remaining} hours**.",
+                        )
+                        return
+                all_members = await self.config.all_members(ctx.guild)
+                delver_count = max(1, sum(1 for data in all_members.values() if data.get("created")))
+                maximum = 2500 + delver_count * 650
+                season = current_season()
+                record = {
+                    "name": "Nhal, Eater of Seasons",
+                    "emoji": "🌌",
+                    "description": (f"Drawn by {season['name']}, a shadow large enough to cover Lastlight descends."),
+                    "hp": maximum,
+                    "max_hp": maximum,
+                    "contributions": {},
+                    "last_attacks": {},
+                    "spawned": datetime.now(timezone.utc).isoformat(),
+                }
+                await self.config.guild(ctx.guild).world_boss.set(record)
+        await ctx.send(embed=self._world_boss_embed(record), view=WorldBossView(self))
+
+    @deepdelve.command(name="leaderboard", aliases=["top"])
+    @commands.guild_only()
+    async def leaderboard(self, ctx: commands.Context, category: str = "depth") -> None:
+        """View rankings for depth, level, kills, gold, or bosses."""
+        if not await self._channel_allowed(ctx):
+            return
+        categories = {
+            "depth": ("deepest_floor", "Deepest Floor", "🏰"),
+            "level": ("level", "Level", "✨"),
+            "kills": ("kills", "Enemies Defeated", "☠️"),
+            "gold": ("gold", "Gold", "🪙"),
+            "bosses": ("bosses", "Bosses Defeated", "🏆"),
+        }
+        category = category.lower()
+        if category not in categories:
+            await ctx.send(f"Choose a category: {humanize_list(list(categories))}.")
+            return
+        key, title, emoji = categories[category]
+        all_members = await self.config.all_members(ctx.guild)
+        rankings = [(member_id, data) for member_id, data in all_members.items() if data.get("created")]
+        economy_mode = await self.config.guild(ctx.guild).economy_mode()
+        if key == "gold" and economy_mode == "bank":
+            title = await bank.get_currency_name(ctx.guild)
+            for member_id, data in rankings:
+                member = ctx.guild.get_member(int(member_id))
+                if member:
+                    data["gold"] = await bank.get_balance(member)
+        rankings.sort(key=lambda entry: int(entry[1].get(key, 0)), reverse=True)
+        if not rankings:
+            await ctx.send("No delvers have entered the dungeon yet.")
+            return
+        lines = []
+        medals = ("🥇", "🥈", "🥉")
+        for position, (member_id, data) in enumerate(rankings[:10], start=1):
+            member = ctx.guild.get_member(int(member_id))
+            name = member.display_name if member else data.get("character_name", f"Delver {member_id}")
+            marker = medals[position - 1] if position <= 3 else f"`#{position}`"
+            lines.append(f"{marker} **{name}** — {emoji} **{data.get(key, 0)}**")
+        embed = discord.Embed(
+            title=f"{emoji} DeepDelve Leaderboard — {title}",
+            description="\n".join(lines),
+            color=GOLD_COLOR,
+        )
+        embed.set_footer(text=f"Use /deepdelve leaderboard category:{category}")
+        await ctx.send(embed=embed)
+
+    @deepdelve.command(name="retire")
+    @commands.guild_only()
+    async def retire(self, ctx: commands.Context) -> None:
+        """Permanently delete your character and start over."""
+        if not await self._channel_allowed(ctx):
+            return
+        profile = await self._get_profile(ctx.guild.id, ctx.author.id)
+        if not profile["created"]:
+            await ctx.send(embed=self._not_created_embed())
+            return
+        embed = discord.Embed(
+            title="🪦 Retire this character?",
+            description=(
+                "This permanently deletes your levels, equipment, gold, achievements, and all other progress. "
+                "**This cannot be undone.**"
+            ),
+            color=DANGER_COLOR,
+        )
+        await ctx.send(embed=embed, view=RetireConfirmView(self, ctx.author.id))
+
+    @deepdelve.group(name="set", invoke_without_command=True)
+    @commands.guild_only()
+    @commands.admin_or_permissions(manage_guild=True)
+    async def deepdelve_set(self, ctx: commands.Context) -> None:
+        """Configure DeepDelve for this server."""
+        data = await self.config.guild(ctx.guild).all()
+        channel = ctx.guild.get_channel(data["adventure_channel"])
+        channel_text = channel.mention if channel else "Any channel"
+        embed = discord.Embed(
+            title="⚙️ DeepDelve Settings",
+            color=EMBED_COLOR,
+        )
+        embed.add_field(name="Enabled", value="Yes" if data["enabled"] else "No")
+        embed.add_field(name="Adventure Channel", value=channel_text)
+        embed.add_field(name="Daily Turns", value=str(data["daily_turns"]))
+        embed.add_field(
+            name="Economy",
+            value=(
+                "Red bank — all game transactions use the server economy"
+                if data["economy_mode"] == "bank"
+                else "Internal — isolated dungeon gold"
+            ),
+            inline=False,
+        )
+        await ctx.send(embed=embed)
+
+    @deepdelve_set.command(name="enabled")
+    @commands.guild_only()
+    @commands.admin_or_permissions(manage_guild=True)
+    async def set_enabled(self, ctx: commands.Context, enabled: bool) -> None:
+        """Enable or disable gameplay in this server."""
+        await self.config.guild(ctx.guild).enabled.set(enabled)
+        await ctx.send(f"DeepDelve is now **{'enabled' if enabled else 'disabled'}**.")
+
+    @deepdelve_set.command(name="channel")
+    @commands.guild_only()
+    @commands.admin_or_permissions(manage_guild=True)
+    async def set_channel(
+        self,
+        ctx: commands.Context,
+        channel: discord.TextChannel | None = None,
+    ) -> None:
+        """Restrict gameplay to one channel, or omit the channel to clear the restriction."""
+        await self.config.guild(ctx.guild).adventure_channel.set(channel.id if channel else 0)
+        if channel:
+            await ctx.send(f"DeepDelve adventures are now restricted to {channel.mention}.")
+        else:
+            await ctx.send("DeepDelve adventures may now be played in any channel.")
+
+    @deepdelve_set.command(name="turns")
+    @commands.guild_only()
+    @commands.admin_or_permissions(manage_guild=True)
+    async def set_turns(self, ctx: commands.Context, turns: int) -> None:
+        """Set the number of daily exploration turns (5–100)."""
+        if not 5 <= turns <= 100:
+            await ctx.send("Daily turns must be between 5 and 100.")
+            return
+        await self.config.guild(ctx.guild).daily_turns.set(turns)
+        await ctx.send(f"New UTC days will grant each delver **{turns} turns**.")
+
+    @deepdelve_set.command(name="economy")
+    @commands.guild_only()
+    @commands.admin_or_permissions(manage_guild=True)
+    async def set_economy(self, ctx: commands.Context, mode: str) -> None:
+        """Choose `internal` dungeon gold or Red's shared `bank` economy."""
+        mode = mode.lower().strip()
+        if mode not in {"internal", "bank"}:
+            await ctx.send("Economy mode must be `internal` or `bank`.")
+            return
+        await self.config.guild(ctx.guild).economy_mode.set(mode)
+        if mode == "bank":
+            currency = await bank.get_currency_name(ctx.guild)
+            await ctx.send(
+                f"DeepDelve now uses Red's bank and **{currency}**. All rewards, purchases, "
+                "sales, penalties, achievements, crafting, and rankings affect real bank balances. "
+                "Existing internal dungeon gold is retained but inactive.",
+            )
+        else:
+            await ctx.send(
+                "DeepDelve now uses its isolated internal gold. The most recently cached character "
+                "balance becomes each character's internal balance; Red bank balances are no longer changed.",
+            )
+
+    @deepdelve_set.command(name="resetuser")
+    @commands.guild_only()
+    @commands.admin_or_permissions(manage_guild=True)
+    async def reset_user(self, ctx: commands.Context, member: discord.Member) -> None:
+        """Delete a member's DeepDelve profile."""
+        await self.config.member(member).clear()
+        await ctx.send(f"Deleted {member.mention}'s DeepDelve character data.")
+
+    async def red_get_data_for_user(self, *, user_id: int) -> dict[str, io.BytesIO]:
+        """Export a user's DeepDelve profiles for Red's data request API."""
+        payload: dict[str, Any] = {"profiles": {}, "social_records": {}}
+        all_profiles = await self.config.all_members()
+        for guild_id, members in all_profiles.items():
+            data = members.get(user_id)
+            if data and data.get("created"):
+                payload["profiles"][str(guild_id)] = data
+        all_guilds = await self.config.all_guilds()
+        for guild_id, data in all_guilds.items():
+            social: dict[str, Any] = {}
+            parties = {code: record for code, record in data.get("parties", {}).items() if user_id in record.get("members", [])}
+            auctions = {
+                code: record for code, record in data.get("auctions", {}).items() if int(record.get("seller", 0)) == user_id
+            }
+            player_guilds = {
+                code: record for code, record in data.get("player_guilds", {}).items() if user_id in record.get("members", [])
+            }
+            arenas = {
+                code: record
+                for code, record in data.get("arenas", {}).items()
+                if user_id in {int(record.get("challenger", 0)), int(record.get("opponent", 0))}
+            }
+            if parties:
+                social["parties"] = parties
+            if auctions:
+                social["auctions"] = auctions
+            if player_guilds:
+                social["player_guilds"] = player_guilds
+            if arenas:
+                social["arenas"] = arenas
+            world_boss = data.get("world_boss", {})
+            if str(user_id) in world_boss.get("contributions", {}):
+                social["world_boss"] = {
+                    "damage": world_boss["contributions"][str(user_id)],
+                    "last_attack": world_boss.get("last_attacks", {}).get(str(user_id)),
+                }
+            firsts = {
+                boss: record for boss, record in data.get("server_firsts", {}).items() if int(record.get("user_id", 0)) == user_id
+            }
+            if firsts:
+                social["server_firsts"] = firsts
+            if social:
+                payload["social_records"][str(guild_id)] = social
+        if not payload["profiles"] and not payload["social_records"]:
+            return {}
+        serialized = json.dumps(payload, indent=2, sort_keys=True).encode("utf-8")
+        return {"deepdelve.json": io.BytesIO(serialized)}
+
+    async def red_delete_data_for_user(self, *, requester: str, user_id: int) -> None:
+        """Delete all character data belonging to a Discord user."""
+        del requester
+        all_guilds = await self.config.all_guilds()
+        for guild_id, data in all_guilds.items():
+            guild_proxy = self.config.guild_from_id(guild_id)
+            parties = data.get("parties", {})
+            for code, record in list(parties.items()):
+                if user_id not in record.get("members", []):
+                    continue
+                record["members"] = [member_id for member_id in record["members"] if member_id != user_id]
+                if not record["members"]:
+                    parties.pop(code)
+                else:
+                    if record.get("leader") == user_id:
+                        record["leader"] = record["members"][0]
+                    parties[code] = record
+            auctions = {
+                code: record for code, record in data.get("auctions", {}).items() if int(record.get("seller", 0)) != user_id
+            }
+            player_guilds = data.get("player_guilds", {})
+            for code, record in list(player_guilds.items()):
+                if user_id not in record.get("members", []):
+                    continue
+                record["members"] = [member_id for member_id in record["members"] if member_id != user_id]
+                if not record["members"]:
+                    player_guilds.pop(code)
+                else:
+                    if record.get("owner") == user_id:
+                        record["owner"] = record["members"][0]
+                    player_guilds[code] = record
+            arenas = {
+                code: record
+                for code, record in data.get("arenas", {}).items()
+                if user_id
+                not in {
+                    int(record.get("challenger", 0)),
+                    int(record.get("opponent", 0)),
+                }
+            }
+            world_boss = data.get("world_boss", {})
+            world_boss.get("contributions", {}).pop(str(user_id), None)
+            world_boss.get("last_attacks", {}).pop(str(user_id), None)
+            firsts = {
+                boss: record for boss, record in data.get("server_firsts", {}).items() if int(record.get("user_id", 0)) != user_id
+            }
+            with contextlib.suppress(Exception):
+                await guild_proxy.parties.set(parties)
+                await guild_proxy.auctions.set(auctions)
+                await guild_proxy.player_guilds.set(player_guilds)
+                await guild_proxy.arenas.set(arenas)
+                await guild_proxy.world_boss.set(world_boss)
+                await guild_proxy.server_firsts.set(firsts)
+        all_profiles = await self.config.all_members()
+        for guild_id, members in all_profiles.items():
+            if user_id not in members:
+                continue
+            with contextlib.suppress(Exception):
+                await self.config.member_from_ids(guild_id, user_id).clear()
