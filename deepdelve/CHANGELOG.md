@@ -2,6 +2,13 @@
 
 All notable changes to `deepdelve` are documented here.
 
+## 4.3.1
+
+- Fixed every live component interaction being dispatched a second time through
+  restart recovery, which produced a false “unexpected snag” response after valid clicks.
+- Live stateful views now receive first refusal, while dynamic buttons and selectors
+  continue to recover genuinely orphaned messages after cog reloads and bot restarts.
+
 ## 4.3.0
 
 - Split native item powers from enchantment powers and added schema-v7 profile and

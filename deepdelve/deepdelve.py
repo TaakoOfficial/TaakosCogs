@@ -787,7 +787,7 @@ class DeepDelve(DashboardIntegration, commands.Cog):
     """An old-school persistent text RPG built for Discord."""
 
     __author__ = "Taako"
-    __version__ = "4.3.0"
+    __version__ = "4.3.1"
 
     def __init__(self, bot: Red) -> None:
         self.bot = bot

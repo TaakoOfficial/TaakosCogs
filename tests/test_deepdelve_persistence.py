@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 from deepdelve.deepdelve import (
     AdventureView,
@@ -77,5 +79,37 @@ def test_dynamic_component_templates_reconstruct_routes() -> None:
                 rebuilt = await dynamic_type.from_custom_id(None, item, match)
                 assert rebuilt.user_id == 123456789
                 assert rebuilt.route == match["route"]
+
+    asyncio.run(check())
+
+
+def test_dynamic_recovery_yields_to_a_live_view_that_already_responded() -> None:
+    async def check() -> None:
+        dispatch = AsyncMock()
+        cog = SimpleNamespace(_dispatch_persistent_button=dispatch)
+        interaction = SimpleNamespace(
+            response=SimpleNamespace(is_done=lambda: True),
+            client=SimpleNamespace(get_cog=lambda _name: cog),
+        )
+        item = next(iter(_views()[0].children))
+        dynamic = DeepDelveDynamicButton(item, 123456789, "adventure:explore")
+        await dynamic.callback(interaction)
+        dispatch.assert_not_awaited()
+
+    asyncio.run(check())
+
+
+def test_dynamic_recovery_dispatches_an_orphaned_message_after_handoff() -> None:
+    async def check() -> None:
+        dispatch = AsyncMock()
+        cog = SimpleNamespace(_dispatch_persistent_button=dispatch)
+        interaction = SimpleNamespace(
+            response=SimpleNamespace(is_done=lambda: False),
+            client=SimpleNamespace(get_cog=lambda _name: cog),
+        )
+        item = next(iter(_views()[0].children))
+        dynamic = DeepDelveDynamicButton(item, 123456789, "adventure:explore")
+        await dynamic.callback(interaction)
+        dispatch.assert_awaited_once_with(interaction, "adventure:explore")
 
     asyncio.run(check())

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 from typing import TYPE_CHECKING, Any
@@ -14,6 +15,7 @@ if TYPE_CHECKING:
 BUTTON_TEMPLATE = re.compile(r"deepdelve:b:(?P<user_id>[0-9]+):(?P<route>[a-z0-9_:-]+)")
 SELECT_TEMPLATE = re.compile(r"deepdelve:s:(?P<user_id>[0-9]+):(?P<route>[a-z0-9_:-]+)")
 LOGGER = logging.getLogger("red.taakoscogs.deepdelve")
+LIVE_VIEW_HANDOFF_SECONDS = 0.1
 
 
 def persistent_custom_id(kind: str, user_id: int, route: str) -> str:
@@ -31,6 +33,18 @@ async def _reject(interaction: discord.Interaction, message: str) -> None:
 def _resolve_cog(interaction: discord.Interaction) -> DeepDelve | None:
     cog = interaction.client.get_cog("DeepDelve")
     return cog if cog is not None else None
+
+
+async def _handled_by_live_view(interaction: discord.Interaction) -> bool:
+    """Give a message-bound view first refusal before using restart recovery.
+
+    Discord.py schedules matching dynamic items even when the same message still has
+    a live, stateful view registered. That would otherwise execute every click twice.
+    Live callbacks acknowledge immediately; restored messages remain unanswered and
+    fall through to the dynamic route after this short handoff.
+    """
+    await asyncio.sleep(LIVE_VIEW_HANDOFF_SECONDS)
+    return interaction.response.is_done()
 
 
 class DeepDelveDynamicButton(
@@ -66,6 +80,8 @@ class DeepDelveDynamicButton(
         return False
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        if await _handled_by_live_view(interaction):
+            return
         cog = _resolve_cog(interaction)
         if cog is None:
             await _reject(interaction, "DeepDelve is reloading. Try that control again in a moment.")
@@ -117,6 +133,8 @@ class DeepDelveDynamicSelect(
         return False
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        if await _handled_by_live_view(interaction):
+            return
         cog = _resolve_cog(interaction)
         if cog is None:
             await _reject(interaction, "DeepDelve is reloading. Try that control again in a moment.")
