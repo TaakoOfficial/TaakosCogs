@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from typing import Any, Literal
@@ -21,6 +22,12 @@ from .components import (
     view_to_payload,
 )
 from .dashboard_integration import DashboardIntegration
+from .url_safety import (
+    RemoteHTTPError,
+    URLSafetyError,
+    fetch_public_bytes,
+    public_client_session,
+)
 
 FORMATS = Literal["json", "yaml", "jsonfile", "yamlfile", "pastebin", "message"]
 log = logging.getLogger("red.taakoscogs.messagestudio")
@@ -65,7 +72,7 @@ class MessageStudio(DashboardIntegration, commands.Cog):
     async def cog_load(self) -> None:
         if not hasattr(discord.ui, "LayoutView"):
             raise RuntimeError("MessageStudio requires discord.py 2.6 or newer.")
-        self.session = aiohttp.ClientSession()
+        self.session = public_client_session()
 
     async def cog_unload(self) -> None:
         if self.session is not None:
@@ -637,6 +644,8 @@ class MessageStudio(DashboardIntegration, commands.Cog):
     async def on_interaction(self, interaction: discord.Interaction) -> None:
         if interaction.type is not discord.InteractionType.component or interaction.guild is None or interaction.message is None:
             return
+        if await self.bot.cog_disabled_in_guild(self, interaction.guild):
+            return
         record = (await self.config.guild(interaction.guild).component_actions()).get(str(interaction.message.id))
         if not record or not isinstance(interaction.data, dict):
             return
@@ -813,13 +822,21 @@ class MessageStudio(DashboardIntegration, commands.Cog):
         if "gist.github.com" in parsed.netloc and not parsed.path.endswith("/raw"):
             url = url.rstrip("/") + "/raw"
         assert self.session is not None
-        async with self.session.get(url, timeout=aiohttp.ClientTimeout(total=15)) as response:
-            if response.status != 200:
-                raise commands.BadArgument(f"The URL returned HTTP {response.status}.")
-            data = await response.content.read(256_001)
-        if len(data) > 256_000:
-            raise commands.BadArgument("Remote payloads are limited to 256 KB.")
-        return data.decode()
+        try:
+            data, _content_type, _final_url = await fetch_public_bytes(
+                self.session,
+                url,
+                max_bytes=256_000,
+                timeout=aiohttp.ClientTimeout(total=15, connect=5),
+            )
+        except RemoteHTTPError as exc:
+            raise commands.BadArgument(f"The URL returned HTTP {exc.status}.") from exc
+        except (URLSafetyError, aiohttp.ClientError, asyncio.TimeoutError) as exc:
+            raise commands.BadArgument(f"Remote payload rejected: {exc}") from exc
+        try:
+            return data.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise commands.BadArgument("Remote payloads must be UTF-8 text.") from exc
 
     def _validate(self, payload):
         self._send_kwargs(payload)

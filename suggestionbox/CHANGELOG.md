@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.3.0 - 2026-07-16
 
 - Reorganized the dashboard into responsive Suggestions, Settings, Actions, and Maintenance tabs that remain selected after form submissions.
 

@@ -1,8 +1,11 @@
 # 🌦️ RandomWeather Changelog
 
-## [Unreleased]
+## [v2.4.0] - 2026-07-16
 
 - Added standalone Red-Web-Dashboard integration for viewing visible commands and current server configuration.
+- Replaced Flaticon weather thumbnails with pinned, centrally attributed Twemoji graphics while preserving condition-specific thumbnails.
+- Standardized logging under `red.taakoscogs.randomweather`.
+- Assigned a unique Config identifier and added an automatic, verified, one-time migration that preserves existing guild settings under the legacy identifier for rollback.
 
 
 ## [v2.3.1] - 2026-07-09

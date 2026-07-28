@@ -59,3 +59,7 @@ Slash command equivalents are available for the same core calendar actions.
 ## Data
 
 RPCalander stores server calendar settings and uses `post_tracker.json` to prevent duplicate daily posts. It does not persistently store or share end user data.
+
+## Artwork
+
+Calendar and moon thumbnails use Twemoji v17.0.3 graphics under CC-BY 4.0. Full attribution and license links are in the repository's [third-party notices](../THIRD_PARTY_NOTICES.md).

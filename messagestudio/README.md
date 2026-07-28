@@ -30,6 +30,8 @@ The builder provides:
 
 The editor is self-contained. It does not load or communicate with message.style or Merlin's API.
 
+Remote JSON imports accept only public HTTP(S) destinations. MessageStudio rejects local, loopback, link-local, and private-network addresses before connecting, revalidates every redirect, and streams at most 256 KB.
+
 ### Profile and Server Asset Tools
 
 The dashboard **Utility Tools** page shows the current server's icon, banner, invite splash, and discovery splash with full-size Open and Copy URL controls. Enter a Discord user ID to retrieve the latest display avatar, global avatar, server-specific avatar, profile banner, and accent color that Discord makes available to the bot.
@@ -147,3 +149,5 @@ Discord's Label, File Upload input, Radio Group, Checkbox Group, and Checkbox co
 ## Credits
 
 The visual editor's component-card workflow and split editor/preview layout are inspired by Merlin Fuchs' MIT-licensed [Embed Generator](https://github.com/merlinfuchs/embed-generator). This cog contains an independent, dependency-free dashboard implementation tailored to Red-Web-Dashboard.
+
+The complete upstream MIT copyright and permission notice is preserved in the repository's [third-party notices](../THIRD_PARTY_NOTICES.md).

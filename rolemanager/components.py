@@ -116,8 +116,7 @@ class RoleSelect(discord.ui.Select):
             template = self._option_templates.get(option.value, {})
             label = template.get("label") or f"@{role.name}"
             description = template.get("description") or None
-            option.label = label.replace(
-                "{count}", f"{len(role.members):,}")[:100]
+            option.label = label.replace("{count}", f"{len(role.members):,}")[:100]
             if description:
                 option.description = description.replace(
                     "{count}",

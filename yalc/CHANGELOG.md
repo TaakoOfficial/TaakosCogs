@@ -1,7 +1,37 @@
 # 📝 YALC Changelog
 
-## Unreleased
+## [v4.1.0] - 2026-07-16
 
+- Replaced the Flaticon footer image with a pinned, centrally attributed Twemoji scroll graphic.
+- Standardized logging under `red.taakoscogs.yalc` and made event filtering, channel resolution, and final delivery respect Red's per-guild cog-disable state.
+- Added alphanumeric primary command names while retaining historical underscore names as hidden prefix and slash compatibility commands.
+
+## [v4.0.2] - 2026-07-15
+
+- Rebuilt Tupperbox/proxy filtering around normalized application IDs and webhook attribution instead of proxy persona names or message-content guesses.
+- Added automatic recognition for the official Tupperbox and PluralKit applications while retaining configurable proxy application IDs.
+- Added bounded webhook and message caches so known proxy messages remain filtered from uncached raw edit, delete, and bulk-delete events.
+- Removed the false-positive heuristic that treated unrelated bot messages containing pipe characters as proxies.
+- Clarified the proxy filtering controls and added focused detection tests.
+
+## [v4.0.1] - 2026-07-15
+
+- Fixed the dashboard smart-route renderer referencing the removed `EVENT_TO_SETUP_GROUP` attribute.
+- Fixed the same stale mapping reference in the bulk moderation enable and disable commands.
+- Routed dashboard suggestions and bulk categories through YALC's canonical event-to-channel resolver.
+
+## [v4.0.0] - 2026-07-15
+
+- Rebuilt audit attribution around a bounded, deduplicated audit stream with strict action, target, channel, and time matching. YALC no longer substitutes an unrelated newest audit entry.
+- Added raw gateway coverage for uncached message edits, deletes, and bulk deletes, including explicit notices when Discord did not provide message content.
+- Added direct audit-only logging for bot additions, member prunes, permission-overwrite changes, and webhook creation/deletion.
+- Added moderator and reason attribution to ban and unban logs.
+- Made fallback delivery fail closed: YALC only retries in an explicitly configured fallback channel and never chooses an arbitrary writable public channel.
+- Added reply, sticker, poll, forwarded-message, and attachment context to cached deletion logs.
+- Added per-event dashboard color controls and command-log privacy modes for all commands, staff commands only, or disabled command logging.
+- Added an optional SQLite event journal with content-off-by-default privacy, retention pruning, search, CSV/JSON export, clear, audit-ID deduplication, and Red user-data deletion support.
+- Replaced the old generic form dashboard with a fully standalone YALC control center for core policy, every event toggle/route/color, filters, granular ignores, audit health, journal health, and test delivery.
+- Added focused tests for strict audit matching, duplicate handling, journal privacy, journal persistence, searching, and data deletion.
 - Fixed log-channel dropdowns collapsing into unreadable vertical text on narrow dashboard panels.
 - Added enable/disable controls for all events and for each event category.
 - Refined the dashboard's spacing, hierarchy, controls, and responsive layout.

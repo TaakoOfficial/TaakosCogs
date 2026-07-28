@@ -28,14 +28,18 @@ To update installed cogs:
 [p]cog update
 ```
 
+## Dashboard Support
+
+Every configurable cog includes its own purpose-built Red-Web-Dashboard page with labeled fields, Discord channel and role selectors, validation, and cog-specific actions. Stateless utilities use focused operation or live-status pages instead of showing an empty settings editor. No cog relies on the generic JSON configuration fallback.
+
 ## Cog Catalog
 
 | Cog                                    | Best For                 | Highlights                                                                                                                                  |
 | -------------------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
 | [messagestudio](./messagestudio)         | Rich message building   | EmbedUtils-compatible commands, embeds and Components V2, stored messages, webhooks, JSON/YAML, and a standalone visual dashboard builder. |
 | [toolz](./toolz)                       | Role and user utilities  | Role/user info, role audits, role comparison, CSV exports, bot/no-role audits, role-triggered messages with `{user}` placeholders.          |
-| [rolemanager](./rolemanager)           | Role management          | Self roles, external role-change rules, policies, role panels, autoroles, sticky/temp roles, dashboard operations, imports, and bulk tools. |
-| [yalc](./yalc)                         | Server logging           | Message/member/channel/role logging, event filters, retention settings, ignore lists, Tupperbox/PluralKit-aware filtering.                  |
+| [rolemanager](./rolemanager)           | Role automation          | Audited role policies, advanced targeting/jobs, panels, resilient autoroles, sticky/temp roles, and verified migrations with rollback. |
+| [yalc](./yalc)                         | Server logging           | Strict audit attribution, raw message coverage, complete event routing, fail-closed delivery, advanced filters, and an optional journal.   |
 | [applications](./applications)         | Staff applications       | Configurable forms, application panels, DM questionnaires, review buttons, role actions, CSV exports, polls, and dashboard setup.            |
 | [welcome](./welcome)                   | Join messages            | Configurable welcome messages, placeholders, JSON embeds, cached welcome images, avatar overlays, and dashboard setup.                       |
 | [captcha](./captcha)                   | Member verification      | Persistent verification buttons, per-click random modal codes, existing-message attachment, configurable success roles, and dashboard setup. |
@@ -47,15 +51,16 @@ To update installed cogs:
 | [slashlink](./slashlink)               | Prefix/slash compatibility | Red-managed application-command gateways for loaded prefix-only cogs, with permission-aware autocomplete and normal `[p]slash` controls. |
 | [tempvoice](./tempvoice)               | Voice channel automation | Join-to-create temporary voice channels, embedded owner controls, rename/lock/limit/transfer buttons, claiming, cleanup, and dashboard setup. |
 | [giveaway](./giveaway)                 | Community events         | Timed giveaways, reaction entry, rerolls, cancellation, attached giveaways, prefix/slash commands, and dashboard controls.                  |
-| [uppercase](./uppercase)               | Channel setup            | Create and rename text channels with uppercase-style names using `/create-channel` and `/rename-channel`.                                  |
+| [spinwheel](./spinwheel)               | Decisions and party games | Animated secure-random wheels, saved presets, themed/custom colors, optional winner removal, slash commands, and a visual dashboard.       |
+| [uppercase](./uppercase)               | Channel setup            | Create and rename text channels with uppercase-style names using `/createchannel` and `/renamechannel`.                                    |
 | [emojiporter](./emojiporter)           | Server migration         | Copy emojis and stickers between servers, list emoji/sticker inventory, skip duplicates automatically.                                      |
-| [zodiaccolorroles](./zodiaccolorroles) | Role setup               | Bulk-create zodiac, color, pronoun, and ping preference roles with hybrid command support.                                                  |
+| [rolekit](./rolekit)                   | Community roles & levels | Curated identity/interest role packs, cooldown-limited activity XP, rank cards, leaderboards, milestone roles, and dashboard setup.         |
 | [fivemstatus](./fivemstatus)           | FiveM communities        | Live server status panel with player counts, Join Server button, restart countdowns, uptime tracking, images, and link buttons.             |
 | [cfxstatus](./cfxstatus)               | Cfx.re service checks    | Auto-updating panel that checks the official Cfx.re Statuspage API, with Rockstar's service-status page as a fallback.                     |
 | [randomweather](./randomweather)       | RP atmosphere            | Seasonal weather simulation, extreme weather events, automatic updates, role notifications, timezone-aware generation.                      |
 | [rpcalander](./rpcalander)             | RP timekeeping           | Daily RP calendar posts, custom timelines, moon phases, blood moon events, separate moon channels.                                          |
 | [fable](./fable)                       | RP worldbuilding         | Character profiles, relationships, locations, timelines, visualizations, lore tracking, export tools.                                       |
-| [deepdelve](./deepdelve)               | Full-scale text RPG      | Tactical combat, builds, subclasses, advanced loot, NPC stories, parties, auctions, guilds, arenas, raids, rifts, seasons, and Red bank support. |
+| [deepdelve](./deepdelve)               | Living text RPG          | Branching campaign, puzzles, companions, professions, town growth, world events, tactical combat, deep loot, endgame, and Red bank support. |
 | [paranoia](./paranoia)                 | Social games             | Discord version of paranoia with secret DM questions, custom questions, status tracking, and Tupperbox support.                             |
 | [flipper](./flipper)                   | Simple fun               | Lightweight coin flip command with embeds.                                                                                                  |
 | [whmcs](./whmcs)                       | Hosting/business support | WHMCS clients, billing, support tickets, role permissions, API configuration, and Discord ticket channels.                                  |
@@ -67,11 +72,11 @@ To update installed cogs:
 Install these if you want better moderation visibility, invite attribution, feedback workflows, community reputation, support tickets, and role operations:
 
 ```text
-[p]cog install taakoscogs toolz rolemanager yalc applications welcome captcha invitetracker suggestionbox repboard reviewhub tickethub tempvoice giveaway
+[p]cog install taakoscogs toolz rolemanager yalc applications welcome captcha invitetracker suggestionbox repboard reviewhub tickethub tempvoice giveaway spinwheel
 ```
 
 - `toolz` gives staff role/user lookup, audit, export, and role-triggered message tools.
-- `rolemanager` handles self roles, automatic role-change rules, role policies, reaction/button/select role panels, autoroles, sticky roles, temporary roles, dashboard operations, dry-runs, imports, and bulk role updates.
+- `rolemanager` handles audited self/policy roles, advanced targeting and jobs, reaction/button/select panels, resilient autoroles, sticky/temporary roles, lifecycle reports, and verified imports with rollback.
 - `YALC` gives detailed server logging.
 - `applications` handles staff applications, review workflows, and approval roles.
 - `welcome` handles onboarding messages.
@@ -83,6 +88,7 @@ Install these if you want better moderation visibility, invite attribution, feed
 - `tickethub` handles support tickets with panels, private channels, staff controls, imports, and transcripts.
 - `tempvoice` gives members self-managed temporary voice channels with embedded controls.
 - `giveaway` supports events and community rewards.
+- `spinwheel` turns choices, drawings, and party-game prompts into colorful animated wheels.
 
 ### Roleplay Servers
 
@@ -107,7 +113,7 @@ Install these for interactive events, persistent progression, and party games:
 [p]cog install taakoscogs deepdelve paranoia flipper giveaway
 ```
 
-- `deepdelve` is a full-scale old-school text RPG with tactical combat, character builds, advanced itemization, NPC stories, parties, auctions, player guilds, arena wagers, server raids, rifts, seasons, Hardcore mode, Ascension, and optional Red bank integration.
+- `deepdelve` is a living old-school text RPG with a branching solo campaign, puzzles, companions, professions, server town development, daily world events, tactical combat, advanced itemization, NPC stories, endgame challenges, and optional Red bank integration.
 - `paranoia` is a social party game built around secret questions and public reveals.
 - `flipper` provides quick coin flips.
 - `giveaway` runs timed community giveaways and rerolls.
@@ -117,11 +123,11 @@ Install these for interactive events, persistent progression, and party games:
 Install these when building or moving a server:
 
 ```text
-[p]cog install taakoscogs emojiporter zodiaccolorroles toolz rolemanager uppercase tempvoice
+[p]cog install taakoscogs emojiporter rolekit toolz rolemanager uppercase tempvoice
 ```
 
 - `emojiporter` copies emojis and stickers from another server the bot can access.
-- `zodiaccolorroles` creates common self-role sets quickly.
+- `rolekit` creates curated community role packs and can run lightweight activity ranks with automatic milestone roles.
 - `toolz` helps audit role counts, hierarchy, empty roles, bots, and permissions.
 - `rolemanager` turns those roles into self roles, reaction/button/select roles, autoroles, sticky roles, temporary roles, or policy-linked role sets.
 - `uppercase` creates and renames text channels with uppercase-style names.
@@ -180,6 +186,7 @@ Some cogs have Python package requirements that Red's downloader installs automa
 | fivemstatus   | `aiohttp`        |
 | cfxstatus     | `aiohttp`        |
 | whmcs         | `aiohttp>=3.8.0` |
+| spinwheel     | `Pillow>=10.0.0` |
 
 Some features also need Discord privileged intents:
 
@@ -195,13 +202,16 @@ Some features also need Discord privileged intents:
 
 Each cog includes its own data statement in `info.json`. In short:
 
-- `flipper`, `randomweather`, `emojiporter`, `zodiaccolorroles`, `uppercase`, and `slashlink` do not persistently store end user data.
+- `flipper`, `randomweather`, `emojiporter`, `uppercase`, and `slashlink` do not persistently store end user data.
+- `rolekit` stores per-server XP and counted-message totals when activity leveling is enabled; it never stores message content.
 - `messagestudio` stores saved message payloads, author IDs, lock settings, and usage counts when its storage commands are used.
 - `toolz` stores per-guild role-message settings such as role IDs, channel IDs, and message templates.
 - `rolemanager` stores role configuration, role-policy and role-change-rule settings, role costs, reaction/button/select message/channel IDs, emoji keys, temporary-role expiry timestamps, and Discord user IDs for sticky and temporary role assignment.
 - `captcha` stores panel message/channel IDs, role IDs, and button labels; verification challenges are transient in memory.
-- `YALC`, `applications`, `welcome`, `invitetracker`, `suggestionbox`, `repboard`, `reviewhub`, `tickethub`, `tempvoice`, `giveaway`, `fivemstatus`, `fable`, `deepdelve`, `paranoia`, `rpcalander`, and `whmcs` store the settings or records needed for their features.
-- `deepdelve` stores persistent characters, builds, inventory, social memberships and records, multiplayer activity, progression, encounters, stories, endgame and seasonal data, and Discord user IDs. In bank mode it reads and changes Red bank balances for game transactions.
+- `yalc` stores logging settings, routes, filters, ignore-rule user IDs, and limited voice history. Its optional retained event journal stores event metadata and only stores message content when explicitly enabled.
+- `applications`, `welcome`, `invitetracker`, `suggestionbox`, `repboard`, `reviewhub`, `tickethub`, `tempvoice`, `giveaway`, `spinwheel`, `fivemstatus`, `fable`, `deepdelve`, `paranoia`, `rpcalander`, and `whmcs` store the settings or records needed for their features.
+- `deepdelve` stores persistent characters, builds, inventory, campaign decisions, puzzles, companions, professions, town contributions, world-event discoveries, social records, progression, encounters, stories, endgame and seasonal data, and Discord user IDs. In bank mode it reads and changes Red bank balances for game transactions.
+- `spinwheel` stores server-created wheel names, entry labels, colors, winner-removal preferences, last winners, and aggregate spin counts; it does not store Discord user IDs.
 - `invitetracker` stores invite cache metadata, inviter stats, tracked member join-source records, Discord user IDs, invite codes, timestamps, fake-join flags, and unknown join counts.
 - `suggestionbox` stores suggestion text, author IDs, voter IDs, staff reviewer IDs, message/channel/thread IDs, votes, statuses, staff notes, review reasons, and timestamps.
 - `repboard` stores reputation settings, giver/receiver/moderator IDs, reasons, message/channel IDs, timestamps, active/removed state, cooldown metadata, daily limit metadata, and aggregate reputation statistics.
@@ -231,9 +241,10 @@ Start with each cog's README:
 - [tickethub README](./tickethub/README.md)
 - [slashlink README](./slashlink/README.md)
 - [giveaway README](./giveaway/README.md)
+- [spinwheel README](./spinwheel/README.md)
 - [uppercase README](./uppercase/README.md)
 - [emojiporter README](./emojiporter/README.md)
-- [zodiaccolorroles README](./zodiaccolorroles/README.md)
+- [rolekit README](./rolekit/README.md)
 - [fivemstatus README](./fivemstatus/README.md)
 - [cfxstatus README](./cfxstatus/README.md)
 - [randomweather README](./randomweather/README.md)
@@ -269,4 +280,10 @@ once, and it will run these checks automatically on every commit.
 
 ## License
 
-This repository is licensed under the GNU AGPLv3 unless an individual cog states otherwise. See [LICENSE](./LICENSE) for details.
+This repository is licensed under the GNU AGPLv3 unless an individual cog states otherwise. The [LICENSE](./LICENSE) file contains the complete, verbatim AGPLv3 text.
+
+Project copyright information is in [COPYRIGHT](./COPYRIGHT). Artwork attribution, preserved third-party license notices, compatibility acknowledgements, and dependency notes are centralized in [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md).
+
+## Contributors
+
+Thanks to Evanroby for their repository contributions. Git history remains the authoritative record of individual authorship.

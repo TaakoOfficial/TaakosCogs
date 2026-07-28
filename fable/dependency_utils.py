@@ -2,6 +2,8 @@ import logging
 import subprocess
 import sys
 
+log = logging.getLogger("red.taakoscogs.fable.dependencies")
+
 
 def check_and_install_google_dependencies():
     """
@@ -27,6 +29,6 @@ def check_and_install_google_dependencies():
                 )
                 __import__(import_name)
             except (subprocess.SubprocessError, ImportError) as e:
-                logging.error(f"Failed to install {pkg}: {e}")
+                log.error("Failed to install %s: %s", pkg, e)
                 raise ImportError(
                     f"Could not install required dependency: {pkg}")

@@ -317,6 +317,14 @@ NPCS: dict[str, dict[str, Any]] = {
         "emoji": "⚒️",
         "role": "Smith",
         "introduction": "“Everything brought from the Deep still dreams of being down there.”",
+        "dialogue": (
+            "“Bring me iron that screams when struck. Quiet metal has nothing left to teach.”",
+            "“Your blade leans toward the stair at night. I have started chaining it to the bench.”",
+            "“The Foundry did not make weapons. It made memories that happened to have edges.”",
+            "“You chose what became of the memory press. I can see the answer in every spark.”",
+            "“If the fifth bell rings, put your weapon down. Some doors recognize a challenge.”",
+            "“I used to think craft meant control. The Deep cured me of that vanity.”",
+        ),
         "quests": (
             ("A Hammer's Memory", 3, "Craft three items for Orra."),
             ("Metal That Screams", 8, "Bring Orra eight total crafting materials."),
@@ -328,6 +336,14 @@ NPCS: dict[str, dict[str, Any]] = {
         "emoji": "🛡️",
         "role": "Contract Master",
         "introduction": "“Heroes come back with stories. Professionals come back with maps.”",
+        "dialogue": (
+            "“Count exits before enemies. The dead always remember the monster and forget the locked door.”",
+            "“The Watch has a betting pool on your next scar. I confiscated it. Mostly.”",
+            "“Every contract keeps one more lantern burning above. Do not mistake coin for the reason.”",
+            "“People call Lastlight a town. It is a shield whose citizens happen to live on the safe side.”",
+            "“If the fifth bell sounds, report to me. If I am gone, you already know why.”",
+            "“You have become the plan we make after every other plan fails.”",
+        ),
         "quests": (
             ("First Watch", 3, "Defeat three enemies."),
             ("Bounty of the Deep", 10, "Complete three contracts."),
@@ -339,6 +355,14 @@ NPCS: dict[str, dict[str, Any]] = {
         "emoji": "🪶",
         "role": "Forbidden Historian",
         "introduction": "“The Deep is a sentence. Every delver is punctuation.”",
+        "dialogue": (
+            "“Do not read inscriptions aloud. Grammar is one of the oldest forms of summoning.”",
+            "“Arachne mapped stars below us because the sky above had begun editing itself.”",
+            "“History is not what happened. It is what survived being useful to the victor.”",
+            "“Your campaign choices have altered three manuscripts that were written centuries ago.”",
+            "“The Author Beneath is not a metaphor. I wish very badly that it were.”",
+            "“When you reach the last page, leave a margin. Something else may need to answer.”",
+        ),
         "quests": (
             ("Ink Below", 3, "Recover three lore fragments."),
             ("The Missing Name", 7, "Recover seven lore fragments."),
@@ -350,6 +374,14 @@ NPCS: dict[str, dict[str, Any]] = {
         "emoji": "🎲",
         "role": "Rival Delver",
         "introduction": "“Try not to die before I beat your floor record.”",
+        "dialogue": (
+            "“I found your footprints three floors down. Awfully considerate of you to mark the safe route.”",
+            "“Companions make you soft. Mine is called Knife and lives in my sleeve.”",
+            "“You solve riddles. I threaten the door until it develops common sense.”",
+            "“The Court offered me a title. I asked whether it came with a hat. Negotiations collapsed.”",
+            "“If you become Warden of the Deep, I am absolutely ignoring every posted rule.”",
+            "“You know the irritating part? I think you might actually finish this.”",
+        ),
         "quests": (
             ("Friendly Competition", 5, "Reach floor five."),
             ("No Potions", 12, "Defeat twelve enemies."),
@@ -367,6 +399,7 @@ TITLES: dict[str, tuple[str, str]] = {
     "ascendant": ("The Ascendant", "Ascend after floor twenty."),
     "hardcore": ("Deathless", "Reach floor ten in Hardcore mode."),
     "champion": ("Arena Champion", "Win ten arena duels."),
+    "chronicler": ("Chronicler of the Deep", "Complete the five-chapter campaign."),
 }
 
 SCARS: tuple[str, ...] = (

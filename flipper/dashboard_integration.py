@@ -1,10 +1,10 @@
-"""Red-Web-Dashboard integration."""
+# ruff: noqa: E501
+"""Interactive dashboard for Flipper."""
 
 from __future__ import annotations
 
 import html
-import json
-import logging
+import random
 from typing import TYPE_CHECKING, Any, Callable
 
 from redbot.core import commands
@@ -12,12 +12,8 @@ from redbot.core import commands
 if TYPE_CHECKING:
     import discord
 
-log = logging.getLogger("red.taakoscogs.flipper.dashboard")
-
 
 def dashboard_page(*args, **kwargs):
-    """Dashboard page decorator compatible with Red-Web-Dashboard."""
-
     def decorator(func: Callable):
         func.__dashboard_decorator_params__ = (args, kwargs)
         return func
@@ -26,117 +22,32 @@ def dashboard_page(*args, **kwargs):
 
 
 class DashboardIntegration:
-    """Conservative dashboard integration for cogs without custom web controls."""
+    """A dashboard-native coin toss for this stateless utility cog."""
 
     @commands.Cog.listener()
     async def on_dashboard_cog_add(self, dashboard_cog: commands.Cog) -> None:
-        """Register the cog as a Red-Web-Dashboard third party."""
         handler = dashboard_cog.rpc.third_parties_handler
         try:
             handler.add_third_party(self, overwrite=True)
         except TypeError:
             handler.add_third_party(self)
 
-    @dashboard_page(
-        name=None,
-        description="View this cog's current server configuration and commands.",
-        methods=("GET",),
-    )
-    async def dashboard_page(
-        self,
-        user: discord.User,
-        guild: discord.Guild,
-        **kwargs: Any,
-    ) -> dict[str, Any]:
-        """Render a read-only dashboard page."""
-        if not await self._dashboard_can_manage(user, guild):
-            return {
-                "status": 1,
-                "error_title": "Insufficient Permissions",
-                "error_message": (
-                    "You need Manage Server, Red admin, or bot owner access."
-                ),
-            }
-
-        try:
-            source = await self._dashboard_source(guild)
-        except Exception as error:
-            log.exception("Dashboard render failed for %s.",
-                          self.qualified_name)
-            return {
-                "status": 1,
-                "error_title": "Dashboard Error",
-                "error_message": f"Could not render dashboard page: {error}",
-            }
-
-        return {
-            "status": 0,
-            "web_content": {
-                "source": source,
-                "expanded": True,
-            },
-        }
-
-    async def _dashboard_can_manage(
-        self,
-        user: discord.User,
-        guild: discord.Guild,
-    ) -> bool:
-        member = guild.get_member(user.id)
-        is_owner = user.id in getattr(self.bot, "owner_ids", set())
-        is_admin = member is not None and await self.bot.is_admin(member)
-        return bool(
-            is_owner
-            or is_admin
-            or (member is not None and member.guild_permissions.manage_guild),
-        )
-
-    async def _dashboard_source(self, guild: discord.Guild) -> str:
-        cog_name = html.escape(self.qualified_name)
-        config = await self._dashboard_guild_config(guild)
-        commands_html = self._dashboard_commands_html()
-        config_html = self._dashboard_config_html(config)
-
-        return f"""
-<section class="third-party-dashboard">
-  <h2>{cog_name}</h2>
-  <p>This dashboard page confirms the cog is registered with Red-Web-Dashboard.</p>
-  <h3>Commands</h3>
-  {commands_html}
-  <h3>Current Server Config</h3>
-  {config_html}
-</section>
-"""
-
-    async def _dashboard_guild_config(
-        self,
-        guild: discord.Guild,
-    ) -> dict[str, Any] | None:
-        config = getattr(self, "config", None) or getattr(
-            self, "_config", None)
-        if config is None:
-            return None
-        guild_config = getattr(config, "guild", None)
-        if guild_config is None:
-            return None
-        return await guild_config(guild).all()
-
-    def _dashboard_commands_html(self) -> str:
-        commands_list = sorted(
-            command.qualified_name
-            for command in self.walk_commands()
-            if not command.hidden
-        )
-        if not commands_list:
-            return "<p>No visible commands were found for this cog.</p>"
-        items = "\n".join(
-            f"<li><code>{html.escape(command)}</code></li>" for command in commands_list
-        )
-        return f"<ul>{items}</ul>"
+    @dashboard_page(name=None, description="Flip a coin from the dashboard.", methods=("GET", "POST"))
+    async def dashboard_page(self, user: discord.User, guild: discord.Guild, **kwargs: Any):
+        result = None
+        notices = []
+        if kwargs.get("method", "GET").upper() == "POST":
+            result = random.choice(("Heads", "Tails"))
+            notices.append({"message": f"The coin landed on {result}.", "category": "success"})
+        side = result or "Ready"
+        symbol = "🪙" if result is None else ("👑" if result == "Heads" else "🦅")
+        csrf = self._flip_csrf(kwargs)
+        source = f"""<section class="flip-dash"><style>.flip-dash{{text-align:center;max-width:680px;margin:auto}}.flip-dash .coin{{font-size:5rem;margin:1rem}}.flip-dash .card{{border:1px solid rgba(127,127,127,.3);border-radius:1rem;padding:2rem}}.flip-dash h3{{font-size:2rem}}</style><h2>Flipper</h2><p>A quick, fair 50/50 toss for <strong>{html.escape(guild.name)}</strong>. Flipper has no server settings or stored history.</p><div class="card"><div class="coin">{symbol}</div><h3>{side}</h3><form method="POST">{csrf}<button class="btn btn-primary btn-lg">Flip the Coin</button></form></div></section>"""
+        return {"status": 0, "notifications": notices, "web_content": {"source": source, "expanded": True}}
 
     @staticmethod
-    def _dashboard_config_html(config: dict[str, Any] | None) -> str:
-        if config is None:
-            return "<p>This cog does not store per-server config.</p>"
-        dumped = json.dumps(config, indent=2, sort_keys=True, default=str)
-        return f"<pre><code>{html.escape(dumped)}</code></pre>"
+    def _flip_csrf(kwargs):
+        token = kwargs.get("csrf_token")
+        if not isinstance(token, (tuple, list)) or len(token) != 2:
+            return ""
+        return f'<input type="hidden" name="csrf_token" value="{html.escape(str(token[1]), quote=True)}">'

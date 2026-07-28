@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import contextlib
 import io
@@ -17,6 +18,12 @@ from redbot.core import Config, commands
 from redbot.core.utils.chat_formatting import box, pagify
 
 from .dashboard_integration import DashboardIntegration
+from .url_safety import (
+    RemoteHTTPError,
+    URLSafetyError,
+    fetch_public_bytes,
+    public_client_session,
+)
 
 if TYPE_CHECKING:
     from datetime import datetime
@@ -495,34 +502,29 @@ class Welcome(DashboardIntegration, commands.Cog):
 
     async def _download_image(self, url: str) -> dict[str, str]:
         timeout = aiohttp.ClientTimeout(total=30)
-        async with aiohttp.ClientSession(timeout=timeout) as session, session.get(url) as response:
-            if response.status != 200:
-                raise commands.CommandError(
-                    f"Failed to download the image. HTTP status: {response.status}",
+        try:
+            async with public_client_session() as session:
+                data, content_type, final_url = await fetch_public_bytes(
+                    session,
+                    url,
+                    max_bytes=self.IMAGE_SIZE_LIMIT,
+                    timeout=timeout,
+                    required_content_type_prefix="image/",
                 )
+        except RemoteHTTPError as exc:
+            raise commands.CommandError(
+                f"Failed to download the image. HTTP status: {exc.status}",
+            ) from exc
+        except (URLSafetyError, aiohttp.ClientError, asyncio.TimeoutError) as exc:
+            raise commands.BadArgument(f"The image URL was rejected: {exc}") from exc
 
-            content_type = (
-                response.headers.get(
-                    "Content-Type", "").split(";")[0].lower()
-            )
-            if not content_type.startswith("image/"):
-                raise commands.BadArgument(
-                    "The provided URL did not return an image.",
-                )
-
-            data = await response.read()
-            if len(data) > self.IMAGE_SIZE_LIMIT:
-                raise commands.BadArgument(
-                    "The downloaded image is larger than 8 MB. Use a smaller image.",
-                )
-
-            filename = self._sanitize_filename(url, content_type)
-            return {
-                "source_url": url,
-                "filename": filename,
-                "content_type": content_type,
-                "data_base64": base64.b64encode(data).decode("ascii"),
-            }
+        filename = self._sanitize_filename(final_url, content_type)
+        return {
+            "source_url": final_url,
+            "filename": filename,
+            "content_type": content_type,
+            "data_base64": base64.b64encode(data).decode("ascii"),
+        }
 
     @staticmethod
     def _discord_asset_size(size: int = 1024) -> int:
@@ -557,27 +559,18 @@ class Welcome(DashboardIntegration, commands.Cog):
     async def _download_member_avatar(self, member: discord.Member) -> bytes:
         url = self._member_avatar_url(member)
         timeout = aiohttp.ClientTimeout(total=30)
-        async with aiohttp.ClientSession(timeout=timeout) as session, session.get(url) as response:
-            if response.status != 200:
-                raise commands.CommandError(
-                    f"Failed to download the member avatar. HTTP status: {response.status}",
+        try:
+            async with public_client_session() as session:
+                data, _content_type, _final_url = await fetch_public_bytes(
+                    session,
+                    url,
+                    max_bytes=self.IMAGE_SIZE_LIMIT,
+                    timeout=timeout,
+                    required_content_type_prefix="image/",
                 )
-
-            content_type = (
-                response.headers.get(
-                    "Content-Type", "").split(";")[0].lower()
-            )
-            if not content_type.startswith("image/"):
-                raise commands.CommandError(
-                    "The member avatar URL did not return an image.",
-                )
-
-            data = await response.read()
-            if len(data) > self.IMAGE_SIZE_LIMIT:
-                raise commands.CommandError(
-                    "The member avatar is larger than 8 MB.",
-                )
-            return data
+        except (RemoteHTTPError, URLSafetyError, aiohttp.ClientError, asyncio.TimeoutError) as exc:
+            raise commands.CommandError(f"The member avatar could not be downloaded: {exc}") from exc
+        return data
 
     @staticmethod
     def _resampling_filter() -> Any:
@@ -819,6 +812,8 @@ class Welcome(DashboardIntegration, commands.Cog):
 
     @commands.Cog.listener()
     async def on_member_join(self, member: discord.Member) -> None:
+        if await self.bot.cog_disabled_in_guild(self, member.guild):
+            return
         settings = await self._get_guild_settings(member.guild)
         if not settings.get("enabled"):
             return

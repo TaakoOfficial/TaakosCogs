@@ -1,8 +1,10 @@
 # Changelog
 
-## [Unreleased]
+## [1.3.0] - 2026-07-16
 
 - Added standalone Red-Web-Dashboard integration for viewing visible commands and current server configuration.
+- Made the reaction listener respect Red's per-guild cog-disable state.
+- Assigned a unique Config identifier and added an automatic, verified, one-time migration that preserves existing guild settings under the legacy identifier for rollback.
 
 
 ## [1.2.1] - 2026-07-09
@@ -65,7 +67,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Questions limited to 200 characters
 - Minimum 3 players required
 
-## [Unreleased]
+## Roadmap
 
 ### Planned Features
 - Question categories and filtering

@@ -2,6 +2,30 @@
 
 All notable changes to `deepdelve` are documented here.
 
+## 4.0.0
+
+- Added The Living Chronicle, a five-chapter branching campaign with fifteen authored
+  scenes, permanent decisions, multiple endings, mechanical choice bonuses, rewards,
+  and a completion title.
+- Added five interactive regional puzzle chambers with saved attempts, hints, damage
+  consequences, unique completion tracking, streaks, and scalable rewards.
+- Added five collectible companions with milestone discovery, active selection,
+  levels, bond, statistics, combat progression, and distinct exploration passives.
+- Added Blacksmith, Alchemist, Cartographer, and Relic Hunter professions with 25
+  levels, five ranks, preserved mastery, daily gathering, and unique benefits.
+- Added server-wide Lastlight development with contributions, treasury, four
+  upgradeable buildings, sixteen upgrade tiers, and mechanical town benefits.
+- Added five deterministic daily world events that alter enemy strength, rewards,
+  puzzle frequency, and expedition atmosphere.
+- Added ten enemies, three late-game bosses, ten lore fragments, five consequence
+  encounters, evolving NPC dialogue, and four new achievements.
+- Added the five-part Delver's Primer and contextual onboarding on new profiles.
+- Added automatic versioned migrations, persistent world-boss controls, expanded
+  privacy export/deletion, and configurable 0.75×–2.00× server difficulty.
+- Added original campaign, Lastlight, and companion artwork with rich embed integration.
+- Split campaign, puzzle, companion, profession, world, migration, and expansion
+  content into focused modules and added regression tests for their pure systems.
+
 ## 3.0.0
 
 - Added tactical enemy intentions with Strike, Heavy, Flurry, Guard, Hex, and Renewal actions.

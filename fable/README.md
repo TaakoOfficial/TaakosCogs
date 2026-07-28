@@ -53,6 +53,12 @@ This cog includes standalone Red-Web-Dashboard integration. Server managers can 
 - Additional permissions may be needed for admin settings and export workflows.
 - Google API setup is optional and only needed for sync/export features.
 
+Google service-account JSON must be submitted with the private `/fable setapikey` slash command. Fable deletes and rejects visible prefix messages containing credentials. The key is stored in the server's Red Config and is only sent to Google's APIs during an explicit sync operation.
+
 ## Data
 
 Fable stores character profiles, relationships, locations, events, story arcs, settings, and optional sync configuration as configured by users. Data is not shared externally unless an explicit export or sync workflow is configured.
+
+## Artwork
+
+Book footer icons use Twemoji v17.0.3 graphics under CC-BY 4.0. Full attribution and license links are in the repository's [third-party notices](../THIRD_PARTY_NOTICES.md).

@@ -1,8 +1,11 @@
 # Changelog
 
-## [Unreleased]
+## [1.1.0] - 2026-07-16
 
 - Added standalone Red-Web-Dashboard integration for viewing visible commands and current server configuration.
+- Standardized logging under `red.taakoscogs.whmcs` and removed request payload, credential, and client-state logging.
+- Rejected visible prefix-message credential submission in favor of private slash options or Dashboard password fields.
+- Made ticket-channel message automation respect Red's per-guild cog-disable state.
 
 
 ## [1.0.14] - 2026-07-09
@@ -336,7 +339,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Comprehensive error handling and logging
 - Support for both API credentials and admin username/password authentication
 
-## [Unreleased]
+## Roadmap
 
 ### Planned Features
 

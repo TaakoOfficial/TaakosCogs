@@ -1,8 +1,10 @@
 # Changelog
 
-## [Unreleased]
+## [1.4.0] - 2026-07-16
 
 - Added standalone Red-Web-Dashboard integration for viewing visible commands and current server configuration.
+- Replaced Flaticon and Freepik artwork with pinned, centrally attributed Twemoji graphics while preserving moon and calendar icons.
+- Standardized logging under `red.taakoscogs.rpcalander` without configuring the process-wide root logger.
 
 
 ## [1.3.2] - 2026-07-09

@@ -1,10 +1,9 @@
-"""Red-Web-Dashboard integration."""
+# ruff: noqa: E501
+"""Purpose-built dashboard for Paranoia."""
 
 from __future__ import annotations
 
 import html
-import json
-import logging
 from typing import TYPE_CHECKING, Any, Callable
 
 from redbot.core import commands
@@ -12,12 +11,8 @@ from redbot.core import commands
 if TYPE_CHECKING:
     import discord
 
-log = logging.getLogger("red.taakoscogs.paranoia.dashboard")
-
 
 def dashboard_page(*args, **kwargs):
-    """Dashboard page decorator compatible with Red-Web-Dashboard."""
-
     def decorator(func: Callable):
         func.__dashboard_decorator_params__ = (args, kwargs)
         return func
@@ -26,117 +21,92 @@ def dashboard_page(*args, **kwargs):
 
 
 class DashboardIntegration:
-    """Conservative dashboard integration for cogs without custom web controls."""
+    """Paranoia question-bank settings and live-game overview."""
 
     @commands.Cog.listener()
     async def on_dashboard_cog_add(self, dashboard_cog: commands.Cog) -> None:
-        """Register the cog as a Red-Web-Dashboard third party."""
         handler = dashboard_cog.rpc.third_parties_handler
         try:
             handler.add_third_party(self, overwrite=True)
         except TypeError:
             handler.add_third_party(self)
 
-    @dashboard_page(
-        name=None,
-        description="View this cog's current server configuration and commands.",
-        methods=("GET",),
-    )
-    async def dashboard_page(
-        self,
-        user: discord.User,
-        guild: discord.Guild,
-        **kwargs: Any,
-    ) -> dict[str, Any]:
-        """Render a read-only dashboard page."""
-        if not await self._dashboard_can_manage(user, guild):
-            return {
-                "status": 1,
-                "error_title": "Insufficient Permissions",
-                "error_message": (
-                    "You need Manage Server, Red admin, or bot owner access."
-                ),
-            }
+    @dashboard_page(name=None, description="Manage Paranoia questions and proxy support.", methods=("GET", "POST"))
+    async def dashboard_page(self, user: discord.User, guild: discord.Guild, **kwargs: Any):
+        if not await self._par_can_manage(user, guild):
+            return {"status": 1, "error_title": "Insufficient Permissions", "error_message": "Manage Server is required."}
+        notices = []
+        if kwargs.get("method", "GET").upper() == "POST":
+            form = self._par_form(kwargs)
+            questions = [line.strip() for line in self._par_value(form, "custom_questions").splitlines() if line.strip()]
+            if len(questions) > 500:
+                notices.append({"message": "The custom question bank is limited to 500 questions.", "category": "error"})
+            elif any(len(question) > 300 for question in questions):
+                notices.append({"message": "Each question must be 300 characters or fewer.", "category": "error"})
+            else:
+                conf = self.config.guild(guild)
+                await conf.custom_questions.set(questions)
+                await conf.tupperbox_support.set(self._par_checked(form, "tupperbox_support"))
+                notices.append({"message": "Paranoia settings saved.", "category": "success"})
+        settings = await self.config.guild(guild).all()
+        source = self._par_source(guild, settings, self._par_csrf(kwargs))
+        return {"status": 0, "notifications": notices, "web_content": {"source": source, "expanded": True}}
 
-        try:
-            source = await self._dashboard_source(guild)
-        except Exception as error:
-            log.exception("Dashboard render failed for %s.",
-                          self.qualified_name)
-            return {
-                "status": 1,
-                "error_title": "Dashboard Error",
-                "error_message": f"Could not render dashboard page: {error}",
-            }
-
-        return {
-            "status": 0,
-            "web_content": {
-                "source": source,
-                "expanded": True,
-            },
-        }
-
-    async def _dashboard_can_manage(
-        self,
-        user: discord.User,
-        guild: discord.Guild,
-    ) -> bool:
-        member = guild.get_member(user.id)
-        is_owner = user.id in getattr(self.bot, "owner_ids", set())
-        is_admin = member is not None and await self.bot.is_admin(member)
-        return bool(
-            is_owner
-            or is_admin
-            or (member is not None and member.guild_permissions.manage_guild),
-        )
-
-    async def _dashboard_source(self, guild: discord.Guild) -> str:
-        cog_name = html.escape(self.qualified_name)
-        config = await self._dashboard_guild_config(guild)
-        commands_html = self._dashboard_commands_html()
-        config_html = self._dashboard_config_html(config)
-
+    def _par_source(self, guild, settings, csrf):
+        custom = "\n".join(settings.get("custom_questions", []))
+        games = settings.get("active_games", {})
+        game_rows = []
+        for channel_id, game in games.items():
+            channel = guild.get_channel(int(channel_id))
+            name = f"#{channel.name}" if channel else f"Deleted channel ({channel_id})"
+            game_rows.append(
+                f"<tr><td>{html.escape(name)}</td><td>{int(game.get('round', 0))}</td>"
+                f"<td>{len(game.get('players', []))}</td><td>{len(game.get('current_answers', {}))}</td></tr>",
+            )
+        rows = "".join(game_rows) or '<tr><td colspan="4">No games are currently running.</td></tr>'
+        enabled = " checked" if settings.get("tupperbox_support") else ""
         return f"""
-<section class="third-party-dashboard">
-  <h2>{cog_name}</h2>
-  <p>This dashboard page confirms the cog is registered with Red-Web-Dashboard.</p>
-  <h3>Commands</h3>
-  {commands_html}
-  <h3>Current Server Config</h3>
-  {config_html}
-</section>
-"""
+<section class="par-dash"><style>
+.par-dash .card{{border:1px solid rgba(127,127,127,.3);border-radius:.65rem;padding:1rem;margin-bottom:1rem}}
+.par-dash textarea{{width:100%;min-height:18rem;padding:.6rem;background:var(--background,#202225);color:var(--text,#fff);border:1px solid rgba(127,127,127,.35);border-radius:.35rem}}
+.par-dash .check{{display:flex;align-items:center;gap:.5rem}}.par-dash table{{width:100%}}.par-dash th,.par-dash td{{padding:.45rem;text-align:left}}
+</style><h2>Paranoia</h2><p>Manage the question pool and proxy behavior for <strong>{html.escape(guild.name)}</strong>.</p>
+<form method="POST" class="card">{csrf}
+<label class="check"><input type="checkbox" name="tupperbox_support"{enabled}> Enable Tupperbox/proxy support</label>
+<h3>Custom questions</h3><p>Enter one question per line. The built-in question bank remains available.</p>
+<textarea name="custom_questions" maxlength="151000" spellcheck="true">{html.escape(custom)}</textarea>
+<p>{len(settings.get("custom_questions", []))} custom · {len(self.default_questions)} built-in questions</p>
+<button class="btn btn-primary">Save Question Settings</button></form>
+<section class="card"><h3>Active games</h3><table><thead><tr><th>Channel</th><th>Round</th><th>Players</th><th>Answers</th></tr></thead><tbody>{rows}</tbody></table></section>
+</section>"""
 
-    async def _dashboard_guild_config(
-        self,
-        guild: discord.Guild,
-    ) -> dict[str, Any] | None:
-        config = getattr(self, "config", None) or getattr(
-            self, "_config", None)
-        if config is None:
-            return None
-        guild_config = getattr(config, "guild", None)
-        if guild_config is None:
-            return None
-        return await guild_config(guild).all()
-
-    def _dashboard_commands_html(self) -> str:
-        commands_list = sorted(
-            command.qualified_name
-            for command in self.walk_commands()
-            if not command.hidden
+    async def _par_can_manage(self, user, guild):
+        member = guild.get_member(user.id)
+        return bool(
+            user.id in getattr(self.bot, "owner_ids", set())
+            or (member and await self.bot.is_admin(member))
+            or (member and member.guild_permissions.manage_guild),
         )
-        if not commands_list:
-            return "<p>No visible commands were found for this cog.</p>"
-        items = "\n".join(
-            f"<li><code>{html.escape(command)}</code></li>" for command in commands_list
-        )
-        return f"<ul>{items}</ul>"
 
     @staticmethod
-    def _dashboard_config_html(config: dict[str, Any] | None) -> str:
-        if config is None:
-            return "<p>This cog does not store per-server config.</p>"
-        dumped = json.dumps(config, indent=2, sort_keys=True, default=str)
-        return f"<pre><code>{html.escape(dumped)}</code></pre>"
+    def _par_form(kwargs):
+        data = kwargs.get("data") or {}
+        return (data.get("form") or data.get("json") or {}) if isinstance(data, dict) else data
+
+    @staticmethod
+    def _par_value(form, key, default=""):
+        value = form.get(key, default) if hasattr(form, "get") else default
+        if isinstance(value, (list, tuple)):
+            value = value[0] if value else default
+        return default if value is None else str(value)
+
+    @classmethod
+    def _par_checked(cls, form, key):
+        return cls._par_value(form, key).lower() in {"1", "true", "on", "yes"}
+
+    @staticmethod
+    def _par_csrf(kwargs):
+        token = kwargs.get("csrf_token")
+        if not isinstance(token, (tuple, list)) or len(token) != 2:
+            return ""
+        return f'<input type="hidden" name="csrf_token" value="{html.escape(str(token[1]), quote=True)}">'

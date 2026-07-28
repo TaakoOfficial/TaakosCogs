@@ -5,6 +5,8 @@ from __future__ import annotations
 import random
 from typing import Any
 
+from .expansion_content import EXTENDED_BOSSES, EXTENDED_ENEMIES
+
 GAME_CLASSES: dict[str, dict[str, Any]] = {
     "vanguard": {
         "name": "Vanguard",
@@ -64,7 +66,7 @@ ENEMIES: tuple[dict[str, Any], ...] = (
     {"name": "Magma Elemental", "emoji": "🔥", "tier": 4, "hp": 145, "attack": 25, "defense": 12, "gold": 54, "xp": 58},
     {"name": "Fallen Champion", "emoji": "⚔️", "tier": 4, "hp": 155, "attack": 27, "defense": 13, "gold": 62, "xp": 64},
     {"name": "Abyssal Horror", "emoji": "🐙", "tier": 4, "hp": 175, "attack": 29, "defense": 11, "gold": 70, "xp": 72},
-)
+) + EXTENDED_ENEMIES
 
 BOSSES: tuple[dict[str, Any], ...] = (
     {
@@ -107,7 +109,7 @@ BOSSES: tuple[dict[str, Any], ...] = (
         "gold": 500,
         "xp": 520,
     },
-)
+) + EXTENDED_BOSSES
 
 ROOM_TEXTS: tuple[str, ...] = (
     "Torchlight reveals a chamber scratched with forgotten names.",
@@ -170,6 +172,10 @@ ACHIEVEMENTS: dict[str, dict[str, Any]] = {
     "contractor": {"name": "Oathkeeper", "description": "Complete your first contract.", "gold": 100},
     "lorekeeper": {"name": "Whispers Remembered", "description": "Recover five lore fragments.", "gold": 175},
     "master_smith": {"name": "Made in Darkness", "description": "Craft ten pieces of equipment.", "gold": 300},
+    "riddlemaster": {"name": "Doors of the Mind", "description": "Solve five unique dungeon puzzles.", "gold": 350},
+    "bonded": {"name": "Never Delve Alone", "description": "Raise a companion to bond 50.", "gold": 300},
+    "professional": {"name": "A Life Below", "description": "Reach profession level 10.", "gold": 400},
+    "chronicler": {"name": "The Final Word", "description": "Complete the first campaign.", "gold": 750},
 }
 
 REGIONS: tuple[dict[str, Any], ...] = (
@@ -286,6 +292,46 @@ LORE_FRAGMENTS: tuple[dict[str, str], ...] = (
         "title": "Margin of the World",
         "text": "Past the twentieth floor, write nothing down. Words become doors, and readers become keys.",
     },
+    {
+        "title": "The Surveyor's Last Map",
+        "text": "The red route marks where I walked. The blue route marks where the dungeon remembers I walked.",
+    },
+    {
+        "title": "Spore Gospel",
+        "text": "We are not the first life to grow upon these graves. We are merely the first to call decay an ending.",
+    },
+    {
+        "title": "Inventory of Borrowed Lives",
+        "text": "Three kings, eleven soldiers, a baker, and one frightened child were pressed into the same iron body.",
+    },
+    {
+        "title": "Letter Never Sent",
+        "text": "Mara, the fifth bell is beneath your office. You have stood guard over it every day without knowing.",
+    },
+    {
+        "title": "The Star That Begged",
+        "text": "Do not return me to the sky. It is colder there than your stories say, and something has eaten my sisters.",
+    },
+    {
+        "title": "Rook's Real Name",
+        "text": "The rival crossed out every line except this one: I joke because the Deep listens when I am afraid.",
+    },
+    {
+        "title": "Orra's First Hammer",
+        "text": "A tool becomes sacred after it has made something its maker could not destroy.",
+    },
+    {
+        "title": "The Unremembered Saint",
+        "text": "Caligo performed one miracle: she convinced history that the coming darkness had never seen the light.",
+    },
+    {
+        "title": "A Future Obituary",
+        "text": "Lastlight survived the opening of the Deep. No living witness could agree who opened it.",
+    },
+    {
+        "title": "The Author's Dedication",
+        "text": "For the one who reaches the final page: you were always my favorite character.",
+    },
 )
 
 MATERIALS: dict[str, dict[str, str]] = {
@@ -338,6 +384,61 @@ CHOICES: tuple[dict[str, Any], ...] = (
             ("leave", "Move On", "↩️"),
         ),
     },
+    {
+        "key": "weeping_sword",
+        "title": "The Weeping Sword",
+        "emoji": "🗡️",
+        "text": "A sword embedded in the wall weeps clear water and asks you to remember its final wielder.",
+        "options": (
+            ("study", "Hear Its Memory", "🧠"),
+            ("force", "Pull It Free", "💪"),
+            ("leave", "Leave It Mourning", "↩️"),
+        ),
+    },
+    {
+        "key": "fungal_feast",
+        "title": "The Feast That Breathes",
+        "emoji": "🍄",
+        "text": "A table of luminous mushrooms exhales in unison. One place has been set for you.",
+        "options": (
+            ("aid", "Taste the Feast", "🍽️"),
+            ("destroy", "Burn the Table", "🔥"),
+            ("leave", "Decline Politely", "↩️"),
+        ),
+    },
+    {
+        "key": "clockwork_child",
+        "title": "The Clockwork Child",
+        "emoji": "🤖",
+        "text": "A small brass figure asks whether it is alive, holding a key shaped like a human heartbeat.",
+        "options": (
+            ("aid", "Wind the Key", "🗝️"),
+            ("study", "Examine the Mechanism", "🔎"),
+            ("leave", "Say Nothing", "↩️"),
+        ),
+    },
+    {
+        "key": "empty_throne",
+        "title": "The Empty Throne",
+        "emoji": "🪑",
+        "text": "The throne is empty, yet every ghost in the hall bows when you approach it.",
+        "options": (
+            ("offer", "Kneel", "👑"),
+            ("destroy", "Shatter the Throne", "💥"),
+            ("leave", "Refuse the Court", "↩️"),
+        ),
+    },
+    {
+        "key": "future_grave",
+        "title": "Your Future Grave",
+        "emoji": "🪦",
+        "text": "A gravestone bears your name, tomorrow's date, and a cause of death scratched away.",
+        "options": (
+            ("study", "Read the Hidden Words", "📖"),
+            ("destroy", "Break the Stone", "🔨"),
+            ("leave", "Walk Past", "↩️"),
+        ),
+    },
 )
 
 
@@ -372,7 +473,7 @@ def xp_for_level(level: int) -> int:
 
 def enemy_for_floor(floor: int, rng: random.Random = random) -> dict[str, Any]:
     """Build a scaled random enemy suitable for a floor."""
-    tier = min(4, max(1, (max(1, floor) - 1) // 5 + 1))
+    tier = min(5, max(1, (max(1, floor) - 1) // 5 + 1))
     choices = [enemy for enemy in ENEMIES if enemy["tier"] in {tier, max(1, tier - 1)}]
     base = dict(rng.choice(choices))
     scale = 1 + max(0, floor - 1) * 0.085

@@ -1,8 +1,10 @@
 # Changelog
 
-## [Unreleased]
+## [2.1.0] - 2026-07-16
 
 - Added standalone Red-Web-Dashboard integration for viewing visible commands and current server configuration.
+- Replaced the Flaticon footer image with a pinned, centrally attributed Twemoji book graphic.
+- Rejected visible prefix-message service-account keys in favor of the private slash-command option and removed misleading encrypted-storage wording.
 
 
 ## [2.0.1] - 2026-07-09

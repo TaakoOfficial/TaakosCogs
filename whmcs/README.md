@@ -23,7 +23,7 @@ This cog includes standalone Red-Web-Dashboard integration. Server managers can 
 - View and reply to support tickets from Discord.
 - Optional ticket-specific Discord channels with auto-reply integration.
 - Role-based access levels for admin, billing, support, and read-only users.
-- Secure API configuration through Red's config system.
+- Private API-secret entry through password fields in Red-Web-Dashboard or slash-command options.
 
 ## Command Areas
 
@@ -38,7 +38,7 @@ This cog includes standalone Red-Web-Dashboard integration. Server managers can 
 ## Setup Notes
 
 1. Create WHMCS API credentials in WHMCS.
-2. Run `[p]whmcs admin config`.
+2. Open the WHMCS Dashboard page or use `/whmcs admin config` to enter the API secret and optional access key. Visible prefix messages are deliberately rejected for credentials.
 3. Run `[p]whmcs admin test`.
 4. Configure role permissions with `[p]whmcs admin permissions`.
 5. Optional: configure ticket categories with `[p]whmcs admin channels`.
@@ -53,4 +53,4 @@ This cog includes standalone Red-Web-Dashboard integration. Server managers can 
 
 ## Data
 
-WHMCS stores guild-specific API configuration, permission settings, rate-limit settings, and optional ticket-channel mappings. It connects to your WHMCS API when commands require external client, billing, or support data.
+WHMCS stores guild-specific API configuration, including credentials, in Red's per-guild Config alongside permission settings, rate-limit settings, and optional ticket-channel mappings. It connects to your WHMCS API when commands require external client, billing, or support data. Credentials are redacted from logs.

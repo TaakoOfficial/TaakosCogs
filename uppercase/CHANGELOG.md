@@ -1,8 +1,9 @@
 # Changelog
 
-## Unreleased
+## 1.2.0 - 2026-07-16
 
 - Added standalone Red-Web-Dashboard integration for viewing visible commands and current server configuration.
+- Renamed the primary commands to `createchannel` and `renamechannel` while retaining the historical hyphenated names as hidden prefix and slash compatibility commands.
 
 
 ## 1.1.4

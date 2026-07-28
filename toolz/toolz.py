@@ -601,6 +601,8 @@ class Toolz(DashboardIntegration, commands.Cog):
         before: discord.Member,
         after: discord.Member,
     ) -> None:
+        if await self.bot.cog_disabled_in_guild(self, after.guild):
+            return
         before_role_ids = {role.id for role in before.roles}
         added_roles = [
             role

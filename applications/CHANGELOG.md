@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.4.0 - 2026-07-16
 
 - Reorganized the dashboard into responsive Application Setup, Questions, Panels, Responses, and Polls tabs that remain selected after form submissions.
 

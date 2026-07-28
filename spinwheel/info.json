@@ -1,0 +1,33 @@
+{
+    "$schema": "https://raw.githubusercontent.com/Cog-Creators/Red-DiscordBot/V3/develop/schema/red_cog.schema.json",
+    "name": "spinwheel",
+    "author": [
+        "Taako"
+    ],
+    "version": "1.0.0",
+    "description": "A polished animated wheel spinner for Red-DiscordBot with secure random selection, saved wheels, color themes, custom palettes, winner removal, slash commands, and a standalone dashboard.",
+    "install_msg": "spinwheel loaded. Use `[p]wheel spin <entry, entry, ...>` for an instant wheel, `[p]wheel create` to save one, `/wheel spin` for the slash command, or Red-Web-Dashboard for visual setup.",
+    "short": "Animated, colorful, cryptographically random wheels with saved presets and dashboard controls.",
+    "tags": [
+        "wheel",
+        "spinner",
+        "random",
+        "games",
+        "giveaway",
+        "dashboard",
+        "utility"
+    ],
+    "requirements": [
+        "Pillow>=10.0.0"
+    ],
+    "min_bot_version": "3.5.0",
+    "min_python_version": [
+        3,
+        9,
+        0
+    ],
+    "hidden": false,
+    "disabled": false,
+    "type": "COG",
+    "end_user_data_statement": "This cog stores server-created wheel names, user-provided entry labels, color settings, winner-removal preferences, and aggregate spin counts. It does not store Discord user IDs."
+}

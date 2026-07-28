@@ -22,6 +22,8 @@ Explore → encounter → choose an action → earn loot → equip upgrades → 
 Progress is saved after every action. An interrupted battle can be resumed with
 `[p]deepdelve adventure`.
 
+![The Living Chronicle](./assets/chronicle-campaign.png)
+
 ## Install
 
 ```text
@@ -61,6 +63,18 @@ member's current display name.
 - Persistent per-server characters and saved combat encounters.
 - Button-driven exploration, combat, inventory, and town services.
 - Five authored regions with distinct atmosphere, narration, lore, and materials.
+- A five-chapter branching solo campaign with fifteen scenes, permanent decisions,
+  multiple endings, mechanical choice bonuses, and a unique completion title.
+- Five interactive regional puzzle chambers with saved attempts, hints, failure
+  consequences, streak rewards, and build-aware reward modifiers.
+- Five collectible companions with levels, bond, combat statistics, exploration
+  passives, and authored personalities.
+- Four persistent professions with 25 levels, five ranks, daily gathering, preserved
+  mastery when switching, and distinct crafting or exploration advantages.
+- Server-wide Lastlight development with a shared treasury and four buildings, each
+  providing four levels of permanent benefits.
+- Five deterministic server-specific world events that rotate daily and alter enemy
+  strength, rewards, puzzle frequency, and atmosphere.
 - Consequence-bearing decisions influenced by class, attributes, items, and currency.
 - Scalable enemies with named bosses on every fifth floor.
 - Elite enemies with armor, frenzy, venom, life drain, or ancient power.
@@ -70,8 +84,8 @@ member's current display name.
 - Common, Uncommon, Rare, Epic, and Legendary equipment.
 - Legendary effects, set bonuses, inspection comparisons, +10 upgrades, shards, enchanting, and rerolling.
 - Lastlight contracts, reputation, crafting materials, and a depth-scaled forge.
-- Ten hidden lore fragments and a personal expedition journal.
-- Four recurring NPCs with relationship levels and multi-stage personal quests.
+- Twenty hidden lore fragments and a personal expedition journal.
+- Four recurring NPCs with relationship levels, evolving dialogue, and multi-stage personal quests.
 - Four-member parties with cooperative roles and stat bonuses.
 - Equipment auctions and persistent player guilds with perks, rankings, and shared vaults.
 - Consensual arena wagers with escrow, records, and seasonal points.
@@ -83,6 +97,8 @@ member's current display name.
 - Achievements with gold rewards and personal creature bestiaries.
 - Depth, level, kill, gold, and boss leaderboards.
 - Configurable adventure channel and daily turn allowance.
+- Versioned, automatic save migration, persistent world-boss controls, per-player
+  synchronization, and administrator difficulty scaling.
 - No external services or Python dependencies.
 
 ## Player Commands
@@ -103,6 +119,7 @@ member's current display name.
 | `[p]deepdelve contract` | Visit the Lastlight contract board |
 | `[p]deepdelve craft` | Forge a weapon, armor, or charm |
 | `[p]deepdelve regions` | View discovered dungeon regions |
+| `[p]deepdelve chronicle` | Open the solo campaign and living-world hub |
 | `[p]deepdelve leaderboard [category]` | View server rankings |
 | `[p]deepdelve retire` | Permanently delete your character |
 
@@ -120,8 +137,54 @@ member's current display name.
 | `[p]deepdelve guild` | Player guilds, contributions, perks, rankings, and shared vaults |
 | `[p]deepdelve arena` | Challenges, escrowed wagers, acceptance, declining, and cancellation |
 | `[p]deepdelve endgame` | Rifts, daily dungeons, Hardcore, Ascension, seasons, and world bosses |
+| `[p]deepdelve chronicle` | Campaign, tutorial, puzzles, companions, professions, gathering, events, and town growth |
 
 Use `[p]help deepdelve <group>` to see every subcommand and argument.
+
+## The Living Chronicle
+
+The main solo story spans five chapters from the Forgotten Warrens through the
+Margin of the World. Each chapter contains three authored scenes and ends in one of
+three permanent decisions. Those choices are recorded on the campaign panel and
+grant small build bonuses, so two characters can finish with meaningfully different
+histories and statistics.
+
+```text
+[p]deepdelve chronicle
+[p]deepdelve chronicle tutorial
+[p]deepdelve chronicle campaign
+[p]deepdelve chronicle puzzle
+```
+
+Campaign scenes use a Continue Story button. Major decisions use dedicated buttons
+and cannot be undone without retiring the character.
+
+## Companions and Professions
+
+![Companions of the Deep](./assets/companions.png)
+
+Companions unlock at milestone depths. One can be active at a time; victories build
+XP and bond, improving its statistics and passive effects. The roster includes a
+trap-finding tunnel hound, a mana-restoring spore wisp, a salvaging memory automaton,
+an elite-hunting court familiar, and an Unwritten shade that can return spent time.
+
+Blacksmith, Alchemist, Cartographer, and Relic Hunter professions each level to 25
+through relevant activity. Members receive three manual gathering actions per UTC
+day, while exploration and combat also grant profession experience. Switching paths
+costs currency but preserves mastery in every learned profession.
+
+## Lastlight and World Events
+
+![Lastlight Outpost](./assets/lastlight-town.png)
+
+Every member can contribute currency to Lastlight's shared treasury. Administrators
+spend it on the Deepforge, Lantern Infirmary, Forbidden Archive, or Lastlight Watch.
+Their benefits feed directly into crafting, services, potions, campaign and puzzle
+rewards, and daily turns.
+
+Each server receives a deterministic daily world event. Black Rain, the Lantern
+Festival, Shifting Stairs, the Hollow March, and the Quiet Deep change the risk and
+reward profile of ordinary expeditions without requiring scheduled maintenance.
 
 ## Tactical Combat
 
@@ -177,12 +240,14 @@ Administrators and members with Manage Server can configure the game:
 [p]deepdelve set channel #adventures
 [p]deepdelve set channel
 [p]deepdelve set turns 24
+[p]deepdelve set difficulty 1.00
 [p]deepdelve set economy bank
 [p]deepdelve set resetuser @member
 ```
 
 The channel restriction applies to both commands and interactive exploration
-buttons. Daily turns may be configured from 5 to 100.
+buttons. Daily turns may be configured from 5 to 100. Difficulty may be set from
+0.75× to 2.00× and scales enemy health, attack, defense, and rewards.
 
 ## Red Economy Integration
 
@@ -242,10 +307,11 @@ includes character details, attributes, inventory, equipment, currency cache, du
 progress, active encounters and choices, conditions, crafting materials, contracts,
 reputation, NPC stories, lore, journal entries, titles, scars, blessings,
 achievements, social membership, arena records, endgame progress, seasonal progress,
-and discovered enemies. Server configuration also stores party, auction, player-guild
-and shared-vault, arena, world-boss, and server-first records. When bank mode is
-enabled, DeepDelve reads and changes the member's Red bank balance for game
-transactions.
+campaign decisions, puzzle history, companions, professions, gathering activity,
+town contributions, world-event discoveries, and discovered enemies. Server
+configuration also stores party, auction, player-guild and shared-vault, arena,
+world-boss, server-first, shared town, and contributor records. When bank mode is
+enabled, DeepDelve reads and changes the member's Red bank balance for game transactions.
 
 The cog implements Red's user-data export and deletion hooks. Players can also delete
 their current server character directly with `[p]deepdelve retire`. No game data is
@@ -257,6 +323,14 @@ DeepDelve is divided into focused modules:
 
 - `content.py` contains original regions, enemies, bosses, events, and base loot.
 - `advanced_content.py` contains abilities, talents, subclasses, sets, legendaries, NPCs, and seasons.
+- `expansion_content.py` contains campaign chapters, puzzles, companions, professions,
+  town buildings, world events, and the expanded enemy and boss roster.
+- `systems/campaign.py` handles permanent story progression and choice bonuses.
+- `systems/puzzles.py` handles puzzle selection, saved attempts, hints, and rewards.
+- `systems/companions.py` handles collection, bond, leveling, and passive statistics.
+- `systems/professions.py` handles profession ranks, experience, and gathering.
+- `systems/world.py` handles deterministic events and shared town upgrades.
+- `systems/migrations.py` performs idempotent profile and guild save upgrades.
 - `systems/combat.py` handles enemy intentions.
 - `systems/progression.py` calculates builds, titles, subclasses, talents, scars, and blessings.
 - `systems/items.py` handles advanced procedural itemization and equipment operations.

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import random
 import re
 
@@ -8,6 +9,8 @@ from redbot.core import Config, commands
 from redbot.core.utils.chat_formatting import humanize_list
 
 from .dashboard_integration import DashboardIntegration
+
+log = logging.getLogger("red.taakoscogs.paranoia")
 
 
 class Paranoia(DashboardIntegration, commands.Cog):
@@ -20,11 +23,20 @@ class Paranoia(DashboardIntegration, commands.Cog):
     Features Tupperbox integration for roleplay communities!
     """
 
+    CONFIG_IDENTIFIER = 1122110071725183678
+    LEGACY_CONFIG_IDENTIFIER = 1234567890
+    IDENTIFIER_MIGRATION_VERSION = 1
+
     def __init__(self, bot):
         self.bot = bot
         self.config = Config.get_conf(
             self,
-            identifier=1234567890,
+            identifier=self.CONFIG_IDENTIFIER,
+            force_registration=True,
+        )
+        self._legacy_config = Config.get_conf(
+            self,
+            identifier=self.LEGACY_CONFIG_IDENTIFIER,
             force_registration=True,
         )
 
@@ -34,7 +46,9 @@ class Paranoia(DashboardIntegration, commands.Cog):
             "tupperbox_support": True,
         }
 
+        self.config.register_global(identifier_migration_version=0)
         self.config.register_guild(**default_guild)
+        self._legacy_config.register_guild(**default_guild)
 
         # Default questions for the game
         self.default_questions = [
@@ -54,6 +68,40 @@ class Paranoia(DashboardIntegration, commands.Cog):
             "Who would you trust to plan your birthday party?",
             "Who has the most contagious laugh?",
         ]
+
+    async def cog_load(self) -> None:
+        """Migrate settings from the legacy Config identifier before use."""
+        await self._migrate_config_identifier()
+
+    async def _migrate_config_identifier(self) -> None:
+        """Copy legacy guild data once, retaining the old namespace for rollback."""
+        if (
+            await self.config.identifier_migration_version()
+            >= self.IDENTIFIER_MIGRATION_VERSION
+        ):
+            return
+
+        legacy_guilds = await self._legacy_config.all_guilds()
+        destination_guild_ids = set((await self.config.all_guilds()).keys())
+        copied = 0
+        for guild_id, data in legacy_guilds.items():
+            if guild_id in destination_guild_ids:
+                continue
+            destination = self.config.guild_from_id(guild_id)
+            await destination.set(data)
+            if await destination.all() != data:
+                raise RuntimeError(
+                    f"Paranoia Config migration verification failed for guild {guild_id}.",
+                )
+            copied += 1
+
+        await self.config.identifier_migration_version.set(
+            self.IDENTIFIER_MIGRATION_VERSION,
+        )
+        log.info(
+            "Paranoia Config identifier migration completed for %d guild(s).",
+            copied,
+        )
 
     def _is_tupperbox_message(self, message: discord.Message) -> bool:
         """Check if a message is from Tupperbox."""
@@ -435,7 +483,11 @@ class Paranoia(DashboardIntegration, commands.Cog):
         if user.bot:
             return
 
-        guild_data = await self.config.guild(reaction.message.guild).active_games()
+        guild = reaction.message.guild
+        if guild is None or await self.bot.cog_disabled_in_guild(self, guild):
+            return
+
+        guild_data = await self.config.guild(guild).active_games()
         channel_id = str(reaction.message.channel.id)
 
         if channel_id not in guild_data:
