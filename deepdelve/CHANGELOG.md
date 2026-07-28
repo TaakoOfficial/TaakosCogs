@@ -2,6 +2,29 @@
 
 All notable changes to `deepdelve` are documented here.
 
+## 5.0.0
+
+- Added the persistent Living World hub with restart-safe Resume, Quests, Atlas,
+  Character, Inventory, Morality, Codex, Town, Mail, and Sanctum navigation.
+- Added a six-act, 36-scene Living Chronicle with 18 permanent decisions and four
+  endings; three eight-quest faction arcs; nine personal arcs; a persistent journal;
+  World Echoes; relationship memories; mail; and a solo Nemesis system.
+- Made Morality playable through unique-source Resolve, 18 capped Tenet sidegrades,
+  a rotating Oath Board, equal-value faction services, three-stage moral journeys,
+  reactive presentation, and normalized once-per-encounter invocations.
+- Added an Atlas and ten named branching dungeons, 60 authored events, 15 multi-route
+  puzzles, 45 enemies, 15 elite identities, 10 bosses, and permanent consequence flags.
+- Added 12 equipment sets, 30 named relics, 24 consumables, 30 recipes, 36 contracts,
+  12 permanent seasonal chapters, weekly commissions, recipe research, and a capped
+  five-room Sanctum currency sink.
+- Advanced profiles to schema 8 and guilds to schema 6 with idempotent migrations,
+  historical unique-deed Resolve credit, preserved old custom IDs, per-character
+  locks, immediate interaction deferral, and idempotent reward claims.
+- Closed duplicate campaign payouts, full-satchel faction charges, resale/arbitrage
+  paths, repeatable Resolve farming, and stale-state interaction races.
+- Added registry validation, 7/30/90-day economy projections, migration and duplicate
+  claim coverage, and an all-class/subclass/morality Monte Carlo release gate.
+
 ## 4.3.6
 
 - Bypassed Red Config's unsafe recursive merge for member profiles, which crashed

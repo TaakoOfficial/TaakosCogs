@@ -29,12 +29,19 @@ def apply_miniboss(enemy: dict[str, Any], floor: int, rng: random.Random = rando
     enemy["base_name"] = definition["name"]
     enemy["emoji"] = definition["emoji"]
     for stat in ("hp", "attack", "defense"):
-        endurance = max(1.18, 1.45 - max(0, floor - 1) * 0.008) if stat == "hp" else 1.0
+        endurance = (
+            max(1.15, 1.5 - max(0, floor - 1) * 0.025)
+            if stat == "hp" and floor <= 10
+            else 1.15
+            if stat == "hp"
+            else 1.0
+        )
         enemy[stat] = max(1, round(int(enemy[stat]) * float(definition[stat]) * endurance))
     enemy["max_hp"] = enemy["hp"]
     enemy["gold"] = round(int(enemy["gold"]) * 2)
     enemy["xp"] = round(int(enemy["xp"]) * 1.8)
     enemy["miniboss"] = True
+    enemy["threat_multiplier"] = 1.20
     enemy["codex_key"] = f"miniboss:{region_index(floor)}"
     enemy["affix"] = enemy.get("affix") or {}
     return enemy

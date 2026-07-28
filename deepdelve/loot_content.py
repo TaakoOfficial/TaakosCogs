@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from .living_content import LIVING_CONSUMABLES
+
 STARTER_WEAPONS: dict[str, dict[str, dict[str, Any]]] = {
     "vanguard": {
         "bastion_sword": {
@@ -481,6 +483,7 @@ CONSUMABLES: dict[str, dict[str, Any]] = {
         "description": "Guarantee escape from a non-boss battle.",
     },
 }
+CONSUMABLES.update(LIVING_CONSUMABLES)
 
 RECIPES: dict[str, dict[str, Any]] = {
     "lanternsteel": {"name": "Lanternsteel Pattern", "slot": "weapon", "region": 0, "effect": "silence"},

@@ -46,6 +46,7 @@ from .content import (
 )
 from .dashboard_integration import DashboardIntegration
 from .expansion_content import CAMPAIGN_CHAPTERS, COMPANIONS, PROFESSIONS, TOWN_BUILDINGS
+from .living_content import FACTIONS, LIVING_RECIPES, LIVING_TITLES, NAMED_DUNGEONS, TENETS
 from .loot_content import CONSUMABLES, RECIPES, STORY_RELICS
 from .persistent_views import (
     DeepDelveDynamicButton,
@@ -53,62 +54,111 @@ from .persistent_views import (
     persistent_custom_id,
 )
 from .systems import (
+    QUESTS,
+    SANCTUM_ROOMS,
+    abandon_dungeon,
+    accept_commission,
+    accept_oath,
+    accept_quest,
     active_companion,
     active_world_event,
     advance_campaign,
+    advance_dungeon,
+    advance_living_campaign,
+    advance_redemption,
+    advance_season_chapter,
     apply_advanced_itemization,
     apply_miniboss,
     arena_power,
+    atlas_locations,
     available_abilities,
+    available_quests,
+    begin_redemption,
+    begin_season_chapter,
     boss_relic_for,
     campaign_bonuses,
     campaign_scene,
+    change_relationship,
+    commission_board,
     companion_bonuses,
     comparison_line,
+    content_counts,
+    create_nemesis,
     create_rumor,
     create_starter_item,
     current_season,
     daily_dungeon,
+    defeat_nemesis,
     dismantle_rewards,
     ending_recap,
     ensure_enemy_intent,
+    ensure_legacy,
+    ensure_nemeses,
+    ensure_relationships,
+    ensure_sanctum,
+    enter_dungeon,
+    equip_tenets,
     equipment_effects,
     equipment_set_bonuses,
+    fail_quest,
     floor_mutator,
     gather,
+    generate_mail,
+    give_gift,
     grant_companion_xp,
     grant_profession_xp,
+    grant_resolve,
     guild_perks,
     intent_description,
     item_detail,
     item_power,
     item_sale_value,
+    living_campaign_view,
     moral_power,
     morality_path,
     npc_moral_reaction,
     npc_progress,
+    oath_board,
     origin_morality,
     party_bonus,
     profession_rank,
+    progress_commission,
+    progress_oath,
+    progress_quests,
     progress_rumor,
     progression_bonuses,
     record_bestiary_kill,
     record_choice_deed,
+    record_dungeon_victory,
+    record_nemesis_escape,
     refresh_titles,
+    relationship_level,
+    request_favor,
+    research_recipe,
+    resolve_dungeon_choice,
+    resolve_quest,
     restore_challenge_origin,
     roll_consumable,
     roll_enemy_intent,
+    sanctum_upgrade_cost,
     scaled_daily_floor,
+    season_chapter_status,
     short_code,
     should_auto_dismantle,
     starter_options,
     subclass_options,
+    tenet_effects,
     town_bonuses,
     unlock_companions,
+    unlock_tenet,
     upgrade_building,
     upgrade_cost,
+    upgrade_sanctum,
     use_consumable,
+    use_faction_service,
     use_moral_power,
+    validate_content,
+    world_echoes,
 )
 from .systems.migrations import GUILD_SCHEMA_VERSION, PROFILE_SCHEMA_VERSION, migrate_guild, migrate_profile
 from .systems.progression import talent_definition
@@ -122,6 +172,7 @@ SUCCESS_COLOR = 0x2ECC71
 DANGER_COLOR = 0xC0392B
 GOLD_COLOR = 0xF1C40F
 LOGGER = logging.getLogger("red.taakoscogs.deepdelve")
+TITLES = {**TITLES, **LIVING_TITLES}
 
 
 def progress_bar(current: int, maximum: int, length: int = 10) -> str:
@@ -385,6 +436,50 @@ class AdventureView(OwnedView):
             embed=self.cog._town_embed(profile),
             view=TownView(self.cog, self.user_id),
         )
+
+
+class GameHubView(OwnedView):
+    """Persistent browser-RPG navigation rendered from current profile state."""
+
+    @discord.ui.button(label="Resume", emoji="🧭", style=discord.ButtonStyle.primary, row=0)
+    async def resume(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        await self.cog._hub_interaction(interaction, "resume")
+
+    @discord.ui.button(label="Quests", emoji="📜", style=discord.ButtonStyle.secondary, row=0)
+    async def quests(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        await self.cog._hub_interaction(interaction, "quests")
+
+    @discord.ui.button(label="Atlas", emoji="🗺️", style=discord.ButtonStyle.secondary, row=0)
+    async def atlas(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        await self.cog._hub_interaction(interaction, "atlas")
+
+    @discord.ui.button(label="Character", emoji="🧑‍🚀", style=discord.ButtonStyle.secondary, row=0)
+    async def character(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        await self.cog._hub_interaction(interaction, "character")
+
+    @discord.ui.button(label="Inventory", emoji="🎒", style=discord.ButtonStyle.secondary, row=0)
+    async def inventory(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        await self.cog._hub_interaction(interaction, "inventory")
+
+    @discord.ui.button(label="Morality", emoji="⚖️", style=discord.ButtonStyle.secondary, row=1)
+    async def morality(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        await self.cog._hub_interaction(interaction, "morality")
+
+    @discord.ui.button(label="Codex", emoji="📚", style=discord.ButtonStyle.secondary, row=1)
+    async def codex(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        await self.cog._hub_interaction(interaction, "codex")
+
+    @discord.ui.button(label="Town", emoji="🏘️", style=discord.ButtonStyle.success, row=1)
+    async def town(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        await self.cog._hub_interaction(interaction, "town")
+
+    @discord.ui.button(label="Mail", emoji="✉️", style=discord.ButtonStyle.secondary, row=1)
+    async def mail(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        await self.cog._hub_interaction(interaction, "mail")
+
+    @discord.ui.button(label="Sanctum", emoji="🏛️", style=discord.ButtonStyle.secondary, row=1)
+    async def sanctum(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        await self.cog._hub_interaction(interaction, "sanctum")
 
 
 class AbilitySelect(discord.ui.Select):
@@ -813,7 +908,7 @@ class DeepDelve(DashboardIntegration, commands.Cog):
     """An old-school persistent text RPG built for Discord."""
 
     __author__ = "Taako"
-    __version__ = "4.3.6"
+    __version__ = "5.0.0"
 
     def __init__(self, bot: Red) -> None:
         self.bot = bot
@@ -840,6 +935,11 @@ class DeepDelve(DashboardIntegration, commands.Cog):
             },
             event_announcement_channel=0,
             content_multiplier=1.0,
+            season_archive=[],
+            living_campaign={"act": 0, "scene": 0, "decision": 0, "choices": {}, "completed": [], "ending": ""},
+            season_story={"active": "", "scene": 0},
+            commissions={"week": "", "offers": [], "active": {}, "completed": 0},
+            profession_mastery_points=0,
         )
         self.config.register_member(
             created=False,
@@ -959,6 +1059,40 @@ class DeepDelve(DashboardIntegration, commands.Cog):
             set_discoveries={},
             set_fragments={},
             legendary_codex=[],
+            legacy={
+                "resolve": 0,
+                "resolve_earned": 0,
+                "unlocked_tenets": [],
+                "active_tenets": [],
+                "faction_reputation": {"lantern": 0, "concord": 0, "court": 0},
+                "oath": "",
+                "oath_board_date": "",
+                "oath_board": [],
+                "redemption": {},
+                "consequence_flags": [],
+                "resolve_sources": [],
+                "service_dates": {},
+            },
+            quests_v2={
+                "active": {},
+                "completed": {},
+                "failed": {},
+                "choice_flags": [],
+                "counters": {},
+                "claim_tokens": [],
+            },
+            relationships={},
+            mailbox=[],
+            mail_read=[],
+            nemeses={"active": [], "defeated": [], "next_id": 1},
+            atlas={"discovered": [], "completed": [], "shortcuts": [], "active_dungeon": {}, "clues": {}},
+            sanctum={
+                "rooms": {"hall": 0, "library": 0, "workshop": 0, "garden": 0, "observatory": 0},
+                "spent": 0,
+                "cosmetics": [],
+                "active_cosmetic": "",
+            },
+            season_archive=[],
         )
         self._locks: dict[tuple[int, int], asyncio.Lock] = {}
         self._guild_locks: dict[int, asyncio.Lock] = {}
@@ -1060,6 +1194,55 @@ class DeepDelve(DashboardIntegration, commands.Cog):
         else:
             await interaction.response.send_message(message, ephemeral=True)
 
+    async def _hub_interaction(self, interaction: discord.Interaction, screen: str) -> None:
+        """Open a current-state hub screen while acknowledging Discord immediately."""
+        if not interaction.guild:
+            await self._persistent_error(interaction, "DeepDelve controls can only be used inside a server.")
+            return
+        if screen == "inventory":
+            await self._show_inventory_interaction(interaction)
+            return
+        await interaction.response.defer()
+        profile = await self._get_profile(interaction.guild.id, interaction.user.id)
+        if not profile.get("created"):
+            await interaction.edit_original_response(embed=self._not_created_embed(), view=None)
+            return
+        if screen == "resume":
+            if profile.get("encounter"):
+                embed = self._combat_embed(profile, "Your unfinished battle resumes.")
+                view: discord.ui.View = CombatView(self, interaction.user.id, profile)
+            elif profile.get("choice"):
+                embed = self._choice_embed(profile)
+                view = ChoiceView(self, interaction.user.id, profile["choice"])
+            elif profile.get("active_puzzle"):
+                embed = self._puzzle_embed(profile)
+                view = PuzzleView(self, interaction.user.id, profile["active_puzzle"])
+            else:
+                embed = self._adventure_embed(profile)
+                view = AdventureView(self, interaction.user.id)
+        elif screen == "quests":
+            embed, view = self._quest_journal_embed(profile), GameHubView(self, interaction.user.id)
+        elif screen == "atlas":
+            embed, view = self._atlas_embed(profile), GameHubView(self, interaction.user.id)
+        elif screen == "character":
+            embed, view = self._profile_embed(interaction.user, profile), GameHubView(self, interaction.user.id)
+        elif screen == "morality":
+            embed, view = self._morality_embed(profile), GameHubView(self, interaction.user.id)
+        elif screen == "codex":
+            embed, view = self._collection_codex_embed(profile), GameHubView(self, interaction.user.id)
+        elif screen == "town":
+            embed, view = self._town_embed(profile), TownView(self, interaction.user.id)
+        elif screen == "mail":
+            starting_gold = profile["gold"]
+            generate_mail(profile)
+            await self._save_profile(interaction.guild.id, interaction.user.id, profile, starting_gold)
+            embed, view = self._mail_embed(profile), GameHubView(self, interaction.user.id)
+        elif screen == "sanctum":
+            embed, view = self._sanctum_embed(profile), GameHubView(self, interaction.user.id)
+        else:
+            embed, view = self._game_hub_embed(profile), GameHubView(self, interaction.user.id)
+        await interaction.edit_original_response(embed=embed, view=view)
+
     async def _dispatch_persistent_button(self, interaction: discord.Interaction, route: str) -> None:
         """Dispatch a player control reconstructed after a restart."""
         if not interaction.guild:
@@ -1075,6 +1258,8 @@ class DeepDelve(DashboardIntegration, commands.Cog):
                 embed=self._profile_embed(interaction.user, profile),
                 view=AdventureView(self, user_id),
             )
+        elif route.startswith("gamehub:"):
+            await self._hub_interaction(interaction, route.partition(":")[2])
         elif route == "adventure:inventory":
             await self._show_inventory_interaction(interaction)
         elif route == "adventure:town":
@@ -1839,6 +2024,279 @@ class DeepDelve(DashboardIntegration, commands.Cog):
         )
         return embed
 
+    def _game_hub_embed(self, profile: dict[str, Any]) -> discord.Embed:
+        """Render the persistent browser-RPG dashboard."""
+        moral = morality_path(profile)
+        legacy = ensure_legacy(profile)
+        quests = profile.get("quests_v2", {})
+        active = quests.get("active", {})
+        ready = sum(int(value.get("progress", 0)) >= int(value.get("target", 1)) for value in active.values())
+        unread = len([letter for letter in profile.get("mailbox", []) if letter["key"] not in profile.get("mail_read", [])])
+        nemeses = ensure_nemeses(profile)
+        atlas = profile.get("atlas", {})
+        current_objective = "No active quests"
+        if active:
+            key, progress = next(iter(active.items()))
+            definition = QUESTS.get(key, {"name": key})
+            current_objective = f"**{definition['name']}** — {progress['progress']}/{progress['target']}"
+        embed = discord.Embed(
+            title=f"🕯️ DeepDelve 5.0 — {profile['character_name']}",
+            description=(
+                f"*{moral['appearance']}*\n\n"
+                f"**Current Objective**\n{current_objective}"
+            ),
+            color=moral["color"],
+        )
+        embed.add_field(
+            name="Expedition",
+            value=(
+                f"🏰 Floor **{profile['floor']}** • deepest **{profile['deepest_floor']}**\n"
+                f"🧭 Energy **{profile['turns']}** • room **{profile['rooms_cleared'] + 1}/5**\n"
+                f"❤️ {profile['hp']} health • 🔷 {profile['mana']} mana"
+            ),
+        )
+        embed.add_field(
+            name="Living World",
+            value=(
+                f"📜 **{len(active)}** active • **{ready}** ready\n"
+                f"✉️ **{unread}** unread letters\n"
+                f"👁️ **{len(nemeses['active'])}** Nemeses hunting"
+            ),
+        )
+        embed.add_field(
+            name=f"{moral['emoji']} Legacy",
+            value=(
+                f"**{moral['name']}** ({int(profile.get('morality', 0)):+d})\n"
+                f"◆ **{legacy['resolve']}** Resolve\n"
+                f"📜 **{len(legacy['active_tenets'])}/3** active Tenets"
+            ),
+        )
+        embed.add_field(
+            name="Factions",
+            value="\n".join(
+                f"{FACTIONS[key]['emoji']} {FACTIONS[key]['name']}: **{legacy['faction_reputation'][key]}**"
+                for key in FACTIONS
+            ),
+            inline=False,
+        )
+        embed.add_field(
+            name="World Progress",
+            value=(
+                f"🗺️ **{len(atlas.get('discovered', []))}/{len(NAMED_DUNGEONS)}** named dungeons discovered\n"
+                f"🏛️ **{len(atlas.get('completed', []))}/{len(NAMED_DUNGEONS)}** completed • "
+                f"📚 **{len(profile.get('season_archive', []))}/12** seasonal chapters archived"
+            ),
+            inline=False,
+        )
+        embed.set_footer(text="All navigation is free. Exploration and named-dungeon rooms spend energy only after confirmation.")
+        return embed
+
+    @staticmethod
+    def _quest_journal_embed(profile: dict[str, Any]) -> discord.Embed:
+        state = profile.get("quests_v2", {})
+        active_lines = []
+        for key, progress in list(state.get("active", {}).items())[:8]:
+            definition = QUESTS.get(key, {"name": key, "category": "unknown"})
+            marker = "✅" if int(progress["progress"]) >= int(progress["target"]) else "◆"
+            active_lines.append(
+                f"{marker} **{definition['name']}** · {definition['category'].title()}\n"
+                f"`{key}` • {progress['progress']}/{progress['target']}",
+            )
+        available = [
+            quest for quest in available_quests(profile)
+            if quest["available"] and not quest["active"] and not quest["completed"]
+        ]
+        locked = [quest for quest in available_quests(profile) if not quest["available"] and not quest["completed"]]
+        available_lines = [
+            f"📜 **{quest['name']}** · {quest['category'].title()}\n`{quest['key']}` • {quest['energy']} energy budget"
+            for quest in available[:6]
+        ]
+        locked_lines = [f"🔒 **{quest['name']}** — {quest['reason']}" for quest in locked[:4]]
+        embed = discord.Embed(
+            title="📜 Persistent Quest Journal",
+            description=(
+                "Every objective, alternate resolution, and reward claim is saved. "
+                "Resolving through different convictions changes future World Echoes."
+            ),
+            color=0x8E44AD,
+        )
+        embed.add_field(
+            name=f"Active — {len(state.get('active', {}))}",
+            value="\n".join(active_lines) or "No active quests.",
+            inline=False,
+        )
+        embed.add_field(
+            name=f"Available — {len(available)}",
+            value="\n".join(available_lines) or "No quests currently available.",
+            inline=False,
+        )
+        if locked_lines:
+            embed.add_field(name="Coming Roads", value="\n".join(locked_lines), inline=False)
+        embed.set_footer(
+            text="Use /deepdelve living quests accept <key> and resolve <key> <conviction>.",
+        )
+        return embed
+
+    @staticmethod
+    def _living_campaign_embed(profile: dict[str, Any], narrative: str | None = None) -> discord.Embed:
+        view = living_campaign_view(profile)
+        if view["complete"]:
+            name, text = view["ending"]
+            return discord.Embed(
+                title=f"📕 The Living Chronicle — {name}",
+                description=f"{text}\n\n**18 permanent decisions • {len(view['state']['completed'])}/6 acts complete**",
+                color=morality_path(profile)["color"],
+            )
+        act = view["act"]
+        state = view["state"]
+        if not view["available"]:
+            description = f"🔒 Reach floor **{act['floor']}** to begin.\n\n{act['scenes'][0]}"
+        elif view["needs_choice"]:
+            decision = act["decisions"][int(state["decision"])]
+            description = (
+                f"{narrative + chr(10) + chr(10) if narrative else ''}"
+                f"**Permanent decision {int(state['decision']) + 1}/3**\n{decision['prompt']}\n\n"
+                "Choose `mercy`, `honesty`, `ambition`, or `ruthlessness`."
+            )
+        else:
+            next_scene = int(state["scene"]) + 1
+            description = (
+                f"{narrative + chr(10) + chr(10) if narrative else ''}"
+                f"Scene **{next_scene}/6** is ready. Continuing costs **1 exploration energy**."
+            )
+        embed = discord.Embed(
+            title=f"📖 Act {int(state['act']) + 1}/6 — {act['name']}",
+            description=description,
+            color=0x6C3483,
+        )
+        embed.add_field(
+            name="Chronicle State",
+            value=(
+                f"📖 Scene **{state['scene']}/6**\n"
+                f"⚖️ Decisions **{state['decision']}/3**\n"
+                f"🧭 Energy **{profile['turns']}**"
+            ),
+        )
+        embed.add_field(
+            name="Act Reward",
+            value=f"{act['reward']['gold']} currency • {act['reward']['xp']} XP • {act['reward']['resolve']} Resolve",
+        )
+        embed.set_footer(text="Continue with /deepdelve living saga continue; use a conviction at decisions.")
+        return embed
+
+    @staticmethod
+    def _atlas_embed(profile: dict[str, Any]) -> discord.Embed:
+        locations = atlas_locations(profile)
+        lines = []
+        for location in locations:
+            marker = "✅" if location["completed"] else "🗺️" if location["discovered"] else "🔒"
+            detail = (
+                f"{location['rooms']} rooms • 1 energy/room • {location['mechanic']}"
+                if location["discovered"]
+                else location["locked_reason"]
+            )
+            lines.append(f"{marker} **{location['name']}** · floor {location['floor']}\n`{location['key']}` • {detail}")
+        run = profile.get("atlas", {}).get("active_dungeon", {})
+        run_line = ""
+        if run:
+            definition = NAMED_DUNGEONS[run["key"]]
+            pending = run.get("pending") or {}
+            state = (
+                f" • choice: {pending.get('name')}"
+                if pending
+                else " • battle active"
+                if run.get("awaiting_combat")
+                else ""
+            )
+            run_line = (
+                f"\n\n**Active:** {definition['name']} • room {run['room']}/{definition['rooms']} "
+                f"• checkpoint {run['checkpoint']}{state}"
+            )
+        embed = discord.Embed(
+            title="🗺️ The Living Atlas",
+            description="\n\n".join(lines) + run_line,
+            color=0x2471A3,
+        )
+        embed.set_footer(
+            text="Use /deepdelve living atlas enter, advance, choice, or abandon. Costs are shown before entry.",
+        )
+        return embed
+
+    @staticmethod
+    def _mail_embed(profile: dict[str, Any]) -> discord.Embed:
+        read = set(profile.get("mail_read", []))
+        letters = profile.get("mailbox", [])
+        lines = [
+            f"{'✉️' if letter['key'] not in read else '📨'} **{letter['subject']}** — {letter['from']}\n{letter['body']}"
+            for letter in reversed(letters[-8:])
+        ]
+        embed = discord.Embed(
+            title=f"✉️ Lastlight Post — {sum(letter['key'] not in read for letter in letters)} unread",
+            description="\n\n".join(lines) or "No letters have found you yet.",
+            color=0xA569BD,
+        )
+        embed.set_footer(text="Use /deepdelve living mail read. Letters never expire.")
+        return embed
+
+    @staticmethod
+    def _sanctum_embed(profile: dict[str, Any]) -> discord.Embed:
+        state = ensure_sanctum(profile)
+        lines = []
+        for key, definition in SANCTUM_ROOMS.items():
+            level = int(state["rooms"][key])
+            cost = sanctum_upgrade_cost(profile, key)
+            next_line = "Complete" if cost is None else f"Next: {cost} currency"
+            lines.append(f"🏛️ **{definition['name']} {level}/3**\n{definition['benefit']} • `{key}` • {next_line}")
+        embed = discord.Embed(
+            title="🏛️ Personal Sanctum",
+            description="\n\n".join(lines),
+            color=0xB7950B,
+        )
+        embed.set_footer(
+            text=(
+                f"Lifetime restoration spending: {state['spent']} currency "
+                "• Upgrades are capped convenience and cosmetics."
+            ),
+        )
+        return embed
+
+    @staticmethod
+    def _collection_codex_embed(profile: dict[str, Any]) -> discord.Embed:
+        counts = content_counts()
+        nemeses = ensure_nemeses(profile)
+        atlas = profile.get("atlas", {})
+        embed = discord.Embed(
+            title="📚 Collection Codex",
+            description="A permanent record of the enemies, treasures, stories, and consequences you have uncovered.",
+            color=0x1ABC9C,
+        )
+        embed.add_field(
+            name="Creatures & Rivals",
+            value=(
+                f"👹 **{len(profile.get('bestiary', {}))}/{counts['enemies']}+** researched entries\n"
+                f"👁️ **{len(nemeses['defeated'])}** Nemeses defeated\n"
+                f"🏆 **{profile.get('bosses', 0)}** bosses defeated"
+            ),
+        )
+        embed.add_field(
+            name="Treasures",
+            value=(
+                f"🏺 **{len(profile.get('legendary_codex', []))}** legendary discoveries\n"
+                f"🧩 **{sum(len(value) for value in profile.get('set_discoveries', {}).values())}** set pieces\n"
+                f"📖 **{len(profile.get('recipes', []))}** recipes"
+            ),
+        )
+        embed.add_field(
+            name="Chronicle",
+            value=(
+                f"🗺️ **{len(atlas.get('completed', []))}/{counts['dungeons']}** named dungeons\n"
+                f"⚖️ **{len(profile.get('moral_deeds', []))}** remembered deeds\n"
+                f"📚 **{len(profile.get('season_archive', []))}/{counts['seasons']}** season chapters"
+            ),
+            inline=False,
+        )
+        return embed
+
     def _adventure_embed(self, profile: dict[str, Any], narrative: str | None = None) -> discord.Embed:
         if not profile.get("created"):
             return self._not_created_embed()
@@ -2117,6 +2575,7 @@ class DeepDelve(DashboardIntegration, commands.Cog):
         score = int(profile.get("morality", 0))
         convictions = profile.get("convictions", {})
         power = moral_power(profile)
+        legacy = ensure_legacy(profile)
         recent = profile.get("moral_deeds", [])[-3:]
         embed = discord.Embed(
             title=f"{moral['emoji']} Living Morality — {moral['name']}",
@@ -2159,7 +2618,37 @@ class DeepDelve(DashboardIntegration, commands.Cog):
             ),
             inline=False,
         )
-        embed.set_footer(text="Repeated easy deeds have diminishing returns and stop shifting Morality.")
+        tenet_lines = [
+            f"◆ **{TENETS[key]['name']}** — {TENETS[key]['description']}"
+            for key in legacy["active_tenets"]
+            if key in TENETS
+        ]
+        embed.add_field(
+            name=f"◆ Resolve & Tenets — {legacy['resolve']} Resolve",
+            value="\n".join(tenet_lines) or "No Tenets equipped. Learn sidegrades with `/deepdelve living tenets`.",
+            inline=False,
+        )
+        embed.add_field(
+            name="Ideological Factions",
+            value="\n".join(
+                f"{FACTIONS[key]['emoji']} **{FACTIONS[key]['name']}** — {legacy['faction_reputation'][key]} reputation"
+                for key in FACTIONS
+            ),
+            inline=False,
+        )
+        journey = legacy.get("redemption") or {}
+        if journey:
+            embed.add_field(
+                name="🛤️ Moral Journey",
+                value=(
+                    f"Toward **{journey['target'].title()}** • stage {journey['stage']}/3 • "
+                    f"{journey['progress']}/{journey['required']} fitting deeds"
+                ),
+                inline=False,
+            )
+        embed.set_footer(
+            text="Morality changes access and tactics—not total reward value. Easy repeated deeds stop shifting the world.",
+        )
         return embed
 
     @staticmethod
@@ -2457,6 +2946,17 @@ class DeepDelve(DashboardIntegration, commands.Cog):
         else:
             contract_text = "No active contract. Take one from the notice board."
         embed.add_field(name="Contract Board", value=contract_text, inline=False)
+        legacy = ensure_legacy(profile)
+        contacts = [
+            f"{FACTIONS[key]['emoji']} **{FACTIONS[key]['name']}** — "
+            + (
+                f"contact unlocked (`/deepdelve living service {key}`)"
+                if int(legacy["faction_reputation"][key]) >= 10
+                else f"{legacy['faction_reputation'][key]}/10 reputation"
+            )
+            for key in FACTIONS
+        ]
+        embed.add_field(name="Faction Contacts", value="\n".join(contacts), inline=False)
         embed.set_footer(text=f"You carry {self._money(profile, profile['gold'])}.")
         return embed
 
@@ -2527,6 +3027,8 @@ class DeepDelve(DashboardIntegration, commands.Cog):
         base = 18 + int(profile["level"]) * 4 + int(profile.get("floor", 1))
         discount = min(0.15, int(profile.get("reputation", 0)) * 0.002)
         discount += float(profile.get("town_bonus", {}).get("service_discount", 0))
+        if "clean_hands" in profile.get("legacy", {}).get("active_tenets", []):
+            discount += 0.1
         if profile.get("world_event", {}).get("key") == "lantern_festival":
             discount += 0.15
         return max(1, round(base * (1 - discount)))
@@ -2671,6 +3173,11 @@ class DeepDelve(DashboardIntegration, commands.Cog):
                 descent = f"You descend to **floor {profile['floor']}**. "
 
             profile["turns"] -= 1
+            progress_lines = [
+                *progress_quests(profile, "explore"),
+                *progress_oath(profile, "explore"),
+            ]
+            progress_text = f"\n\n{chr(10).join(progress_lines)}" if progress_lines else ""
             floor = int(profile["floor"])
             if not profile.get("floor_mutator"):
                 profile["floor_mutator"] = floor_mutator(
@@ -2712,7 +3219,7 @@ class DeepDelve(DashboardIntegration, commands.Cog):
                     profile["encounter"]["name"],
                 )
                 await self._save_profile(guild_id, user_id, profile, starting_gold)
-                return profile, descent + profile["encounter"]["description"]
+                return profile, descent + profile["encounter"]["description"] + progress_text
 
             secret_chance = 0.035
             if mutator["key"] == "darkness":
@@ -2728,7 +3235,7 @@ class DeepDelve(DashboardIntegration, commands.Cog):
                     + self._treasure_event(profile)
                 )
                 await self._save_profile(guild_id, user_id, profile, starting_gold)
-                return profile, descent + narrative
+                return profile, descent + narrative + progress_text
 
             roll = random.random()
             if roll < 0.52:
@@ -2759,6 +3266,18 @@ class DeepDelve(DashboardIntegration, commands.Cog):
                 if profile.get("active_companion") == "nocturne" and enemy.get("affix"):
                     enemy["attack"] = max(1, round(enemy["attack"] * 0.9))
                     enemy["defense"] = max(0, round(enemy["defense"] * 0.9))
+                nemeses = ensure_nemeses(profile)["active"]
+                if nemeses and random.random() < 0.08:
+                    nemesis = random.choice(nemeses)
+                    enemy["name"] = nemesis["name"]
+                    enemy["nemesis_id"] = nemesis["id"]
+                    scale = 1 + int(nemesis["level"]) * 0.08
+                    enemy["hp"] = max(1, round(enemy["hp"] * scale))
+                    enemy["max_hp"] = enemy["hp"]
+                    enemy["attack"] = max(1, round(enemy["attack"] * (1 + int(nemesis["level"]) * 0.04)))
+                    enemy["gold"] = max(1, round(enemy["gold"] * float(nemesis["reward_multiplier"])))
+                    enemy["xp"] = max(1, round(enemy["xp"] * float(nemesis["reward_multiplier"])))
+                    enemy["description"] = f"Your Nemesis has found you again. {nemesis['trait_text']}"
                 profile["encounter"] = ensure_enemy_intent(enemy)
                 profile["discovered"] = self._append_unique(
                     profile["discovered"],
@@ -2766,7 +3285,7 @@ class DeepDelve(DashboardIntegration, commands.Cog):
                 )
                 await self._save_profile(guild_id, user_id, profile, starting_gold)
                 region = region_for_floor(floor)
-                return profile, descent + random.choice(region["rooms"])
+                return profile, descent + random.choice(region["rooms"]) + progress_text
 
             if roll < 0.64:
                 profile["rooms_cleared"] += 1
@@ -2815,7 +3334,7 @@ class DeepDelve(DashboardIntegration, commands.Cog):
             if achievement_text:
                 narrative += f"\n\n{achievement_text}"
             await self._save_profile(guild_id, user_id, profile, starting_gold)
-            return profile, descent + narrative
+            return profile, descent + narrative + progress_text
 
     def _treasure_event(self, profile: dict[str, Any]) -> str:
         stats = self._stats(profile)
@@ -2985,6 +3504,21 @@ class DeepDelve(DashboardIntegration, commands.Cog):
             )
             if deed_lines:
                 narrative += "\n\n" + "\n".join(deed_lines)
+                deed = profile.get("moral_deeds", [])[-1]
+                applied = deed.get("convictions", {})
+                conviction = max(applied, key=applied.get) if applied else ""
+                if conviction:
+                    journey_lines = advance_redemption(profile, conviction)
+                    if journey_lines:
+                        narrative += "\n" + "\n".join(journey_lines)
+            quest_lines = [
+                *progress_quests(profile, "choose"),
+                *progress_quests(profile, "resolve"),
+                *progress_oath(profile, "choose"),
+                *progress_oath(profile, "resolve"),
+            ]
+            if quest_lines:
+                narrative += "\n\n" + "\n".join(quest_lines)
             if profile["hp"] <= 0 and profile["deaths"] == deaths_before:
                 narrative += "\n\n" + self._apply_death(profile, "a fatal decision")
             profile["choice"] = {}
@@ -3032,6 +3566,13 @@ class DeepDelve(DashboardIntegration, commands.Cog):
                 reward_multiplier=float(event["puzzle"]) * (1 + town_bonus),
             )
             narrative = result["message"]
+            if result.get("solved"):
+                quest_lines = [
+                    *progress_quests(profile, "recover"),
+                    *progress_oath(profile, "study"),
+                ]
+                if quest_lines:
+                    narrative += "\n\n" + "\n".join(quest_lines)
             if profile["hp"] <= 0:
                 narrative += "\n\n" + self._apply_death(profile, "an unforgiving riddle")
             profession_lines = grant_profession_xp(profile, 18 if result.get("solved") else 4)
@@ -3059,6 +3600,8 @@ class DeepDelve(DashboardIntegration, commands.Cog):
             profile = await self._get_profile(guild_id, user_id)
             starting_gold = profile["gold"]
             result = advance_campaign(profile, action)
+            if result.get("resolved"):
+                result["message"] += "\n" + "\n".join(progress_quests(profile, "decision"))
             level_lines = self._apply_level_ups(profile)
             narrative = result["message"]
             if level_lines:
@@ -3310,12 +3853,30 @@ class DeepDelve(DashboardIntegration, commands.Cog):
 
             enemy = ensure_enemy_intent(enemy)
             stats = self._stats(profile)
+            legacy_effects = tenet_effects(profile)
             challenge_name = (profile.get("rift_state") or {}).get("name", "")
             if "Glass Labyrinth" in challenge_name:
                 stats["attack"] = round(stats["attack"] * 1.4)
             lines: list[str] = []
             enemy_turn = True
             cast_ability_key = ""
+            if (
+                legacy_effects.get("blood_mana")
+                and not profile["combat_flags"].get("tenet_blood_price")
+                and profile["mana"] <= stats["max_mana"] - int(legacy_effects["blood_mana"])
+            ):
+                health_cost = max(
+                    1,
+                    round(stats["max_hp"] * int(legacy_effects.get("blood_cost_percent", 0)) / 100),
+                )
+                if profile["hp"] > health_cost:
+                    profile["combat_flags"]["tenet_blood_price"] = True
+                    profile["hp"] -= health_cost
+                    profile["mana"] = min(
+                        stats["max_mana"],
+                        profile["mana"] + int(legacy_effects["blood_mana"]),
+                    )
+                    lines.append(f"🩸 **Blood Price** trades **{health_cost} health** for **3 mana**.")
 
             for condition in ("poison", "burn"):
                 turns = int(enemy["status"].get(condition, 0))
@@ -3380,12 +3941,22 @@ class DeepDelve(DashboardIntegration, commands.Cog):
                 lines.append(result["message"])
             elif action.startswith("consumable:"):
                 key = action.partition(":")[2]
+                consumables_before = int(profile.get("consumables", {}).get(key, 0))
                 profile["_calculated_stats"] = stats
                 result = use_consumable(profile, key)
                 profile.pop("_calculated_stats", None)
                 if not result["ok"]:
                     return profile, result["message"]
                 lines.append(result["message"])
+                if (
+                    consumables_before > int(profile.get("consumables", {}).get(key, 0))
+                    and legacy_effects.get("preserve_consumable_percent")
+                    and not profile["combat_flags"].get("tenet_careful_pack")
+                ):
+                    profile["combat_flags"]["tenet_careful_pack"] = True
+                    if random.randint(1, 100) <= int(legacy_effects["preserve_consumable_percent"]):
+                        profile["consumables"][key] = int(profile["consumables"].get(key, 0)) + 1
+                        lines.append("🎒 **Careful Pack** preserves the consumable.")
                 if not profile.get("encounter"):
                     enemy_turn = False
             elif action == "potion":
@@ -3402,6 +3973,18 @@ class DeepDelve(DashboardIntegration, commands.Cog):
                 profile["potions"] -= 1
                 profile["hp"] += healing
                 lines.append(f"🧪 You recover **{healing} health**.")
+                if (
+                    legacy_effects.get("first_potion_mana")
+                    and not profile["combat_flags"].get("tenet_first_potion")
+                ):
+                    profile["combat_flags"]["tenet_first_potion"] = True
+                    restored = min(
+                        stats["max_mana"] - profile["mana"],
+                        int(legacy_effects["first_potion_mana"]),
+                    )
+                    profile["mana"] += restored
+                    if restored:
+                        lines.append(f"◆ **Mercy Repaid** restores **{restored} mana**.")
                 if "mercy" in equipment_effects(profile["equipment"]):
                     profile["combat_flags"]["guard"] = max(
                         float(profile["combat_flags"].get("guard", 0)),
@@ -3428,6 +4011,8 @@ class DeepDelve(DashboardIntegration, commands.Cog):
                     lines.append("💨 Your escape route is cut off!")
             elif action == "defend":
                 guard = 0.55 + min(0.2, stats["defense"] * 0.008)
+                if profile["hp"] <= stats["max_hp"] / 2:
+                    guard += float(legacy_effects.get("guard_bonus", 0))
                 effects = equipment_effects(profile["equipment"])
                 if "origin_frost" in effects:
                     guard = min(0.82, guard + 0.05)
@@ -3459,7 +4044,13 @@ class DeepDelve(DashboardIntegration, commands.Cog):
                     if healed:
                         lines.append(f"💚 Your equipment restores **{healed} health**.")
                 mana_recovery = 1 if profile.get("floor_mutator", {}).get("key") == "hollow" else 2
+                defend_count = int(profile["combat_flags"].get("tenet_defend_count", 0)) + 1
+                profile["combat_flags"]["tenet_defend_count"] = defend_count
+                cycle = int(legacy_effects.get("defend_mana_cycle", 0))
+                if cycle and defend_count % cycle == 0:
+                    mana_recovery += 1
                 profile["mana"] = min(stats["max_mana"], profile["mana"] + mana_recovery)
+                profile["combat_flags"]["tenet_last_action"] = "defend"
                 lines.append(
                     f"🛡️ You brace for **{round(guard * 100)}% damage reduction** and recover **{mana_recovery} mana**.",
                 )
@@ -3496,6 +4087,19 @@ class DeepDelve(DashboardIntegration, commands.Cog):
                     stats,
                     ability_key,
                 )
+                if (
+                    profile["combat_flags"].get("tenet_last_action") == "defend"
+                    and legacy_effects.get("post_defend_damage_percent")
+                ):
+                    damage = round(damage * (1 + int(legacy_effects["post_defend_damage_percent"]) / 100))
+                    skill_lines.append("🐺 **Predator's Patience** turns defense into force.")
+                if (
+                    enemy.get("boss")
+                    and enemy["hp"] <= enemy["max_hp"] * 0.3
+                    and legacy_effects.get("execute_percent")
+                ):
+                    damage = round(damage * (1 + int(legacy_effects["execute_percent"]) / 100))
+                    skill_lines.append("🕯️ **Last Lantern** burns brighter at the brink.")
                 if profile.get("floor_mutator", {}).get("key") == "unstable":
                     volatility = random.uniform(0.9, 1.15)
                     damage = max(1, round(damage * volatility))
@@ -3527,8 +4131,10 @@ class DeepDelve(DashboardIntegration, commands.Cog):
                         )
                         skill_lines.append("🌀 Paradox Regalia advances another cooldown.")
                 enemy["hp"] -= damage
+                profile["combat_flags"]["tenet_last_action"] = "ability"
                 lines.extend(skill_lines)
             else:
+                previous_action = profile["combat_flags"].get("tenet_last_action")
                 if profile["combat_flags"].pop("next_crit", False):
                     stats["luck"] += 30
                 defense = int(enemy["defense"])
@@ -3553,11 +4159,31 @@ class DeepDelve(DashboardIntegration, commands.Cog):
                     profile["mana"] = min(stats["max_mana"], profile["mana"] + 2)
                     profile["combat_flags"]["battle_mana_used"] = True
                     lines.append("🔊 Echoing Fang restores **2 mana**.")
+                if not profile.get("status") and not enemy.get("status") and legacy_effects.get("clean_attack_percent"):
+                    damage = round(damage * (1 + int(legacy_effects["clean_attack_percent"]) / 100))
+                    lines.append("⚖️ **Even Edge** rewards the uncontested exchange.")
+                if previous_action == "defend" and legacy_effects.get("post_defend_damage_percent"):
+                    damage = round(damage * (1 + int(legacy_effects["post_defend_damage_percent"]) / 100))
+                    lines.append("🐺 **Predator's Patience** turns defense into force.")
+                if (
+                    enemy.get("boss")
+                    and enemy["hp"] <= enemy["max_hp"] * 0.3
+                    and legacy_effects.get("execute_percent")
+                ):
+                    damage = round(damage * (1 + int(legacy_effects["execute_percent"]) / 100))
+                    lines.append("🕯️ **Last Lantern** burns brighter at the brink.")
+                if previous_action == "ability" and legacy_effects.get("alternating_guard"):
+                    profile["combat_flags"]["guard"] = max(
+                        float(profile["combat_flags"].get("guard", 0)),
+                        float(legacy_effects["alternating_guard"]),
+                    )
+                    lines.append("⚖️ **Balanced Guard** covers the change in rhythm.")
                 if enemy.get("guarded", 0):
                     damage = max(1, round(damage * 0.5))
                     enemy["guarded"] = 0
                     lines.append("🛡️ The enemy's defensive stance absorbs half the blow.")
                 enemy["hp"] -= damage
+                profile["combat_flags"]["tenet_last_action"] = "basic"
                 prefix = "💥 **CRITICAL!** " if critical else "⚔️ "
                 lines.append(f"{prefix}You deal **{damage} damage**.")
                 if critical:
@@ -3729,6 +4355,10 @@ class DeepDelve(DashboardIntegration, commands.Cog):
             damage = max(1, round(damage * 0.5))
             enemy["guarded"] = 0
             lines.append("🛡️ The enemy's guard absorbs half the ability's damage.")
+        if damage and profile.get("class_key") == "vanguard" and (enemy.get("boss") or enemy.get("miniboss")):
+            bonus = max(1, round(damage * 0.18))
+            damage += bonus
+            lines.append(f"🛡️ Vanguard armor-breaking adds **{bonus} damage** against the champion.")
         return damage, lines
 
     @staticmethod
@@ -3824,6 +4454,9 @@ class DeepDelve(DashboardIntegration, commands.Cog):
             lines.append("⏳ Armor of the Held Moment catches the crushing blow.")
         if "warding" in equipped_effects and enemy.get("affix"):
             total = round(total * 0.85)
+        if profile.get("status", {}).pop("vulnerable", 0):
+            total = round(total * 1.1)
+            lines.append("🩸 Borrowed Vigor leaves you vulnerable to this attack.")
         guard = float(profile["combat_flags"].pop("guard", 0))
         if guard:
             prevented = round(total * guard)
@@ -3839,6 +4472,13 @@ class DeepDelve(DashboardIntegration, commands.Cog):
         lines.append(
             f"{intent['emoji']} **{enemy['name']} uses {intent['name']}** for **{max(0, total)} damage**.",
         )
+        heavy_guard = tenet_effects(profile).get("heavy_revenge_guard", 0)
+        if intent["key"] == "heavy" and heavy_guard:
+            profile["combat_flags"]["guard"] = max(
+                float(profile["combat_flags"].get("guard", 0)),
+                float(heavy_guard),
+            )
+            lines.append("🌑 **Unyielding Claim** guards against the next attack.")
 
         retaliation = int(profile["combat_flags"].pop("retaliate", 0))
         if retaliation:
@@ -3871,7 +4511,7 @@ class DeepDelve(DashboardIntegration, commands.Cog):
 
     @staticmethod
     def _enemy_damage(enemy: dict[str, Any], stats: dict[str, int]) -> int:
-        attack = int(enemy["attack"])
+        attack = round(int(enemy["attack"]) * float(enemy.get("threat_multiplier", 1.0)))
         if enemy.get("weakened", 0):
             attack = round(attack * 0.68)
         base = random.randint(max(1, attack - 2), attack + 3)
@@ -3881,6 +4521,8 @@ class DeepDelve(DashboardIntegration, commands.Cog):
 
     def _victory(self, profile: dict[str, Any], enemy: dict[str, Any]) -> list[str]:
         event_reward = float(enemy.get("event_reward", 1.0))
+        if profile.get("combat_flags", {}).pop("tenet_death_save_penalty", False):
+            event_reward *= 0.9
         gold = round(int(enemy["gold"]) * event_reward)
         equipped_effects = equipment_effects(profile.get("equipment", {}))
         if "fortune" in equipped_effects:
@@ -3895,6 +4537,7 @@ class DeepDelve(DashboardIntegration, commands.Cog):
         profile["xp"] += xp
         profile["kills"] += 1
         profile["rooms_cleared"] += 1
+        atlas_lines = record_dungeon_victory(profile, enemy)
         profile["encounter"] = {}
         if enemy.get("boss"):
             profile["bosses"] += 1
@@ -3904,6 +4547,29 @@ class DeepDelve(DashboardIntegration, commands.Cog):
             f"🏆 **{enemy['name']} is defeated!**",
             f"You gain **{xp} XP** and **{self._money(profile, gold)}**.",
         ]
+        lines.extend(atlas_lines)
+        lines.extend(progress_quests(profile, "defeat"))
+        lines.extend(progress_oath(profile, "defeat"))
+        lines.extend(progress_oath(profile, "hunt"))
+        lines.extend(progress_commission(profile, "defeat"))
+        if enemy.get("boss"):
+            granted = grant_resolve(profile, 1, f"boss:{enemy.get('name')}:{enemy.get('floor', profile['floor'])}")
+            if granted:
+                lines.append("◆ A unique boss decision hardens into **1 Resolve**.")
+        if enemy.get("nemesis_id"):
+            defeated, message = defeat_nemesis(profile, int(enemy["nemesis_id"]))
+            if defeated:
+                lines.append(message)
+        borrowed_vigor = tenet_effects(profile).get("elite_heal_percent", 0)
+        if enemy.get("affix") and borrowed_vigor:
+            stats_now = self._stats(profile)
+            healed = min(
+                stats_now["max_hp"] - profile["hp"],
+                max(1, round(stats_now["max_hp"] * int(borrowed_vigor) / 100)),
+            )
+            profile["hp"] += healed
+            profile.setdefault("status", {})["vulnerable"] = 1
+            lines.append(f"🩸 **Borrowed Vigor** restores **{healed} health**, but leaves one vulnerable turn.")
         if enemy.get("boss"):
             if profile.get("conviction_fatigue", 0):
                 lines.append("⚖️ Defeating a boss clears all **Conviction Fatigue**.")
@@ -4169,6 +4835,23 @@ class DeepDelve(DashboardIntegration, commands.Cog):
             profile["combat_flags"]["margin_saved"] = True
             profile["hp"] = 1
             return "📖 **Armor Between Lines** writes your death into the margin. You remain at **1 health**."
+        if (
+            "oath_of_return" in profile.get("legacy", {}).get("active_tenets", [])
+            and not profile.get("combat_flags", {}).get("tenet_death_save_used")
+        ):
+            profile["combat_flags"]["tenet_death_save_used"] = True
+            profile["combat_flags"]["tenet_death_save_penalty"] = True
+            profile["hp"] = 1
+            return "◆ **Oath of Return** holds you at **1 health**. This encounter's rewards are reduced by 10%."
+        enemy = dict(profile.get("encounter") or {})
+        nemesis_line = ""
+        if enemy.get("nemesis_id"):
+            record_nemesis_escape(profile, int(enemy["nemesis_id"]))
+            nemesis_line = f"\n👁️ **{enemy.get('name', 'Your Nemesis')}** survives and grows stronger."
+        elif enemy:
+            nemesis = create_nemesis(profile, enemy)
+            if nemesis:
+                nemesis_line = f"\n👁️ **Nemesis born:** {nemesis['name']} has learned how you fight."
         if profile.get("hardcore"):
             profile["deaths"] += 1
             profile["hardcore_dead"] = True
@@ -4179,7 +4862,10 @@ class DeepDelve(DashboardIntegration, commands.Cog):
             profile["combat_flags"] = {}
             profile["skill_cooldowns"] = {}
             profile["hp"] = 0
-            return f"☠️ **HARDCORE DEATH.** {profile['character_name']} falls to {cause}. This chronicle is permanently sealed."
+            return (
+                f"☠️ **HARDCORE DEATH.** {profile['character_name']} falls to {cause}. "
+                f"This chronicle is permanently sealed.{nemesis_line}"
+            )
         loss = min(profile["gold"], max(10, round(profile["gold"] * 0.15)))
         profile["gold"] -= loss
         profile["deaths"] += 1
@@ -4203,7 +4889,7 @@ class DeepDelve(DashboardIntegration, commands.Cog):
         retreat_text = "return to your interrupted expedition" if failed_challenge else f"retreat to floor **{profile['floor']}**"
         return (
             f"☠️ You fall to **{cause}**. Outpost scouts drag you back from the dark.\n"
-            f"You lose **{self._money(profile, loss)}** and {retreat_text}."
+            f"You lose **{self._money(profile, loss)}** and {retreat_text}.{nemesis_line}"
         )
 
     @staticmethod
@@ -4415,6 +5101,9 @@ class DeepDelve(DashboardIntegration, commands.Cog):
                 profession_lines = grant_profession_xp(profile, 25 + profile["floor"])
                 if profession_lines:
                     narrative += "\n" + "\n".join(profession_lines)
+                commission_lines = progress_commission(profile, "craft")
+                if commission_lines:
+                    narrative += "\n" + "\n".join(commission_lines)
                 achievement_text = self._award_achievements(profile)
                 if achievement_text:
                     narrative += f"\n\n{achievement_text}"
@@ -4738,21 +5427,614 @@ class DeepDelve(DashboardIntegration, commands.Cog):
         if profile.get("hardcore_dead"):
             await ctx.send(embed=self._hardcore_death_embed(profile))
             return
-        view: discord.ui.View
-        embed: discord.Embed
-        if profile["encounter"]:
-            view = CombatView(self, ctx.author.id, profile)
-            embed = self._combat_embed(profile, "Your unfinished battle resumes.")
-        elif profile["choice"]:
-            view = ChoiceView(self, ctx.author.id, profile["choice"])
-            embed = self._choice_embed(profile)
-        elif profile.get("active_puzzle"):
-            view = PuzzleView(self, ctx.author.id, profile["active_puzzle"])
-            embed = self._puzzle_embed(profile)
+        await ctx.send(
+            embed=self._game_hub_embed(profile),
+            view=GameHubView(self, ctx.author.id),
+        )
+
+    @deepdelve.command(name="living")
+    @commands.guild_only()
+    async def living(
+        self,
+        ctx: commands.Context,
+        section: str = "hub",
+        action: str = "view",
+        target: str = "",
+        extra: str = "",
+    ) -> None:
+        """Use 5.0 systems: quests, atlas, tenets, oaths, saga, archive, bonds, commissions, and more."""
+        section = section.lower()
+        action = action.lower()
+        if section in {"hub", "home"}:
+            profile = await self._require_character(ctx)
+            if profile:
+                await ctx.send(embed=self._game_hub_embed(profile), view=GameHubView(self, ctx.author.id))
+            return
+        if section in {"quests", "quest"}:
+            if action == "accept":
+                await self.quests_accept(ctx, target)
+            elif action == "resolve":
+                await self.quests_resolve(ctx, target, extra)
+            elif action in {"abandon", "fail"}:
+                await self.quests_abandon(ctx, target)
+            else:
+                await self.quests_group(ctx)
+        elif section == "atlas":
+            if action == "enter":
+                await self.atlas_enter(ctx, target)
+            elif action == "advance":
+                await self.atlas_advance(ctx)
+            elif action == "abandon":
+                await self.atlas_abandon(ctx)
+            elif action == "choice":
+                await self.atlas_choice(ctx, target)
+            else:
+                await self.atlas_group(ctx)
+        elif section in {"tenets", "tenet"}:
+            if action == "learn":
+                await self.tenets_learn(ctx, target)
+            elif action == "equip":
+                await self.tenets_equip(ctx, keys=" ".join(value for value in (target, extra) if value))
+            else:
+                await self.tenets_group(ctx)
+        elif section in {"oaths", "oath"}:
+            if action == "accept":
+                await self.oaths_accept(ctx, target)
+            else:
+                await self.oaths_group(ctx)
+        elif section == "journey":
+            await self.moral_journey(ctx, action if action != "view" else target)
+        elif section == "echoes":
+            await self.echoes(ctx)
+        elif section == "mail":
+            await self.mail(ctx, action)
+        elif section == "sanctum":
+            if action == "upgrade":
+                await self.sanctum_upgrade(ctx, target)
+            else:
+                await self.sanctum_group(ctx)
+        elif section == "service":
+            await self.faction_service(ctx, action if action != "view" else target)
+        elif section in {"relationships", "bonds"}:
+            if action == "gift":
+                await self.relationship_gift(ctx, target, extra)
+            elif action == "favor":
+                await self.relationship_favor(ctx, target)
+            else:
+                await self.relationships(ctx)
+        elif section == "nemeses":
+            await self.nemeses(ctx)
+        elif section == "content":
+            await self.living_content_status(ctx)
+        elif section == "saga":
+            await self.living_saga(ctx, action)
+        elif section == "archive":
+            if action == "begin":
+                if not target.isdigit():
+                    await ctx.send("Choose a numeric archive chapter.")
+                else:
+                    await self.season_archive_begin(ctx, int(target))
+            elif action == "advance":
+                await self.season_archive_advance(ctx)
+            else:
+                await self.season_archive_group(ctx)
+        elif section in {"commissions", "commission"}:
+            if action == "accept":
+                if not target.isdigit():
+                    await ctx.send("Choose commission 1, 2, or 3.")
+                else:
+                    await self.commissions_accept(ctx, int(target))
+            elif action == "recipes":
+                await self.commissions_recipes(ctx)
+            elif action == "research":
+                await self.commissions_research(ctx, target)
+            else:
+                await self.commissions_group(ctx)
         else:
-            view = AdventureView(self, ctx.author.id)
-            embed = self._adventure_embed(profile)
-        await ctx.send(embed=embed, view=view)
+            await ctx.send(
+                "Choose `quests`, `atlas`, `tenets`, `oaths`, `journey`, `echoes`, `mail`, `sanctum`, "
+                "`bonds`, `nemeses`, `saga`, `archive`, `commissions`, or `content`.",
+            )
+
+    async def quests_group(self, ctx: commands.Context) -> None:
+        """Open the persistent quest journal."""
+        profile = await self._require_character(ctx)
+        if profile:
+            await ctx.send(embed=self._quest_journal_embed(profile), view=GameHubView(self, ctx.author.id))
+
+    async def quests_accept(self, ctx: commands.Context, key: str) -> None:
+        """Accept an available quest by its displayed key."""
+        profile = await self._require_character(ctx)
+        if not profile:
+            return
+        async with self._lock_for(ctx.guild.id, ctx.author.id):
+            profile = await self._get_profile(ctx.guild.id, ctx.author.id)
+            starting_gold = profile["gold"]
+            ok, message = accept_quest(profile, key.lower())
+            if ok:
+                await self._save_profile(ctx.guild.id, ctx.author.id, profile, starting_gold)
+        await ctx.send(message)
+
+    async def quests_resolve(self, ctx: commands.Context, key: str, outcome: str) -> None:
+        """Resolve a ready quest through mercy, honesty, ambition, or ruthlessness."""
+        profile = await self._require_character(ctx)
+        if not profile:
+            return
+        async with self._lock_for(ctx.guild.id, ctx.author.id):
+            profile = await self._get_profile(ctx.guild.id, ctx.author.id)
+            starting_gold = profile["gold"]
+            ok, message = resolve_quest(profile, key.lower(), outcome.lower())
+            if ok:
+                self._apply_level_ups(profile)
+                await self._save_profile(ctx.guild.id, ctx.author.id, profile, starting_gold)
+        await ctx.send(message)
+
+    async def quests_abandon(self, ctx: commands.Context, key: str) -> None:
+        """Abandon an active quest and preserve its failure state."""
+        profile = await self._require_character(ctx)
+        if not profile:
+            return
+        async with self._lock_for(ctx.guild.id, ctx.author.id):
+            profile = await self._get_profile(ctx.guild.id, ctx.author.id)
+            starting_gold = profile["gold"]
+            ok, message = fail_quest(profile, key.lower())
+            if ok:
+                await self._save_profile(ctx.guild.id, ctx.author.id, profile, starting_gold)
+        await ctx.send(message)
+
+    async def atlas_group(self, ctx: commands.Context) -> None:
+        """View named dungeons, routes, costs, and checkpoints."""
+        profile = await self._require_character(ctx)
+        if profile:
+            await ctx.send(embed=self._atlas_embed(profile), view=GameHubView(self, ctx.author.id))
+
+    async def atlas_enter(self, ctx: commands.Context, key: str) -> None:
+        """Enter a discovered named dungeon; entry itself is free."""
+        profile = await self._require_character(ctx)
+        if not profile:
+            return
+        async with self._lock_for(ctx.guild.id, ctx.author.id):
+            profile = await self._get_profile(ctx.guild.id, ctx.author.id)
+            starting_gold = profile["gold"]
+            ok, message = enter_dungeon(profile, key.lower())
+            if ok:
+                await self._save_profile(ctx.guild.id, ctx.author.id, profile, starting_gold)
+        await ctx.send(message)
+
+    async def atlas_advance(self, ctx: commands.Context) -> None:
+        """Spend one displayed energy to advance the current named dungeon."""
+        profile = await self._require_character(ctx)
+        if not profile:
+            return
+        async with self._lock_for(ctx.guild.id, ctx.author.id):
+            profile = await self._get_profile(ctx.guild.id, ctx.author.id)
+            starting_gold = profile["gold"]
+            ok, message = advance_dungeon(profile)
+            if ok:
+                lines = [
+                    *progress_quests(profile, "explore"),
+                    *progress_quests(profile, "delve"),
+                    *progress_oath(profile, "explore"),
+                    *progress_oath(profile, "delve"),
+                ]
+                await self._save_profile(ctx.guild.id, ctx.author.id, profile, starting_gold)
+                if lines:
+                    message += "\n" + "\n".join(lines)
+        await ctx.send(message)
+
+    async def atlas_abandon(self, ctx: commands.Context) -> None:
+        """Abandon to the last checkpoint without refunding spent energy."""
+        profile = await self._require_character(ctx)
+        if not profile:
+            return
+        async with self._lock_for(ctx.guild.id, ctx.author.id):
+            profile = await self._get_profile(ctx.guild.id, ctx.author.id)
+            starting_gold = profile["gold"]
+            ok, message = abandon_dungeon(profile)
+            if ok:
+                await self._save_profile(ctx.guild.id, ctx.author.id, profile, starting_gold)
+        await ctx.send(message)
+
+    async def atlas_choice(self, ctx: commands.Context, approach: str) -> None:
+        """Resolve a named-dungeon moral event or puzzle approach."""
+        profile = await self._require_character(ctx)
+        if not profile:
+            return
+        async with self._lock_for(ctx.guild.id, ctx.author.id):
+            profile = await self._get_profile(ctx.guild.id, ctx.author.id)
+            starting_gold = profile["gold"]
+            ok, message = resolve_dungeon_choice(profile, approach)
+            if ok:
+                await self._save_profile(ctx.guild.id, ctx.author.id, profile, starting_gold)
+        await ctx.send(message)
+
+    async def tenets_group(self, ctx: commands.Context) -> None:
+        """View Resolve and the 18 balanced moral-path sidegrades."""
+        profile = await self._require_character(ctx)
+        if not profile:
+            return
+        legacy = ensure_legacy(profile)
+        path = morality_path(profile)["key"]
+        broad_path = "radiant" if path in {"radiant", "beacon"} else "umbral" if path in {"umbral", "dreadbound"} else "pragmatic"
+        lines = []
+        for key, tenet in TENETS.items():
+            if tenet["path"] != broad_path:
+                continue
+            marker = "⭐" if key in legacy["active_tenets"] else "✅" if key in legacy["unlocked_tenets"] else "🔒"
+            lines.append(f"{marker} **{tenet['name']}** · {tenet['kind'].title()}\n`{key}` — {tenet['description']}")
+        embed = discord.Embed(
+            title=f"◆ {broad_path.title()} Tenets — {legacy['resolve']} Resolve",
+            description="\n\n".join(lines),
+            color=morality_path(profile)["color"],
+        )
+        embed.set_footer(text="Learning costs 2 Resolve. Equip up to three; Tenets are tactical sidegrades.")
+        await ctx.send(embed=embed)
+
+    async def tenets_learn(self, ctx: commands.Context, key: str) -> None:
+        """Learn a Tenet for two non-tradable Resolve."""
+        profile = await self._require_character(ctx)
+        if not profile:
+            return
+        async with self._lock_for(ctx.guild.id, ctx.author.id):
+            profile = await self._get_profile(ctx.guild.id, ctx.author.id)
+            starting_gold = profile["gold"]
+            ok, message = unlock_tenet(profile, key.lower())
+            if ok:
+                await self._save_profile(ctx.guild.id, ctx.author.id, profile, starting_gold)
+        await ctx.send(message)
+
+    async def tenets_equip(self, ctx: commands.Context, *, keys: str) -> None:
+        """Equip up to three learned Tenet keys separated by spaces."""
+        profile = await self._require_character(ctx)
+        if not profile:
+            return
+        selected = [key.lower() for key in keys.replace(",", " ").split() if key.lower() not in {"none", "clear"}]
+        async with self._lock_for(ctx.guild.id, ctx.author.id):
+            profile = await self._get_profile(ctx.guild.id, ctx.author.id)
+            starting_gold = profile["gold"]
+            ok, message = equip_tenets(profile, selected)
+            if ok:
+                await self._save_profile(ctx.guild.id, ctx.author.id, profile, starting_gold)
+        await ctx.send(message)
+
+    async def oaths_group(self, ctx: commands.Context) -> None:
+        """View today's equal-value ideological assignments."""
+        profile = await self._require_character(ctx)
+        if not profile:
+            return
+        async with self._lock_for(ctx.guild.id, ctx.author.id):
+            profile = await self._get_profile(ctx.guild.id, ctx.author.id)
+            starting_gold = profile["gold"]
+            board = oath_board(profile)
+            await self._save_profile(ctx.guild.id, ctx.author.id, profile, starting_gold)
+        lines = [
+            (
+                f"{FACTIONS[entry['faction']]['emoji']} **{entry['name']}** — {FACTIONS[entry['faction']]['name']}\n"
+                f"`{entry['faction']}` • {entry['objective']} {entry['target']} time(s) • "
+                f"{entry['reward']['gold']} currency + {entry['reward']['xp']} XP + "
+                f"{entry['reward']['faction_reputation']} reputation"
+            )
+            for entry in board
+        ]
+        embed = discord.Embed(
+            title="📜 Daily Oath Board",
+            description="\n\n".join(lines),
+            color=0xAAB7B8,
+        )
+        embed.set_footer(text="Equal reward value • Use /deepdelve living oaths accept <faction>.")
+        await ctx.send(embed=embed)
+
+    async def oaths_accept(self, ctx: commands.Context, faction: str) -> None:
+        """Accept today's oath for lantern, concord, or court."""
+        profile = await self._require_character(ctx)
+        if not profile:
+            return
+        async with self._lock_for(ctx.guild.id, ctx.author.id):
+            profile = await self._get_profile(ctx.guild.id, ctx.author.id)
+            starting_gold = profile["gold"]
+            ok, message = accept_oath(profile, faction.lower())
+            if ok:
+                await self._save_profile(ctx.guild.id, ctx.author.id, profile, starting_gold)
+        await ctx.send(message)
+
+    async def moral_journey(self, ctx: commands.Context, target: str) -> None:
+        """Begin a slow three-stage journey toward radiant, pragmatic, or umbral."""
+        profile = await self._require_character(ctx)
+        if not profile:
+            return
+        async with self._lock_for(ctx.guild.id, ctx.author.id):
+            profile = await self._get_profile(ctx.guild.id, ctx.author.id)
+            starting_gold = profile["gold"]
+            ok, message = begin_redemption(profile, target.lower())
+            if ok:
+                await self._save_profile(ctx.guild.id, ctx.author.id, profile, starting_gold)
+        await ctx.send(message)
+
+    async def echoes(self, ctx: commands.Context) -> None:
+        """See concrete consequences the world remembers."""
+        profile = await self._require_character(ctx)
+        if profile:
+            await ctx.send(
+                embed=discord.Embed(
+                    title="🌌 World Echoes",
+                    description="\n".join(world_echoes(profile)),
+                    color=morality_path(profile)["color"],
+                ),
+            )
+
+    async def mail(self, ctx: commands.Context, action: str = "view") -> None:
+        """Read permanent letters and Lastlight notices."""
+        profile = await self._require_character(ctx)
+        if not profile:
+            return
+        async with self._lock_for(ctx.guild.id, ctx.author.id):
+            profile = await self._get_profile(ctx.guild.id, ctx.author.id)
+            starting_gold = profile["gold"]
+            generate_mail(profile)
+            if action.lower() == "read":
+                profile["mail_read"] = list(
+                    dict.fromkeys(
+                        [
+                            *profile.get("mail_read", []),
+                            *(letter["key"] for letter in profile["mailbox"]),
+                        ],
+                    ),
+                )
+            await self._save_profile(ctx.guild.id, ctx.author.id, profile, starting_gold)
+        await ctx.send(embed=self._mail_embed(profile), view=GameHubView(self, ctx.author.id))
+
+    async def sanctum_group(self, ctx: commands.Context) -> None:
+        """View the capped personal restoration and collection space."""
+        profile = await self._require_character(ctx)
+        if profile:
+            await ctx.send(embed=self._sanctum_embed(profile), view=GameHubView(self, ctx.author.id))
+
+    async def sanctum_upgrade(self, ctx: commands.Context, room: str) -> None:
+        """Restore one Sanctum room using ordinary currency."""
+        profile = await self._require_character(ctx)
+        if not profile:
+            return
+        async with self._lock_for(ctx.guild.id, ctx.author.id):
+            profile = await self._get_profile(ctx.guild.id, ctx.author.id)
+            starting_gold = profile["gold"]
+            ok, message = upgrade_sanctum(profile, room.lower())
+            if ok:
+                await self._save_profile(ctx.guild.id, ctx.author.id, profile, starting_gold)
+        await ctx.send(message)
+
+    async def faction_service(self, ctx: commands.Context, faction: str) -> None:
+        """Use one unlocked equal-budget faction contact per UTC day."""
+        profile = await self._require_character(ctx)
+        if not profile:
+            return
+        async with self._lock_for(ctx.guild.id, ctx.author.id):
+            profile = await self._get_profile(ctx.guild.id, ctx.author.id)
+            starting_gold = profile["gold"]
+            ok, message = use_faction_service(profile, faction.lower())
+            if ok:
+                await self._save_profile(ctx.guild.id, ctx.author.id, profile, starting_gold)
+        await ctx.send(message)
+
+    async def relationships(self, ctx: commands.Context) -> None:
+        """View trust, conflict, favors, and remembered relationship states."""
+        profile = await self._require_character(ctx)
+        if not profile:
+            return
+        entries = ensure_relationships(profile)
+        lines = [
+            (
+                f"👤 **{key.title()} — {relationship_level(entry)}**\n"
+                f"Trust {entry['trust']}/50 • Conflict {entry['conflict']}/50 • {len(entry['flags'])} memories"
+            )
+            for key, entry in entries.items()
+        ]
+        await ctx.send(embed=discord.Embed(title="👥 Bonds of Lastlight", description="\n\n".join(lines), color=0x3498DB))
+
+    async def relationship_gift(self, ctx: commands.Context, character: str, material: str) -> None:
+        """Give one daily material gift; every character has a preference."""
+        profile = await self._require_character(ctx)
+        if not profile:
+            return
+        async with self._lock_for(ctx.guild.id, ctx.author.id):
+            profile = await self._get_profile(ctx.guild.id, ctx.author.id)
+            starting_gold = profile["gold"]
+            ok, message = give_gift(profile, character.lower(), material.lower())
+            if ok:
+                await self._save_profile(ctx.guild.id, ctx.author.id, profile, starting_gold)
+        await ctx.send(message)
+
+    async def relationship_favor(self, ctx: commands.Context, character: str) -> None:
+        """Request one weekly personal-hunt lead from a trusted character."""
+        profile = await self._require_character(ctx)
+        if not profile:
+            return
+        async with self._lock_for(ctx.guild.id, ctx.author.id):
+            profile = await self._get_profile(ctx.guild.id, ctx.author.id)
+            starting_gold = profile["gold"]
+            ok, message = request_favor(profile, character.lower())
+            if ok:
+                await self._save_profile(ctx.guild.id, ctx.author.id, profile, starting_gold)
+        await ctx.send(message)
+
+    async def nemeses(self, ctx: commands.Context) -> None:
+        """View enemies that learned your name after defeating you."""
+        profile = await self._require_character(ctx)
+        if not profile:
+            return
+        state = ensure_nemeses(profile)
+        lines = [
+            f"👁️ **{entry['name']}** · level {entry['level']}\n{entry['trait_text']} • last seen floor {entry['floor']}"
+            for entry in state["active"]
+        ]
+        await ctx.send(
+            embed=discord.Embed(
+                title=f"👁️ Personal Nemeses — {len(state['active'])}/3",
+                description="\n\n".join(lines) or "No enemy has survived long enough to learn your name.",
+                color=DANGER_COLOR,
+            ),
+        )
+
+    async def living_content_status(self, ctx: commands.Context) -> None:
+        """Show the installed 5.0 content package and validation status."""
+        counts = content_counts()
+        errors = validate_content()
+        await ctx.send(
+            embed=discord.Embed(
+                title="📦 DeepDelve 5.0 Content Registry",
+                description="\n".join(f"**{key.replace('_', ' ').title()}:** {value}" for key, value in counts.items()),
+                color=SUCCESS_COLOR if not errors else DANGER_COLOR,
+            ).set_footer(text="Registry valid" if not errors else f"{len(errors)} validation error(s)"),
+        )
+
+    async def living_saga(self, ctx: commands.Context, action: str = "view") -> None:
+        """Play the six-act Living Chronicle; decisions use conviction names."""
+        profile = await self._require_character(ctx)
+        if not profile:
+            return
+        if action.lower() == "view":
+            await ctx.send(embed=self._living_campaign_embed(profile))
+            return
+        choice = action.lower() if action.lower() in {"mercy", "honesty", "ambition", "ruthlessness"} else None
+        async with self._lock_for(ctx.guild.id, ctx.author.id):
+            profile = await self._get_profile(ctx.guild.id, ctx.author.id)
+            starting_gold = profile["gold"]
+            result = advance_living_campaign(profile, choice)
+            if result["ok"]:
+                if result.get("resolved"):
+                    result["message"] += "\n" + "\n".join(
+                        [
+                            *progress_quests(profile, "decision"),
+                            *progress_oath(profile, "resolve"),
+                        ],
+                    )
+                self._apply_level_ups(profile)
+                await self._save_profile(ctx.guild.id, ctx.author.id, profile, starting_gold)
+        await ctx.send(embed=self._living_campaign_embed(profile, result["message"]))
+
+    async def season_archive_group(self, ctx: commands.Context) -> None:
+        """View twelve permanent seasonal story chapters and catch-up access."""
+        profile = await self._require_character(ctx)
+        if not profile:
+            return
+        lines = []
+        for chapter in season_chapter_status(profile):
+            marker = "✅" if chapter["completed"] else "📖" if chapter["active"] else "📚" if chapter["available"] else "🔒"
+            detail = "Archived permanently" if chapter["completed"] else "Active" if chapter["active"] else (
+                "Available forever" if chapter["available"] else chapter["locked_reason"]
+            )
+            lines.append(f"{marker} **{chapter['index']}. {chapter['name']}** — {detail}")
+        embed = discord.Embed(
+            title=f"📚 Seasonal Archive — {len(profile.get('season_archive', []))}/12",
+            description="\n".join(lines),
+            color=0x5B2C6F,
+        )
+        embed.set_footer(text="Chapters never expire • Begin with /deepdelve living archive begin <number>.")
+        await ctx.send(embed=embed)
+
+    async def season_archive_begin(self, ctx: commands.Context, chapter: int) -> None:
+        """Begin an available permanent seasonal chapter."""
+        profile = await self._require_character(ctx)
+        if not profile:
+            return
+        async with self._lock_for(ctx.guild.id, ctx.author.id):
+            profile = await self._get_profile(ctx.guild.id, ctx.author.id)
+            starting_gold = profile["gold"]
+            ok, message = begin_season_chapter(profile, chapter)
+            if ok:
+                await self._save_profile(ctx.guild.id, ctx.author.id, profile, starting_gold)
+        await ctx.send(message)
+
+    async def season_archive_advance(self, ctx: commands.Context) -> None:
+        """Spend the displayed energy to advance an active archive chapter."""
+        profile = await self._require_character(ctx)
+        if not profile:
+            return
+        async with self._lock_for(ctx.guild.id, ctx.author.id):
+            profile = await self._get_profile(ctx.guild.id, ctx.author.id)
+            starting_gold = profile["gold"]
+            ok, message = advance_season_chapter(profile)
+            if ok:
+                self._apply_level_ups(profile)
+                await self._save_profile(ctx.guild.id, ctx.author.id, profile, starting_gold)
+        await ctx.send(message)
+
+    async def commissions_group(self, ctx: commands.Context) -> None:
+        """View three deterministic weekly profession commissions."""
+        profile = await self._require_character(ctx)
+        if not profile:
+            return
+        async with self._lock_for(ctx.guild.id, ctx.author.id):
+            profile = await self._get_profile(ctx.guild.id, ctx.author.id)
+            starting_gold = profile["gold"]
+            offers = commission_board(profile)
+            await self._save_profile(ctx.guild.id, ctx.author.id, profile, starting_gold)
+        active = profile.get("commissions", {}).get("active", {})
+        lines = [
+            (
+                f"⚒️ **{index}. {offer['name']}**\n"
+                f"{offer['objective'].title()} {offer['target']} time(s) • "
+                f"{offer['reward']['gold']} currency • {offer['reward']['xp']} XP • "
+                f"{offer['reward']['mastery']} mastery"
+            )
+            for index, offer in enumerate(offers, start=1)
+        ]
+        if active:
+            lines.insert(0, f"⭐ **Active: {active['name']}** — {active['progress']}/{active['target']}")
+        await ctx.send(
+            embed=discord.Embed(
+                title="⚒️ Weekly Profession Commissions",
+                description="\n\n".join(lines),
+                color=0xA04000,
+            ).set_footer(text="Use /deepdelve living commissions accept <number>. Offers change weekly at UTC."),
+        )
+
+    async def commissions_accept(self, ctx: commands.Context, number: int) -> None:
+        """Accept one offered weekly profession commission."""
+        profile = await self._require_character(ctx)
+        if not profile:
+            return
+        async with self._lock_for(ctx.guild.id, ctx.author.id):
+            profile = await self._get_profile(ctx.guild.id, ctx.author.id)
+            starting_gold = profile["gold"]
+            ok, message = accept_commission(profile, number)
+            if ok:
+                await self._save_profile(ctx.guild.id, ctx.author.id, profile, starting_gold)
+        await ctx.send(message)
+
+    async def commissions_recipes(self, ctx: commands.Context) -> None:
+        """View Living World recipe research and its guaranteed costs."""
+        profile = await self._require_character(ctx)
+        if not profile:
+            return
+        mastery = int(profile.get("profession_mastery_points", 0))
+        lines = []
+        for key, recipe in list(LIVING_RECIPES.items())[:15]:
+            marker = "✅" if key in profile.get("recipes", []) else "📖" if mastery >= recipe["mastery"] else "🔒"
+            materials = ", ".join(f"{amount} {material}" for material, amount in recipe["materials"].items())
+            lines.append(
+                f"{marker} **{recipe['name']}** · mastery {recipe['mastery']}\n"
+                f"`{key}` • {recipe['gold_cost']} currency + {materials}",
+            )
+        await ctx.send(
+            embed=discord.Embed(
+                title=f"📖 Recipe Research — {mastery} mastery",
+                description="\n\n".join(lines),
+                color=0x7D6608,
+            ).set_footer(text="Showing the first 15 of 30 recipes. Research by displayed key."),
+        )
+
+    async def commissions_research(self, ctx: commands.Context, key: str) -> None:
+        """Research a gated recipe with currency and materials."""
+        profile = await self._require_character(ctx)
+        if not profile:
+            return
+        async with self._lock_for(ctx.guild.id, ctx.author.id):
+            profile = await self._get_profile(ctx.guild.id, ctx.author.id)
+            starting_gold = profile["gold"]
+            ok, message = research_recipe(profile, key.lower())
+            if ok:
+                await self._save_profile(ctx.guild.id, ctx.author.id, profile, starting_gold)
+        await ctx.send(message)
 
     @deepdelve.command(name="create")
     @commands.guild_only()
@@ -5282,7 +6564,7 @@ class DeepDelve(DashboardIntegration, commands.Cog):
             return
         await ctx.send(embed=self._craft_embed(profile), view=CraftView(self, ctx.author.id))
 
-    @deepdelve.command(name="regions", aliases=["world"])
+    @deepdelve.command(name="regions", aliases=["world"], with_app_command=False)
     @commands.guild_only()
     async def regions(self, ctx: commands.Context) -> None:
         """View the known regions of the Deep."""
@@ -5931,6 +7213,7 @@ class DeepDelve(DashboardIntegration, commands.Cog):
             await ctx.send(f"Choose: {humanize_list(list(NPCS))}.")
             return
         progress = npc_progress(profile, npc)
+        living_relationship = ensure_relationships(profile)[npc]
         details = progress["npc"]
         dialogue = details.get("dialogue", ())
         dialogue_index = min(
@@ -5954,8 +7237,11 @@ class DeepDelve(DashboardIntegration, commands.Cog):
             color=morality_path(profile)["color"],
         )
         embed.add_field(
-            name=f"Relationship: {progress['relationship']}",
-            value=f"Reputation: **{progress['reputation']}**",
+            name=f"Relationship: {relationship_level(living_relationship)}",
+            value=(
+                f"Legacy reputation: **{progress['reputation']}** • "
+                f"Trust: **{living_relationship['trust']}** • Conflict: **{living_relationship['conflict']}**"
+            ),
             inline=False,
         )
         embed.add_field(name="Story Quests", value="\n".join(quest_lines), inline=False)
@@ -5987,6 +7273,7 @@ class DeepDelve(DashboardIntegration, commands.Cog):
             reward_xp = 75 + profile["level"] * 15
             profile["story_flags"].append(quest["flag"])
             profile["npc_reputation"][npc] += 5
+            change_relationship(profile, npc, trust=5, flag=f"legacy_quest:{quest['flag']}")
             profile["gold"] += reward_gold
             profile["xp"] += reward_xp
             if quest["flag"].endswith(":3"):
@@ -6186,12 +7473,18 @@ class DeepDelve(DashboardIntegration, commands.Cog):
         if item_id in profile.get("favorite_items", []):
             await ctx.send("That item is favorited. Unfavorite it before listing it.")
             return
+        fee = max(1, min(250, round(price * 0.02)))
+        if profile["gold"] < fee:
+            await ctx.send(f"Listing requires a non-refundable **{self._money(profile, fee)}** auction fee.")
+            return
         async with self._guild_lock_for(ctx.guild.id):
             auctions = await self.config.guild(ctx.guild).auctions()
             if len(auctions) >= 100:
                 await ctx.send("The auction house has reached its 100-listing limit.")
                 return
             auction_id = short_code("A", auctions)
+            starting_gold = profile["gold"]
+            profile["gold"] -= fee
             item = profile["inventory"].pop(index)
             auctions[auction_id] = {
                 "seller": ctx.author.id,
@@ -6200,8 +7493,11 @@ class DeepDelve(DashboardIntegration, commands.Cog):
                 "created": datetime.now(timezone.utc).isoformat(),
             }
             await self.config.guild(ctx.guild).auctions.set(auctions)
-            await self.config.member(ctx.author).set(profile)
-        await ctx.send(f"Listed **{item['name']}** as `{auction_id}` for **{self._money(profile, price)}**.")
+            await self._save_profile(ctx.guild.id, ctx.author.id, profile, starting_gold)
+        await ctx.send(
+            f"Listed **{item['name']}** as `{auction_id}` for **{self._money(profile, price)}**. "
+            f"**{self._money(profile, fee)}** listing fee paid.",
+        )
 
     @auction_group.command(name="buy")
     @commands.guild_only()
@@ -7318,8 +8614,14 @@ class DeepDelve(DashboardIntegration, commands.Cog):
             if int(profile.get("gather_actions", 0)) >= 3:
                 await ctx.send("You have used all **three** gathering actions for today. They reset at 00:00 UTC.")
                 return
+            if int(profile.get("turns", 0)) < 1:
+                await ctx.send("Gathering costs **1 exploration energy**, but none remains.")
+                return
+            profile["turns"] -= 1
             result = gather(profile)
             profile["gather_actions"] += 1
+            commission_lines = progress_commission(profile, "gather")
+            quest_lines = progress_quests(profile, "recover")
             await self._save_profile(ctx.guild.id, ctx.author.id, profile, starting_gold)
         text = (
             f"{result['emoji']} You gather **{result['amount']} {result['name']}** "
@@ -7329,6 +8631,9 @@ class DeepDelve(DashboardIntegration, commands.Cog):
             text += "\n⚗️ Your alchemical technique also produces **one potion**."
         if result["messages"]:
             text += "\n" + "\n".join(result["messages"])
+        if commission_lines or quest_lines:
+            text += "\n" + "\n".join([*commission_lines, *quest_lines])
+        text += f"\n🧭 **-1 energy** • {profile['turns']} remains."
         await ctx.send(text)
 
     @chronicle_group.command(name="world", aliases=["event"])

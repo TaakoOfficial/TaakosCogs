@@ -386,21 +386,33 @@ def use_moral_power(profile: dict[str, Any], enemy: dict[str, Any], stats: dict[
     profile["conviction_fatigue"] = 2
     if power["key"] == "grace":
         mercy = max(0, int(profile["convictions"].get("mercy", 0)))
-        rate = (0.22 if power["greater"] else 0.14) + min(0.05, mercy * 0.001)
+        rate = (0.11 if power["greater"] else 0.09) + (0.01 if mercy >= 25 else 0)
         healing = min(stats["max_hp"] - profile["hp"], max(1, round(stats["max_hp"] * rate)))
         profile["hp"] += healing
         profile["status"] = {}
-        flags["guard"] = max(float(flags.get("guard", 0)), 0.35 if power["greater"] else 0.25)
-        message = f"☀️ **Lantern Grace** restores **{healing} health**, cleanses you, and raises a ward."
+        flags["guard"] = max(float(flags.get("guard", 0)), 0.2 if power["greater"] else 0.16)
+        damage = max(
+            1,
+            round(stats["attack"] * (1.15 if power["greater"] else 1.05)) - int(enemy.get("defense", 0)) // 4,
+        )
+        enemy["hp"] -= damage
+        message = (
+            f"☀️ **Lantern Grace** deals **{damage} damage**, restores **{healing} health**, "
+            "cleanses you, and raises a ward."
+        )
     elif power["key"] == "claim":
-        ruthlessness = max(0, int(profile["convictions"].get("ruthlessness", 0)))
         ambition = max(0, int(profile["convictions"].get("ambition", 0)))
-        multiplier = (1.55 if power["greater"] else 1.2) + min(0.2, ruthlessness * 0.004)
+        multiplier = 1.15 if power["greater"] else 1.05
         damage = max(1, round(stats["attack"] * multiplier) - int(enemy.get("defense", 0)) // 4)
         enemy["hp"] -= damage
-        drain_rate = 0.3 + min(0.1, ambition * 0.002)
-        healing = min(stats["max_hp"] - profile["hp"], max(1, round(damage * drain_rate)))
+        drain_rate = (0.5 if power["greater"] else 0.4) + (0.02 if ambition >= 25 else 0)
+        drain = min(
+            round(damage * drain_rate),
+            round(stats["max_hp"] * (0.10 if power["greater"] else 0.08)),
+        )
+        healing = min(stats["max_hp"] - profile["hp"], max(1, drain))
         profile["hp"] += healing
+        flags["guard"] = max(float(flags.get("guard", 0)), 0.2 if power["greater"] else 0.16)
         message = f"🌑 **Dread Claim** deals **{damage} damage** and steals **{healing} health**."
     else:
         from deepdelve.systems.combat import roll_enemy_intent
@@ -408,12 +420,25 @@ def use_moral_power(profile: dict[str, Any], enemy: dict[str, Any], stats: dict[
         enemy["intent"] = roll_enemy_intent(enemy)
         honesty = max(0, int(profile["convictions"].get("honesty", 0)))
         ambition = max(0, int(profile["convictions"].get("ambition", 0)))
-        mana_base = (5 if power["greater"] else 3) + min(2, honesty // 25)
+        mana_base = (6 if power["greater"] else 4) + (1 if honesty >= 25 else 0)
         mana = min(stats["max_mana"] - profile["mana"], mana_base)
         profile["mana"] += mana
-        guard = (0.5 if power["greater"] else 0.35) + min(0.08, ambition * 0.001)
+        guard = (0.19 if power["greater"] else 0.15) + (0.01 if ambition >= 25 else 0)
         flags["guard"] = max(float(flags.get("guard", 0)), guard)
-        message = f"⚖️ **Measured Gambit** rewrites the intention, restores **{mana} mana**, and grants guard."
+        healing = min(
+            stats["max_hp"] - profile["hp"],
+            max(1, round(stats["max_hp"] * (0.12 if power["greater"] else 0.09))),
+        )
+        profile["hp"] += healing
+        damage = max(
+            1,
+            round(stats["attack"] * (1.15 if power["greater"] else 1.05)) - int(enemy.get("defense", 0)) // 4,
+        )
+        enemy["hp"] -= damage
+        message = (
+            f"⚖️ **Measured Gambit** deals **{damage} damage**, rewrites the intention, "
+            f"restores **{mana} mana** and **{healing} health**, and grants guard."
+        )
     return {"ok": True, "message": message}
 
 

@@ -17,6 +17,7 @@ from deepdelve.deepdelve import (
     CombatView,
     CraftView,
     DeepDelve,
+    GameHubView,
     InventoryView,
     OriginView,
     PuzzleView,
@@ -36,6 +37,7 @@ def _views() -> list:
     cog = object()
     return [
         AdventureView(cog, owner),
+        GameHubView(cog, owner),
         ClassSelectView(cog, owner),
         OriginView(cog, owner, {"class_key": "vanguard"}),
         TownView(cog, owner),
@@ -190,3 +192,32 @@ def test_raw_config_merge_accepts_items_under_none_equipment_defaults() -> None:
     assert merged["equipment"]["weapon"]["name"] == "Watchman's Spear"
     assert merged["equipment"]["armor"] is None
     assert defaults["equipment"]["weapon"] is None
+
+
+def test_hub_acknowledges_before_loading_or_rendering_state() -> None:
+    async def check() -> None:
+        events = []
+        cog = object.__new__(DeepDelve)
+
+        async def get_profile(_guild_id, _user_id):
+            events.append("load")
+            return {"created": True}
+
+        async def defer():
+            events.append("defer")
+
+        async def edit_original_response(**_kwargs):
+            events.append("edit")
+
+        cog._get_profile = get_profile
+        cog._game_hub_embed = lambda _profile: SimpleNamespace()
+        interaction = SimpleNamespace(
+            guild=SimpleNamespace(id=1),
+            user=SimpleNamespace(id=2),
+            response=SimpleNamespace(defer=defer),
+            edit_original_response=edit_original_response,
+        )
+        await cog._hub_interaction(interaction, "hub")
+        assert events == ["defer", "load", "edit"]
+
+    asyncio.run(check())

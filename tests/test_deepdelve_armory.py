@@ -26,7 +26,7 @@ from deepdelve.systems.migrations import PROFILE_SCHEMA_VERSION, migrate_profile
 def test_authored_loot_breadth_and_starter_identity() -> None:
     assert sum(len(options) for options in STARTER_WEAPONS.values()) == 9
     assert sum(len(slots) for region in REGIONAL_BASES for slots in region.values()) == 45
-    assert len(CONSUMABLES) == 15
+    assert len(CONSUMABLES) == 39
     assert len(RECIPES) == 5
     item = create_starter_item("shadow", "serpent_dirk", random.Random(7))
     assert item["origin"] and item["bound"]

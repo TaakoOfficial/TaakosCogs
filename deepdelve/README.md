@@ -13,14 +13,14 @@ traps, forgotten shrines, consequential mysteries, and sealed boss chambers. Eve
 member creates a persistent character and explores one room at a time through Discord
 embeds and buttons.
 
-The central loop is:
+The 5.0 central loop is:
 
 ```text
-Explore → encounter → choose an action → earn loot → equip upgrades → descend
+Hub → choose a goal → spend declared energy → make a remembered choice → grow the world
 ```
 
 Progress is saved after every action. An interrupted battle can be resumed with
-`[p]deepdelve adventure`.
+`[p]deepdelve` or its persistent Resume button.
 
 ![The Living Chronicle](./assets/chronicle-campaign.png)
 
@@ -68,8 +68,14 @@ a background, moral alignment, and one of three class-specific origin weapons.
 - Visible moral transformations, reactive NPC dialogue, morality-gated events, and combat powers.
 - Button-driven exploration, combat, inventory, and town services.
 - Five authored regions with distinct atmosphere, narration, lore, and materials.
-- A five-chapter branching solo campaign with fifteen scenes, permanent decisions,
-  multiple endings, mechanical choice bonuses, and a unique completion title.
+- A six-act Living Chronicle with 36 scenes, 18 permanent decisions, four endings,
+  three eight-quest faction arcs, and a consequence-aware Quest Journal.
+- Resolve, 18 selectable Tenets, a rotating Oath Board, moral journeys, World Echoes,
+  faction services, remembered NPC relationships, mail, and named Nemeses.
+- An unlockable Atlas with ten named branching dungeons, checkpoints, hazards,
+  authored mechanics, minibosses, bosses, secrets, and declared energy costs.
+- Twelve permanent seasonal chapters, weekly profession commissions, recipe research,
+  collection books, and a five-room personal Sanctum.
 - Five interactive regional puzzle chambers with saved attempts, hints, failure
   consequences, streak rewards, and build-aware reward modifiers.
 - Five collectible companions with levels, bond, combat statistics, exploration
@@ -86,9 +92,10 @@ a background, moral alignment, and one of three class-specific origin weapons.
 - Telegraphed enemy intentions, Defend, cooldowns, four abilities per class, and tactical conditions.
 - Five attributes, class talent trees, nine subclasses, backgrounds, alignments, titles, scars, and blessings.
 - 45 authored regional equipment bases with prefixes, suffixes, subclass sets, curses, and identification.
-- 21 source-matched boss relics, protected favorites, loot comparison, drop pity, and collection tracking.
+- 51 named relic identities, protected favorites, loot comparison, drop pity, and collection tracking.
 - Permanent legendary and set records, set-drop pity, duplicate fragments, and missing-piece forging.
-- Fifteen tactical consumables, five rumor-unlocked forge patterns, a 60-slot vault, and three loadouts.
+- Thirty-nine tactical consumables, thirty Living World recipes, five rumor-unlocked
+  forge patterns, a 60-slot vault, and three loadouts.
 - Five deterministic floor conditions, named minibosses, hidden rooms, impossible camps, and personal hunts.
 - Common, Uncommon, Rare, Epic, and Legendary equipment.
 - Legendary effects, set bonuses, inspection comparisons, +10 upgrades, shards, enchanting, and rerolling.
@@ -114,10 +121,11 @@ a background, moral alignment, and one of three class-specific origin weapons.
 
 | Command | Description |
 | --- | --- |
-| `[p]deepdelve` | Open the current adventure panel |
+| `[p]deepdelve` | Open the persistent Living World game hub |
 | `[p]deepdelve create [class] [name]` | Create a character |
 | `[p]deepdelve adventure` | Explore a room or resume battle |
 | `[p]deepdelve profile [member]` | View a character sheet |
+| `[p]deepdelve living <section> [action] [target] [extra]` | Play quests, saga, Atlas, Tenets, oaths, relationships, seasons, commissions, and Sanctum systems |
 | `[p]deepdelve inventory` | Equip and sell collected gear |
 | `[p]deepdelve town` | Heal, restore mana, and buy potions |
 | `[p]deepdelve achievements [member]` | View achievement progress |
@@ -382,6 +390,15 @@ DeepDelve is divided into focused modules:
 - `systems/professions.py` handles profession ranks, experience, and gathering.
 - `systems/world.py` handles deterministic events and shared town upgrades.
 - `systems/migrations.py` performs idempotent profile and guild save upgrades.
+- `living_content.py` contains validated 5.0 campaign, faction, dungeon, event,
+  equipment, recipe, contract, and permanent-season definitions.
+- `systems/quests.py`, `legacy.py`, and `relationships.py` handle the journal,
+  Resolve/Tenets/factions, consequences, NPC memory, mail, and World Echoes.
+- `systems/atlas.py`, `nemesis.py`, and `living_campaign.py` handle named expeditions,
+  personal rivals, the six-act saga, and permanent endings.
+- `systems/commissions.py`, `sanctum.py`, `season_archive.py`, and `economy.py` handle
+  profession goals, capped sinks, archived chapters, reward budgets, and projections.
+- `systems/content_registry.py` validates content counts, keys, references, and rewards.
 - `systems/combat.py` handles enemy intentions.
 - `systems/progression.py` calculates builds, titles, subclasses, talents, scars, and blessings.
 - `systems/items.py` handles advanced procedural itemization and equipment operations.

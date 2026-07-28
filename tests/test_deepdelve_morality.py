@@ -123,7 +123,7 @@ def test_current_schema_backfills_completed_campaign_morality_once() -> None:
         },
     }
     assert migrate_profile(old)
-    assert old["schema_version"] == PROFILE_SCHEMA_VERSION == 7
+    assert old["schema_version"] == PROFILE_SCHEMA_VERSION == 8
     assert old["morality"] == 23
     assert old["convictions"]["honesty"] == 5
     assert not migrate_profile(old)

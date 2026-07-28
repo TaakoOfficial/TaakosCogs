@@ -92,6 +92,16 @@ def refresh_titles(profile: dict[str, Any]) -> list[str]:
         "beacon": int(profile.get("morality", 0)) >= 70,
         "dreadbound": int(profile.get("morality", 0)) <= -70,
         "even_hand": (-29 <= int(profile.get("morality", 0)) <= 29 and len(profile.get("moral_deeds", [])) >= 12),
+        "covenant_voice": profile.get("legacy", {}).get("faction_reputation", {}).get("lantern", 0) >= 40,
+        "gray_arbiter": profile.get("legacy", {}).get("faction_reputation", {}).get("concord", 0) >= 40,
+        "veilmaster": profile.get("legacy", {}).get("faction_reputation", {}).get("court", 0) >= 40,
+        "redeemed": "journey_complete:radiant" in profile.get("legacy", {}).get("consequence_flags", []),
+        "twice_fallen": "journey_complete:umbral" in profile.get("legacy", {}).get("consequence_flags", []),
+        "nemesis_bane": len(profile.get("nemeses", {}).get("defeated", [])) >= 5,
+        "sanctum_keeper": all(level >= 3 for level in profile.get("sanctum", {}).get("rooms", {}).values())
+        if profile.get("sanctum", {}).get("rooms")
+        else False,
+        "atlas_complete": len(profile.get("atlas", {}).get("completed", [])) >= 10,
     }
     new_titles = []
     for key, earned in conditions.items():

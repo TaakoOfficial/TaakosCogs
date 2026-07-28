@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from .living_content import LIVING_ITEM_SETS, LIVING_RELICS, LIVING_TITLES
 from .loot_content import BOSS_RELICS, EXTRA_PREFIXES, EXTRA_SUFFIXES, SUBCLASS_SETS
 
 BACKGROUNDS: dict[str, dict[str, Any]] = {
@@ -280,6 +281,19 @@ ITEM_SETS: dict[str, dict[str, Any]] = {
     },
 }
 ITEM_SETS.update(SUBCLASS_SETS)
+ITEM_SETS.update(
+    {
+        key: {
+            "name": details["name"],
+            "classes": details["classes"],
+            "two": details["two"],
+            "three": details["three"],
+            "two_stats": details["two_stats"],
+            "three_stats": details["three_stats"],
+        }
+        for key, details in LIVING_ITEM_SETS.items()
+    },
+)
 
 LEGENDARIES: tuple[dict[str, Any], ...] = (
     {
@@ -323,6 +337,15 @@ LEGENDARIES: tuple[dict[str, Any], ...] = (
         "Embermaw's Last Scale",
         "The Unwritten Key",
     }
+)
+LEGENDARIES += tuple(
+    {
+        "name": details["name"],
+        "slot": details["slot"],
+        "effect": details["effect"],
+        "description": details["description"],
+    }
+    for details in LIVING_RELICS.values()
 )
 
 NPCS: dict[str, dict[str, Any]] = {
@@ -440,3 +463,5 @@ SEASON_NAMES: tuple[str, ...] = (
     "Season of the Hollow Crown",
     "Season of Falling Stars",
 )
+
+TITLES.update(LIVING_TITLES)

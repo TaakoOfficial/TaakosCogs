@@ -11,9 +11,26 @@ from .armory import (
     starter_options,
     use_consumable,
 )
+from .atlas import (
+    abandon_dungeon,
+    advance_dungeon,
+    atlas_locations,
+    ensure_atlas,
+    enter_dungeon,
+    record_dungeon_victory,
+    resolve_dungeon_choice,
+)
 from .campaign import advance_campaign, campaign_bonuses, campaign_scene, campaign_state, chapter_available
 from .combat import ensure_enemy_intent, intent_description, roll_enemy_intent
+from .commissions import (
+    accept_commission,
+    commission_board,
+    ensure_commissions,
+    progress_commission,
+    research_recipe,
+)
 from .companions import active_companion, companion_bonuses, grant_companion_xp, unlock_companions
+from .content_registry import content_counts, validate_content
 from .dungeon_depth import (
     apply_miniboss,
     create_rumor,
@@ -23,6 +40,7 @@ from .dungeon_depth import (
     record_bestiary_kill,
     region_index,
 )
+from .economy import TARGET_SINK_RANGE, economy_release_gate, equivalent_rewards, reward_budget, simulate_active_economy
 from .endgame import current_season, daily_dungeon, restore_challenge_origin, scaled_daily_floor
 from .items import (
     apply_advanced_itemization,
@@ -34,6 +52,23 @@ from .items import (
     item_sale_value,
     upgrade_cost,
 )
+from .legacy import (
+    accept_oath,
+    advance_redemption,
+    backfill_historical_resolve,
+    begin_redemption,
+    change_faction_reputation,
+    ensure_legacy,
+    equip_tenets,
+    grant_resolve,
+    oath_board,
+    progress_oath,
+    tenet_available,
+    tenet_effects,
+    unlock_tenet,
+    use_faction_service,
+)
+from .living_campaign import ENDINGS, advance_living_campaign, ensure_living_campaign, living_campaign_view
 from .morality import (
     ensure_morality,
     moral_power,
@@ -44,12 +79,42 @@ from .morality import (
     record_choice_deed,
     use_moral_power,
 )
+from .nemesis import create_nemesis, defeat_nemesis, ensure_nemeses, record_nemesis_escape
 from .professions import gather, grant_profession_xp, profession_level, profession_rank
 from .progression import (
     available_abilities,
     progression_bonuses,
     refresh_titles,
     subclass_options,
+)
+from .quests import (
+    QUESTS,
+    accept_quest,
+    available_quests,
+    ensure_quests,
+    expire_quests,
+    fail_quest,
+    perform_skill_check,
+    progress_quests,
+    requirement_status,
+    resolve_quest,
+    skill_check_chance,
+)
+from .relationships import (
+    change_relationship,
+    ensure_relationships,
+    generate_mail,
+    give_gift,
+    relationship_level,
+    request_favor,
+    world_echoes,
+)
+from .sanctum import SANCTUM_ROOMS, ensure_sanctum, sanctum_upgrade_cost, upgrade_sanctum
+from .season_archive import (
+    advance_season_chapter,
+    begin_season_chapter,
+    ensure_season_story,
+    season_chapter_status,
 )
 from .social import arena_power, guild_perks, party_bonus, short_code
 from .story import npc_progress
@@ -112,6 +177,7 @@ __all__ = [
     "should_auto_dismantle",
     "starter_options",
     "use_consumable",
+    "use_faction_service",
     "ensure_morality",
     "moral_power",
     "morality_path",
@@ -120,4 +186,70 @@ __all__ = [
     "record_campaign_deed",
     "record_choice_deed",
     "use_moral_power",
+    "QUESTS",
+    "ENDINGS",
+    "SANCTUM_ROOMS",
+    "abandon_dungeon",
+    "accept_oath",
+    "accept_quest",
+    "accept_commission",
+    "advance_dungeon",
+    "advance_living_campaign",
+    "advance_redemption",
+    "advance_season_chapter",
+    "atlas_locations",
+    "available_quests",
+    "backfill_historical_resolve",
+    "begin_redemption",
+    "begin_season_chapter",
+    "change_faction_reputation",
+    "change_relationship",
+    "content_counts",
+    "commission_board",
+    "create_nemesis",
+    "defeat_nemesis",
+    "ensure_atlas",
+    "ensure_legacy",
+    "ensure_commissions",
+    "ensure_living_campaign",
+    "ensure_nemeses",
+    "ensure_quests",
+    "expire_quests",
+    "fail_quest",
+    "ensure_relationships",
+    "ensure_sanctum",
+    "ensure_season_story",
+    "enter_dungeon",
+    "equip_tenets",
+    "generate_mail",
+    "give_gift",
+    "grant_resolve",
+    "oath_board",
+    "perform_skill_check",
+    "progress_quests",
+    "progress_oath",
+    "progress_commission",
+    "record_nemesis_escape",
+    "record_dungeon_victory",
+    "relationship_level",
+    "living_campaign_view",
+    "requirement_status",
+    "request_favor",
+    "research_recipe",
+    "resolve_quest",
+    "resolve_dungeon_choice",
+    "sanctum_upgrade_cost",
+    "season_chapter_status",
+    "skill_check_chance",
+    "tenet_available",
+    "tenet_effects",
+    "unlock_tenet",
+    "upgrade_sanctum",
+    "validate_content",
+    "world_echoes",
+    "TARGET_SINK_RANGE",
+    "economy_release_gate",
+    "equivalent_rewards",
+    "reward_budget",
+    "simulate_active_economy",
 ]

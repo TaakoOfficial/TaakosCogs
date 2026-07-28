@@ -7,10 +7,19 @@ from typing import Any
 from deepdelve.advanced_content import ITEM_SUFFIXES, LEGENDARIES
 from deepdelve.content import AFFIXES
 from deepdelve.loot_content import RECIPES, STARTER_WEAPONS, STORY_RELICS
+from deepdelve.systems.atlas import ensure_atlas
+from deepdelve.systems.commissions import ensure_commissions
+from deepdelve.systems.legacy import backfill_historical_resolve, ensure_legacy
+from deepdelve.systems.living_campaign import ensure_living_campaign
 from deepdelve.systems.morality import origin_morality, record_campaign_deed
+from deepdelve.systems.nemesis import ensure_nemeses
+from deepdelve.systems.quests import ensure_quests
+from deepdelve.systems.relationships import ensure_relationships
+from deepdelve.systems.sanctum import ensure_sanctum
+from deepdelve.systems.season_archive import ensure_season_story
 
-PROFILE_SCHEMA_VERSION = 7
-GUILD_SCHEMA_VERSION = 5
+PROFILE_SCHEMA_VERSION = 8
+GUILD_SCHEMA_VERSION = 6
 
 
 def _migrate_item_enchantment(item: dict[str, Any] | None) -> bool:
@@ -21,11 +30,9 @@ def _migrate_item_enchantment(item: dict[str, Any] | None) -> bool:
     item["enchant_description"] = item.get("effect_description", "")
     native_effect = ""
     native_description = ""
-    native_definitions = [
-        definition
-        for options in STARTER_WEAPONS.values()
-        for definition in options.values()
-    ] + list(LEGENDARIES)
+    native_definitions = [definition for options in STARTER_WEAPONS.values() for definition in options.values()] + list(
+        LEGENDARIES,
+    )
     native = next(
         (definition for definition in native_definitions if definition["name"] == item.get("name")),
         None,
@@ -35,11 +42,7 @@ def _migrate_item_enchantment(item: dict[str, Any] | None) -> bool:
         native_description = native["description"]
     elif item.get("source"):
         recipe = next(
-            (
-                definition
-                for definition in RECIPES.values()
-                if definition["name"] == item.get("source")
-            ),
+            (definition for definition in RECIPES.values() if definition["name"] == item.get("source")),
             None,
         )
         if recipe:
@@ -47,11 +50,7 @@ def _migrate_item_enchantment(item: dict[str, Any] | None) -> bool:
             native_description = f"Pattern effect: {recipe['name']}."
     elif item.get("suffix"):
         suffix = next(
-            (
-                definition
-                for definition in ITEM_SUFFIXES
-                if definition["name"] == item.get("suffix")
-            ),
+            (definition for definition in ITEM_SUFFIXES if definition["name"] == item.get("suffix")),
             None,
         )
         if suffix:
@@ -110,6 +109,7 @@ def _migrate_bestiary(profile: dict[str, Any]) -> bool:
 def migrate_profile(profile: dict[str, Any]) -> bool:
     """Upgrade a profile in place and report whether it changed."""
     changed = False
+    previous_version = int(profile.get("schema_version", 0))
     defaults: dict[str, Any] = {
         "schema_version": PROFILE_SCHEMA_VERSION,
         "tutorial_step": 0,
@@ -155,6 +155,44 @@ def migrate_profile(profile: dict[str, Any]) -> bool:
         "set_discoveries": {},
         "set_fragments": {},
         "legendary_codex": [],
+        "legacy": {
+            "resolve": 0,
+            "resolve_earned": 0,
+            "unlocked_tenets": [],
+            "active_tenets": [],
+            "faction_reputation": {"lantern": 0, "concord": 0, "court": 0},
+            "oath": "",
+            "oath_board_date": "",
+            "oath_board": [],
+            "redemption": {},
+            "consequence_flags": [],
+            "resolve_sources": [],
+            "service_dates": {},
+        },
+        "quests_v2": {
+            "active": {},
+            "completed": {},
+            "failed": {},
+            "choice_flags": [],
+            "counters": {},
+            "claim_tokens": [],
+        },
+        "relationships": {},
+        "mailbox": [],
+        "mail_read": [],
+        "nemeses": {"active": [], "defeated": [], "next_id": 1},
+        "atlas": {"discovered": [], "completed": [], "shortcuts": [], "active_dungeon": {}, "clues": {}},
+        "sanctum": {
+            "rooms": {"hall": 0, "library": 0, "workshop": 0, "garden": 0, "observatory": 0},
+            "spent": 0,
+            "cosmetics": [],
+            "active_cosmetic": "",
+        },
+        "season_archive": [],
+        "living_campaign": {"act": 0, "scene": 0, "decision": 0, "choices": {}, "completed": [], "ending": ""},
+        "season_story": {"active": "", "scene": 0},
+        "commissions": {"week": "", "offers": [], "active": {}, "completed": 0},
+        "profession_mastery_points": 0,
     }
     for key, value in defaults.items():
         if key not in profile:
@@ -177,6 +215,17 @@ def migrate_profile(profile: dict[str, Any]) -> bool:
         if conviction not in profile["convictions"]:
             profile["convictions"][conviction] = 0
             changed = True
+    ensure_legacy(profile)
+    ensure_living_campaign(profile)
+    ensure_quests(profile)
+    ensure_relationships(profile)
+    ensure_nemeses(profile)
+    ensure_atlas(profile)
+    ensure_sanctum(profile)
+    ensure_season_story(profile)
+    ensure_commissions(profile)
+    if previous_version < 8 and backfill_historical_resolve(profile):
+        changed = True
     owned_items = [
         *profile.get("inventory", []),
         *profile.get("stash", []),
@@ -222,6 +271,7 @@ def migrate_guild(data: dict[str, Any]) -> bool:
         },
         "event_announcement_channel": 0,
         "content_multiplier": 1.0,
+        "season_archive": [],
     }
     for key, value in defaults.items():
         if key not in data:
@@ -237,15 +287,8 @@ def migrate_guild(data: dict[str, Any]) -> bool:
         if key not in buildings:
             buildings[key] = value
             changed = True
-    stored_items = [
-        record.get("item")
-        for record in data.get("auctions", {}).values()
-    ]
-    stored_items.extend(
-        item
-        for record in data.get("player_guilds", {}).values()
-        for item in record.get("vault", [])
-    )
+    stored_items = [record.get("item") for record in data.get("auctions", {}).values()]
+    stored_items.extend(item for record in data.get("player_guilds", {}).values() for item in record.get("vault", []))
     for item in stored_items:
         if _migrate_item_enchantment(item):
             changed = True
