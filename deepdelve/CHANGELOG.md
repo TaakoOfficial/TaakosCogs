@@ -2,6 +2,15 @@
 
 All notable changes to `deepdelve` are documented here.
 
+## 4.3.3
+
+- Made dynamic routing the sole handler for all player buttons and selectors instead
+  of registering a second live callback for newly posted messages.
+- Purges legacy message-bound DeepDelve views during unload and load, preventing stale
+  cog instances from receiving interactions after an update.
+- Encodes inventory selections into owner-bound action routes so inventory management
+  remains fully stateful without live views.
+
 ## 4.3.2
 
 - Replaced the response-timing heuristic with an exact message-bound view-registry

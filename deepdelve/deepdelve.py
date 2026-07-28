@@ -146,6 +146,10 @@ class OwnedView(discord.ui.View):
         self.persistent = persistent
         for child in self.children:
             self._bind_component(child)
+        if persistent:
+            # Dynamic routing is the single component handler. A finished view still
+            # renders normally but is not also registered as a competing live view.
+            self.stop()
 
     def add_item(self, item: discord.ui.Item[Any]) -> OwnedView:
         """Add a component and bind a stable owner-specific custom ID."""
@@ -670,6 +674,23 @@ class InventoryView(OwnedView):
         self.selected_id: str | None = None
         self.add_item(InventorySelect(profile))
 
+    def bind_selection(self, selected_id: str) -> None:
+        """Encode the selected item into action routes for stateless recovery."""
+        self.selected_id = selected_id
+        for child in self.children:
+            if not isinstance(child, discord.ui.Button) or not child.custom_id:
+                continue
+            marker = f"deepdelve:b:{self.user_id}:inventory:"
+            if not child.custom_id.startswith(marker):
+                continue
+            action = child.custom_id.removeprefix(marker).split(":", maxsplit=1)[0]
+            if action != "back":
+                child.custom_id = persistent_custom_id(
+                    "b",
+                    self.user_id,
+                    f"inventory:{action}:{selected_id}",
+                )
+
     @discord.ui.button(label="Equip", emoji="🛡️", style=discord.ButtonStyle.primary, row=1)
     async def equip(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
         await self.cog._inventory_interaction(interaction, self.selected_id, "equip")
@@ -790,7 +811,7 @@ class DeepDelve(DashboardIntegration, commands.Cog):
     """An old-school persistent text RPG built for Discord."""
 
     __author__ = "Taako"
-    __version__ = "4.3.2"
+    __version__ = "4.3.3"
 
     def __init__(self, bot: Red) -> None:
         self.bot = bot
@@ -944,6 +965,7 @@ class DeepDelve(DashboardIntegration, commands.Cog):
 
     async def cog_load(self) -> None:
         """Migrate stored data and restore server-wide persistent controls."""
+        self._purge_live_player_views()
         self._world_boss_view = WorldBossView(self)
         self.bot.add_view(self._world_boss_view)
         self.bot.add_dynamic_items(DeepDelveDynamicButton, DeepDelveDynamicSelect)
@@ -953,10 +975,28 @@ class DeepDelve(DashboardIntegration, commands.Cog):
         """Release per-session synchronization state."""
         self._locks.clear()
         self._guild_locks.clear()
+        self._purge_live_player_views()
         if self._world_boss_view:
             self.bot.remove_view(self._world_boss_view)
             self._world_boss_view = None
         self.bot.remove_dynamic_items(DeepDelveDynamicButton, DeepDelveDynamicSelect)
+
+    def _purge_live_player_views(self) -> None:
+        """Remove legacy message-bound views so only dynamic recovery handles clicks."""
+        connection = getattr(self.bot, "_connection", None)
+        store = getattr(connection, "_view_store", None)
+        buckets = getattr(store, "_views", {})
+        stale_views: set[discord.ui.View] = set()
+        for items in list(buckets.values()):
+            for item in list(items.values()):
+                custom_id = str(getattr(item, "custom_id", ""))
+                view = getattr(item, "view", None)
+                if custom_id.startswith(("deepdelve:b:", "deepdelve:s:")) and view is not None:
+                    stale_views.add(view)
+        for view in stale_views:
+            self.bot.remove_view(view)
+        if stale_views:
+            LOGGER.info("Removed %s legacy message-bound DeepDelve view(s).", len(stale_views))
 
     async def _migrate_all_data(self) -> None:
         """Run idempotent schema upgrades for every stored guild and character."""
@@ -1039,15 +1079,17 @@ class DeepDelve(DashboardIntegration, commands.Cog):
                 embed=self._town_embed(profile),
                 view=TownView(self, user_id),
             )
-        elif route in {
-            "inventory:equip",
-            "inventory:upgrade",
-            "inventory:dismantle",
-            "inventory:sell",
-            "inventory:enchant",
-            "inventory:reroll",
+        elif route.startswith("inventory:") and route.split(":", maxsplit=2)[1] in {
+            "equip",
+            "upgrade",
+            "dismantle",
+            "sell",
+            "enchant",
+            "reroll",
         }:
-            await self._inventory_interaction(interaction, None, route.partition(":")[2])
+            route_parts = route.split(":", maxsplit=2)
+            selected_id = route_parts[2] if len(route_parts) == 3 else None
+            await self._inventory_interaction(interaction, selected_id, route_parts[1])
         elif route == "inventory:back":
             await interaction.response.defer()
             profile = await self._get_profile(interaction.guild.id, user_id)
@@ -1105,7 +1147,7 @@ class DeepDelve(DashboardIntegration, commands.Cog):
             await interaction.response.defer()
             profile = await self._get_profile(guild_id, user_id)
             view = InventoryView(self, user_id, profile)
-            view.selected_id = selected
+            view.bind_selection(selected)
             await interaction.edit_original_response(
                 embed=self._inventory_embed(profile, selected),
                 view=view,

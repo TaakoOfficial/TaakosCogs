@@ -14,6 +14,7 @@ from deepdelve.deepdelve import (
     ClassSelectView,
     CombatView,
     CraftView,
+    DeepDelve,
     InventoryView,
     OriginView,
     PuzzleView,
@@ -61,6 +62,7 @@ def test_player_views_are_persistent_and_owner_bound() -> None:
         for view in _views():
             assert view.timeout is None
             assert view.is_persistent()
+            assert view.is_finished()
             for item in view.children:
                 assert ":123456789:" in item.custom_id
                 assert len(item.custom_id) <= 100
@@ -83,32 +85,7 @@ def test_dynamic_component_templates_reconstruct_routes() -> None:
     asyncio.run(check())
 
 
-def test_dynamic_recovery_yields_to_the_exact_registered_live_view() -> None:
-    async def check() -> None:
-        dispatch = AsyncMock()
-        cog = SimpleNamespace(_dispatch_persistent_button=dispatch)
-        custom_id = "deepdelve:b:123456789:adventure:explore"
-        live_items = {(2, custom_id): object()}
-        interaction = SimpleNamespace(
-            response=SimpleNamespace(is_done=lambda: True),
-            client=SimpleNamespace(
-                get_cog=lambda _name: cog,
-                _connection=SimpleNamespace(
-                    _view_store=SimpleNamespace(_views={42: live_items}),
-                ),
-            ),
-            message=SimpleNamespace(id=42, interaction_metadata=None),
-            data={"component_type": 2, "custom_id": custom_id},
-        )
-        item = next(iter(_views()[0].children))
-        dynamic = DeepDelveDynamicButton(item, 123456789, "adventure:explore")
-        await dynamic.callback(interaction)
-        dispatch.assert_not_awaited()
-
-    asyncio.run(check())
-
-
-def test_dynamic_recovery_dispatches_an_orphaned_message_after_handoff() -> None:
+def test_dynamic_router_is_the_single_handler_for_player_messages() -> None:
     async def check() -> None:
         dispatch = AsyncMock()
         cog = SimpleNamespace(_dispatch_persistent_button=dispatch)
@@ -116,15 +93,7 @@ def test_dynamic_recovery_dispatches_an_orphaned_message_after_handoff() -> None
             response=SimpleNamespace(is_done=lambda: False),
             client=SimpleNamespace(
                 get_cog=lambda _name: cog,
-                _connection=SimpleNamespace(
-                    _view_store=SimpleNamespace(_views={}),
-                ),
             ),
-            message=SimpleNamespace(id=42, interaction_metadata=None),
-            data={
-                "component_type": 2,
-                "custom_id": "deepdelve:b:123456789:adventure:explore",
-            },
         )
         item = next(iter(_views()[0].children))
         dynamic = DeepDelveDynamicButton(item, 123456789, "adventure:explore")
@@ -132,3 +101,56 @@ def test_dynamic_recovery_dispatches_an_orphaned_message_after_handoff() -> None
         dispatch.assert_awaited_once_with(interaction, "adventure:explore")
 
     asyncio.run(check())
+
+
+def test_inventory_selection_is_encoded_into_stateless_action_routes() -> None:
+    async def check() -> None:
+        view = InventoryView(
+            object(),
+            123456789,
+            {
+                "inventory": [
+                    {
+                        "id": "abc123",
+                        "name": "Test Blade",
+                        "rarity_index": 0,
+                        "attack": 2,
+                    },
+                ],
+            },
+        )
+        view.bind_selection("abc123")
+        action_ids = [
+            item.custom_id
+            for item in view.children
+            if getattr(item, "custom_id", "").startswith("deepdelve:b:123456789:inventory:")
+            and not item.custom_id.endswith(":back")
+        ]
+        assert action_ids
+        assert all(custom_id.endswith(":abc123") for custom_id in action_ids)
+
+    asyncio.run(check())
+
+
+def test_cog_load_purges_legacy_message_bound_player_views() -> None:
+    player_view = object()
+    world_view = object()
+    buckets = {
+        1: {
+            (2, "player"): SimpleNamespace(
+                custom_id="deepdelve:b:123:adventure:explore",
+                view=player_view,
+            ),
+            (2, "world"): SimpleNamespace(
+                custom_id="deepdelve:worldboss:strike",
+                view=world_view,
+            ),
+        },
+    }
+    removed = []
+    bot = SimpleNamespace(
+        _connection=SimpleNamespace(_view_store=SimpleNamespace(_views=buckets)),
+        remove_view=removed.append,
+    )
+    DeepDelve._purge_live_player_views(SimpleNamespace(bot=bot))
+    assert removed == [player_view]
