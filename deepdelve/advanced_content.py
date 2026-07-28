@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from .loot_content import BOSS_RELICS, EXTRA_PREFIXES, EXTRA_SUFFIXES, SUBCLASS_SETS
+
 BACKGROUNDS: dict[str, dict[str, Any]] = {
     "soldier": {
         "name": "Lastlight Soldier",
@@ -112,7 +114,7 @@ ABILITIES: dict[str, tuple[dict[str, Any], ...]] = {
             "level": 1,
             "mana": 5,
             "cooldown": 1,
-            "description": "165% damage and weaken the enemy.",
+            "description": "140% damage and weaken the enemy.",
         },
         {
             "key": "iron_wall",
@@ -247,7 +249,7 @@ ITEM_PREFIXES: tuple[dict[str, Any], ...] = (
     {"name": "Vital", "hp": 1.3},
     {"name": "Fortunate", "luck": 1.35},
     {"name": "Balanced", "all": 1.12},
-)
+) + EXTRA_PREFIXES
 
 ITEM_SUFFIXES: tuple[dict[str, Any], ...] = (
     {"name": "of Embers", "effect": "burn", "description": "Critical hits may Burn."},
@@ -255,7 +257,7 @@ ITEM_SUFFIXES: tuple[dict[str, Any], ...] = (
     {"name": "of Mending", "effect": "mending", "description": "Victories restore health."},
     {"name": "of Fortune", "effect": "fortune", "description": "Find additional currency."},
     {"name": "of Warding", "effect": "warding", "description": "Take less elite damage."},
-)
+) + EXTRA_SUFFIXES
 
 ITEM_SETS: dict[str, dict[str, Any]] = {
     "bulwark": {
@@ -277,6 +279,7 @@ ITEM_SETS: dict[str, dict[str, Any]] = {
         "three": "Every third ability costs no mana.",
     },
 }
+ITEM_SETS.update(SUBCLASS_SETS)
 
 LEGENDARIES: tuple[dict[str, Any], ...] = (
     {
@@ -309,6 +312,17 @@ LEGENDARIES: tuple[dict[str, Any], ...] = (
         "effect": "key",
         "description": "Narrative tests roll twice and take the better result.",
     },
+) + tuple(
+    relic
+    for relic in BOSS_RELICS
+    if relic["name"]
+    not in {
+        "Bellower's Silence",
+        "Arachne's Promise",
+        "Crown of No Kingdom",
+        "Embermaw's Last Scale",
+        "The Unwritten Key",
+    }
 )
 
 NPCS: dict[str, dict[str, Any]] = {
@@ -400,6 +414,9 @@ TITLES: dict[str, tuple[str, str]] = {
     "hardcore": ("Deathless", "Reach floor ten in Hardcore mode."),
     "champion": ("Arena Champion", "Win ten arena duels."),
     "chronicler": ("Chronicler of the Deep", "Complete the five-chapter campaign."),
+    "beacon": ("Beacon of Lastlight", "Reach +70 Morality."),
+    "dreadbound": ("The Dreadbound", "Reach -70 Morality."),
+    "even_hand": ("The Even Hand", "Remain morally uncommitted after twelve remembered deeds."),
 }
 
 SCARS: tuple[str, ...] = (

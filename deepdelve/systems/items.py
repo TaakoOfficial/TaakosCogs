@@ -13,6 +13,7 @@ def apply_advanced_itemization(
     item: dict[str, Any],
     floor: int,
     class_key: str,
+    subclass: str = "",
     rng: random.Random = random,
 ) -> dict[str, Any]:
     """Add affixes, sets, legendary identities, and upgrade metadata."""
@@ -41,7 +42,11 @@ def apply_advanced_itemization(
         item["effect_description"] = suffix["description"]
 
     if rarity >= 3 and rng.random() < 0.35:
-        valid_sets = [(key, details) for key, details in ITEM_SETS.items() if class_key in details["classes"]]
+        valid_sets = [
+            (key, details)
+            for key, details in ITEM_SETS.items()
+            if class_key in details["classes"] and (not details.get("subclasses") or subclass in details["subclasses"])
+        ]
         if valid_sets:
             set_key, details = rng.choice(valid_sets)
             item["set"] = set_key
@@ -87,14 +92,15 @@ def equipment_set_bonuses(equipment: dict[str, Any]) -> tuple[dict[str, int], li
         if not details:
             continue
         if count >= 2:
-            if set_key == "bulwark":
-                bonuses["defense"] += 8
-            elif set_key == "nightstalker":
-                bonuses["luck"] += 6
-            else:
-                bonuses["mana"] += 18
+            stats = details.get("two_stats")
+            if not stats:
+                stats = {"defense": 8} if set_key == "bulwark" else {"luck": 6} if set_key == "nightstalker" else {"mana": 18}
+            for stat, amount in stats.items():
+                bonuses[stat] = bonuses.get(stat, 0) + int(amount)
             effects.append(f"{details['name']} (2): {details['two']}")
         if count >= 3:
+            for stat, amount in details.get("three_stats", {}).items():
+                bonuses[stat] = bonuses.get(stat, 0) + int(amount)
             effects.append(f"{details['name']} (3): {details['three']}")
     return bonuses, effects
 
@@ -106,10 +112,18 @@ def upgrade_cost(item: dict[str, Any]) -> tuple[int, int]:
     return 40 + (level + 1) * 35 + rarity * 25, 2 + level + rarity
 
 
+def item_sale_value(item: dict[str, Any]) -> int:
+    """Return resale value without allowing stat upgrades to manufacture currency."""
+    floor = max(1, int(item.get("floor", 1)))
+    rarity = max(0, min(len(RARITIES) - 1, int(item.get("rarity_index", 0))))
+    natural_value = round((12 + floor * 7) * float(RARITIES[rarity]["multiplier"]))
+    return max(1, min(int(item.get("value", natural_value)), natural_value))
+
+
 def dismantle_rewards(item: dict[str, Any]) -> tuple[int, int]:
     """Return currency and arcane-shard yields from dismantling."""
     rarity = int(item.get("rarity_index", 0))
-    return max(1, int(item.get("value", 1)) // 4), 1 + rarity * 2 + int(item.get("upgrade", 0))
+    return max(1, item_sale_value(item) // 4), 1 + rarity * 2 + int(item.get("upgrade", 0))
 
 
 def item_detail(item: dict[str, Any]) -> str:
@@ -126,6 +140,10 @@ def item_detail(item: dict[str, Any]) -> str:
         f"*{item['rarity']} {item['slot'].title()} • Floor {item.get('floor', 1)} • Upgrade +{item.get('upgrade', 0)}*",
         item_stat_line(item),
     ]
+    if item.get("origin"):
+        lines[1] = "*Origin Weapon • Bound • Upgrade cap +3*"
+    if item.get("source"):
+        lines.append(f"👑 Source: **{item['source']}**")
     if item.get("effect_description"):
         lines.append(f"✨ {item['effect_description']}")
     if item.get("set"):

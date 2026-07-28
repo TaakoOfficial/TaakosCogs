@@ -4,8 +4,8 @@
     ],
     "name": "deepdelve",
     "short": "A living, persistent old-school text RPG for Discord.",
-    "description": "A full-scale Discord text RPG with a branching five-chapter solo campaign, interactive puzzles, levelable companions, persistent professions, server town development, daily world events, tactical combat, deep character builds, advanced loot, crafting, NPC stories, endgame challenges, and optional Red bank integration.",
-    "end_user_data_statement": "This cog stores per-server Discord user IDs and persistent RPG profiles including character identity and background, attributes, talents, subclass, statistics, inventory, equipment, codex, currency cache, progression, encounters, choices, campaign decisions, puzzle history, companions, profession mastery, gathering activity, town contributions, world-event discoveries, conditions, materials, contracts, reputation, NPC story progress, lore, journal entries, titles, scars, blessings, achievements, social memberships, arena records, endgame and seasonal progress. Guild configuration may also store user IDs in parties, auctions, player guilds, shared vaults, arena challenges, world-boss contributions, server-first records, and shared town contributors. When Red bank integration is enabled, the cog reads and changes the user's Red bank balance for game transactions. This data is used only for DeepDelve gameplay and is covered by Red's data export and deletion tools.",
+    "description": "A full-scale Discord text RPG with living morality and convictions, remembered deeds, visible moral transformation, reactive NPCs, moral combat powers, interactive origins, authored regional loot, tactical consumables, floor conditions, rumors, a branching campaign, companions, professions, endgame challenges, and optional Red bank integration.",
+    "end_user_data_statement": "This cog stores per-server Discord user IDs and persistent RPG profiles including character identity, origin choices and philosophy, living morality score, conviction values, remembered deeds and anti-farming counters, background, attributes, talents, subclass, statistics, inventory, stash, favorites, loadouts, equipment, consumables, forge recipes, codex and collection progress, currency cache, progression, encounters, floor conditions, hidden rooms, camps, rumors, bestiary mastery, run history, campaign decisions and story relics, puzzle history, companions, profession mastery, gathering activity, town contributions, world-event discoveries, conditions, materials, contracts, reputation, NPC story progress, lore, journal entries, titles, scars, blessings, achievements, social memberships, arena records, endgame and seasonal progress. Guild configuration may also store user IDs in parties, auctions, player guilds, shared vaults, arena challenges, world-boss contributions, server-first records, and shared town contributors. When Red bank integration is enabled, the cog reads and changes the user's Red bank balance for game transactions. This data is used only for DeepDelve gameplay and is covered by Red's data export and deletion tools.",
     "install_msg": "DeepDelve awaits! Load the cog, then use `[p]deepdelve create` or `/deepdelve create` to begin. Administrators can use `[p]deepdelve set` to configure the game.",
     "tags": [
         "game",
@@ -29,7 +29,7 @@
         "leaderboard"
     ],
     "requirements": [],
-    "version": "4.0.0",
+    "version": "4.2.0",
     "hidden": false,
     "min_bot_version": "3.5.0",
     "min_python_version": [

@@ -2,7 +2,7 @@
 
 from .deepdelve import DeepDelve
 
-__version__ = "4.0.0"
+__version__ = "4.2.0"
 
 
 async def setup(bot):

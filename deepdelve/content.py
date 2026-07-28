@@ -6,6 +6,7 @@ import random
 from typing import Any
 
 from .expansion_content import EXTENDED_BOSSES, EXTENDED_ENEMIES
+from .loot_content import REGIONAL_BASES
 
 GAME_CLASSES: dict[str, dict[str, Any]] = {
     "vanguard": {
@@ -14,12 +15,12 @@ GAME_CLASSES: dict[str, dict[str, Any]] = {
         "description": "A durable fighter who turns defense into crushing blows.",
         "max_hp": 125,
         "max_mana": 20,
-        "attack": 12,
+        "attack": 10,
         "defense": 8,
         "luck": 3,
         "skill": "Shield Bash",
         "skill_cost": 5,
-        "skill_description": "A heavy strike that deals 165% damage and weakens the enemy.",
+        "skill_description": "A heavy strike that deals 140% damage and weakens the enemy.",
     },
     "shadow": {
         "name": "Shadow",
@@ -439,6 +440,31 @@ CHOICES: tuple[dict[str, Any], ...] = (
             ("leave", "Walk Past", "↩️"),
         ),
     },
+    {
+        "key": "lastlight_camp",
+        "title": "The Impossible Camp",
+        "emoji": "🏕️",
+        "text": "A Lastlight campfire burns where no expedition should be. Three bedrolls wait, but only yours has a shadow.",
+        "options": (
+            ("rest", "Rest by the Fire", "🔥"),
+            ("study", "Read the Field Notes", "📚"),
+            ("prepare", "Search the Supplies", "🎒"),
+        ),
+    },
+    {
+        "key": "judgment_mirror",
+        "title": "The Mirror of Judgment",
+        "emoji": "🪞",
+        "text": (
+            "A silver mirror contains every cruel and compassionate choice you refused to make. "
+            "Your reflection asks which version of you deserves to leave."
+        ),
+        "options": (
+            ("absolve", "Release the Prisoners", "☀️"),
+            ("bargain", "Negotiate a Truth", "⚖️"),
+            ("consume", "Devour Their Sins", "🌑"),
+        ),
+    },
 )
 
 
@@ -478,22 +504,37 @@ def enemy_for_floor(floor: int, rng: random.Random = random) -> dict[str, Any]:
     base = dict(rng.choice(choices))
     scale = 1 + max(0, floor - 1) * 0.085
     variance = rng.uniform(0.92, 1.08)
-    for field in ("hp", "attack", "defense", "gold", "xp"):
-        base[field] = max(1, round(base[field] * scale * variance))
+    for field in ("hp", "attack", "defense"):
+        multiplier = 2.0 if field == "hp" else 1.0
+        base[field] = max(1, round(base[field] * scale * variance * multiplier))
+    base["gold"] = max(1, round(base["gold"] * (1 + max(0, floor - 1) * 0.045) * variance))
+    base["xp"] = max(1, round(base["xp"] * (1 + max(0, floor - 1) * 0.07) * variance))
     base.update({"max_hp": base["hp"], "boss": False, "floor": floor, "weakened": 0})
     return base
 
 
 def boss_for_floor(floor: int) -> dict[str, Any]:
-    """Build a boss, cycling and scaling beyond the authored encounters."""
+    """Build a boss on a monotonic curve beyond the authored encounters."""
     boss_number = max(1, floor // 5)
-    base = dict(BOSSES[(boss_number - 1) % len(BOSSES)])
-    cycle = (boss_number - 1) // len(BOSSES)
-    scale = 1 + cycle * 0.7
-    for field in ("hp", "attack", "defense", "gold", "xp"):
-        base[field] = max(1, round(base[field] * scale))
-    if cycle:
+    identity = dict(BOSSES[(boss_number - 1) % len(BOSSES)])
+    if boss_number <= len(BOSSES):
+        base = identity
+    else:
+        steps = boss_number - len(BOSSES)
+        anchor = BOSSES[-1]
+        base = identity
+        scales = {
+            "hp": 1 + steps * 0.32,
+            "attack": 1 + steps * 0.16,
+            "defense": 1 + steps * 0.12,
+            "gold": 1 + steps * 0.16,
+            "xp": 1 + steps * 0.15,
+        }
+        for field, scale in scales.items():
+            base[field] = max(int(anchor[field]) + 1, round(int(anchor[field]) * scale))
         base["name"] = f"Ascended {base['name']}"
+    base["hp"] = round(int(base["hp"]) * 2.9)
+    base["attack"] = round(int(base["attack"]) * 1.4)
     base.update({"max_hp": base["hp"], "boss": True, "floor": floor, "weakened": 0})
     return base
 
@@ -527,8 +568,9 @@ def generate_item(
         slot = rng.choice(("weapon", "armor", "charm"))
     rarity_index = roll_rarity(floor, luck, rng)
     rarity = RARITIES[rarity_index]
-    names = ITEM_NAMES[slot]
-    prefix, noun = names[min(len(names) - 1, max(rarity_index, floor // 6))]
+    region_index = min(len(REGIONAL_BASES) - 1, max(0, (max(1, floor) - 1) // 5))
+    noun = rng.choice(REGIONAL_BASES[region_index][slot])
+    prefix = ("Worn", "Tempered", "Runed", "Exalted", "Mythic")[rarity_index]
     value = round((12 + floor * 7) * rarity["multiplier"])
     primary = max(1, round((2 + floor * 0.65) * rarity["multiplier"]))
     item = {

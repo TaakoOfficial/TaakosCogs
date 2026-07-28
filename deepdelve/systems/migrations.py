@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from typing import Any
 
-PROFILE_SCHEMA_VERSION = 4
+from deepdelve.loot_content import STORY_RELICS
+from deepdelve.systems.morality import origin_morality, record_campaign_deed
+
+PROFILE_SCHEMA_VERSION = 6
 GUILD_SCHEMA_VERSION = 4
 
 
@@ -29,6 +32,28 @@ def migrate_profile(profile: dict[str, Any]) -> bool:
         "town_contribution": 0,
         "gather_date": "",
         "gather_actions": 0,
+        "origin_complete": bool(profile.get("created", False)),
+        "starter_choice": "",
+        "stash": [],
+        "loadouts": {},
+        "favorite_items": [],
+        "auto_dismantle": -1,
+        "consumables": {},
+        "recipes": [],
+        "bestiary": {},
+        "active_rumor": {},
+        "rumors_completed": 0,
+        "story_relics": [],
+        "run_history": [],
+        "floor_mutator": {},
+        "boss_relic_pity": 0,
+        "loot_pity": 0,
+        "camp_choices": 0,
+        "secret_rooms": 0,
+        "morality": origin_morality(profile.get("alignment", "")),
+        "convictions": {"mercy": 0, "honesty": 0, "ambition": 0, "ruthlessness": 0},
+        "moral_deeds": [],
+        "deed_counts": {},
     }
     for key, value in defaults.items():
         if key not in profile:
@@ -38,6 +63,18 @@ def migrate_profile(profile: dict[str, Any]) -> bool:
     for key, value in defaults["campaign"].items():
         if key not in campaign:
             campaign[key] = value
+            changed = True
+    recovered_relics = [choice for choice in campaign.get("choices", {}).values() if choice in STORY_RELICS]
+    merged_relics = list(dict.fromkeys([*profile.get("story_relics", []), *recovered_relics]))
+    if merged_relics != profile.get("story_relics", []):
+        profile["story_relics"] = merged_relics
+        changed = True
+    for chapter_key, choice in campaign.get("choices", {}).items():
+        if record_campaign_deed(profile, chapter_key, choice):
+            changed = True
+    for conviction in ("mercy", "honesty", "ambition", "ruthlessness"):
+        if conviction not in profile["convictions"]:
+            profile["convictions"][conviction] = 0
             changed = True
     profession = profile["profession"]
     for key, value in defaults["profession"].items():

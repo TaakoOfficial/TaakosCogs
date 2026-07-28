@@ -42,3 +42,19 @@ def daily_dungeon(day: date | None = None) -> dict[str, Any]:
         "floor": 5 + digest[1] % 21,
         "seed": int.from_bytes(digest[:8], "big"),
     }
+
+
+def scaled_daily_floor(challenge_floor: int, deepest_floor: int) -> int:
+    """Keep the shared daily dangerous without placing players in impossible brackets."""
+    return max(5, min(int(challenge_floor), max(5, int(deepest_floor) + 2)))
+
+
+def restore_challenge_origin(profile: dict[str, Any]) -> bool:
+    """Leave a rift cleanly and restore the adventure state it temporarily replaced."""
+    rift = profile.get("rift_state") or {}
+    if not rift:
+        return False
+    profile["floor"] = max(1, int(rift.get("original_floor", profile.get("floor", 1))))
+    profile["rooms_cleared"] = max(0, int(rift.get("original_rooms", 0)))
+    profile["rift_state"] = {}
+    return True

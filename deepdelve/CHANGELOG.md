@@ -2,6 +2,66 @@
 
 All notable changes to `deepdelve` are documented here.
 
+## 4.2.0
+
+- Replaced static good-and-evil labeling with Living Morality from −100 Umbral to
+  +100 Radiant while preserving alignment as the character's origin philosophy.
+- Added Mercy, Honesty, Ambition, and Ruthlessness convictions so characters sharing
+  a moral path can still develop distinct identities.
+- Added a permanent forty-entry Book of Deeds covering campaign decisions and
+  consequential dungeon encounters, with capped diminishing returns that prevent
+  easy morality farming.
+- Added five visible moral transformations, reactive character-sheet colors and
+  descriptions, authored reactions from every major NPC, altered shrine responses,
+  and morality-aware wanderer encounters.
+- Added Lantern Grace, Measured Gambit, and Dread Claim as balanced once-per-battle
+  Conviction powers with stronger forms at extreme morality.
+- Added the Mirror of Judgment, whose three solutions are gated by Radiant, balanced,
+  or Umbral morality, plus three morality-earned titles.
+- Added schema-v6 backfilling that reconstructs morality and story deeds from existing
+  campaign choices without changing established origin data.
+
+## 4.1.0
+
+- Added a persistent three-part origin sequence with backgrounds, alignments, and
+  nine class-specific starter weapons whose restrained effects shape early builds.
+- Added 45 authored regional equipment bases, 20 new affixes, nine subclass sets,
+  21 source-matched boss relics, item comparisons, loot pity, and relic pity.
+- Added a 60-slot vault, three named loadouts, favorites, protected auto-dismantle,
+  collection tracking, five rumor-unlocked forge patterns, and exploit-safe resets.
+- Added 15 tactical consumables with a persistent combat selector and safe
+  out-of-combat restorative use.
+- Added deterministic floor conditions, five named minibosses, hidden rooms,
+  impossible camps, personal rumor hunts, recipe rewards, and bestiary mastery.
+- Added story relics for campaign decisions, boss run history, and personalized
+  chronicle recaps.
+- Expanded combat identities for origin weapons, authored affixes, sets, boss
+  relics, two-phase boss escalation, and floor-condition tactics.
+- Added schema-v5 migrations and regression coverage for origins, collections,
+  armory safeguards, consumables, rumors, relics, mutators, and persistent controls.
+
+## 4.0.1
+
+- Rebuilt enemy durability and boss progression around longer tactical encounters,
+  including a monotonic Ascended boss curve with no floor-40 identity reset.
+- Reduced Vanguard damage, made Retaliation functional, corrected solo Warlord
+  bonuses, and gave bosses stronger armor penetration.
+- Changed cooldowns to advance after completed actions, reduced defensive and Mote
+  mana recovery, and preserved meaningful resource pressure between encounters.
+- Safely restores interrupted adventure state after challenge death or escape,
+  prevents ascension with unresolved content, and brackets daily dungeons to player
+  progression.
+- Removed companion-selection bond farming, capped prestige combat power, and made
+  scars narrative records instead of intentional-death stat rewards.
+- Prevented upgraded equipment from manufacturing resale currency, slowed monster,
+  contract, challenge, and overflow rewards, and strengthened service and crafting
+  gold sinks.
+- Added regression coverage and a repeatable Monte Carlo combat simulator for the
+  new balance bands.
+- Made player-owned adventure, combat, town, crafting, inventory, choice, puzzle,
+  and campaign controls persistent across timeouts, cog reloads, and bot restarts
+  through owner-bound dynamic component IDs.
+
 ## 4.0.0
 
 - Added The Living Chronicle, a five-chapter branching campaign with fifteen authored

@@ -1,15 +1,46 @@
 """Gameplay service modules used by DeepDelve."""
 
+from .armory import (
+    boss_relic_for,
+    comparison_line,
+    create_starter_item,
+    item_power,
+    recipe_for_region,
+    roll_consumable,
+    should_auto_dismantle,
+    starter_options,
+    use_consumable,
+)
 from .campaign import advance_campaign, campaign_bonuses, campaign_scene, campaign_state, chapter_available
 from .combat import ensure_enemy_intent, intent_description, roll_enemy_intent
 from .companions import active_companion, companion_bonuses, grant_companion_xp, unlock_companions
-from .endgame import current_season, daily_dungeon
+from .dungeon_depth import (
+    apply_miniboss,
+    create_rumor,
+    ending_recap,
+    floor_mutator,
+    progress_rumor,
+    record_bestiary_kill,
+    region_index,
+)
+from .endgame import current_season, daily_dungeon, restore_challenge_origin, scaled_daily_floor
 from .items import (
     apply_advanced_itemization,
     dismantle_rewards,
     equipment_set_bonuses,
     item_detail,
+    item_sale_value,
     upgrade_cost,
+)
+from .morality import (
+    ensure_morality,
+    moral_power,
+    morality_path,
+    npc_moral_reaction,
+    origin_morality,
+    record_campaign_deed,
+    record_choice_deed,
+    use_moral_power,
 )
 from .professions import gather, grant_profession_xp, profession_level, profession_rank
 from .progression import (
@@ -41,6 +72,7 @@ __all__ = [
     "equipment_set_bonuses",
     "intent_description",
     "item_detail",
+    "item_sale_value",
     "npc_progress",
     "guild_perks",
     "gather",
@@ -49,13 +81,39 @@ __all__ = [
     "party_bonus",
     "progression_bonuses",
     "refresh_titles",
+    "restore_challenge_origin",
     "roll_enemy_intent",
     "subclass_options",
     "short_code",
+    "scaled_daily_floor",
     "profession_level",
     "profession_rank",
     "town_bonuses",
     "unlock_companions",
     "upgrade_building",
     "upgrade_cost",
+    "apply_miniboss",
+    "boss_relic_for",
+    "comparison_line",
+    "create_rumor",
+    "create_starter_item",
+    "ending_recap",
+    "floor_mutator",
+    "item_power",
+    "progress_rumor",
+    "record_bestiary_kill",
+    "recipe_for_region",
+    "region_index",
+    "roll_consumable",
+    "should_auto_dismantle",
+    "starter_options",
+    "use_consumable",
+    "ensure_morality",
+    "moral_power",
+    "morality_path",
+    "npc_moral_reaction",
+    "origin_morality",
+    "record_campaign_deed",
+    "record_choice_deed",
+    "use_moral_power",
 ]

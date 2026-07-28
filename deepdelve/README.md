@@ -56,11 +56,16 @@ Prefix users can create a named character directly:
 ```
 
 Without arguments, character creation uses an interactive class selector and the
-member's current display name.
+member's current display name. New delvers then write a three-part origin by choosing
+a background, moral alignment, and one of three class-specific origin weapons.
 
 ## Highlights
 
 - Persistent per-server characters and saved combat encounters.
+- A persistent origin sequence with nine starter weapons and build-defining early choices.
+- Living Morality from −100 Umbral to +100 Radiant, shaped by actions rather than a menu choice.
+- Mercy, Honesty, Ambition, and Ruthlessness convictions with a permanent Book of Deeds.
+- Visible moral transformations, reactive NPC dialogue, morality-gated events, and combat powers.
 - Button-driven exploration, combat, inventory, and town services.
 - Five authored regions with distinct atmosphere, narration, lore, and materials.
 - A five-chapter branching solo campaign with fifteen scenes, permanent decisions,
@@ -80,7 +85,10 @@ member's current display name.
 - Elite enemies with armor, frenzy, venom, life drain, or ancient power.
 - Telegraphed enemy intentions, Defend, cooldowns, four abilities per class, and tactical conditions.
 - Five attributes, class talent trees, nine subclasses, backgrounds, alignments, titles, scars, and blessings.
-- Procedurally generated weapons, armor, and charms with prefixes, suffixes, sets, curses, and identification.
+- 45 authored regional equipment bases with prefixes, suffixes, subclass sets, curses, and identification.
+- 21 source-matched boss relics, protected favorites, loot comparison, drop pity, and collection tracking.
+- Fifteen tactical consumables, five rumor-unlocked forge patterns, a 60-slot vault, and three loadouts.
+- Five deterministic floor conditions, named minibosses, hidden rooms, impossible camps, and personal hunts.
 - Common, Uncommon, Rare, Epic, and Legendary equipment.
 - Legendary effects, set bonuses, inspection comparisons, +10 upgrades, shards, enchanting, and rerolling.
 - Lastlight contracts, reputation, crafting materials, and a depth-scaled forge.
@@ -130,14 +138,14 @@ member's current display name.
 | Group | Systems |
 | --- | --- |
 | `[p]deepdelve progression` | Attributes, talents, backgrounds, alignment, subclass, title, and respec |
-| `[p]deepdelve item` | Inspection, codex, sets, identification, and curse cleansing |
+| `[p]deepdelve item` | Armory, stash, loadouts, favorites, supplies, patterns, collections, and relic systems |
 | `[p]deepdelve npc` | Lastlight characters, relationships, and story quests |
 | `[p]deepdelve party` | Party creation, joining, leaving, status, and cooperative roles |
 | `[p]deepdelve auction` | Browse, list, buy, and cancel fixed-price equipment listings |
 | `[p]deepdelve guild` | Player guilds, contributions, perks, rankings, and shared vaults |
 | `[p]deepdelve arena` | Challenges, escrowed wagers, acceptance, declining, and cancellation |
 | `[p]deepdelve endgame` | Rifts, daily dungeons, Hardcore, Ascension, seasons, and world bosses |
-| `[p]deepdelve chronicle` | Campaign, tutorial, puzzles, companions, professions, gathering, events, and town growth |
+| `[p]deepdelve chronicle` | Campaign, tutorial, rumors, bestiary, recap, companions, professions, events, and town growth |
 
 Use `[p]help deepdelve <group>` to see every subcommand and argument.
 
@@ -158,6 +166,29 @@ histories and statistics.
 
 Campaign scenes use a Continue Story button. Major decisions use dedicated buttons
 and cannot be undone without retiring the character.
+
+## Living Morality and Convictions
+
+Alignment records what a delver believed when their origin was written. Living
+Morality records what their actions demonstrate afterward. Campaign decisions and
+consequential dungeon encounters shift a score from −100 Umbral to +100 Radiant,
+while Mercy, Honesty, Ambition, and Ruthlessness track the motives beneath those
+choices.
+
+Repeated easy deeds rapidly lose influence and stop granting Morality after three
+occurrences. Unique campaign choices are recorded once and cannot be farmed. As a
+delver changes, their character-sheet color, aura description, NPC dialogue, shrines,
+wanderer encounters, available titles, and certain dungeon solutions change with
+them.
+
+Established characters unlock one once-per-battle Conviction power:
+
+- Radiant: Lantern Grace heals, cleanses, and protects.
+- Uncommitted: Measured Gambit rewrites an enemy intention and restores resources.
+- Umbral: Dread Claim wounds through armor and steals health.
+
+Use `[p]deepdelve chronicle morality` for the complete moral sheet and
+`[p]deepdelve chronicle deeds` for the permanent recent record.
 
 ## Companions and Professions
 
@@ -190,8 +221,8 @@ reward profile of ordinary expeditions without requiring scheduled maintenance.
 
 Enemies reveal their next intention before every action. Intentions include measured
 strikes, crushing blows, multi-hit flurries, defensive stances, curses, and healing.
-Players can attack, defend, use a potion, flee, or choose an unlocked ability from the
-combat selector.
+Players can attack, defend, use a potion, flee, choose an unlocked ability, or deploy
+one of fifteen regional tactical consumables from persistent combat selectors.
 
 Every class unlocks abilities at levels 1, 4, 7, and 12. Leveling grants attribute
 points and regular talent points. At level 10, each base class chooses one of three
@@ -209,6 +240,11 @@ equipping, selling, dismantling, upgrading, enchanting, and rerolling. Item comm
 provide detailed inspection, identification, curse cleansing, set bonuses, and the
 permanent relic codex.
 
+The expanded armory supports protected favorites, rarity-based auto-dismantling, a
+60-slot Lastlight vault, three named equipment loadouts, collection summaries, and
+five guaranteed-effect patterns learned by resolving regional rumors. Origin weapons
+are bound keepsakes with a +3 ceiling and cannot be sold or dismantled.
+
 ## Multiplayer and Endgame
 
 Parties hold up to four delvers. Cooperative roles—Guardian, Striker, Support, and
@@ -220,7 +256,8 @@ created, paid only after acceptance, and refundable through decline or cancellat
 The auction house transfers real equipment and uses the selected DeepDelve economy.
 
 Challenge rifts contain five escalating waves. Daily dungeons are deterministically
-seeded from the UTC date so every server receives the same challenge and modifier.
+seeded from the UTC date so every server receives the same modifier; their effective
+floor is bracketed near each delver's deepest progression.
 World bosses are shared server encounters with individual attack cooldowns and
 contribution-based rewards.
 
@@ -228,7 +265,8 @@ Ascension becomes available after floor 20 and four bosses. It resets combat
 progression for permanent prestige and blessings while preserving lore, codex,
 achievements, currency, reputation, titles, and social membership. Hardcore mode is
 optional and must be selected before the first kill; a Hardcore combat death
-permanently seals that character.
+permanently seals that character. Prestige combat bonuses cap after ten ranks while
+later Ascensions continue to count toward the character's chronicle.
 
 ## Server Settings
 
@@ -280,15 +318,19 @@ the character's most recently cached balance as internal gold.
 - Exploring a new room costs one turn; combat actions do not.
 - A floor contains five rooms. Every fifth floor ends with a boss.
 - Fleeing becomes easier with Luck, but bosses are harder to escape.
-- A normal defeated character loses 15% of their currency, gains a scar, retreats one
-  floor, and is restored at Lastlight. Hardcore deaths are permanent.
+- A normal defeated character loses 15% of their currency, may gain a cosmetic scar,
+  retreats one floor, and is restored at Lastlight. Challenge failures instead
+  restore the interrupted expedition. Hardcore deaths are permanent.
 - Equipment packs hold 25 items. Loot found while full is converted into gold.
-- Town prices scale gently with character level.
+- Town prices scale with character level and dungeon depth.
 - Region-specific materials drop from enemies and bosses. The forge consumes three
   units of the current region's material.
 - Narrative encounters remain saved until the member makes a decision.
 - Contracts progress through enemy victories and award reputation alongside currency
   and experience.
+- Newly posted player controls remain usable across cog reloads and bot restarts.
+  Controls are bound to their original delver; reopen older pre-4.0.1 screens with
+  `[p]deepdelve adventure`.
 
 ## Permissions
 

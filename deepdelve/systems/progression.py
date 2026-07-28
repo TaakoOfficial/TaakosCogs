@@ -44,24 +44,14 @@ def progression_bonuses(profile: dict[str, Any]) -> dict[str, int]:
         bonuses["ability_percent"] = int(talents.get("spellpower", 0)) * 3
     else:
         bonuses["critical"] = int(talents.get("precision", 0)) * 2
-    prestige = int(profile.get("prestige", 0))
+    prestige = min(10, max(0, int(profile.get("prestige", 0))))
     bonuses["hp_percent"] = bonuses.get("hp_percent", 0) + prestige * 2
     bonuses["attack_percent"] = bonuses.get("attack_percent", 0) + prestige
     for blessing_name in profile.get("blessings", []):
         blessing = next((entry for entry in BLESSINGS if entry["name"] == blessing_name), None)
         if blessing:
             bonuses[blessing["stat"]] = bonuses.get(blessing["stat"], 0) + blessing["amount"]
-    scar_effects = {
-        "Spiderbite Scar": ("luck", 1),
-        "Cinderbrand": ("attack", 1),
-        "Hollow King's Gaze": ("mana", 5),
-        "Void-Touched Hand": ("attack", 2),
-        "Bellower's Mark": ("defense", 1),
-    }
-    for scar_name in profile.get("scars", []):
-        scar = scar_effects.get(scar_name)
-        if scar:
-            bonuses[scar[0]] = bonuses.get(scar[0], 0) + scar[1]
+    # Scars are narrative records, not rewards for repeatedly losing encounters.
     party_bonus = profile.get("party_bonus", {})
     for stat, amount in party_bonus.items():
         bonuses[stat] = bonuses.get(stat, 0) + int(amount)
@@ -99,6 +89,9 @@ def refresh_titles(profile: dict[str, Any]) -> list[str]:
         "ascendant": profile.get("ascensions", 0) >= 1,
         "hardcore": profile.get("hardcore", False) and profile.get("deepest_floor", 0) >= 10,
         "champion": profile.get("arena_wins", 0) >= 10,
+        "beacon": int(profile.get("morality", 0)) >= 70,
+        "dreadbound": int(profile.get("morality", 0)) <= -70,
+        "even_hand": (-29 <= int(profile.get("morality", 0)) <= 29 and len(profile.get("moral_deeds", [])) >= 12),
     }
     new_titles = []
     for key, earned in conditions.items():

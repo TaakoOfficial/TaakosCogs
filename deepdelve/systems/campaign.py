@@ -5,6 +5,8 @@ from __future__ import annotations
 from typing import Any
 
 from deepdelve.expansion_content import CAMPAIGN_CHAPTERS
+from deepdelve.loot_content import STORY_RELICS
+from deepdelve.systems.morality import record_campaign_deed
 
 
 def campaign_state(profile: dict[str, Any]) -> dict[str, Any]:
@@ -88,19 +90,26 @@ def advance_campaign(profile: dict[str, Any], choice: str | None = None) -> dict
     profile["gold"] += gold_reward
     profile["xp"] += xp_reward
     profile["event_tokens"] = int(profile.get("event_tokens", 0)) + int(reward["tokens"])
+    if choice in STORY_RELICS and choice not in profile.setdefault("story_relics", []):
+        profile["story_relics"].append(choice)
     state["chapter"] += 1
     state["scene"] = 0
     if state["chapter"] >= len(CAMPAIGN_CHAPTERS):
         state["ending"] = choice
         profile["titles"] = list(dict.fromkeys([*profile.get("titles", []), "chronicler"]))
     label, consequence = options[choice]
+    deed_lines = record_campaign_deed(profile, chapter["key"], choice)
+    relic_line = ""
+    if choice in STORY_RELICS:
+        relic = STORY_RELICS[choice]
+        relic_line = f"\n🏺 Story relic recovered: **{relic['name']}**."
     return {
         "ok": True,
         "resolved": True,
         "message": (
             f"**{label}.** {consequence}\n\n"
             f"Chapter complete: **+{gold_reward} gold**, **+{xp_reward} XP**, "
-            f"**+{reward['tokens']} Chronicle Token(s)**."
+            f"**+{reward['tokens']} Chronicle Token(s)**.{relic_line}" + (f"\n{deed_lines[0]}" if deed_lines else "")
         ),
     }
 
