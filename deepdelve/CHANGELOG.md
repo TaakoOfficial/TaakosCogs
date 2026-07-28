@@ -2,6 +2,13 @@
 
 All notable changes to `deepdelve` are documented here.
 
+## 4.3.5
+
+- Replaced the finished-view workaround with discord.py's supported fully dynamic
+  view model, restoring normal command panel delivery.
+- Player panels now contain dynamic items directly: they render as ordinary Discord
+  controls, register no competing live callbacks, and remain restart-safe.
+
 ## 4.3.4
 
 - Made legacy live-view cleanup optional and non-fatal across differing Red and

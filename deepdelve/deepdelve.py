@@ -144,22 +144,19 @@ class OwnedView(discord.ui.View):
         self.cog = cog
         self.user_id = user_id
         self.persistent = persistent
-        for child in self.children:
-            self._bind_component(child)
-        if persistent:
-            # Dynamic routing is the single component handler. A finished view still
-            # renders normally but is not also registered as a competing live view.
-            self.stop()
+        declared_children = list(self.children)
+        self.clear_items()
+        for child in declared_children:
+            self.add_item(child)
 
     def add_item(self, item: discord.ui.Item[Any]) -> OwnedView:
         """Add a component and bind a stable owner-specific custom ID."""
-        super().add_item(item)
-        self._bind_component(item)
+        super().add_item(self._bind_component(item))
         return self
 
-    def _bind_component(self, item: discord.ui.Item[Any]) -> None:
+    def _bind_component(self, item: discord.ui.Item[Any]) -> discord.ui.Item[Any]:
         if not self.persistent or not isinstance(item, (discord.ui.Button, discord.ui.Select)):
-            return
+            return item
         existing = item.custom_id or ""
         if existing.startswith(("deepdelve:choice:", "deepdelve:puzzle:", "deepdelve:campaign:")):
             route = existing.removeprefix("deepdelve:")
@@ -180,6 +177,9 @@ class OwnedView(discord.ui.View):
             route = f"{view_name}:{callback_name}"
         kind = "b" if isinstance(item, discord.ui.Button) else "s"
         item.custom_id = persistent_custom_id(kind, self.user_id, route)
+        if isinstance(item, discord.ui.Button):
+            return DeepDelveDynamicButton(item, self.user_id, route)
+        return DeepDelveDynamicSelect(item, self.user_id, route)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id == self.user_id:
@@ -678,7 +678,7 @@ class InventoryView(OwnedView):
         """Encode the selected item into action routes for stateless recovery."""
         self.selected_id = selected_id
         for child in self.children:
-            if not isinstance(child, discord.ui.Button) or not child.custom_id:
+            if not isinstance(child, DeepDelveDynamicButton) or not child.custom_id:
                 continue
             marker = f"deepdelve:b:{self.user_id}:inventory:"
             if not child.custom_id.startswith(marker):
@@ -811,7 +811,7 @@ class DeepDelve(DashboardIntegration, commands.Cog):
     """An old-school persistent text RPG built for Discord."""
 
     __author__ = "Taako"
-    __version__ = "4.3.4"
+    __version__ = "4.3.5"
 
     def __init__(self, bot: Red) -> None:
         self.bot = bot

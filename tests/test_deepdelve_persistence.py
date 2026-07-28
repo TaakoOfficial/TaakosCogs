@@ -6,6 +6,8 @@ import asyncio
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
+from discord.ui.view import ViewStore
+
 from deepdelve.deepdelve import (
     AdventureView,
     CampaignContinueView,
@@ -62,10 +64,22 @@ def test_player_views_are_persistent_and_owner_bound() -> None:
         for view in _views():
             assert view.timeout is None
             assert view.is_persistent()
-            assert view.is_finished()
+            assert not view.is_finished()
             for item in view.children:
                 assert ":123456789:" in item.custom_id
                 assert len(item.custom_id) <= 100
+                assert isinstance(item, (DeepDelveDynamicButton, DeepDelveDynamicSelect))
+
+    asyncio.run(check())
+
+
+def test_fully_dynamic_views_register_no_competing_live_callbacks() -> None:
+    async def check() -> None:
+        store = ViewStore(SimpleNamespace())
+        view = AdventureView(object(), 123456789)
+        store.add_view(view, message_id=42)
+        assert store._views[42] == {}
+        assert DeepDelveDynamicButton.__discord_ui_compiled_template__ in store._dynamic_items
 
     asyncio.run(check())
 
@@ -78,7 +92,7 @@ def test_dynamic_component_templates_reconstruct_routes() -> None:
                 match = template.fullmatch(item.custom_id)
                 assert match is not None
                 dynamic_type = DeepDelveDynamicButton if item.custom_id.startswith("deepdelve:b:") else DeepDelveDynamicSelect
-                rebuilt = await dynamic_type.from_custom_id(None, item, match)
+                rebuilt = await dynamic_type.from_custom_id(None, item.item, match)
                 assert rebuilt.user_id == 123456789
                 assert rebuilt.route == match["route"]
 
@@ -96,7 +110,7 @@ def test_dynamic_router_is_the_single_handler_for_player_messages() -> None:
             ),
         )
         item = next(iter(_views()[0].children))
-        dynamic = DeepDelveDynamicButton(item, 123456789, "adventure:explore")
+        dynamic = DeepDelveDynamicButton(item.item, 123456789, "adventure:explore")
         await dynamic.callback(interaction)
         dispatch.assert_awaited_once_with(interaction, "adventure:explore")
 
