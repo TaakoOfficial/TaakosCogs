@@ -179,6 +179,26 @@ def test_dynamic_router_is_the_single_handler_for_player_messages() -> None:
     asyncio.run(check())
 
 
+def test_adventure_view_has_a_direct_game_hub_route() -> None:
+    view = AdventureView(object(), 123456789)
+    game_hub = next(item for item in view.children if item.label == "Game Hub")
+    assert game_hub.custom_id == "deepdelve:b:123456789:adventure:game_hub"
+
+
+def test_persistent_adventure_game_hub_route_opens_the_hub() -> None:
+    async def check() -> None:
+        cog = object.__new__(DeepDelve)
+        cog._hub_interaction = AsyncMock()
+        interaction = SimpleNamespace(
+            guild=SimpleNamespace(id=1),
+            user=SimpleNamespace(id=123456789),
+        )
+        await cog._dispatch_persistent_button(interaction, "adventure:game_hub")
+        cog._hub_interaction.assert_awaited_once_with(interaction, "hub")
+
+    asyncio.run(check())
+
+
 def test_inventory_selection_is_encoded_into_stateless_action_routes() -> None:
     async def check() -> None:
         view = InventoryView(

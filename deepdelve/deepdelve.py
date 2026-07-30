@@ -443,6 +443,10 @@ class AdventureView(OwnedView):
             view=TownView(self.cog, self.user_id),
         )
 
+    @discord.ui.button(label="Game Hub", emoji="↩️", style=discord.ButtonStyle.secondary)
+    async def game_hub(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        await self.cog._hub_interaction(interaction, "hub")
+
 
 class GameHubView(OwnedView):
     """Persistent browser-RPG navigation rendered from current profile state."""
@@ -1701,6 +1705,8 @@ class DeepDelve(DashboardIntegration, commands.Cog):
                 embed=self._town_embed(profile),
                 view=TownView(self, user_id),
             )
+        elif route == "adventure:game_hub":
+            await self._hub_interaction(interaction, "hub")
         elif route in {"combat:attack", "combat:defend", "combat:potion", "combat:flee", "combat:conviction"}:
             await self._combat_interaction(interaction, route.partition(":")[2])
         elif route in {"town:rest", "town:potion", "town:meditate"}:
