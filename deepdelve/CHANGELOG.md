@@ -2,6 +2,20 @@
 
 All notable changes to `deepdelve` are documented here.
 
+## 5.0.1
+
+- Added a persistent Activities hub so professions, gathering, companions, weekly
+  commissions, the Living Chronicle, and seasonal chapters are playable from menus.
+- Added menu controls for accepting and resolving quests, entering and advancing
+  named dungeons, resolving Atlas rooms, resuming battles, and abandoning routes.
+- Added inventory identification with a visible arcane-shard cost and an Identify
+  button for unidentified drops.
+- Smoothed the floor 6–9 enemy, elite, and miniboss endurance transition so the
+  second region no longer creates a sudden progression wall.
+- Fixed the permanent Season Archive screen reading the wrong completion-state key.
+- Fixed puzzle and riddle text appearing twice when a chamber was first discovered.
+- Extended persistent-view reconstruction coverage for every new button and selector.
+
 ## 5.0.0
 
 - Added the persistent Living World hub with restart-safe Resume, Quests, Atlas,

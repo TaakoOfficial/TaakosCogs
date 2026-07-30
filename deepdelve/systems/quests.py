@@ -37,7 +37,7 @@ def quest_registry() -> dict[str, dict[str, Any]]:
             # their progress and rewards so the same act cannot pay out twice.
             "managed": True,
             "campaign_act": act["key"],
-            "managed_message": "Main acts advance through `/deepdelve living saga`.",
+            "managed_message": "Main acts advance through Activities → Living Saga.",
         }
     for arcs in FACTION_QUESTS.values():
         previous = ""
@@ -62,7 +62,7 @@ def quest_registry() -> dict[str, dict[str, Any]]:
             "reward": chapter["reward"],
             "outcomes": ("mercy", "honesty", "ambition", "ruthlessness"),
             "managed": True,
-            "managed_message": "Seasonal chapters advance through `/deepdelve living archive`.",
+            "managed_message": "Seasonal chapters advance through Activities → Season Archive.",
         }
     contract_categories = ("side", "bounty", "profession", "moral")
     objective_aliases = {

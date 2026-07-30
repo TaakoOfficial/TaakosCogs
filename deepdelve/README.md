@@ -66,7 +66,8 @@ a background, moral alignment, and one of three class-specific origin weapons.
 - Living Morality from −100 Umbral to +100 Radiant, shaped by actions rather than a menu choice.
 - Mercy, Honesty, Ambition, and Ruthlessness convictions with a permanent Book of Deeds.
 - Visible moral transformations, reactive NPC dialogue, morality-gated events, and combat powers.
-- Button-driven exploration, combat, inventory, and town services.
+- Menu-driven exploration, combat, quests, Atlas routes, inventory identification,
+  professions, companions, commissions, story chapters, and town services.
 - Five authored regions with distinct atmosphere, narration, lore, and materials.
 - A six-act Living Chronicle with 36 scenes, 18 permanent decisions, four endings,
   three eight-quest faction arcs, and a consequence-aware Quest Journal.
@@ -118,6 +119,9 @@ a background, moral alignment, and one of three class-specific origin weapons.
 - No external services or Python dependencies.
 
 ## Player Commands
+
+The persistent game hub is the primary interface; ordinary play does not require
+remembering subcommands. Commands remain available as shortcuts and for accessibility.
 
 | Command | Description |
 | --- | --- |

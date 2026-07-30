@@ -5,6 +5,7 @@ from __future__ import annotations
 import random
 from datetime import date
 
+from deepdelve.deepdelve import DeepDelve
 from deepdelve.expansion_content import CAMPAIGN_CHAPTERS
 from deepdelve.systems.campaign import advance_campaign, campaign_bonuses, campaign_scene
 from deepdelve.systems.companions import companion_bonuses, grant_companion_xp, unlock_companions
@@ -73,6 +74,15 @@ def test_puzzle_success_and_failure_paths() -> None:
     assert not first_failure["solved"]
     assert not second_failure["solved"]
     assert not data["active_puzzle"]
+
+
+def test_puzzle_embed_never_repeats_the_riddle_narrative() -> None:
+    data = profile()
+    data["active_puzzle"] = puzzle_for_floor(12, [], random.Random(7))
+    riddle = data["active_puzzle"]["text"]
+    cog = object.__new__(DeepDelve)
+    embed = cog._puzzle_embed(data, riddle)
+    assert embed.description.count(riddle) == 1
 
 
 def test_companions_unlock_level_and_contribute_stats() -> None:

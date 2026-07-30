@@ -486,7 +486,10 @@ def apply_affix(enemy: dict[str, Any], floor: int, rng: random.Random = random) 
     enemy["name"] = f"{affix['name']} {enemy['name']}"
     enemy["emoji"] = affix["emoji"]
     for field in ("hp", "attack", "defense"):
-        endurance = max(1.25, 1.65 - max(0, floor - 1) * 0.015) if field == "hp" else 1.0
+        if field == "hp" and 6 <= floor <= 9:
+            endurance = 1.35 + (floor - 6) * 0.04125
+        else:
+            endurance = max(1.25, 1.65 - max(0, floor - 1) * 0.015) if field == "hp" else 1.0
         enemy[field] = max(1, round(enemy[field] * affix[field] * endurance))
     enemy["max_hp"] = enemy["hp"]
     enemy["gold"] = round(enemy["gold"] * 1.5)
@@ -510,6 +513,8 @@ def enemy_for_floor(floor: int, rng: random.Random = random) -> dict[str, Any]:
     variance = rng.uniform(0.92, 1.08)
     for field in ("hp", "attack", "defense"):
         multiplier = max(2.4, 4.0 - max(1, floor) * 0.06) if field == "hp" else 1.0
+        if field == "hp" and 6 <= floor <= 9:
+            multiplier *= 0.82 + (floor - 6) * 0.045
         base[field] = max(1, round(base[field] * scale * variance * multiplier))
     base["gold"] = max(1, round(base["gold"] * (1 + max(0, floor - 1) * 0.045) * variance))
     base["xp"] = max(1, round(base["xp"] * (1 + max(0, floor - 1) * 0.07) * variance))

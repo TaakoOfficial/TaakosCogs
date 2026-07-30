@@ -150,8 +150,7 @@ def advance_dungeon(profile: dict[str, Any]) -> tuple[bool, str]:
         }
         return True, (
             f"⚖️ **Room {room}/{dungeon['rooms']} — {event['name']}**\n{event['text']}\n"
-            "Choose `mercy`, `honesty`, `ambition`, or `ruthlessness` with "
-            "`/deepdelve living atlas choice <approach>`."
+            "Choose a conviction from the Atlas menu."
         )
     if room == 3:
         run["checkpoint"] = run["room"]
@@ -167,7 +166,7 @@ def advance_dungeon(profile: dict[str, Any]) -> tuple[bool, str]:
         return True, (
             f"🕯️ **Checkpoint secured — {puzzle['name']}**\n{puzzle['prompt']}\n"
             f"Valid approaches: **{', '.join(puzzle['solutions'])}**. "
-            "Use `/deepdelve living atlas choice <approach>`."
+            "Choose one from the Atlas menu."
         )
     if room in {2, 5, int(dungeon["rooms"])}:
         kind = "boss" if room >= int(dungeon["rooms"]) else "miniboss" if room == 5 else "normal"

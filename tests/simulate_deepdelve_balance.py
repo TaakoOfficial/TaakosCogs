@@ -206,7 +206,10 @@ def enemy_for_kind(floor: int, kind: str) -> dict:
         enemy["name"] = f"{affix['name']} {enemy['name']}"
         enemy["affix"] = affix
         for field in ("hp", "attack", "defense"):
-            endurance = max(1.25, 1.65 - max(0, floor - 1) * 0.015) if field == "hp" else 1.0
+            if field == "hp" and 6 <= floor <= 9:
+                endurance = 1.35 + (floor - 6) * 0.04125
+            else:
+                endurance = max(1.25, 1.65 - max(0, floor - 1) * 0.015) if field == "hp" else 1.0
             enemy[field] = max(1, round(enemy[field] * affix[field] * endurance))
         enemy["max_hp"] = enemy["hp"]
         enemy["threat_multiplier"] = 1.25

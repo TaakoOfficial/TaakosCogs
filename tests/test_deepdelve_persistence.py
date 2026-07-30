@@ -9,19 +9,27 @@ from unittest.mock import AsyncMock
 from discord.ui.view import ViewStore
 
 from deepdelve.deepdelve import (
+    ActivitiesView,
     AdventureView,
+    AtlasView,
     CampaignContinueView,
     CampaignView,
     ChoiceView,
     ClassSelectView,
     CombatView,
+    CommissionsView,
+    CompanionView,
     CraftView,
     DeepDelve,
     GameHubView,
     InventoryView,
     OriginView,
+    ProfessionView,
     PuzzleView,
+    QuestJournalView,
     RetireConfirmView,
+    SagaView,
+    SeasonArchiveView,
     TownView,
 )
 from deepdelve.persistent_views import (
@@ -38,6 +46,58 @@ def _views() -> list:
     return [
         AdventureView(cog, owner),
         GameHubView(cog, owner),
+        ActivitiesView(cog, owner),
+        ProfessionView(cog, owner, {"profession": {"key": ""}}),
+        CompanionView(cog, owner, {"companions": {}, "active_companion": ""}),
+        CommissionsView(cog, owner, {"profession": {"key": ""}, "commissions": {}}),
+        QuestJournalView(
+            cog,
+            owner,
+            {
+                "deepest_floor": 0,
+                "living_campaign": {"act": 0, "completed": []},
+                "quests_v2": {"active": {}, "completed": [], "failed": [], "counters": {}},
+                "legacy": {"faction_reputation": {}, "consequence_flags": []},
+            },
+        ),
+        AtlasView(
+            cog,
+            owner,
+            {
+                "deepest_floor": 1,
+                "atlas": {
+                    "discovered": [],
+                    "completed": [],
+                    "shortcuts": [],
+                    "active_dungeon": {},
+                    "clues": {},
+                },
+            },
+        ),
+        SagaView(
+            cog,
+            owner,
+            {
+                "deepest_floor": 1,
+                "living_campaign": {
+                    "act": 0,
+                    "scene": 0,
+                    "decision": 0,
+                    "choices": {},
+                    "completed": [],
+                    "ending": "",
+                },
+            },
+        ),
+        SeasonArchiveView(
+            cog,
+            owner,
+            {
+                "deepest_floor": 1,
+                "season_archive": [],
+                "season_story": {"active": "", "scene": 0},
+            },
+        ),
         ClassSelectView(cog, owner),
         OriginView(cog, owner, {"class_key": "vanguard"}),
         TownView(cog, owner),
@@ -144,6 +204,7 @@ def test_inventory_selection_is_encoded_into_stateless_action_routes() -> None:
         ]
         assert action_ids
         assert all(custom_id.endswith(":abc123") for custom_id in action_ids)
+        assert any(":inventory:identify:abc123" in custom_id for custom_id in action_ids)
 
     asyncio.run(check())
 

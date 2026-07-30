@@ -222,6 +222,12 @@ class OwnedView(discord.ui.View):
                 "OriginBackgroundSelect": "origin_background",
                 "OriginStarterSelect": "origin_starter",
                 "OriginAlignmentSelect": "origin_alignment",
+                "ProfessionSelect": "profession_select",
+                "CompanionSelect": "companion_select",
+                "CommissionSelect": "commission_select",
+                "QuestActionSelect": "quest_action_select",
+                "AtlasActionSelect": "atlas_action_select",
+                "ArchiveChapterSelect": "archive_chapter_select",
             }.get(type(item).__name__, type(item).__name__.lower())
         else:
             callback = getattr(item.callback, "callback", item.callback)
@@ -481,6 +487,409 @@ class GameHubView(OwnedView):
     async def sanctum(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
         await self.cog._hub_interaction(interaction, "sanctum")
 
+    @discord.ui.button(label="Activities", emoji="🎯", style=discord.ButtonStyle.primary, row=2)
+    async def activities(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        await self.cog._hub_interaction(interaction, "activities")
+
+
+class QuestActionSelect(discord.ui.Select):
+    """Accept or resolve journal quests directly from the menu."""
+
+    def __init__(self, profile: dict[str, Any]) -> None:
+        state = profile.get("quests_v2", {})
+        options = []
+        for key, progress in state.get("active", {}).items():
+            if int(progress.get("progress", 0)) < int(progress.get("target", 1)):
+                continue
+            definition = QUESTS.get(key, {})
+            for outcome, emoji in (("mercy", "🤍"), ("honesty", "👁️"), ("ambition", "🔥"), ("ruthlessness", "🗡️")):
+                options.append(
+                    discord.SelectOption(
+                        label=f"Resolve: {definition.get('name', key)}",
+                        value=f"resolve|{key}|{outcome}",
+                        emoji=emoji,
+                        description=f"Choose the {outcome.title()} outcome.",
+                    ),
+                )
+        if len(options) < 25:
+            for quest in available_quests(profile):
+                if (
+                    quest["available"]
+                    and not quest["active"]
+                    and not quest["completed"]
+                    and not quest.get("managed")
+                ):
+                    options.append(
+                        discord.SelectOption(
+                            label=f"Accept: {quest['name']}"[:100],
+                            value=f"accept|{quest['key']}",
+                            emoji="📜",
+                            description=(
+                                f"{quest['category'].title()} • target {quest['target']} • "
+                                f"up to {quest['energy']} energy"
+                            )[:100],
+                        ),
+                    )
+                    if len(options) >= 25:
+                        break
+        super().__init__(placeholder="Accept or resolve a quest…", options=options[:25], row=0)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        view = self.view
+        if isinstance(view, QuestJournalView):
+            parts = self.values[0].split("|", maxsplit=2)
+            await view.cog._quest_menu_interaction(
+                interaction,
+                parts[0],
+                parts[1],
+                parts[2] if len(parts) > 2 else "",
+            )
+
+
+class QuestJournalView(OwnedView):
+    """Persistent menu-first quest journal."""
+
+    def __init__(self, cog: DeepDelve, user_id: int, profile: dict[str, Any]) -> None:
+        super().__init__(cog, user_id)
+        state = profile.get("quests_v2", {})
+        has_ready = any(
+            int(progress.get("progress", 0)) >= int(progress.get("target", 1))
+            for progress in state.get("active", {}).values()
+        )
+        has_available = any(
+            quest["available"] and not quest["active"] and not quest["completed"] and not quest.get("managed")
+            for quest in available_quests(profile)
+        )
+        if has_ready or has_available:
+            self.add_item(QuestActionSelect(profile))
+
+    @discord.ui.button(label="Game Hub", emoji="↩️", style=discord.ButtonStyle.secondary, row=1)
+    async def back(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        await self.cog._hub_interaction(interaction, "hub")
+
+
+class AtlasActionSelect(discord.ui.Select):
+    """Enter a dungeon or resolve its current room choice."""
+
+    def __init__(self, profile: dict[str, Any]) -> None:
+        run = profile.get("atlas", {}).get("active_dungeon") or {}
+        pending = run.get("pending") or {}
+        if pending:
+            options = [
+                discord.SelectOption(
+                    label=f"Choose {option.title()}",
+                    value=f"choice|{option}",
+                    emoji={"mercy": "🤍", "honesty": "👁️", "ambition": "🔥", "ruthlessness": "🗡️"}.get(
+                        option,
+                        "🧩",
+                    ),
+                    description=f"Resolve {pending['name']} through this approach.",
+                )
+                for option in pending["options"]
+            ]
+            placeholder = "Resolve the current room…"
+        else:
+            options = [
+                discord.SelectOption(
+                    label=location["name"],
+                    value=f"enter|{location['key']}",
+                    emoji="🏛️",
+                    description=(
+                        f"Floor {location['floor']} • {location['rooms']} rooms • "
+                        f"{location['energy_per_room']} energy/room"
+                    )[:100],
+                )
+                for location in atlas_locations(profile)
+                if location["discovered"] and not run
+            ][:25]
+            placeholder = "Enter a named dungeon…"
+        super().__init__(placeholder=placeholder, options=options, row=0)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        view = self.view
+        if isinstance(view, AtlasView):
+            action, value = self.values[0].split("|", maxsplit=1)
+            await view.cog._atlas_menu_interaction(interaction, action, value)
+
+
+class AtlasView(OwnedView):
+    """Persistent named-dungeon controls."""
+
+    def __init__(self, cog: DeepDelve, user_id: int, profile: dict[str, Any]) -> None:
+        super().__init__(cog, user_id)
+        run = profile.get("atlas", {}).get("active_dungeon") or {}
+        pending = run.get("pending") or {}
+        has_locations = any(location["discovered"] for location in atlas_locations(profile))
+        if pending or (not run and has_locations):
+            self.add_item(AtlasActionSelect(profile))
+        self.advance.disabled = not bool(run) or bool(pending) or bool(profile.get("encounter"))
+        self.abandon.disabled = not bool(run) or bool(profile.get("encounter"))
+        self.resume.disabled = not bool(profile.get("encounter"))
+
+    @discord.ui.button(label="Advance (1 Energy)", emoji="🧭", style=discord.ButtonStyle.primary, row=1)
+    async def advance(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        await self.cog._atlas_menu_interaction(interaction, "advance", "")
+
+    @discord.ui.button(label="Resume Battle", emoji="⚔️", style=discord.ButtonStyle.danger, row=1)
+    async def resume(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        await self.cog._hub_interaction(interaction, "resume")
+
+    @discord.ui.button(label="Abandon", emoji="🏳️", style=discord.ButtonStyle.secondary, row=1)
+    async def abandon(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        await self.cog._atlas_menu_interaction(interaction, "abandon", "")
+
+    @discord.ui.button(label="Game Hub", emoji="↩️", style=discord.ButtonStyle.secondary, row=1)
+    async def back(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        await self.cog._hub_interaction(interaction, "hub")
+
+
+class SagaView(OwnedView):
+    """Persistent Living Chronicle scene and conviction controls."""
+
+    def __init__(self, cog: DeepDelve, user_id: int, profile: dict[str, Any]) -> None:
+        super().__init__(cog, user_id)
+        state = living_campaign_view(profile)
+        complete = bool(state["complete"])
+        needs_choice = bool(not complete and state["needs_choice"])
+        available = bool(not complete and state["available"])
+        self.continue_story.disabled = not available or needs_choice
+        for button in (self.mercy, self.honesty, self.ambition, self.ruthlessness):
+            button.disabled = not available or not needs_choice
+
+    @discord.ui.button(label="Continue (1 Energy)", emoji="📖", style=discord.ButtonStyle.primary, row=0)
+    async def continue_story(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        await self.cog._saga_menu_interaction(interaction, "")
+
+    @discord.ui.button(label="Mercy", emoji="🤍", style=discord.ButtonStyle.success, row=1)
+    async def mercy(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        await self.cog._saga_menu_interaction(interaction, "mercy")
+
+    @discord.ui.button(label="Honesty", emoji="👁️", style=discord.ButtonStyle.secondary, row=1)
+    async def honesty(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        await self.cog._saga_menu_interaction(interaction, "honesty")
+
+    @discord.ui.button(label="Ambition", emoji="🔥", style=discord.ButtonStyle.primary, row=1)
+    async def ambition(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        await self.cog._saga_menu_interaction(interaction, "ambition")
+
+    @discord.ui.button(label="Ruthlessness", emoji="🗡️", style=discord.ButtonStyle.danger, row=1)
+    async def ruthlessness(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        await self.cog._saga_menu_interaction(interaction, "ruthlessness")
+
+    @discord.ui.button(label="Activities", emoji="↩️", style=discord.ButtonStyle.secondary, row=2)
+    async def back(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        await self.cog._hub_interaction(interaction, "activities")
+
+
+class ArchiveChapterSelect(discord.ui.Select):
+    """Begin any available, unfinished seasonal chapter."""
+
+    def __init__(self, profile: dict[str, Any]) -> None:
+        options = [
+            discord.SelectOption(
+                label=f"{chapter['index']}. {chapter['name']}"[:100],
+                value=str(chapter["index"]),
+                emoji="📚",
+                description="Begin this permanent three-scene chapter.",
+            )
+            for chapter in season_chapter_status(profile)
+            if chapter["available"] and not chapter["completed"] and not chapter["active"]
+        ][:25]
+        super().__init__(placeholder="Begin an available chapter…", options=options, row=0)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        view = self.view
+        if isinstance(view, SeasonArchiveView):
+            await view.cog._archive_menu_interaction(interaction, "begin", int(self.values[0]))
+
+
+class SeasonArchiveView(OwnedView):
+    """Persistent seasonal archive controls."""
+
+    def __init__(self, cog: DeepDelve, user_id: int, profile: dict[str, Any]) -> None:
+        super().__init__(cog, user_id)
+        active = profile.get("season_story", {}).get("active", "")
+        available = any(
+            chapter["available"] and not chapter["completed"] and not chapter["active"]
+            for chapter in season_chapter_status(profile)
+        )
+        if not active and available:
+            self.add_item(ArchiveChapterSelect(profile))
+        self.advance.disabled = not bool(active)
+        if active:
+            scene = int(profile.get("season_story", {}).get("scene", 0))
+            self.advance.label = f"Advance ({(3, 3, 2)[scene]} Energy)"
+
+    @discord.ui.button(label="Advance Chapter", emoji="📖", style=discord.ButtonStyle.primary, row=1)
+    async def advance(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        await self.cog._archive_menu_interaction(interaction, "advance", 0)
+
+    @discord.ui.button(label="Activities", emoji="↩️", style=discord.ButtonStyle.secondary, row=1)
+    async def back(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        await self.cog._hub_interaction(interaction, "activities")
+
+
+class ActivitiesView(OwnedView):
+    """Menu-first access to systems that previously required commands."""
+
+    @discord.ui.button(label="Profession", emoji="🛠️", style=discord.ButtonStyle.primary, row=0)
+    async def profession(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        await self.cog._hub_interaction(interaction, "profession")
+
+    @discord.ui.button(label="Companions", emoji="🐾", style=discord.ButtonStyle.secondary, row=0)
+    async def companions(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        await self.cog._hub_interaction(interaction, "companions")
+
+    @discord.ui.button(label="Commissions", emoji="⚒️", style=discord.ButtonStyle.secondary, row=0)
+    async def commissions(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        await self.cog._hub_interaction(interaction, "commissions")
+
+    @discord.ui.button(label="Living Saga", emoji="📖", style=discord.ButtonStyle.secondary, row=1)
+    async def saga(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        await self.cog._hub_interaction(interaction, "saga")
+
+    @discord.ui.button(label="Season Archive", emoji="🗄️", style=discord.ButtonStyle.secondary, row=1)
+    async def archive(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        await self.cog._hub_interaction(interaction, "archive")
+
+    @discord.ui.button(label="Game Hub", emoji="↩️", style=discord.ButtonStyle.secondary, row=2)
+    async def back(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        await self.cog._hub_interaction(interaction, "hub")
+
+
+class ProfessionSelect(discord.ui.Select):
+    """Choose or change a profession without typing its key."""
+
+    def __init__(self, profile: dict[str, Any]) -> None:
+        current = profile.get("profession", {}).get("key", "")
+        options = [
+            discord.SelectOption(
+                label=definition["name"],
+                value=key,
+                emoji=definition["emoji"],
+                description=definition["benefit"][:100],
+                default=key == current,
+            )
+            for key, definition in PROFESSIONS.items()
+        ]
+        super().__init__(placeholder="Choose or change profession…", options=options, row=0)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        view = self.view
+        if isinstance(view, ProfessionView):
+            await view.cog._profession_select_interaction(interaction, self.values[0])
+
+
+class ProfessionView(OwnedView):
+    """Profession selection and daily work controls."""
+
+    def __init__(self, cog: DeepDelve, user_id: int, profile: dict[str, Any]) -> None:
+        super().__init__(cog, user_id)
+        self.add_item(ProfessionSelect(profile))
+
+    @discord.ui.button(label="Gather", emoji="⛏️", style=discord.ButtonStyle.success, row=1)
+    async def gather(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        await self.cog._profession_gather_interaction(interaction)
+
+    @discord.ui.button(label="Commissions", emoji="📋", style=discord.ButtonStyle.primary, row=1)
+    async def commissions(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        await self.cog._hub_interaction(interaction, "commissions")
+
+    @discord.ui.button(label="Activities", emoji="↩️", style=discord.ButtonStyle.secondary, row=1)
+    async def back(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        await self.cog._hub_interaction(interaction, "activities")
+
+
+class CompanionSelect(discord.ui.Select):
+    """Activate a discovered companion."""
+
+    def __init__(self, profile: dict[str, Any]) -> None:
+        active_key = profile.get("active_companion", "")
+        options = [
+            discord.SelectOption(
+                label=COMPANIONS[key]["name"],
+                value=key,
+                emoji=COMPANIONS[key]["emoji"],
+                description=COMPANIONS[key]["passive"][:100],
+                default=key == active_key,
+            )
+            for key in profile.get("companions", {})
+            if key in COMPANIONS
+        ][:25]
+        if not options:
+            options = [
+                discord.SelectOption(
+                    label="No companions discovered",
+                    value="none",
+                    emoji="🔒",
+                    description="Continue descending to meet companions.",
+                ),
+            ]
+        super().__init__(placeholder="Choose active companion…", options=options, row=0)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        view = self.view
+        if isinstance(view, CompanionView):
+            await view.cog._companion_select_interaction(interaction, self.values[0])
+
+
+class CompanionView(OwnedView):
+    """Companion roster controls."""
+
+    def __init__(self, cog: DeepDelve, user_id: int, profile: dict[str, Any]) -> None:
+        super().__init__(cog, user_id)
+        self.add_item(CompanionSelect(profile))
+
+    @discord.ui.button(label="Activities", emoji="↩️", style=discord.ButtonStyle.secondary, row=1)
+    async def back(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        await self.cog._hub_interaction(interaction, "activities")
+
+
+class CommissionSelect(discord.ui.Select):
+    """Accept one of the current weekly commissions."""
+
+    def __init__(self, profile: dict[str, Any]) -> None:
+        offers = commission_board(profile)
+        options = [
+            discord.SelectOption(
+                label=f"{index}. {offer['name']}",
+                value=str(index),
+                emoji="📋",
+                description=(
+                    f"{offer['objective'].title()} {offer['target']} • "
+                    f"{offer['reward']['gold']} currency"
+                )[:100],
+            )
+            for index, offer in enumerate(offers, start=1)
+        ]
+        super().__init__(
+            placeholder="Accept a weekly commission…",
+            options=options,
+            disabled=bool(profile.get("commissions", {}).get("active")),
+            row=0,
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        view = self.view
+        if isinstance(view, CommissionsView):
+            await view.cog._commission_select_interaction(interaction, int(self.values[0]))
+
+
+class CommissionsView(OwnedView):
+    """Weekly commission board controls."""
+
+    def __init__(self, cog: DeepDelve, user_id: int, profile: dict[str, Any]) -> None:
+        super().__init__(cog, user_id)
+        self.add_item(CommissionSelect(profile))
+
+    @discord.ui.button(label="Profession", emoji="🛠️", style=discord.ButtonStyle.primary, row=1)
+    async def profession(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        await self.cog._hub_interaction(interaction, "profession")
+
+    @discord.ui.button(label="Activities", emoji="↩️", style=discord.ButtonStyle.secondary, row=1)
+    async def back(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        await self.cog._hub_interaction(interaction, "activities")
+
 
 class AbilitySelect(discord.ui.Select):
     """Select one of the character's unlocked combat abilities."""
@@ -590,6 +999,10 @@ class TownView(OwnedView):
     @discord.ui.button(label="Forge", emoji="⚒️", style=discord.ButtonStyle.secondary, row=1)
     async def forge(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
         await self.cog._show_crafting_interaction(interaction)
+
+    @discord.ui.button(label="Profession", emoji="🛠️", style=discord.ButtonStyle.primary, row=1)
+    async def profession(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        await self.cog._hub_interaction(interaction, "profession")
 
     @discord.ui.button(label="Return", emoji="↩️", style=discord.ButtonStyle.secondary, row=1)
     async def back(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
@@ -812,6 +1225,10 @@ class InventoryView(OwnedView):
     async def reroll(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
         await self.cog._inventory_interaction(interaction, self.selected_id, "reroll")
 
+    @discord.ui.button(label="Identify", emoji="🔮", style=discord.ButtonStyle.success, row=2)
+    async def identify(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        await self.cog._inventory_interaction(interaction, self.selected_id, "identify")
+
     @discord.ui.button(label="Return", emoji="↩️", style=discord.ButtonStyle.secondary, row=2)
     async def back(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
         if not interaction.guild:
@@ -908,7 +1325,7 @@ class DeepDelve(DashboardIntegration, commands.Cog):
     """An old-school persistent text RPG built for Discord."""
 
     __author__ = "Taako"
-    __version__ = "5.0.0"
+    __version__ = "5.0.1"
 
     def __init__(self, bot: Red) -> None:
         self.bot = bot
@@ -1221,9 +1638,9 @@ class DeepDelve(DashboardIntegration, commands.Cog):
                 embed = self._adventure_embed(profile)
                 view = AdventureView(self, interaction.user.id)
         elif screen == "quests":
-            embed, view = self._quest_journal_embed(profile), GameHubView(self, interaction.user.id)
+            embed, view = self._quest_journal_embed(profile), QuestJournalView(self, interaction.user.id, profile)
         elif screen == "atlas":
-            embed, view = self._atlas_embed(profile), GameHubView(self, interaction.user.id)
+            embed, view = self._atlas_embed(profile), AtlasView(self, interaction.user.id, profile)
         elif screen == "character":
             embed, view = self._profile_embed(interaction.user, profile), GameHubView(self, interaction.user.id)
         elif screen == "morality":
@@ -1239,6 +1656,21 @@ class DeepDelve(DashboardIntegration, commands.Cog):
             embed, view = self._mail_embed(profile), GameHubView(self, interaction.user.id)
         elif screen == "sanctum":
             embed, view = self._sanctum_embed(profile), GameHubView(self, interaction.user.id)
+        elif screen == "activities":
+            embed, view = self._activities_embed(profile), ActivitiesView(self, interaction.user.id)
+        elif screen == "profession":
+            embed, view = self._profession_embed(profile), ProfessionView(self, interaction.user.id, profile)
+        elif screen == "companions":
+            embed, view = self._companion_embed(profile), CompanionView(self, interaction.user.id, profile)
+        elif screen == "commissions":
+            starting_gold = profile["gold"]
+            embed = self._commissions_embed(profile)
+            await self._save_profile(interaction.guild.id, interaction.user.id, profile, starting_gold)
+            view = CommissionsView(self, interaction.user.id, profile)
+        elif screen == "saga":
+            embed, view = self._living_campaign_embed(profile), SagaView(self, interaction.user.id, profile)
+        elif screen == "archive":
+            embed, view = self._season_archive_embed(profile), SeasonArchiveView(self, interaction.user.id, profile)
         else:
             embed, view = self._game_hub_embed(profile), GameHubView(self, interaction.user.id)
         await interaction.edit_original_response(embed=embed, view=view)
@@ -1277,6 +1709,8 @@ class DeepDelve(DashboardIntegration, commands.Cog):
             await self._contract_interaction(interaction)
         elif route == "town:forge":
             await self._show_crafting_interaction(interaction)
+        elif route == "town:profession":
+            await self._hub_interaction(interaction, "profession")
         elif route == "town:back":
             await interaction.response.defer()
             profile = await self._get_profile(interaction.guild.id, user_id)
@@ -1308,6 +1742,7 @@ class DeepDelve(DashboardIntegration, commands.Cog):
             "sell",
             "enchant",
             "reroll",
+            "identify",
         }:
             route_parts = route.split(":", maxsplit=2)
             selected_id = route_parts[2] if len(route_parts) == 3 else None
@@ -1342,6 +1777,39 @@ class DeepDelve(DashboardIntegration, commands.Cog):
             )
         elif route == "origin:begin":
             await self._origin_begin(interaction)
+        elif route.startswith("activities:"):
+            await self._hub_interaction(interaction, route.partition(":")[2])
+        elif route == "profession:gather":
+            await self._profession_gather_interaction(interaction)
+        elif route == "profession:commissions":
+            await self._hub_interaction(interaction, "commissions")
+        elif route in {"profession:back", "companion:back"}:
+            await self._hub_interaction(interaction, "activities")
+        elif route == "commissions:profession":
+            await self._hub_interaction(interaction, "profession")
+        elif route == "commissions:back":
+            await self._hub_interaction(interaction, "activities")
+        elif route == "questjournal:back":
+            await self._hub_interaction(interaction, "hub")
+        elif route.startswith("atlas:"):
+            action = route.partition(":")[2]
+            if action in {"advance", "abandon"}:
+                await self._atlas_menu_interaction(interaction, action, "")
+            elif action == "resume":
+                await self._hub_interaction(interaction, "resume")
+            else:
+                await self._hub_interaction(interaction, "hub")
+        elif route.startswith("saga:"):
+            action = route.partition(":")[2]
+            if action == "back":
+                await self._hub_interaction(interaction, "activities")
+            else:
+                choice = "" if action == "continue_story" else action
+                await self._saga_menu_interaction(interaction, choice)
+        elif route == "seasonarchive:advance":
+            await self._archive_menu_interaction(interaction, "advance", 0)
+        elif route == "seasonarchive:back":
+            await self._hub_interaction(interaction, "activities")
         else:
             await self._persistent_error(
                 interaction,
@@ -1399,6 +1867,25 @@ class DeepDelve(DashboardIntegration, commands.Cog):
                 route.removeprefix("origin_"),
                 selected,
             )
+        elif route == "profession_select":
+            await self._profession_select_interaction(interaction, selected)
+        elif route == "companion_select":
+            await self._companion_select_interaction(interaction, selected)
+        elif route == "commission_select":
+            await self._commission_select_interaction(interaction, int(selected))
+        elif route == "quest_action_select":
+            parts = selected.split("|", maxsplit=2)
+            await self._quest_menu_interaction(
+                interaction,
+                parts[0],
+                parts[1],
+                parts[2] if len(parts) > 2 else "",
+            )
+        elif route == "atlas_action_select":
+            action, value = selected.split("|", maxsplit=1)
+            await self._atlas_menu_interaction(interaction, action, value)
+        elif route == "archive_chapter_select":
+            await self._archive_menu_interaction(interaction, "begin", int(selected))
         else:
             await self._persistent_error(
                 interaction,
@@ -2133,7 +2620,7 @@ class DeepDelve(DashboardIntegration, commands.Cog):
         if locked_lines:
             embed.add_field(name="Coming Roads", value="\n".join(locked_lines), inline=False)
         embed.set_footer(
-            text="Use /deepdelve living quests accept <key> and resolve <key> <conviction>.",
+            text="Use the journal selector to accept ready quests or choose their final conviction.",
         )
         return embed
 
@@ -2181,7 +2668,7 @@ class DeepDelve(DashboardIntegration, commands.Cog):
             name="Act Reward",
             value=f"{act['reward']['gold']} currency • {act['reward']['xp']} XP • {act['reward']['resolve']} Resolve",
         )
-        embed.set_footer(text="Continue with /deepdelve living saga continue; use a conviction at decisions.")
+        embed.set_footer(text="Continue the Chronicle from Activities; permanent decisions always ask for confirmation.")
         return embed
 
     @staticmethod
@@ -2218,7 +2705,7 @@ class DeepDelve(DashboardIntegration, commands.Cog):
             color=0x2471A3,
         )
         embed.set_footer(
-            text="Use /deepdelve living atlas enter, advance, choice, or abandon. Costs are shown before entry.",
+            text="Enter, advance, resolve rooms, and resume battles with the Atlas controls below.",
         )
         return embed
 
@@ -2418,11 +2905,17 @@ class DeepDelve(DashboardIntegration, commands.Cog):
     def _puzzle_embed(self, profile: dict[str, Any], narrative: str | None = None) -> discord.Embed:
         puzzle = profile.get("active_puzzle") or {}
         region = region_for_floor(profile["floor"])
+        puzzle_text = puzzle.get("text", "The mechanism waits.")
+        lead = narrative or ""
+        if lead.strip() == puzzle_text.strip():
+            lead = ""
+        elif lead.startswith(f"{puzzle_text}\n\n"):
+            lead = lead.removeprefix(f"{puzzle_text}\n\n")
         embed = discord.Embed(
             title=f"{puzzle.get('emoji', '🧩')} {puzzle.get('name', 'Dungeon Puzzle')}",
             description=(
-                f"*{region['name']}*\n\n{narrative + chr(10) + chr(10) if narrative else ''}"
-                f"{puzzle.get('text', 'The mechanism waits.')}\n\n"
+                f"*{region['name']}*\n\n{lead + chr(10) + chr(10) if lead else ''}"
+                f"{puzzle_text}\n\n"
                 "**Choose carefully. A wrong answer has consequences.**"
             ),
             color=0x2980B9,
@@ -2625,7 +3118,7 @@ class DeepDelve(DashboardIntegration, commands.Cog):
         ]
         embed.add_field(
             name=f"◆ Resolve & Tenets — {legacy['resolve']} Resolve",
-            value="\n".join(tenet_lines) or "No Tenets equipped. Learn sidegrades with `/deepdelve living tenets`.",
+            value="\n".join(tenet_lines) or "No Tenets equipped yet.",
             inline=False,
         )
         embed.add_field(
@@ -2679,7 +3172,7 @@ class DeepDelve(DashboardIntegration, commands.Cog):
             description="\n\n".join(lines),
             color=0x16A085,
         )
-        embed.set_footer(text="Activate one with /deepdelve chronicle companion name:<key>.")
+        embed.set_footer(text="Choose a discovered companion from the roster menu below.")
         return embed
 
     @staticmethod
@@ -2704,6 +3197,100 @@ class DeepDelve(DashboardIntegration, commands.Cog):
         )
         embed.set_footer(text=footer)
         return embed
+
+    @staticmethod
+    def _activities_embed(profile: dict[str, Any]) -> discord.Embed:
+        """Summarize menu-accessible long-term activities."""
+        profession = profile.get("profession", {})
+        profession_def = PROFESSIONS.get(profession.get("key", ""))
+        companion = active_companion(profile)
+        return discord.Embed(
+            title="🎯 Lastlight Activities",
+            description=(
+                "Choose a system below. Every normal player action is available through menus; "
+                "commands are optional shortcuts."
+            ),
+            color=0x2471A3,
+        ).add_field(
+            name="Current Calling",
+            value=(
+                f"{profession_def['emoji']} **{profession_def['name']}**, level {profession.get('level', 1)}"
+                if profession_def
+                else "🛠️ No profession selected—your first calling is free."
+            ),
+            inline=False,
+        ).add_field(
+            name="Expedition Ally",
+            value=(
+                f"{companion[0]['emoji']} **{companion[0]['name']}**, bond {companion[1]['bond']}/100"
+                if companion
+                else "🐾 No active companion."
+            ),
+            inline=False,
+        ).add_field(
+            name="Living World",
+            value=(
+                f"📖 Saga acts completed: **{len(profile.get('living_campaign', {}).get('completed', []))}/6**\n"
+                f"🗄️ Seasonal chapters archived: **{len(profile.get('season_archive', []))}/12**\n"
+                f"⚒️ Weekly commissions completed: **{profile.get('commissions', {}).get('completed', 0)}**"
+            ),
+            inline=False,
+        )
+
+    @staticmethod
+    def _commissions_embed(profile: dict[str, Any]) -> discord.Embed:
+        offers = commission_board(profile)
+        active = profile.get("commissions", {}).get("active") or {}
+        lines = [
+            (
+                f"**{index}. {offer['name']}**\n"
+                f"{offer['objective'].title()} {offer['target']} • "
+                f"{offer['reward']['gold']} currency • {offer['reward']['xp']} XP"
+            )
+            for index, offer in enumerate(offers, start=1)
+        ]
+        if active:
+            lines.insert(
+                0,
+                f"⭐ **Active: {active['name']}** — {active['progress']}/{active['target']}\n",
+            )
+        embed = discord.Embed(
+            title="⚒️ Weekly Profession Commissions",
+            description="\n\n".join(lines),
+            color=0xB9770E,
+        )
+        embed.set_footer(
+            text="Choose an offer from the menu. Only one weekly commission may be active at a time.",
+        )
+        return embed
+
+    @staticmethod
+    def _season_archive_embed(profile: dict[str, Any]) -> discord.Embed:
+        statuses = season_chapter_status(profile)
+        lines = []
+        for status in statuses:
+            marker = "✅" if status["completed"] else "📖" if status["active"] else "📚" if status["available"] else "🔒"
+            reason = (
+                "Archived permanently"
+                if status["completed"]
+                else "Active"
+                if status["active"]
+                else "Available now"
+                if status["available"]
+                else status["locked_reason"]
+            )
+            lines.append(f"{marker} **{status['index']}. {status['name']}** — {reason}")
+        active = profile.get("season_story", {})
+        active_line = (
+            f"\n\n**Active chapter:** `{active.get('active')}` • scene {active.get('scene', 0)}/3"
+            if active.get("active")
+            else ""
+        )
+        return discord.Embed(
+            title="🗄️ Permanent Season Archive",
+            description="\n".join(lines) + active_line,
+            color=0x5B2C6F,
+        )
 
     @staticmethod
     def _world_event_embed(guild_id: int) -> discord.Embed:
@@ -2846,7 +3433,7 @@ class DeepDelve(DashboardIntegration, commands.Cog):
     ) -> discord.Embed:
         embed = discord.Embed(
             title=f"🎒 {profile['character_name']}'s Pack",
-            description="Select an item, then equip or sell it.",
+            description="Select an item, then use the buttons below. Unidentified relics can be revealed here.",
             color=EMBED_COLOR,
         )
         inventory = profile.get("inventory", [])
@@ -2872,28 +3459,38 @@ class DeepDelve(DashboardIntegration, commands.Cog):
             None,
         )
         if selected:
-            currency_cost, shard_cost = upgrade_cost(selected)
-            equipped = profile["equipment"].get(selected["slot"])
-            comparison = ""
-            if equipped:
-                deltas = []
-                for stat, label in (
-                    ("attack", "ATK"),
-                    ("defense", "DEF"),
-                    ("hp", "HP"),
-                    ("luck", "LUCK"),
-                ):
-                    delta = int(selected.get(stat, 0)) - int(equipped.get(stat, 0))
-                    if delta:
-                        deltas.append(f"{delta:+} {label}")
-                comparison = f"\n↔️ vs. **{equipped['name']}**: " + (" • ".join(deltas) if deltas else "equal base attributes")
-            embed.add_field(
-                name="Item Inspection",
-                value=(
+            if not selected.get("identified", True):
+                inspection = (
+                    f"{item_detail(selected)}\n"
+                    f"🔮 Identification cost: **{3 + int(selected.get('rarity_index', 0))} arcane shards**\n"
+                    "Use the **Identify** button to reveal its identity and powers."
+                )
+            else:
+                currency_cost, shard_cost = upgrade_cost(selected)
+                equipped = profile["equipment"].get(selected["slot"])
+                comparison = ""
+                if equipped:
+                    deltas = []
+                    for stat, label in (
+                        ("attack", "ATK"),
+                        ("defense", "DEF"),
+                        ("hp", "HP"),
+                        ("luck", "LUCK"),
+                    ):
+                        delta = int(selected.get(stat, 0)) - int(equipped.get(stat, 0))
+                        if delta:
+                            deltas.append(f"{delta:+} {label}")
+                    comparison = f"\n↔️ vs. **{equipped['name']}**: " + (
+                        " • ".join(deltas) if deltas else "equal base attributes"
+                    )
+                inspection = (
                     f"{item_detail(selected)}\n"
                     f"⬆️ Next upgrade: {self._money(profile, currency_cost)} + "
                     f"{shard_cost} shards{comparison}"
-                ),
+                )
+            embed.add_field(
+                name="Item Inspection",
+                value=inspection,
                 inline=False,
             )
         _set_stats, set_effects = equipment_set_bonuses(profile.get("equipment", {}))
@@ -3301,7 +3898,7 @@ class DeepDelve(DashboardIntegration, commands.Cog):
                     floor,
                     profile.get("solved_puzzles", []),
                 )
-                narrative = profile["active_puzzle"]["text"]
+                narrative = "A puzzle chamber seals behind you. Its mechanism waits for an answer."
             elif roll < 0.91:
                 self._map_node(profile, "❔")
                 choice = dict(random.choice(CHOICES))
@@ -5126,6 +5723,275 @@ class DeepDelve(DashboardIntegration, commands.Cog):
             view=InventoryView(self, interaction.user.id, profile),
         )
 
+    async def _profession_select_interaction(self, interaction: discord.Interaction, key: str) -> None:
+        """Choose a profession from the persistent menu."""
+        if not interaction.guild:
+            return
+        await interaction.response.defer()
+        if key not in PROFESSIONS:
+            await interaction.followup.send("That profession is unavailable.", ephemeral=True)
+            return
+        async with self._lock_for(interaction.guild.id, interaction.user.id):
+            profile = await self._get_profile(interaction.guild.id, interaction.user.id)
+            starting_gold = profile["gold"]
+            current_key = profile.get("profession", {}).get("key", "")
+            if current_key == key:
+                narrative = f"You are already a **{PROFESSIONS[key]['name']}**."
+            else:
+                cost = 0 if not current_key else 150 + int(profile["level"]) * 15
+                if profile["gold"] < cost:
+                    await interaction.followup.send(
+                        f"Changing professions costs **{self._money(profile, cost)}**.",
+                        ephemeral=True,
+                    )
+                    return
+                current = profile.get("profession", {})
+                if current.get("key"):
+                    profile["profession_mastery"][current["key"]] = {
+                        "level": int(current.get("level", 1)),
+                        "xp": int(current.get("xp", 0)),
+                    }
+                restored = profile["profession_mastery"].get(key, {"level": 1, "xp": 0})
+                profile["profession"] = {"key": key, **restored}
+                profile["gold"] -= cost
+                narrative = (
+                    f"{PROFESSIONS[key]['emoji']} You are now a **{PROFESSIONS[key]['name']}**. "
+                    f"{'Your first calling is free.' if not cost else f'Changing paths cost {self._money(profile, cost)}.'}"
+                )
+                await self._save_profile(interaction.guild.id, interaction.user.id, profile, starting_gold)
+        embed = self._profession_embed(profile)
+        embed.description = f"{narrative}\n\n{embed.description}"
+        await interaction.edit_original_response(
+            embed=embed,
+            view=ProfessionView(self, interaction.user.id, profile),
+        )
+
+    async def _profession_gather_interaction(self, interaction: discord.Interaction) -> None:
+        """Use a daily gathering action from the profession menu."""
+        if not interaction.guild:
+            return
+        await interaction.response.defer()
+        async with self._lock_for(interaction.guild.id, interaction.user.id):
+            profile = await self._get_profile(interaction.guild.id, interaction.user.id)
+            starting_gold = profile["gold"]
+            if not profile.get("profession", {}).get("key"):
+                await interaction.followup.send("Choose a profession from this menu first.", ephemeral=True)
+                return
+            today = datetime.now(timezone.utc).date().isoformat()
+            if profile.get("gather_date") != today:
+                profile["gather_date"] = today
+                profile["gather_actions"] = 0
+            if int(profile.get("gather_actions", 0)) >= 3:
+                await interaction.followup.send(
+                    "All three gathering actions are used. They reset at 00:00 UTC.",
+                    ephemeral=True,
+                )
+                return
+            if int(profile.get("turns", 0)) < 1:
+                await interaction.followup.send("Gathering costs 1 energy, but none remains.", ephemeral=True)
+                return
+            profile["turns"] -= 1
+            result = gather(profile)
+            profile["gather_actions"] += 1
+            lines = [*progress_commission(profile, "gather"), *progress_quests(profile, "recover")]
+            await self._save_profile(interaction.guild.id, interaction.user.id, profile, starting_gold)
+        narrative = (
+            f"{result['emoji']} Gathered **{result['amount']} {result['name']}**. "
+            f"**{3 - profile['gather_actions']}** daily actions and **{profile['turns']} energy** remain."
+        )
+        if result["potion"]:
+            narrative += "\n⚗️ Your technique also produced one potion."
+        if result["messages"] or lines:
+            narrative += "\n" + "\n".join([*result["messages"], *lines])
+        embed = self._profession_embed(profile)
+        embed.description = f"{narrative}\n\n{embed.description}"
+        await interaction.edit_original_response(
+            embed=embed,
+            view=ProfessionView(self, interaction.user.id, profile),
+        )
+
+    async def _companion_select_interaction(self, interaction: discord.Interaction, key: str) -> None:
+        """Activate a discovered companion from the roster menu."""
+        if not interaction.guild:
+            return
+        await interaction.response.defer()
+        async with self._lock_for(interaction.guild.id, interaction.user.id):
+            profile = await self._get_profile(interaction.guild.id, interaction.user.id)
+            starting_gold = profile["gold"]
+            if key == "none" or key not in profile.get("companions", {}) or key not in COMPANIONS:
+                await interaction.followup.send("No discovered companion matches that choice.", ephemeral=True)
+                return
+            profile["active_companion"] = key
+            await self._save_profile(interaction.guild.id, interaction.user.id, profile, starting_gold)
+        embed = self._companion_embed(profile)
+        embed.description = (
+            f"{COMPANIONS[key]['emoji']} **{COMPANIONS[key]['name']} joins your expedition.**\n\n"
+            f"{embed.description}"
+        )
+        await interaction.edit_original_response(
+            embed=embed,
+            view=CompanionView(self, interaction.user.id, profile),
+        )
+
+    async def _commission_select_interaction(self, interaction: discord.Interaction, index: int) -> None:
+        """Accept a weekly commission from its menu."""
+        if not interaction.guild:
+            return
+        await interaction.response.defer()
+        async with self._lock_for(interaction.guild.id, interaction.user.id):
+            profile = await self._get_profile(interaction.guild.id, interaction.user.id)
+            starting_gold = profile["gold"]
+            ok, message = accept_commission(profile, index)
+            if ok:
+                await self._save_profile(interaction.guild.id, interaction.user.id, profile, starting_gold)
+        if not ok:
+            await interaction.followup.send(message, ephemeral=True)
+            return
+        embed = self._commissions_embed(profile)
+        embed.description = f"{message}\n\n{embed.description}"
+        await interaction.edit_original_response(
+            embed=embed,
+            view=CommissionsView(self, interaction.user.id, profile),
+        )
+
+    async def _quest_menu_interaction(
+        self,
+        interaction: discord.Interaction,
+        action: str,
+        key: str,
+        outcome: str = "",
+    ) -> None:
+        """Accept or resolve a quest from the journal selector."""
+        if not interaction.guild:
+            return
+        await interaction.response.defer()
+        async with self._lock_for(interaction.guild.id, interaction.user.id):
+            profile = await self._get_profile(interaction.guild.id, interaction.user.id)
+            starting_gold = profile["gold"]
+            if action == "accept":
+                ok, message = accept_quest(profile, key)
+            elif action == "resolve":
+                ok, message = resolve_quest(profile, key, outcome)
+                if ok:
+                    self._apply_level_ups(profile)
+            else:
+                ok, message = False, "Unknown quest action."
+            if ok:
+                await self._save_profile(interaction.guild.id, interaction.user.id, profile, starting_gold)
+        if not ok:
+            await interaction.followup.send(message, ephemeral=True)
+            return
+        embed = self._quest_journal_embed(profile)
+        embed.description = f"{message}\n\n{embed.description}"
+        await interaction.edit_original_response(
+            embed=embed,
+            view=QuestJournalView(self, interaction.user.id, profile),
+        )
+
+    async def _atlas_menu_interaction(
+        self,
+        interaction: discord.Interaction,
+        action: str,
+        value: str,
+    ) -> None:
+        """Advance and resolve named dungeons entirely through the Atlas menu."""
+        if not interaction.guild:
+            return
+        await interaction.response.defer()
+        async with self._lock_for(interaction.guild.id, interaction.user.id):
+            profile = await self._get_profile(interaction.guild.id, interaction.user.id)
+            starting_gold = profile["gold"]
+            if action == "enter":
+                ok, message = enter_dungeon(profile, value)
+            elif action == "choice":
+                ok, message = resolve_dungeon_choice(profile, value)
+            elif action == "advance":
+                ok, message = advance_dungeon(profile)
+                if ok:
+                    progress = [
+                        *progress_quests(profile, "explore"),
+                        *progress_quests(profile, "delve"),
+                        *progress_oath(profile, "explore"),
+                        *progress_oath(profile, "delve"),
+                    ]
+                    if progress:
+                        message += "\n" + "\n".join(progress)
+            elif action == "abandon":
+                ok, message = abandon_dungeon(profile)
+            else:
+                ok, message = False, "Unknown Atlas action."
+            if ok:
+                await self._save_profile(interaction.guild.id, interaction.user.id, profile, starting_gold)
+        if not ok:
+            await interaction.followup.send(message, ephemeral=True)
+            return
+        embed = self._atlas_embed(profile)
+        embed.description = f"{message}\n\n{embed.description}"
+        await interaction.edit_original_response(
+            embed=embed,
+            view=AtlasView(self, interaction.user.id, profile),
+        )
+
+    async def _saga_menu_interaction(self, interaction: discord.Interaction, choice: str) -> None:
+        """Advance the Living Chronicle from its persistent controls."""
+        if not interaction.guild:
+            return
+        await interaction.response.defer()
+        async with self._lock_for(interaction.guild.id, interaction.user.id):
+            profile = await self._get_profile(interaction.guild.id, interaction.user.id)
+            starting_gold = profile["gold"]
+            result = advance_living_campaign(profile, choice or None)
+            if result["ok"]:
+                if result.get("resolved"):
+                    progress = [
+                        *progress_quests(profile, "decision"),
+                        *progress_oath(profile, "resolve"),
+                    ]
+                    if progress:
+                        result["message"] += "\n" + "\n".join(progress)
+                self._apply_level_ups(profile)
+                await self._save_profile(interaction.guild.id, interaction.user.id, profile, starting_gold)
+        if not result["ok"]:
+            await interaction.followup.send(result["message"], ephemeral=True)
+            return
+        await interaction.edit_original_response(
+            embed=self._living_campaign_embed(profile, result["message"]),
+            view=SagaView(self, interaction.user.id, profile),
+        )
+
+    async def _archive_menu_interaction(
+        self,
+        interaction: discord.Interaction,
+        action: str,
+        chapter: int,
+    ) -> None:
+        """Begin or advance a permanent seasonal chapter from its menu."""
+        if not interaction.guild:
+            return
+        await interaction.response.defer()
+        async with self._lock_for(interaction.guild.id, interaction.user.id):
+            profile = await self._get_profile(interaction.guild.id, interaction.user.id)
+            starting_gold = profile["gold"]
+            if action == "begin":
+                ok, message = begin_season_chapter(profile, chapter)
+            elif action == "advance":
+                ok, message = advance_season_chapter(profile)
+                if ok:
+                    self._apply_level_ups(profile)
+            else:
+                ok, message = False, "Unknown archive action."
+            if ok:
+                await self._save_profile(interaction.guild.id, interaction.user.id, profile, starting_gold)
+        if not ok:
+            await interaction.followup.send(message, ephemeral=True)
+            return
+        embed = self._season_archive_embed(profile)
+        embed.description = f"{message}\n\n{embed.description}"
+        await interaction.edit_original_response(
+            embed=embed,
+            view=SeasonArchiveView(self, interaction.user.id, profile),
+        )
+
     async def _inventory_interaction(
         self,
         interaction: discord.Interaction,
@@ -5159,7 +6025,24 @@ class DeepDelve(DashboardIntegration, commands.Cog):
                     ephemeral=True,
                 )
                 return
-            if action == "equip":
+            if action == "identify":
+                if item.get("identified", True):
+                    await interaction.followup.send("That item is already identified.", ephemeral=True)
+                    return
+                shard_cost = 3 + int(item.get("rarity_index", 0))
+                if profile["arcane_shards"] < shard_cost:
+                    await interaction.followup.send(
+                        f"Identification requires **{shard_cost} arcane shards**.",
+                        ephemeral=True,
+                    )
+                    return
+                profile["arcane_shards"] -= shard_cost
+                item["identified"] = True
+                item["name"] = item.pop("hidden_name", item["name"])
+                item["codex_key"] = item["name"].lower().replace(" ", "_")
+                self._record_item(profile, item)
+                narrative = f"🔮 Identified **{item['name']}** for **{shard_cost} arcane shards**."
+            elif action == "equip":
                 old_item = profile["equipment"].get(item["slot"])
                 if not item.get("identified", True):
                     await interaction.followup.send(
@@ -5540,7 +6423,7 @@ class DeepDelve(DashboardIntegration, commands.Cog):
         """Open the persistent quest journal."""
         profile = await self._require_character(ctx)
         if profile:
-            await ctx.send(embed=self._quest_journal_embed(profile), view=GameHubView(self, ctx.author.id))
+            await ctx.send(embed=self._quest_journal_embed(profile), view=QuestJournalView(self, ctx.author.id, profile))
 
     async def quests_accept(self, ctx: commands.Context, key: str) -> None:
         """Accept an available quest by its displayed key."""
@@ -5586,7 +6469,7 @@ class DeepDelve(DashboardIntegration, commands.Cog):
         """View named dungeons, routes, costs, and checkpoints."""
         profile = await self._require_character(ctx)
         if profile:
-            await ctx.send(embed=self._atlas_embed(profile), view=GameHubView(self, ctx.author.id))
+            await ctx.send(embed=self._atlas_embed(profile), view=AtlasView(self, ctx.author.id, profile))
 
     async def atlas_enter(self, ctx: commands.Context, key: str) -> None:
         """Enter a discovered named dungeon; entry itself is free."""
