@@ -199,6 +199,98 @@ def test_persistent_adventure_game_hub_route_opens_the_hub() -> None:
     asyncio.run(check())
 
 
+def test_persistent_navigation_routes_open_the_expected_parent() -> None:
+    async def check() -> None:
+        expected_destinations = {
+            "adventure:game_hub": "hub",
+            "activities:back": "hub",
+            "town:game_hub": "hub",
+            "inventory:game_hub": "hub",
+            "questjournal:back": "hub",
+            "atlas:back": "hub",
+            "profession:back": "activities",
+            "companion:back": "activities",
+            "commissions:back": "activities",
+            "saga:back": "activities",
+            "seasonarchive:back": "activities",
+        }
+        cog = object.__new__(DeepDelve)
+        cog._hub_interaction = AsyncMock()
+        interaction = SimpleNamespace(
+            guild=SimpleNamespace(id=1),
+            user=SimpleNamespace(id=123456789),
+        )
+        for route, destination in expected_destinations.items():
+            cog._hub_interaction.reset_mock()
+            await cog._dispatch_persistent_button(interaction, route)
+            cog._hub_interaction.assert_awaited_once_with(interaction, destination)
+
+    asyncio.run(check())
+
+
+def test_every_rendered_persistent_component_has_a_dispatch_route() -> None:
+    async def check() -> None:
+        cog = object.__new__(DeepDelve)
+        async_handlers = (
+            "_archive_menu_interaction",
+            "_atlas_menu_interaction",
+            "_campaign_interaction",
+            "_choice_interaction",
+            "_combat_interaction",
+            "_commission_select_interaction",
+            "_companion_select_interaction",
+            "_contract_interaction",
+            "_craft_interaction",
+            "_handle_explore_interaction",
+            "_hub_interaction",
+            "_inventory_interaction",
+            "_origin_begin",
+            "_origin_interaction",
+            "_profession_gather_interaction",
+            "_profession_select_interaction",
+            "_puzzle_interaction",
+            "_quest_menu_interaction",
+            "_saga_menu_interaction",
+            "_show_crafting_interaction",
+            "_show_inventory_interaction",
+            "_town_interaction",
+        )
+        for name in async_handlers:
+            setattr(cog, name, AsyncMock())
+        cog._create_character = AsyncMock(return_value=True)
+        cog._get_profile = AsyncMock(return_value={"class_key": "vanguard", "inventory": []})
+        cog._persistent_error = AsyncMock()
+        cog._adventure_embed = lambda _profile: SimpleNamespace()
+        cog._inventory_embed = lambda _profile, _selected=None: SimpleNamespace()
+        cog._origin_embed = lambda _profile: SimpleNamespace()
+        cog._profile_embed = lambda _user, _profile: SimpleNamespace()
+        cog._town_embed = lambda _profile: SimpleNamespace()
+        cog.config = SimpleNamespace(
+            member_from_ids=lambda _guild_id, _user_id: SimpleNamespace(clear=AsyncMock()),
+        )
+        interaction = SimpleNamespace(
+            guild=SimpleNamespace(id=1),
+            user=SimpleNamespace(id=123456789, display_name="Route Tester"),
+            response=SimpleNamespace(defer=AsyncMock()),
+            followup=SimpleNamespace(send=AsyncMock()),
+            edit_original_response=AsyncMock(),
+        )
+
+        for view in _views():
+            for item in view.children:
+                cog._persistent_error.reset_mock()
+                if isinstance(item, DeepDelveDynamicButton):
+                    await cog._dispatch_persistent_button(interaction, item.route)
+                elif isinstance(item, DeepDelveDynamicSelect):
+                    selected = str(item.item.options[0].value)
+                    await cog._dispatch_persistent_select(interaction, item.route, [selected])
+                else:
+                    raise AssertionError(f"Unexpected persistent component: {type(item).__name__}")
+                cog._persistent_error.assert_not_awaited()
+
+    asyncio.run(check())
+
+
 def test_inventory_selection_is_encoded_into_stateless_action_routes() -> None:
     async def check() -> None:
         view = InventoryView(

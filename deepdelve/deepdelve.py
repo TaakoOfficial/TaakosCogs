@@ -1019,6 +1019,10 @@ class TownView(OwnedView):
             view=AdventureView(self.cog, self.user_id),
         )
 
+    @discord.ui.button(label="Game Hub", emoji="↩️", style=discord.ButtonStyle.secondary, row=2)
+    async def game_hub(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        await self.cog._hub_interaction(interaction, "hub")
+
 
 class ChoiceButton(discord.ui.Button):
     """One consequence-bearing narrative choice."""
@@ -1243,6 +1247,10 @@ class InventoryView(OwnedView):
             embed=self.cog._adventure_embed(profile),
             view=AdventureView(self.cog, self.user_id),
         )
+
+    @discord.ui.button(label="Game Hub", emoji="↩️", style=discord.ButtonStyle.secondary, row=3)
+    async def game_hub(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        await self.cog._hub_interaction(interaction, "hub")
 
 
 class RetireConfirmView(OwnedView):
@@ -1724,6 +1732,8 @@ class DeepDelve(DashboardIntegration, commands.Cog):
                 embed=self._adventure_embed(profile),
                 view=AdventureView(self, user_id),
             )
+        elif route == "town:game_hub":
+            await self._hub_interaction(interaction, "hub")
         elif route.startswith("choice:"):
             await self._choice_interaction(interaction, route.partition(":")[2])
         elif route.startswith("puzzle:"):
@@ -1760,6 +1770,8 @@ class DeepDelve(DashboardIntegration, commands.Cog):
                 embed=self._adventure_embed(profile),
                 view=AdventureView(self, user_id),
             )
+        elif route == "inventory:game_hub":
+            await self._hub_interaction(interaction, "hub")
         elif route == "retireconfirm:confirm":
             await interaction.response.defer()
             await self.config.member_from_ids(interaction.guild.id, user_id).clear()
@@ -1784,7 +1796,11 @@ class DeepDelve(DashboardIntegration, commands.Cog):
         elif route == "origin:begin":
             await self._origin_begin(interaction)
         elif route.startswith("activities:"):
-            await self._hub_interaction(interaction, route.partition(":")[2])
+            destination = route.partition(":")[2]
+            await self._hub_interaction(
+                interaction,
+                "hub" if destination == "back" else destination,
+            )
         elif route == "profession:gather":
             await self._profession_gather_interaction(interaction)
         elif route == "profession:commissions":
