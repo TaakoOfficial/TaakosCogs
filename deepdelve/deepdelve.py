@@ -219,6 +219,7 @@ class OwnedView(discord.ui.View):
                 "AbilitySelect": "ability_select",
                 "ConsumableSelect": "consumable_select",
                 "InventorySelect": "inventory_select",
+                "EquippedItemSelect": "equipped_item_select",
                 "OriginBackgroundSelect": "origin_background",
                 "OriginStarterSelect": "origin_starter",
                 "OriginAlignmentSelect": "origin_alignment",
@@ -1363,13 +1364,49 @@ class InventorySelect(discord.ui.Select):
                     description="Defeat enemies and explore treasure rooms to find gear.",
                 ),
             )
-        super().__init__(placeholder="Select an item…", options=options)
+        super().__init__(placeholder="Select a pack item…", options=options, row=0)
 
     async def callback(self, interaction: discord.Interaction) -> None:
         view = self.view
         if not isinstance(view, InventoryView):
             return
         view.selected_id = self.values[0]
+        view.bind_selection(view.selected_id)
+        await interaction.response.defer()
+        if interaction.guild:
+            profile = await view.cog._get_profile(interaction.guild.id, interaction.user.id)
+            await interaction.edit_original_response(
+                embed=view.cog._inventory_embed(profile, view.selected_id),
+                view=view,
+            )
+
+
+class EquippedItemSelect(discord.ui.Select):
+    """Select currently equipped gear for upgrading or enchanting."""
+
+    def __init__(self, profile: dict[str, Any]) -> None:
+        options = []
+        for slot in ("weapon", "armor", "charm"):
+            item = profile.get("equipment", {}).get(slot)
+            if not item:
+                continue
+            rarity = RARITIES[int(item.get("rarity_index", 0))]
+            options.append(
+                discord.SelectOption(
+                    label=f"{slot.title()}: {item['name']}"[:100],
+                    value=str(item["id"]),
+                    emoji=rarity["emoji"],
+                    description=f"Equipped • {item_stat_line(item)}"[:100],
+                ),
+            )
+        super().__init__(placeholder="Select equipped gear to upgrade or enchant…", options=options, row=3)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        view = self.view
+        if not isinstance(view, InventoryView):
+            return
+        view.selected_id = self.values[0]
+        view.bind_selection(view.selected_id)
         await interaction.response.defer()
         if interaction.guild:
             profile = await view.cog._get_profile(interaction.guild.id, interaction.user.id)
@@ -1386,6 +1423,8 @@ class InventoryView(OwnedView):
         super().__init__(cog, user_id)
         self.selected_id: str | None = None
         self.add_item(InventorySelect(profile))
+        if any(profile.get("equipment", {}).values()):
+            self.add_item(EquippedItemSelect(profile))
 
     def bind_selection(self, selected_id: str) -> None:
         """Encode the selected item into action routes for stateless recovery."""
@@ -2089,7 +2128,7 @@ class DeepDelve(DashboardIntegration, commands.Cog):
             await self._combat_interaction(interaction, f"ability:{selected}")
         elif route == "consumable_select":
             await self._combat_interaction(interaction, f"consumable:{selected}")
-        elif route == "inventory_select":
+        elif route in {"inventory_select", "equipped_item_select"}:
             await interaction.response.defer()
             profile = await self._get_profile(guild_id, user_id)
             view = InventoryView(self, user_id, profile)
@@ -3697,7 +3736,10 @@ class DeepDelve(DashboardIntegration, commands.Cog):
     ) -> discord.Embed:
         embed = discord.Embed(
             title=f"🎒 {profile['character_name']}'s Pack",
-            description="Select an item, then use the buttons below. Unidentified relics can be revealed here.",
+            description=(
+                "Select a pack item for management, or select equipped gear to upgrade or enchant it. "
+                "Unidentified relics can be revealed here."
+            ),
             color=EMBED_COLOR,
         )
         inventory = profile.get("inventory", [])
@@ -3716,10 +3758,20 @@ class DeepDelve(DashboardIntegration, commands.Cog):
         equip_lines = []
         for slot in ("weapon", "armor", "charm"):
             item = profile["equipment"].get(slot)
-            equip_lines.append(f"**{slot.title()}:** {item['name'] if item else 'Empty'}")
+            selected_marker = " ◀" if item and str(item["id"]) == selected_id else ""
+            equip_lines.append(
+                f"**{slot.title()}:** {item['name'] if item else 'Empty'}{selected_marker}",
+            )
         embed.add_field(name="Currently Equipped", value="\n".join(equip_lines), inline=False)
         selected = next(
-            (item for item in inventory if str(item["id"]) == selected_id),
+            (
+                item
+                for item in [
+                    *inventory,
+                    *(item for item in profile["equipment"].values() if item),
+                ]
+                if str(item["id"]) == selected_id
+            ),
             None,
         )
         if selected:
@@ -3733,7 +3785,7 @@ class DeepDelve(DashboardIntegration, commands.Cog):
                 currency_cost, shard_cost = upgrade_cost(selected)
                 equipped = profile["equipment"].get(selected["slot"])
                 comparison = ""
-                if equipped:
+                if equipped and str(equipped["id"]) != str(selected["id"]):
                     deltas = []
                     for stat, label in (
                         ("attack", "ATK"),
@@ -6453,13 +6505,32 @@ class DeepDelve(DashboardIntegration, commands.Cog):
                 (index for index, item in enumerate(profile["inventory"]) if str(item["id"]) == selected_id),
                 None,
             )
-            if index is None:
+            equipped_slot = next(
+                (
+                    slot
+                    for slot, equipped in profile.get("equipment", {}).items()
+                    if equipped and str(equipped["id"]) == selected_id
+                ),
+                None,
+            )
+            if index is None and equipped_slot is None:
                 await interaction.followup.send(
-                    "That item is no longer in your pack.",
+                    "That item is no longer in your pack or equipment.",
                     ephemeral=True,
                 )
                 return
-            item = profile["inventory"][index]
+            if equipped_slot is not None and action not in {"upgrade", "enchant"}:
+                await interaction.followup.send(
+                    "Equipped gear can only be upgraded or enchanted here. Equip a replacement first "
+                    "to manage it as a pack item.",
+                    ephemeral=True,
+                )
+                return
+            item = (
+                profile["equipment"][equipped_slot]
+                if equipped_slot is not None
+                else profile["inventory"][index]
+            )
             favorite = str(item["id"]) in profile.get("favorite_items", [])
             if favorite and action in {"sell", "dismantle", "reroll"}:
                 await interaction.followup.send(

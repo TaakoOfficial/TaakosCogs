@@ -426,6 +426,86 @@ def test_inventory_selection_is_encoded_into_stateless_action_routes() -> None:
     asyncio.run(check())
 
 
+def test_equipped_items_have_a_separate_inventory_selector() -> None:
+    async def check() -> None:
+        view = InventoryView(
+            object(),
+            123456789,
+            {
+                "inventory": [
+                    {
+                        "id": f"pack-{index}",
+                        "name": f"Pack Item {index}",
+                        "rarity_index": 0,
+                        "attack": 2,
+                    }
+                    for index in range(25)
+                ],
+                "equipment": {
+                    "weapon": {
+                        "id": "equipped-weapon",
+                        "name": "Equipped Blade",
+                        "rarity_index": 1,
+                        "attack": 5,
+                    },
+                    "armor": None,
+                    "charm": None,
+                },
+            },
+        )
+
+        selectors = [item for item in view.children if isinstance(item, DeepDelveDynamicSelect)]
+        assert len(selectors) == 2
+        assert len(selectors[0].item.options) == 25
+        assert [option.value for option in selectors[1].item.options] == ["equipped-weapon"]
+        assert selectors[1].route == "equipped_item_select"
+
+    asyncio.run(check())
+
+
+def test_inventory_upgrade_can_target_equipped_item() -> None:
+    async def check() -> None:
+        equipped_weapon = {
+            "id": "equipped-weapon",
+            "name": "Equipped Blade",
+            "slot": "weapon",
+            "rarity_index": 0,
+            "attack": 5,
+            "upgrade": 0,
+        }
+        profile = {
+            "gold": 500,
+            "arcane_shards": 20,
+            "inventory": [],
+            "equipment": {"weapon": equipped_weapon, "armor": None, "charm": None},
+            "favorite_items": [],
+        }
+        cog = object.__new__(DeepDelve)
+        cog._lock_for = lambda _guild_id, _user_id: asyncio.Lock()
+        cog._get_profile = AsyncMock(return_value=profile)
+        cog._save_profile = AsyncMock(return_value=profile)
+        cog._inventory_embed = lambda _profile, _selected=None: SimpleNamespace(description="Inventory")
+        interaction = SimpleNamespace(
+            guild=SimpleNamespace(id=1),
+            user=SimpleNamespace(id=123456789),
+            response=SimpleNamespace(defer=AsyncMock()),
+            followup=SimpleNamespace(send=AsyncMock()),
+            edit_original_response=AsyncMock(),
+        )
+
+        await cog._inventory_interaction(interaction, "equipped-weapon", "upgrade")
+
+        assert profile["equipment"]["weapon"] is equipped_weapon
+        assert equipped_weapon["upgrade"] == 1
+        assert equipped_weapon["attack"] == 6
+        assert profile["gold"] == 425
+        assert profile["arcane_shards"] == 18
+        cog._save_profile.assert_awaited_once_with(1, 123456789, profile, 500)
+        interaction.followup.send.assert_not_awaited()
+
+    asyncio.run(check())
+
+
 def test_cog_load_purges_legacy_message_bound_player_views() -> None:
     player_view = object()
     world_view = object()
