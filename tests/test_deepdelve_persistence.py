@@ -23,12 +23,15 @@ from deepdelve.deepdelve import (
     DeepDelve,
     GameHubView,
     InventoryView,
+    MailView,
     OriginView,
     ProfessionView,
+    ProgressionView,
     PuzzleView,
     QuestJournalView,
     RetireConfirmView,
     SagaView,
+    SanctumView,
     SeasonArchiveView,
     TownView,
 )
@@ -46,6 +49,35 @@ def _views() -> list:
     return [
         AdventureView(cog, owner),
         GameHubView(cog, owner),
+        ProgressionView(
+            cog,
+            owner,
+            {
+                "attribute_points": 1,
+                "attributes": {"might": 0, "finesse": 0, "insight": 0, "vitality": 0, "fortune": 0},
+                "class_key": "vanguard",
+                "level": 10,
+                "subclass": "",
+                "talent_points": 1,
+                "talents": {},
+                "titles": ["delver"],
+                "current_title": "",
+            },
+        ),
+        MailView(cog, owner, {"mailbox": [{"key": "welcome"}], "mail_read": []}),
+        SanctumView(
+            cog,
+            owner,
+            {
+                "gold": 1000,
+                "sanctum": {
+                    "rooms": {"hall": 0, "library": 0, "workshop": 0, "garden": 0, "observatory": 0},
+                    "spent": 0,
+                    "cosmetics": [],
+                    "active_cosmetic": "",
+                },
+            },
+        ),
         ActivitiesView(cog, owner),
         ProfessionView(cog, owner, {"profession": {"key": ""}}),
         CompanionView(cog, owner, {"companions": {}, "active_companion": ""}),
@@ -206,9 +238,12 @@ def test_persistent_navigation_routes_open_the_expected_parent() -> None:
             "activities:back": "hub",
             "town:game_hub": "hub",
             "inventory:game_hub": "hub",
+            "mail:back": "hub",
+            "sanctum:back": "hub",
             "questjournal:back": "hub",
             "atlas:back": "hub",
             "profession:back": "activities",
+            "progression:back": "hub",
             "companion:back": "activities",
             "commissions:back": "activities",
             "saga:back": "activities",
@@ -226,6 +261,70 @@ def test_persistent_navigation_routes_open_the_expected_parent() -> None:
             cog._hub_interaction.assert_awaited_once_with(interaction, destination)
 
     asyncio.run(check())
+
+
+def test_progression_menu_spends_one_attribute_point_and_refreshes() -> None:
+    async def check() -> None:
+        profile = {
+            "gold": 40,
+            "attribute_points": 2,
+            "attributes": {"might": 0, "finesse": 0, "insight": 0, "vitality": 0, "fortune": 0},
+            "class_key": "vanguard",
+            "level": 1,
+            "subclass": "",
+            "talent_points": 0,
+            "talents": {},
+            "titles": [],
+        }
+        cog = object.__new__(DeepDelve)
+        cog._lock_for = lambda _guild_id, _user_id: asyncio.Lock()
+        cog._get_profile = AsyncMock(return_value=profile)
+        cog._save_profile = AsyncMock(return_value=profile)
+        cog._progression_embed = lambda _profile: SimpleNamespace(description="Character path")
+        interaction = SimpleNamespace(
+            guild=SimpleNamespace(id=1),
+            user=SimpleNamespace(id=123456789),
+            response=SimpleNamespace(defer=AsyncMock()),
+            followup=SimpleNamespace(send=AsyncMock()),
+            edit_original_response=AsyncMock(),
+        )
+
+        await cog._progression_spend_interaction(interaction, "might")
+
+        assert profile["attribute_points"] == 1
+        assert profile["attributes"]["might"] == 1
+        cog._save_profile.assert_awaited_once_with(1, 123456789, profile, 40)
+        refreshed = interaction.edit_original_response.await_args.kwargs["view"]
+        assert isinstance(refreshed, ProgressionView)
+        attribute_buttons = [
+            item
+            for item in refreshed.children
+            if str(getattr(item, "label", "")).endswith("+1")
+        ]
+        assert len(attribute_buttons) == 5
+        assert all(not item.disabled for item in attribute_buttons)
+
+    asyncio.run(check())
+
+
+def test_unfinished_active_quest_can_be_abandoned_from_the_menu() -> None:
+    view = QuestJournalView(
+        object(),
+        123456789,
+        {
+            "deepest_floor": 0,
+            "living_campaign": {"act": 0, "completed": []},
+            "quests_v2": {
+                "active": {"test_quest": {"progress": 0, "target": 3}},
+                "completed": [],
+                "failed": [],
+                "counters": {},
+            },
+            "legacy": {"faction_reputation": {}, "consequence_flags": []},
+        },
+    )
+    selector = next(item for item in view.children if isinstance(item, DeepDelveDynamicSelect))
+    assert any(option.value == "abandon|test_quest" for option in selector.item.options)
 
 
 def test_every_rendered_persistent_component_has_a_dispatch_route() -> None:
@@ -248,11 +347,17 @@ def test_every_rendered_persistent_component_has_a_dispatch_route() -> None:
             "_origin_interaction",
             "_profession_gather_interaction",
             "_profession_select_interaction",
+            "_progression_spend_interaction",
+            "_progression_subclass_interaction",
+            "_progression_talent_interaction",
+            "_progression_title_interaction",
             "_puzzle_interaction",
             "_quest_menu_interaction",
             "_saga_menu_interaction",
             "_show_crafting_interaction",
             "_show_inventory_interaction",
+            "_mail_mark_read_interaction",
+            "_sanctum_upgrade_interaction",
             "_town_interaction",
         )
         for name in async_handlers:
