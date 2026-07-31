@@ -20,6 +20,7 @@ from deepdelve.systems.dungeon_depth import (
     progress_rumor,
     record_bestiary_kill,
 )
+from deepdelve.systems.items import apply_item_upgrade, enchant_cost, upgrade_stat_changes
 from deepdelve.systems.migrations import PROFILE_SCHEMA_VERSION, migrate_profile
 
 
@@ -42,6 +43,20 @@ def test_auto_dismantle_never_destroys_special_or_favorite_items() -> None:
     assert not should_auto_dismantle(profile, ordinary | {"legendary": True})
     assert not should_auto_dismantle(profile, ordinary | {"origin": True})
     assert not should_auto_dismantle(profile, ordinary | {"set": "citadel"})
+
+
+def test_upgrade_preview_exactly_matches_applied_stats() -> None:
+    item = {"rarity_index": 2, "upgrade": 5, "attack": 24, "hp": 9}
+    preview = upgrade_stat_changes(item)
+
+    apply_item_upgrade(item)
+
+    assert preview == {"attack": (24, 27), "hp": (9, 10)}
+    assert item["attack"] == 27
+    assert item["hp"] == 10
+    assert item["upgrade"] == 6
+    assert enchant_cost(item) == 9
+    assert enchant_cost(item, chosen=True) == 18
 
 
 def test_consumables_are_atomic_and_context_aware() -> None:

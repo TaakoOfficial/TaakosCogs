@@ -12,6 +12,7 @@ from discord.ui.view import ViewStore
 from deepdelve.deepdelve import (
     ActivitiesView,
     AdventureView,
+    ArmoryView,
     AtlasView,
     CampaignContinueView,
     CampaignView,
@@ -151,6 +152,16 @@ def _views() -> list:
             },
         ),
         InventoryView(cog, owner, {"inventory": []}),
+        ArmoryView(
+            cog,
+            owner,
+            {
+                "inventory": [],
+                "stash": [],
+                "loadouts": {},
+                "auto_dismantle": -1,
+            },
+        ),
         RetireConfirmView(cog, owner),
     ]
 
@@ -334,6 +345,7 @@ def test_every_rendered_persistent_component_has_a_dispatch_route() -> None:
         cog = object.__new__(DeepDelve)
         async_handlers = (
             "_archive_menu_interaction",
+            "_armory_preference_interaction",
             "_atlas_menu_interaction",
             "_campaign_interaction",
             "_choice_interaction",
@@ -345,6 +357,7 @@ def test_every_rendered_persistent_component_has_a_dispatch_route() -> None:
             "_handle_explore_interaction",
             "_hub_interaction",
             "_inventory_interaction",
+            "_bulk_dismantle_interaction",
             "_origin_begin",
             "_origin_interaction",
             "_profession_gather_interaction",
@@ -358,6 +371,7 @@ def test_every_rendered_persistent_component_has_a_dispatch_route() -> None:
             "_saga_menu_interaction",
             "_show_crafting_interaction",
             "_show_inventory_interaction",
+            "_show_armory_interaction",
             "_mail_mark_read_interaction",
             "_sanctum_upgrade_interaction",
             "_town_interaction",
@@ -421,12 +435,17 @@ def test_inventory_selection_is_encoded_into_stateless_action_routes() -> None:
             if getattr(item, "custom_id", "").startswith("deepdelve:b:123456789:inventory:")
             and not item.custom_id.endswith(":back")
             and not item.custom_id.endswith(":game_hub")
+            and not item.custom_id.endswith(":armory")
         ]
         assert action_ids
         assert all(custom_id.endswith(":abc123") for custom_id in action_ids)
         assert any(":inventory:identify:abc123" in custom_id for custom_id in action_ids)
         assert any(
             getattr(item, "custom_id", "").endswith(":inventory:game_hub")
+            for item in view.children
+        )
+        assert any(
+            getattr(item, "custom_id", "").endswith(":inventory:armory")
             for item in view.children
         )
 
@@ -474,6 +493,70 @@ def test_equipped_items_have_a_separate_inventory_selector() -> None:
         assert selectors[1].route == "equipped_item_select"
 
     asyncio.run(check())
+
+
+def test_inventory_buttons_reflect_equipped_and_protected_item_state() -> None:
+    async def check() -> None:
+        item = {
+            "id": "equipped-weapon",
+            "name": "Capped Blade",
+            "slot": "weapon",
+            "rarity_index": 3,
+            "attack": 20,
+            "upgrade": 10,
+            "upgrade_cap": 10,
+            "identified": True,
+            "bound": True,
+        }
+        view = InventoryView(
+            object(),
+            123456789,
+            {
+                "inventory": [],
+                "equipment": {"weapon": item, "armor": None, "charm": None},
+                "favorite_items": ["equipped-weapon"],
+            },
+        )
+        view.bind_selection("equipped-weapon")
+        buttons = {
+            child.route.split(":")[1]: child.item
+            for child in view.children
+            if isinstance(child, DeepDelveDynamicButton) and child.route.startswith("inventory:")
+        }
+
+        assert buttons["upgrade"].disabled
+        assert buttons["upgrade"].label == "Max +10"
+        assert not buttons["enchant"].disabled
+        assert not buttons["favorite"].disabled
+        assert buttons["favorite"].label == "Unfavorite"
+        assert buttons["equip"].disabled
+        assert buttons["sell"].disabled
+        assert buttons["dismantle"].disabled
+        assert buttons["reroll"].disabled
+        assert buttons["identify"].disabled
+
+    asyncio.run(check())
+
+
+def test_bulk_dismantle_excludes_every_protected_item_type() -> None:
+    ordinary = {"id": "ordinary", "rarity_index": 1}
+    profile = {
+        "auto_dismantle": 2,
+        "favorite_items": ["favorite"],
+        "loadouts": {"boss": {"weapon": "loadout", "armor": "", "charm": ""}},
+        "inventory": [
+            ordinary,
+            {"id": "favorite", "rarity_index": 0},
+            {"id": "loadout", "rarity_index": 0},
+            {"id": "bound", "rarity_index": 0, "bound": True},
+            {"id": "set", "rarity_index": 1, "set": "citadel"},
+            {"id": "enchanted", "rarity_index": 1, "enchant": "Ember Sigil"},
+            {"id": "legendary", "rarity_index": 2, "legendary": True},
+            {"id": "too-rare", "rarity_index": 3},
+        ],
+    }
+
+    assert DeepDelve._bulk_dismantle_candidates(profile) == [ordinary]
 
 
 def test_inventory_upgrade_can_target_equipped_item() -> None:

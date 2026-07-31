@@ -8,6 +8,13 @@ All notable changes to `deepdelve` are documented here.
   preserving the configurable 5–100 turn range.
 - Replaced fixed UTC reset text with Discord timestamps that display the next
   daily reset in each player's local time alongside a relative countdown.
+- Added context-aware inventory controls, exact upgrade previews, richer power,
+  effect, and set comparisons, menu-based favorite protection, and safe
+  confirmations for valuable sales and dismantling.
+- Added a secondary Armory menu with persistent sorting and filtering, visible
+  loadout/vault status, protected bulk dismantling, and configurable salvage rules.
+- Added confirmed enchanting with a standard random sigil or a deterministic
+  player-selected sigil at double shard cost, including replacement warnings.
 - Added a persistent Activities hub so professions, gathering, companions, weekly
   commissions, the Living Chronicle, and seasonal chapters are playable from menus.
 - Added menu controls for accepting and resolving quests, entering and advancing

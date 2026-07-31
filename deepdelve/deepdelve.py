@@ -54,6 +54,7 @@ from .persistent_views import (
     persistent_custom_id,
 )
 from .systems import (
+    ENCHANTMENTS,
     QUESTS,
     SANCTUM_ROOMS,
     abandon_dungeon,
@@ -68,6 +69,7 @@ from .systems import (
     advance_redemption,
     advance_season_chapter,
     apply_advanced_itemization,
+    apply_item_upgrade,
     apply_miniboss,
     arena_power,
     atlas_locations,
@@ -90,6 +92,7 @@ from .systems import (
     daily_dungeon,
     defeat_nemesis,
     dismantle_rewards,
+    enchant_cost,
     ending_recap,
     ensure_enemy_intent,
     ensure_legacy,
@@ -111,6 +114,7 @@ from .systems import (
     guild_perks,
     intent_description,
     item_detail,
+    item_effects,
     item_power,
     item_sale_value,
     living_campaign_view,
@@ -154,6 +158,7 @@ from .systems import (
     upgrade_building,
     upgrade_cost,
     upgrade_sanctum,
+    upgrade_stat_changes,
     use_consumable,
     use_faction_service,
     use_moral_power,
@@ -229,6 +234,9 @@ class OwnedView(discord.ui.View):
                 "ConsumableSelect": "consumable_select",
                 "InventorySelect": "inventory_select",
                 "EquippedItemSelect": "equipped_item_select",
+                "ArmorySortSelect": "armory_sort_select",
+                "ArmoryFilterSelect": "armory_filter_select",
+                "AutoDismantleSelect": "auto_dismantle_select",
                 "OriginBackgroundSelect": "origin_background",
                 "OriginStarterSelect": "origin_starter",
                 "OriginAlignmentSelect": "origin_alignment",
@@ -1352,13 +1360,44 @@ class InventorySelect(discord.ui.Select):
     """Select an inventory item for management."""
 
     def __init__(self, profile: dict[str, Any]) -> None:
-        inventory = profile.get("inventory", [])
+        inventory = list(profile.get("inventory", []))
+        filter_key = profile.get("inventory_filter", "all")
+        if filter_key in {"weapon", "armor", "charm"}:
+            inventory = [item for item in inventory if item.get("slot") == filter_key]
+        elif filter_key == "unidentified":
+            inventory = [item for item in inventory if not item.get("identified", True)]
+        elif filter_key == "favorites":
+            favorites = set(profile.get("favorite_items", []))
+            inventory = [item for item in inventory if str(item["id"]) in favorites]
+        sort_key = profile.get("inventory_sort", "newest")
+        if sort_key == "newest":
+            inventory.reverse()
+        elif sort_key == "rarity":
+            inventory.sort(key=lambda item: int(item.get("rarity_index", 0)), reverse=True)
+        elif sort_key == "power":
+            inventory.sort(key=item_power, reverse=True)
+        elif sort_key == "value":
+            inventory.sort(key=lambda item: int(item.get("value", 0)), reverse=True)
+        elif sort_key == "slot":
+            inventory.sort(key=lambda item: (str(item.get("slot", "")), -item_power(item)))
         options = []
+        loadout_ids = {
+            item_id
+            for loadout in profile.get("loadouts", {}).values()
+            for item_id in loadout.values()
+            if item_id
+        }
         for index, item in enumerate(inventory[:25], start=1):
             rarity = RARITIES[int(item.get("rarity_index", 0))]
+            markers = []
+            if str(item["id"]) in profile.get("favorite_items", []):
+                markers.append("⭐")
+            if str(item["id"]) in loadout_ids:
+                markers.append("📋")
+            marker_text = f" {' '.join(markers)}" if markers else ""
             options.append(
                 discord.SelectOption(
-                    label=f"{index}. {item['name']}"[:100],
+                    label=f"{index}. {item['name']}{marker_text}"[:100],
                     value=str(item["id"]),
                     emoji=rarity["emoji"],
                     description=item_stat_line(item)[:100],
@@ -1367,10 +1406,10 @@ class InventorySelect(discord.ui.Select):
         if not options:
             options.append(
                 discord.SelectOption(
-                    label="Your pack is empty",
+                    label="No pack items match",
                     value="empty",
                     emoji="🎒",
-                    description="Defeat enemies and explore treasure rooms to find gear.",
+                    description="Change the inventory filter from the Armory screen.",
                 ),
             )
         super().__init__(placeholder="Select a pack item…", options=options, row=0)
@@ -1430,10 +1469,66 @@ class InventoryView(OwnedView):
 
     def __init__(self, cog: DeepDelve, user_id: int, profile: dict[str, Any]) -> None:
         super().__init__(cog, user_id)
+        self.profile = profile
         self.selected_id: str | None = None
         self.add_item(InventorySelect(profile))
         if any(profile.get("equipment", {}).values()):
             self.add_item(EquippedItemSelect(profile))
+        self._apply_action_state()
+
+    def _selected_item(self) -> tuple[dict[str, Any] | None, bool]:
+        for item in self.profile.get("inventory", []):
+            if str(item["id"]) == self.selected_id:
+                return item, False
+        for item in self.profile.get("equipment", {}).values():
+            if item and str(item["id"]) == self.selected_id:
+                return item, True
+        return None, False
+
+    def _apply_action_state(self) -> None:
+        """Disable actions that cannot apply to the current selection."""
+        selected, equipped = self._selected_item()
+        for child in self.children:
+            if not isinstance(child, DeepDelveDynamicButton):
+                continue
+            action = child.route.removeprefix("inventory:").split(":", maxsplit=1)[0]
+            button = child.item
+            if action in {"back", "game_hub", "armory"}:
+                continue
+            button.disabled = selected is None
+            if not selected:
+                continue
+            identified = selected.get("identified", True)
+            favorite = str(selected["id"]) in self.profile.get("favorite_items", [])
+            protected_identity = any(
+                selected.get(key)
+                for key in ("origin", "legendary", "boss_relic", "set", "bound")
+            )
+            upgrade_cap = int(selected.get("upgrade_cap", 10))
+            at_cap = int(selected.get("upgrade", 0)) >= upgrade_cap
+            if equipped:
+                button.disabled = action not in {"upgrade", "enchant", "favorite"}
+            else:
+                if action == "equip":
+                    button.disabled = not identified
+                elif action == "identify":
+                    button.disabled = identified
+            if action == "upgrade" and (at_cap or not identified):
+                button.disabled = True
+            if action == "enchant" and not identified:
+                button.disabled = True
+            if action in {"sell", "dismantle", "reroll"} and favorite:
+                button.disabled = True
+            if action == "sell" and selected.get("bound"):
+                button.disabled = True
+            if action == "dismantle" and selected.get("origin"):
+                button.disabled = True
+            if action == "reroll" and protected_identity:
+                button.disabled = True
+            if action == "upgrade":
+                button.label = f"Max +{upgrade_cap}" if at_cap else "Upgrade"
+            elif action == "favorite":
+                button.label = "Unfavorite" if favorite else "Favorite"
 
     def bind_selection(self, selected_id: str) -> None:
         """Encode the selected item into action routes for stateless recovery."""
@@ -1445,12 +1540,13 @@ class InventoryView(OwnedView):
             if not child.custom_id.startswith(marker):
                 continue
             action = child.custom_id.removeprefix(marker).split(":", maxsplit=1)[0]
-            if action not in {"back", "game_hub"}:
+            if action not in {"back", "game_hub", "armory"}:
                 child.custom_id = persistent_custom_id(
                     "b",
                     self.user_id,
                     f"inventory:{action}:{selected_id}",
                 )
+        self._apply_action_state()
 
     @discord.ui.button(label="Equip", emoji="🛡️", style=discord.ButtonStyle.primary, row=1)
     async def equip(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
@@ -1494,6 +1590,169 @@ class InventoryView(OwnedView):
     @discord.ui.button(label="Game Hub", emoji="↩️", style=discord.ButtonStyle.secondary, row=3)
     async def game_hub(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
         await self.cog._hub_interaction(interaction, "hub")
+
+    @discord.ui.button(label="Favorite", emoji="⭐", style=discord.ButtonStyle.secondary, row=3)
+    async def favorite(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        await self.cog._inventory_interaction(interaction, self.selected_id, "favorite")
+
+    @discord.ui.button(label="Armory", emoji="⚒️", style=discord.ButtonStyle.secondary, row=3)
+    async def armory(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        await self.cog._show_armory_interaction(interaction)
+
+
+class InventoryActionConfirmView(OwnedView):
+    """Confirm a risky sale or dismantle."""
+
+    def __init__(self, cog: DeepDelve, user_id: int, item_id: str, action: str) -> None:
+        super().__init__(cog, user_id, timeout=60, persistent=False)
+        self.item_id = item_id
+        self.action = action
+        self.confirm.label = action.title()
+        self.confirm.emoji = "🔨" if action == "dismantle" else "🪙"
+
+    @discord.ui.button(label="Confirm", style=discord.ButtonStyle.danger)
+    async def confirm(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        await self.cog._inventory_interaction(
+            interaction,
+            self.item_id,
+            self.action,
+            confirmed=True,
+        )
+
+    @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary)
+    async def cancel(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        await self.cog._show_inventory_interaction(interaction)
+
+
+class EnchantChoiceSelect(discord.ui.Select):
+    """Choose a deterministic sigil."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            placeholder="Choose a sigil at double shard cost…",
+            options=[
+                discord.SelectOption(label=name, value=effect, description=description)
+                for name, effect, description in ENCHANTMENTS
+            ],
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        view = self.view
+        if isinstance(view, EnchantConfirmView):
+            await view.cog._apply_enchant_interaction(
+                interaction,
+                view.item_id,
+                effect=self.values[0],
+            )
+
+
+class EnchantConfirmView(OwnedView):
+    """Preview random and deterministic enchanting before spending shards."""
+
+    def __init__(self, cog: DeepDelve, user_id: int, item_id: str) -> None:
+        super().__init__(cog, user_id, timeout=90, persistent=False)
+        self.item_id = item_id
+        self.add_item(EnchantChoiceSelect())
+
+    @discord.ui.button(label="Random Sigil", emoji="🎲", style=discord.ButtonStyle.primary)
+    async def random_sigil(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        await self.cog._apply_enchant_interaction(interaction, self.item_id)
+
+    @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary)
+    async def cancel(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        await self.cog._show_inventory_interaction(interaction)
+
+
+class ArmorySortSelect(discord.ui.Select):
+    """Choose how pack equipment is ordered."""
+
+    def __init__(self, profile: dict[str, Any]) -> None:
+        selected = profile.get("inventory_sort", "newest")
+        options = [
+            discord.SelectOption(label=label, value=value, default=value == selected)
+            for label, value in (
+                ("Newest first", "newest"),
+                ("Highest rarity", "rarity"),
+                ("Highest power", "power"),
+                ("Highest value", "value"),
+                ("Group by slot", "slot"),
+            )
+        ]
+        super().__init__(placeholder="Sort pack items…", options=options)
+
+
+class ArmoryFilterSelect(discord.ui.Select):
+    """Filter the pack selector without discarding equipment."""
+
+    def __init__(self, profile: dict[str, Any]) -> None:
+        selected = profile.get("inventory_filter", "all")
+        options = [
+            discord.SelectOption(label=label, value=value, default=value == selected)
+            for label, value in (
+                ("All equipment", "all"),
+                ("Weapons", "weapon"),
+                ("Armor", "armor"),
+                ("Charms", "charm"),
+                ("Unidentified", "unidentified"),
+                ("Favorites", "favorites"),
+            )
+        ]
+        super().__init__(placeholder="Filter pack items…", options=options)
+
+
+class AutoDismantleSelect(discord.ui.Select):
+    """Configure the automatic and bulk dismantle rarity threshold."""
+
+    def __init__(self, profile: dict[str, Any]) -> None:
+        selected = str(profile.get("auto_dismantle", -1))
+        options = [discord.SelectOption(label="Off", value="-1", default=selected == "-1")]
+        options.extend(
+            discord.SelectOption(
+                label=f"{rarity['name']} and below",
+                value=str(index),
+                emoji=rarity["emoji"],
+                default=selected == str(index),
+            )
+            for index, rarity in enumerate(RARITIES[:3])
+        )
+        super().__init__(placeholder="Auto/bulk dismantle threshold…", options=options)
+
+
+class ArmoryView(OwnedView):
+    """Secondary inventory controls that do not fit on the item screen."""
+
+    def __init__(self, cog: DeepDelve, user_id: int, profile: dict[str, Any]) -> None:
+        super().__init__(cog, user_id)
+        self.add_item(ArmorySortSelect(profile))
+        self.add_item(ArmoryFilterSelect(profile))
+        self.add_item(AutoDismantleSelect(profile))
+
+    @discord.ui.button(label="Inventory", emoji="🎒", style=discord.ButtonStyle.primary, row=3)
+    async def inventory(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        await self.cog._show_inventory_interaction(interaction)
+
+    @discord.ui.button(label="Bulk Dismantle", emoji="🔨", style=discord.ButtonStyle.danger, row=3)
+    async def bulk(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        await self.cog._bulk_dismantle_interaction(interaction)
+
+    @discord.ui.button(label="Game Hub", emoji="↩️", style=discord.ButtonStyle.secondary, row=3)
+    async def game_hub(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        await self.cog._hub_interaction(interaction, "hub")
+
+
+class BulkDismantleConfirmView(OwnedView):
+    """Confirm dismantling every currently eligible ordinary pack item."""
+
+    def __init__(self, cog: DeepDelve, user_id: int) -> None:
+        super().__init__(cog, user_id, timeout=60, persistent=False)
+
+    @discord.ui.button(label="Dismantle Eligible Gear", emoji="🔨", style=discord.ButtonStyle.danger)
+    async def confirm(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        await self.cog._bulk_dismantle_interaction(interaction, confirmed=True)
+
+    @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary)
+    async def cancel(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        await self.cog._show_armory_interaction(interaction)
 
 
 class RetireConfirmView(OwnedView):
@@ -2031,6 +2290,7 @@ class DeepDelve(DashboardIntegration, commands.Cog):
             "enchant",
             "reroll",
             "identify",
+            "favorite",
         }:
             route_parts = route.split(":", maxsplit=2)
             selected_id = route_parts[2] if len(route_parts) == 3 else None
@@ -2043,6 +2303,14 @@ class DeepDelve(DashboardIntegration, commands.Cog):
                 view=AdventureView(self, user_id),
             )
         elif route == "inventory:game_hub":
+            await self._hub_interaction(interaction, "hub")
+        elif route == "inventory:armory":
+            await self._show_armory_interaction(interaction)
+        elif route == "armory:inventory":
+            await self._show_inventory_interaction(interaction)
+        elif route == "armory:bulk":
+            await self._bulk_dismantle_interaction(interaction)
+        elif route == "armory:game_hub":
             await self._hub_interaction(interaction, "hub")
         elif route == "mail:mark_read":
             await self._mail_mark_read_interaction(interaction)
@@ -2146,6 +2414,8 @@ class DeepDelve(DashboardIntegration, commands.Cog):
                 embed=self._inventory_embed(profile, selected),
                 view=view,
             )
+        elif route in {"armory_sort_select", "armory_filter_select", "auto_dismantle_select"}:
+            await self._armory_preference_interaction(interaction, route, selected)
         elif route == "class_select":
             await interaction.response.defer()
             created = await self._create_character(
@@ -3793,6 +4063,8 @@ class DeepDelve(DashboardIntegration, commands.Cog):
                 )
             else:
                 currency_cost, shard_cost = upgrade_cost(selected)
+                upgrade_cap = int(selected.get("upgrade_cap", 10))
+                current_upgrade = int(selected.get("upgrade", 0))
                 equipped = profile["equipment"].get(selected["slot"])
                 comparison = ""
                 if equipped and str(equipped["id"]) != str(selected["id"]):
@@ -3809,14 +4081,55 @@ class DeepDelve(DashboardIntegration, commands.Cog):
                     comparison = f"\n↔️ vs. **{equipped['name']}**: " + (
                         " • ".join(deltas) if deltas else "equal base attributes"
                     )
+                    power_delta = item_power(selected) - item_power(equipped)
+                    comparison += f"\n⚖️ Power: **{item_power(selected)}** ({power_delta:+} equipped)"
+                    gained = item_effects(selected) - item_effects(equipped)
+                    lost = item_effects(equipped) - item_effects(selected)
+                    if gained:
+                        comparison += f"\n✨ Gains: {', '.join(sorted(gained))}"
+                    if lost:
+                        comparison += f"\n⚠️ Loses: {', '.join(sorted(lost))}"
+                    current_equipment = dict(profile["equipment"])
+                    proposed_equipment = dict(current_equipment)
+                    proposed_equipment[selected["slot"]] = selected
+                    _current_stats, current_sets = equipment_set_bonuses(current_equipment)
+                    _proposed_stats, proposed_sets = equipment_set_bonuses(proposed_equipment)
+                    activated = set(proposed_sets) - set(current_sets)
+                    broken = set(current_sets) - set(proposed_sets)
+                    if activated:
+                        comparison += f"\n🧩 Activates: {'; '.join(sorted(activated))}"
+                    if broken:
+                        comparison += f"\n🧩 Breaks: {'; '.join(sorted(broken))}"
+                changes = upgrade_stat_changes(selected)
+                stat_labels = {"attack": "ATK", "defense": "DEF", "hp": "HP", "luck": "LUCK"}
+                preview = " • ".join(
+                    f"{stat_labels[stat]} {current} → {upgraded}"
+                    for stat, (current, upgraded) in changes.items()
+                )
+                if current_upgrade >= upgrade_cap:
+                    upgrade_line = f"⬆️ Upgrade: **Maximum +{upgrade_cap}**"
+                else:
+                    upgrade_line = (
+                        f"⬆️ Upgrade +{current_upgrade} → +{current_upgrade + 1}: "
+                        f"{self._money(profile, currency_cost)} + {shard_cost} shards"
+                    )
+                    if preview:
+                        upgrade_line += f"\n└ {preview}"
+                random_enchant_cost = enchant_cost(selected)
+                chosen_enchant_cost = enchant_cost(selected, chosen=True)
+                enchant_line = (
+                    f"🔯 Enchant: **{random_enchant_cost} shards random** or "
+                    f"**{chosen_enchant_cost} shards chosen**"
+                )
+                if selected.get("enchant"):
+                    enchant_line += f"\n└ Replaces **{selected['enchant']}** after confirmation"
                 inspection = (
                     f"{item_detail(selected)}\n"
-                    f"⬆️ Next upgrade: {self._money(profile, currency_cost)} + "
-                    f"{shard_cost} shards{comparison}"
+                    f"{upgrade_line}\n{enchant_line}{comparison}"
                 )
             embed.add_field(
                 name="Item Inspection",
-                value=inspection,
+                value=inspection[:1024],
                 inline=False,
             )
         _set_stats, set_effects = equipment_set_bonuses(profile.get("equipment", {}))
@@ -3828,6 +4141,50 @@ class DeepDelve(DashboardIntegration, commands.Cog):
                 f"{profile.get('arcane_shards', 0)} arcane shards"
             ),
         )
+        return embed
+
+    def _armory_embed(self, profile: dict[str, Any]) -> discord.Embed:
+        threshold = int(profile.get("auto_dismantle", -1))
+        threshold_text = "Off" if threshold < 0 else f"{RARITIES[threshold]['name']} and below"
+        loadouts = profile.get("loadouts", {})
+        loadout_lines = [
+            f"• **{name}** — "
+            + ", ".join(f"{slot}: {item_id or 'empty'}" for slot, item_id in slots.items())
+            for name, slots in loadouts.items()
+        ]
+        embed = discord.Embed(
+            title="⚒️ Lastlight Armory",
+            description=(
+                "Configure how the inventory selector is presented and safely salvage ordinary gear. "
+                "⭐ marks favorites; 📋 marks items referenced by a loadout."
+            ),
+            color=EMBED_COLOR,
+        )
+        embed.add_field(
+            name="Pack Display",
+            value=(
+                f"Sort: **{profile.get('inventory_sort', 'newest').title()}**\n"
+                f"Filter: **{profile.get('inventory_filter', 'all').title()}**"
+            ),
+        )
+        embed.add_field(
+            name="Storage",
+            value=f"🎒 **{len(profile.get('inventory', []))}/25** pack\n📦 **{len(profile.get('stash', []))}/60** vault",
+        )
+        embed.add_field(
+            name="Salvage Protection",
+            value=(
+                f"Threshold: **{threshold_text}**\n"
+                "Favorites, loadout gear, bound items, sets, legendaries, enchantments, and special relics are excluded."
+            ),
+            inline=False,
+        )
+        embed.add_field(
+            name=f"Loadouts ({len(loadouts)}/3)",
+            value="\n".join(loadout_lines) or "*No saved loadouts.*",
+            inline=False,
+        )
+        embed.set_footer(text="Vault transfers and loadout naming remain available under /deepdelve item.")
         return embed
 
     def _town_embed(self, profile: dict[str, Any], narrative: str | None = None) -> discord.Embed:
@@ -6225,6 +6582,140 @@ class DeepDelve(DashboardIntegration, commands.Cog):
             view=InventoryView(self, interaction.user.id, profile),
         )
 
+    async def _show_armory_interaction(self, interaction: discord.Interaction) -> None:
+        if not interaction.guild:
+            return
+        await interaction.response.defer()
+        profile = await self._get_profile(interaction.guild.id, interaction.user.id)
+        await interaction.edit_original_response(
+            embed=self._armory_embed(profile),
+            view=ArmoryView(self, interaction.user.id, profile),
+        )
+
+    async def _armory_preference_interaction(
+        self,
+        interaction: discord.Interaction,
+        route: str,
+        value: str,
+    ) -> None:
+        if not interaction.guild:
+            return
+        await interaction.response.defer()
+        async with self._lock_for(interaction.guild.id, interaction.user.id):
+            profile = await self._get_profile(interaction.guild.id, interaction.user.id)
+            starting_gold = profile["gold"]
+            if route == "armory_sort_select" and value in {"newest", "rarity", "power", "value", "slot"}:
+                profile["inventory_sort"] = value
+            elif route == "armory_filter_select" and value in {
+                "all",
+                "weapon",
+                "armor",
+                "charm",
+                "unidentified",
+                "favorites",
+            }:
+                profile["inventory_filter"] = value
+            elif route == "auto_dismantle_select" and value in {"-1", "0", "1", "2"}:
+                profile["auto_dismantle"] = int(value)
+            else:
+                await interaction.followup.send("That armory option is unavailable.", ephemeral=True)
+                return
+            await self._save_profile(
+                interaction.guild.id,
+                interaction.user.id,
+                profile,
+                starting_gold,
+            )
+        await interaction.edit_original_response(
+            embed=self._armory_embed(profile),
+            view=ArmoryView(self, interaction.user.id, profile),
+        )
+
+    @staticmethod
+    def _bulk_dismantle_candidates(profile: dict[str, Any]) -> list[dict[str, Any]]:
+        threshold = int(profile.get("auto_dismantle", -1))
+        favorites = set(profile.get("favorite_items", []))
+        loadout_ids = {
+            item_id
+            for loadout in profile.get("loadouts", {}).values()
+            for item_id in loadout.values()
+            if item_id
+        }
+        return [
+            item
+            for item in profile.get("inventory", [])
+            if int(item.get("rarity_index", 0)) <= threshold
+            and str(item["id"]) not in favorites
+            and str(item["id"]) not in loadout_ids
+            and not any(
+                item.get(key)
+                for key in ("origin", "legendary", "boss_relic", "set", "bound", "enchant")
+            )
+        ]
+
+    async def _bulk_dismantle_interaction(
+        self,
+        interaction: discord.Interaction,
+        *,
+        confirmed: bool = False,
+    ) -> None:
+        if not interaction.guild:
+            return
+        await interaction.response.defer()
+        async with self._lock_for(interaction.guild.id, interaction.user.id):
+            profile = await self._get_profile(interaction.guild.id, interaction.user.id)
+            starting_gold = profile["gold"]
+            candidates = self._bulk_dismantle_candidates(profile)
+            if not candidates:
+                await interaction.followup.send(
+                    "No ordinary pack items match the current salvage threshold and protection rules.",
+                    ephemeral=True,
+                )
+                return
+            rewards = [dismantle_rewards(item) for item in candidates]
+            currency = sum(reward[0] for reward in rewards)
+            shards = sum(reward[1] for reward in rewards)
+            if not confirmed:
+                names = "\n".join(f"• {item['name']}" for item in candidates[:10])
+                if len(candidates) > 10:
+                    names += f"\n• …and {len(candidates) - 10} more"
+                embed = discord.Embed(
+                    title="🔨 Confirm Bulk Dismantle",
+                    description=(
+                        f"{names}\n\nReceive **{self._money(profile, currency)}** and "
+                        f"**{shards} arcane shards**. This cannot be undone."
+                    ),
+                    color=DANGER_COLOR,
+                )
+                await interaction.edit_original_response(
+                    embed=embed,
+                    view=BulkDismantleConfirmView(self, interaction.user.id),
+                )
+                return
+            candidate_ids = {str(item["id"]) for item in candidates}
+            profile["inventory"] = [
+                item
+                for item in profile["inventory"]
+                if str(item["id"]) not in candidate_ids
+            ]
+            profile["gold"] += currency
+            profile["arcane_shards"] += shards
+            await self._save_profile(
+                interaction.guild.id,
+                interaction.user.id,
+                profile,
+                starting_gold,
+            )
+        embed = self._armory_embed(profile)
+        embed.description = (
+            f"🔨 Dismantled **{len(candidates)} items** into **{self._money(profile, currency)}** "
+            f"and **{shards} arcane shards**.\n\n{embed.description}"
+        )
+        await interaction.edit_original_response(
+            embed=embed,
+            view=ArmoryView(self, interaction.user.id, profile),
+        )
+
     async def _profession_select_interaction(self, interaction: discord.Interaction, key: str) -> None:
         """Choose a profession from the persistent menu."""
         if not interaction.guild:
@@ -6501,6 +6992,8 @@ class DeepDelve(DashboardIntegration, commands.Cog):
         interaction: discord.Interaction,
         selected_id: str | None,
         action: str,
+        *,
+        confirmed: bool = False,
     ) -> None:
         if not interaction.guild:
             return
@@ -6529,7 +7022,7 @@ class DeepDelve(DashboardIntegration, commands.Cog):
                     ephemeral=True,
                 )
                 return
-            if equipped_slot is not None and action not in {"upgrade", "enchant"}:
+            if equipped_slot is not None and action not in {"upgrade", "enchant", "favorite"}:
                 await interaction.followup.send(
                     "Equipped gear can only be upgraded or enchanted here. Equip a replacement first "
                     "to manage it as a pack item.",
@@ -6542,13 +7035,52 @@ class DeepDelve(DashboardIntegration, commands.Cog):
                 else profile["inventory"][index]
             )
             favorite = str(item["id"]) in profile.get("favorite_items", [])
-            if favorite and action in {"sell", "dismantle", "reroll"}:
+            if action == "favorite":
+                favorites = profile.setdefault("favorite_items", [])
+                if favorite:
+                    favorites.remove(str(item["id"]))
+                    narrative = f"Removed favorite protection from **{item['name']}**."
+                else:
+                    favorites.append(str(item["id"]))
+                    narrative = f"⭐ Favorited and protected **{item['name']}**."
+            elif favorite and action in {"sell", "dismantle", "reroll"}:
                 await interaction.followup.send(
                     "That item is favorited. Unfavorite it before altering or disposing of it.",
                     ephemeral=True,
                 )
                 return
-            if action == "identify":
+            risky_item = (
+                int(item.get("rarity_index", 0)) >= 2
+                or int(item.get("upgrade", 0)) > 0
+                or bool(item.get("enchant") or item.get("legendary") or item.get("set"))
+            )
+            if action in {"sell", "dismantle"} and risky_item and not confirmed:
+                if action == "sell":
+                    reward = self._money(profile, item_sale_value(item))
+                else:
+                    currency, shards = dismantle_rewards(item)
+                    reward = f"{self._money(profile, currency)} and {shards} arcane shards"
+                embed = discord.Embed(
+                    title=f"⚠️ Confirm {action.title()}",
+                    description=(
+                        f"{item_detail(item)}\n\n"
+                        f"You will receive **{reward}**. This cannot be undone."
+                    ),
+                    color=DANGER_COLOR,
+                )
+                await interaction.edit_original_response(
+                    embed=embed,
+                    view=InventoryActionConfirmView(
+                        self,
+                        interaction.user.id,
+                        str(item["id"]),
+                        action,
+                    ),
+                )
+                return
+            if action == "favorite":
+                pass
+            elif action == "identify":
                 if item.get("identified", True):
                     await interaction.followup.send("That item is already identified.", ephemeral=True)
                     return
@@ -6628,32 +7160,31 @@ class DeepDelve(DashboardIntegration, commands.Cog):
                     return
                 profile["gold"] -= currency
                 profile["arcane_shards"] -= shards
-                item["upgrade"] = int(item.get("upgrade", 0)) + 1
-                for stat in ("attack", "defense", "hp", "luck"):
-                    if item.get(stat):
-                        item[stat] = max(item[stat] + 1, round(item[stat] * 1.12))
+                apply_item_upgrade(item)
                 narrative = f"Upgraded **{item['name']}** to **+{item['upgrade']}**."
             elif action == "enchant":
-                shard_cost = 5 + int(item.get("rarity_index", 0)) * 2
-                if profile["arcane_shards"] < shard_cost:
-                    await interaction.followup.send(
-                        f"Enchanting requires **{shard_cost} arcane shards**.",
-                        ephemeral=True,
-                    )
-                    return
-                enchantments = (
-                    ("Ember Sigil", "burn", "Critical hits may Burn."),
-                    ("Serpent Sigil", "poison", "Critical hits may Poison."),
-                    ("Mender Sigil", "mending", "Victories restore additional health."),
-                    ("Fortune Sigil", "fortune", "Victory currency is increased."),
-                    ("Warden Sigil", "warding", "Elite damage is reduced."),
+                random_cost = enchant_cost(item)
+                chosen_cost = enchant_cost(item, chosen=True)
+                replacement = (
+                    f"\n\n⚠️ Continuing will replace **{item['enchant']}**."
+                    if item.get("enchant")
+                    else ""
                 )
-                name, effect, description = random.choice(enchantments)
-                profile["arcane_shards"] -= shard_cost
-                item["enchant"] = name
-                item["enchant_effect"] = effect
-                item["enchant_description"] = description
-                narrative = f"Inscribed **{name}** onto **{item['name']}**."
+                embed = discord.Embed(
+                    title="🔯 Sigil Inscription",
+                    description=(
+                        f"{item_detail(item)}\n\n"
+                        f"🎲 **Random sigil:** {random_cost} arcane shards\n"
+                        f"🎯 **Chosen sigil:** {chosen_cost} arcane shards"
+                        f"{replacement}"
+                    ),
+                    color=EMBED_COLOR,
+                )
+                await interaction.edit_original_response(
+                    embed=embed,
+                    view=EnchantConfirmView(self, interaction.user.id, str(item["id"])),
+                )
+                return
             else:
                 if (
                     item.get("origin")
@@ -6700,6 +7231,63 @@ class DeepDelve(DashboardIntegration, commands.Cog):
             embed=embed,
             view=InventoryView(self, interaction.user.id, profile),
         )
+
+    async def _apply_enchant_interaction(
+        self,
+        interaction: discord.Interaction,
+        item_id: str,
+        *,
+        effect: str | None = None,
+    ) -> None:
+        """Apply a confirmed random or player-selected enchantment."""
+        if not interaction.guild:
+            return
+        await interaction.response.defer()
+        async with self._lock_for(interaction.guild.id, interaction.user.id):
+            profile = await self._get_profile(interaction.guild.id, interaction.user.id)
+            starting_gold = profile["gold"]
+            items = [
+                *profile.get("inventory", []),
+                *(item for item in profile.get("equipment", {}).values() if item),
+            ]
+            item = next((entry for entry in items if str(entry["id"]) == item_id), None)
+            if not item:
+                await interaction.followup.send("That equipment is no longer owned.", ephemeral=True)
+                return
+            if not item.get("identified", True):
+                await interaction.followup.send("Identify that relic before enchanting it.", ephemeral=True)
+                return
+            chosen = effect is not None
+            shard_cost = enchant_cost(item, chosen=chosen)
+            if profile.get("arcane_shards", 0) < shard_cost:
+                await interaction.followup.send(
+                    f"This inscription requires **{shard_cost} arcane shards**.",
+                    ephemeral=True,
+                )
+                return
+            available = [entry for entry in ENCHANTMENTS if not effect or entry[1] == effect]
+            if not available:
+                await interaction.followup.send("That sigil is no longer available.", ephemeral=True)
+                return
+            name, selected_effect, description = random.choice(available)
+            profile["arcane_shards"] -= shard_cost
+            item["enchant"] = name
+            item["enchant_effect"] = selected_effect
+            item["enchant_description"] = description
+            await self._save_profile(
+                interaction.guild.id,
+                interaction.user.id,
+                profile,
+                starting_gold,
+            )
+        embed = self._inventory_embed(profile, item_id)
+        embed.description = (
+            f"🔯 Inscribed **{name}** onto **{item['name']}** for **{shard_cost} arcane shards**.\n\n"
+            + (embed.description or "")
+        )
+        view = InventoryView(self, interaction.user.id, profile)
+        view.bind_selection(item_id)
+        await interaction.edit_original_response(embed=embed, view=view)
 
     async def _world_boss_strike(self, interaction: discord.Interaction) -> None:
         if not interaction.guild:

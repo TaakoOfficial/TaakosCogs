@@ -43,14 +43,18 @@ from .dungeon_depth import (
 from .economy import TARGET_SINK_RANGE, economy_release_gate, equivalent_rewards, reward_budget, simulate_active_economy
 from .endgame import current_season, daily_dungeon, restore_challenge_origin, scaled_daily_floor
 from .items import (
+    ENCHANTMENTS,
     apply_advanced_itemization,
+    apply_item_upgrade,
     dismantle_rewards,
+    enchant_cost,
     equipment_effects,
     equipment_set_bonuses,
     item_detail,
     item_effects,
     item_sale_value,
     upgrade_cost,
+    upgrade_stat_changes,
 )
 from .legacy import (
     accept_oath,
@@ -135,6 +139,9 @@ __all__ = [
     "current_season",
     "daily_dungeon",
     "dismantle_rewards",
+    "ENCHANTMENTS",
+    "apply_item_upgrade",
+    "enchant_cost",
     "ensure_enemy_intent",
     "equipment_set_bonuses",
     "equipment_effects",
@@ -161,6 +168,7 @@ __all__ = [
     "unlock_companions",
     "upgrade_building",
     "upgrade_cost",
+    "upgrade_stat_changes",
     "apply_miniboss",
     "boss_relic_for",
     "comparison_line",

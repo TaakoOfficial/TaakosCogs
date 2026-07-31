@@ -260,6 +260,14 @@ The expanded armory supports protected favorites, rarity-based auto-dismantling,
 five guaranteed-effect patterns learned by resolving regional rumors. Origin weapons
 are bound keepsakes with a +3 ceiling and cannot be sold or dismantled.
 
+Inventory actions disable themselves when they do not apply to the selected item.
+Inspection shows exact next-upgrade attributes and power, effect, and set changes.
+Valuable disposal requires confirmation, while enchanting offers either a random
+sigil or a chosen sigil at double cost. The Armory menu provides sorting, filtering,
+favorite protection, salvage thresholds, and protected bulk dismantling; favorites,
+loadout gear, bound items, sets, legendaries, enchantments, and special relics are
+never included in a bulk salvage.
+
 Native relic powers and enchantment powers coexist, so enchanting never erases an
 origin, pattern, suffix, boss, or legendary identity. Pattern forging always produces
 its advertised power. Discovering two slots of a set and converting a weaker duplicate

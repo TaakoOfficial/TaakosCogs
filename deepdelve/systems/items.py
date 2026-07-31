@@ -8,6 +8,14 @@ from typing import Any
 from deepdelve.advanced_content import ITEM_PREFIXES, ITEM_SETS, ITEM_SUFFIXES, LEGENDARIES
 from deepdelve.content import RARITIES, item_stat_line
 
+ENCHANTMENTS = (
+    ("Ember Sigil", "burn", "Critical hits may Burn."),
+    ("Serpent Sigil", "poison", "Critical hits may Poison."),
+    ("Mender Sigil", "mending", "Victories restore additional health."),
+    ("Fortune Sigil", "fortune", "Victory currency is increased."),
+    ("Warden Sigil", "warding", "Elite damage is reduced."),
+)
+
 
 def apply_advanced_itemization(
     item: dict[str, Any],
@@ -128,6 +136,29 @@ def upgrade_cost(item: dict[str, Any]) -> tuple[int, int]:
     level = int(item.get("upgrade", 0))
     rarity = int(item.get("rarity_index", 0))
     return 40 + (level + 1) * 35 + rarity * 25, 2 + level + rarity
+
+
+def upgrade_stat_changes(item: dict[str, Any]) -> dict[str, tuple[int, int]]:
+    """Return the exact attribute changes made by the next upgrade."""
+    changes = {}
+    for stat in ("attack", "defense", "hp", "luck"):
+        current = int(item.get(stat, 0))
+        if current:
+            changes[stat] = (current, max(current + 1, round(current * 1.12)))
+    return changes
+
+
+def apply_item_upgrade(item: dict[str, Any]) -> None:
+    """Apply one equipment upgrade using the same values shown in previews."""
+    for stat, (_current, upgraded) in upgrade_stat_changes(item).items():
+        item[stat] = upgraded
+    item["upgrade"] = int(item.get("upgrade", 0)) + 1
+
+
+def enchant_cost(item: dict[str, Any], *, chosen: bool = False) -> int:
+    """Return the random or deterministic sigil-inscription cost."""
+    base = 5 + int(item.get("rarity_index", 0)) * 2
+    return base * 2 if chosen else base
 
 
 def item_sale_value(item: dict[str, Any]) -> int:
