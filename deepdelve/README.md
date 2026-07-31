@@ -298,14 +298,14 @@ Administrators and members with Manage Server can configure the game:
 [p]deepdelve set enabled true
 [p]deepdelve set channel #adventures
 [p]deepdelve set channel
-[p]deepdelve set turns 24
+[p]deepdelve set turns 40
 [p]deepdelve set difficulty 1.00
 [p]deepdelve set economy bank
 [p]deepdelve set resetuser @member
 ```
 
 The channel restriction applies to both commands and interactive exploration
-buttons. Daily turns may be configured from 5 to 100. Difficulty may be set from
+buttons. New servers default to 40 daily turns, configurable from 5 to 100. Difficulty may be set from
 0.75× to 2.00× and scales enemy health, attack, defense, and rewards.
 
 ## Red Economy Integration

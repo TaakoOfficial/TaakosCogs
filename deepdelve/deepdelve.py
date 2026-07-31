@@ -10,7 +10,7 @@ import json
 import logging
 import random
 from collections.abc import Mapping
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -171,8 +171,17 @@ EMBED_COLOR = 0x6C3483
 SUCCESS_COLOR = 0x2ECC71
 DANGER_COLOR = 0xC0392B
 GOLD_COLOR = 0xF1C40F
+DEFAULT_DAILY_TURNS = 40
 LOGGER = logging.getLogger("red.taakoscogs.deepdelve")
 TITLES = {**TITLES, **LIVING_TITLES}
+
+
+def daily_reset_text(now: datetime | None = None) -> str:
+    """Return the next UTC reset as a Discord-localized time and countdown."""
+    current = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
+    reset = (current + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+    timestamp = int(reset.timestamp())
+    return f"<t:{timestamp}:F> (<t:{timestamp}:R>)"
 
 
 def progress_bar(current: int, maximum: int, length: int = 10) -> str:
@@ -1436,7 +1445,7 @@ class InventoryView(OwnedView):
             if not child.custom_id.startswith(marker):
                 continue
             action = child.custom_id.removeprefix(marker).split(":", maxsplit=1)[0]
-            if action != "back":
+            if action not in {"back", "game_hub"}:
                 child.custom_id = persistent_custom_id(
                     "b",
                     self.user_id,
@@ -1587,7 +1596,7 @@ class DeepDelve(DashboardIntegration, commands.Cog):
         self.config.register_guild(
             enabled=True,
             adventure_channel=0,
-            daily_turns=24,
+            daily_turns=DEFAULT_DAILY_TURNS,
             economy_mode="internal",
             parties={},
             auctions={},
@@ -1624,7 +1633,7 @@ class DeepDelve(DashboardIntegration, commands.Cog):
             potions=2,
             floor=1,
             rooms_cleared=0,
-            turns=24,
+            turns=DEFAULT_DAILY_TURNS,
             turn_date="",
             encounter={},
             inventory=[],
@@ -3112,7 +3121,8 @@ class DeepDelve(DashboardIntegration, commands.Cog):
             value=(
                 f"🚪 Room **{profile['rooms_cleared'] + 1}/5**\n"
                 f"🧭 **{profile['turns']}** turns remain\n"
-                f"🎒 **{len(profile['inventory'])}/25** pack slots"
+                f"🎒 **{len(profile['inventory'])}/25** pack slots\n"
+                f"🕛 Resets {daily_reset_text()}"
             ),
         )
         embed.add_field(
@@ -3132,7 +3142,7 @@ class DeepDelve(DashboardIntegration, commands.Cog):
             value=mutator["description"],
             inline=False,
         )
-        embed.set_footer(text="Choose Explore to enter the next room. Daily turns reset at 00:00 UTC.")
+        embed.set_footer(text="Choose Explore to enter the next room.")
         return embed
 
     def _progression_embed(self, profile: dict[str, Any]) -> discord.Embed:
@@ -4069,7 +4079,7 @@ class DeepDelve(DashboardIntegration, commands.Cog):
             if profile.get("active_puzzle"):
                 return profile, "The puzzle chamber is waiting for your answer."
             if profile["turns"] <= 0:
-                return profile, "You are too exhausted to continue. Your turns reset at **00:00 UTC**."
+                return profile, f"You are too exhausted to continue. Your turns reset {daily_reset_text()}."
 
             descent = ""
             if profile["rooms_cleared"] >= 5:
@@ -6275,7 +6285,7 @@ class DeepDelve(DashboardIntegration, commands.Cog):
                 profile["gather_actions"] = 0
             if int(profile.get("gather_actions", 0)) >= 3:
                 await interaction.followup.send(
-                    "All three gathering actions are used. They reset at 00:00 UTC.",
+                    f"All three gathering actions are used. They reset {daily_reset_text()}.",
                     ephemeral=True,
                 )
                 return
@@ -10005,7 +10015,9 @@ class DeepDelve(DashboardIntegration, commands.Cog):
                 profile["gather_date"] = today
                 profile["gather_actions"] = 0
             if int(profile.get("gather_actions", 0)) >= 3:
-                await ctx.send("You have used all **three** gathering actions for today. They reset at 00:00 UTC.")
+                await ctx.send(
+                    f"You have used all **three** gathering actions for today. They reset {daily_reset_text()}.",
+                )
                 return
             if int(profile.get("turns", 0)) < 1:
                 await ctx.send("Gathering costs **1 exploration energy**, but none remains.")

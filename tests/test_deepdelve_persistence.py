@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -34,6 +35,7 @@ from deepdelve.deepdelve import (
     SanctumView,
     SeasonArchiveView,
     TownView,
+    daily_reset_text,
 )
 from deepdelve.persistent_views import (
     BUTTON_TEMPLATE,
@@ -418,12 +420,23 @@ def test_inventory_selection_is_encoded_into_stateless_action_routes() -> None:
             for item in view.children
             if getattr(item, "custom_id", "").startswith("deepdelve:b:123456789:inventory:")
             and not item.custom_id.endswith(":back")
+            and not item.custom_id.endswith(":game_hub")
         ]
         assert action_ids
         assert all(custom_id.endswith(":abc123") for custom_id in action_ids)
         assert any(":inventory:identify:abc123" in custom_id for custom_id in action_ids)
+        assert any(
+            getattr(item, "custom_id", "").endswith(":inventory:game_hub")
+            for item in view.children
+        )
 
     asyncio.run(check())
+
+
+def test_daily_reset_timestamp_uses_next_utc_midnight() -> None:
+    now = datetime(2026, 1, 1, 12, 30, tzinfo=timezone.utc)
+
+    assert daily_reset_text(now) == "<t:1767312000:F> (<t:1767312000:R>)"
 
 
 def test_equipped_items_have_a_separate_inventory_selector() -> None:

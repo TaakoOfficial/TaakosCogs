@@ -4,6 +4,10 @@ All notable changes to `deepdelve` are documented here.
 
 ## 5.0.1
 
+- Increased the default daily exploration allowance from 24 to 40 turns while
+  preserving the configurable 5–100 turn range.
+- Replaced fixed UTC reset text with Discord timestamps that display the next
+  daily reset in each player's local time alongside a relative countdown.
 - Added a persistent Activities hub so professions, gathering, companions, weekly
   commissions, the Living Chronicle, and seasonal chapters are playable from menus.
 - Added menu controls for accepting and resolving quests, entering and advancing
