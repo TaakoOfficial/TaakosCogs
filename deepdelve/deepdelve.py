@@ -10830,6 +10830,37 @@ class DeepDelve(DashboardIntegration, commands.Cog):
         await self.config.guild(ctx.guild).daily_turns.set(turns)
         await ctx.send(f"New UTC days will grant each delver **{turns} turns**.")
 
+    @deepdelve_set.command(name="grantturns", aliases=["addturns"])
+    @commands.guild_only()
+    @commands.admin_or_permissions(manage_guild=True)
+    async def grant_turns(
+        self,
+        ctx: commands.Context,
+        member: discord.Member,
+        amount: int,
+    ) -> None:
+        """Immediately grant 1–100 exploration turns to a delver."""
+        if not 1 <= amount <= 100:
+            await ctx.send("Granted turns must be between 1 and 100.")
+            return
+        async with self._lock_for(ctx.guild.id, member.id):
+            profile = await self._get_profile(ctx.guild.id, member.id)
+            if not profile.get("created"):
+                await ctx.send(f"{member.mention} does not have a DeepDelve character.")
+                return
+            starting_gold = int(profile.get("gold", 0))
+            profile["turns"] = max(0, int(profile.get("turns", 0))) + amount
+            await self._save_profile(
+                ctx.guild.id,
+                member.id,
+                profile,
+                starting_gold,
+            )
+        await ctx.send(
+            f"Granted **{amount} turns** to {member.mention}. "
+            f"They now have **{profile['turns']} turns**.",
+        )
+
     @deepdelve_set.command(name="difficulty")
     @commands.guild_only()
     @commands.admin_or_permissions(manage_guild=True)
