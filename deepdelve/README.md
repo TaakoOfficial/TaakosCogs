@@ -396,6 +396,7 @@ DeepDelve is divided into focused modules:
 - `advanced_content.py` contains abilities, talents, subclasses, sets, legendaries, NPCs, and seasons.
 - `expansion_content.py` contains campaign chapters, puzzles, companions, professions,
   town buildings, world events, and the expanded enemy and boss roster.
+- `art.py` resolves the optimized creature and boss portraits in `assets/bestiary/`.
 - `systems/campaign.py` handles permanent story progression and choice bonuses.
 - `systems/puzzles.py` handles puzzle selection, saved attempts, hints, and rewards.
 - `systems/companions.py` handles collection, bond, leveling, and passive statistics.

@@ -25,6 +25,10 @@ All notable changes to `deepdelve` are documented here.
   second region no longer creates a sudden progression wall.
 - Fixed the permanent Season Archive screen reading the wrong completion-state key.
 - Fixed puzzle and riddle text appearing twice when a chamber was first discovered.
+- Doubled the procedural puzzle catalog to 50 entries, with ten distinct puzzles
+  available in every floor band and protection against immediate repeats.
+- Added optimized illustrated portraits for all 26 core creatures and seven bosses;
+  elite, Riftbound, Ascended, and named-dungeon variants inherit suitable artwork.
 - Extended persistent-view reconstruction coverage for every new button and selector.
 
 ## 5.0.0

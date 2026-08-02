@@ -6,7 +6,7 @@ import random
 from datetime import date
 
 from deepdelve.deepdelve import DeepDelve
-from deepdelve.expansion_content import CAMPAIGN_CHAPTERS
+from deepdelve.expansion_content import CAMPAIGN_CHAPTERS, PUZZLES
 from deepdelve.systems.campaign import advance_campaign, campaign_bonuses, campaign_scene
 from deepdelve.systems.companions import companion_bonuses, grant_companion_xp, unlock_companions
 from deepdelve.systems.migrations import PROFILE_SCHEMA_VERSION, migrate_profile
@@ -83,6 +83,40 @@ def test_puzzle_embed_never_repeats_the_riddle_narrative() -> None:
     cog = object.__new__(DeepDelve)
     embed = cog._puzzle_embed(data, riddle)
     assert embed.description.count(riddle) == 1
+
+
+def test_every_floor_band_has_a_varied_valid_puzzle_pool() -> None:
+    assert len(PUZZLES) >= 50
+    assert len({puzzle["key"] for puzzle in PUZZLES}) == len(PUZZLES)
+    for floor in (3, 8, 13, 18, 25):
+        pool = [puzzle for puzzle in PUZZLES if puzzle["min_floor"] <= floor <= puzzle["max_floor"]]
+        assert len(pool) >= 10
+        for puzzle in pool:
+            assert puzzle["answer"] in puzzle["options"]
+            assert len(puzzle["options"]) >= 3
+            assert puzzle["text"]
+            assert puzzle["hint"]
+            assert puzzle["success"]
+
+
+def test_exhausted_puzzle_pool_does_not_immediately_repeat() -> None:
+    floor = 8
+    solved = [puzzle["key"] for puzzle in PUZZLES if puzzle["min_floor"] <= floor <= puzzle["max_floor"]]
+    latest = solved[-1]
+
+    for seed in range(10):
+        assert puzzle_for_floor(floor, solved, random.Random(seed))["key"] != latest
+
+
+def test_repeated_puzzle_solution_becomes_the_most_recent_without_duplication() -> None:
+    data = profile()
+    puzzle = puzzle_for_floor(12, [], random.Random(3))
+    data["solved_puzzles"] = [puzzle["key"], "older_puzzle"]
+    data["active_puzzle"] = puzzle
+
+    assert resolve_puzzle(data, puzzle["answer"])["solved"]
+    assert data["solved_puzzles"][-1] == puzzle["key"]
+    assert data["solved_puzzles"].count(puzzle["key"]) == 1
 
 
 def test_companions_unlock_level_and_contribute_stats() -> None:

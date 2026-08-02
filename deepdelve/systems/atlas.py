@@ -79,12 +79,14 @@ def _living_enemy(dungeon: dict[str, Any], room: int, *, kind: str) -> dict[str,
     """Create a live combat identity backed by the normal balance engine."""
     floor = int(dungeon["floor"])
     enemy = enemy_for_floor(floor)
+    art_name = enemy.get("base_name") or enemy["name"]
     if kind == "miniboss":
         enemy = apply_miniboss(enemy, floor)
         identity = LIVING_MINIBOSSES[dungeon["miniboss"]]
         enemy["miniboss"] = True
     elif kind == "boss":
         enemy = boss_for_floor(max(5, ((floor + 4) // 5) * 5))
+        art_name = enemy.get("base_name") or enemy["name"]
         identity = LIVING_BOSSES[dungeon["boss"]]
         enemy["boss"] = True
     else:
@@ -94,6 +96,10 @@ def _living_enemy(dungeon: dict[str, Any], room: int, *, kind: str) -> dict[str,
             if details["region"] == dungeon["region"]
         ]
         identity = identities[room % len(identities)]
+    # Named-dungeon identities share the portrait of their underlying combat
+    # archetype so every encounter remains illustrated without duplicating the
+    # full balance roster as a second image library.
+    enemy["art_name"] = art_name
     enemy["name"] = identity["name"]
     enemy["base_name"] = identity["name"]
     enemy["codex_key"] = f"living:{dungeon['region']}:{identity['name'].lower().replace(' ', '_')}"

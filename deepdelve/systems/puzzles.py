@@ -10,11 +10,11 @@ from deepdelve.expansion_content import PUZZLES
 
 def puzzle_for_floor(floor: int, solved: list[str], rng: random.Random = random) -> dict[str, Any]:
     """Choose a serializable puzzle suitable for a floor."""
-    choices = [
-        puzzle for puzzle in PUZZLES if puzzle["min_floor"] <= floor <= puzzle["max_floor"] and puzzle["key"] not in solved
-    ]
+    eligible = [puzzle for puzzle in PUZZLES if puzzle["min_floor"] <= floor <= puzzle["max_floor"]]
+    choices = [puzzle for puzzle in eligible if puzzle["key"] not in solved]
     if not choices:
-        choices = [puzzle for puzzle in PUZZLES if puzzle["min_floor"] <= floor <= puzzle["max_floor"]]
+        latest = solved[-1] if solved else ""
+        choices = [puzzle for puzzle in eligible if puzzle["key"] != latest] or eligible
     puzzle = dict(rng.choice(choices))
     puzzle["options"] = dict(puzzle["options"])
     puzzle["attempts"] = 0
@@ -47,8 +47,10 @@ def resolve_puzzle(
         profile["gold"] += reward
         profile["arcane_shards"] = int(profile.get("arcane_shards", 0)) + shards
         profile["puzzle_streak"] = streak
-        if puzzle["key"] not in profile["solved_puzzles"]:
-            profile["solved_puzzles"].append(puzzle["key"])
+        solved_puzzles = profile["solved_puzzles"]
+        if puzzle["key"] in solved_puzzles:
+            solved_puzzles.remove(puzzle["key"])
+        solved_puzzles.append(puzzle["key"])
         profile["active_puzzle"] = {}
         profile["rooms_cleared"] += 1
         return {

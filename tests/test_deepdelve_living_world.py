@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
 
+from deepdelve.art import combat_art_path
 from deepdelve.living_content import FACTION_QUESTS, TENETS
 from deepdelve.systems.atlas import (
     advance_dungeon,
@@ -179,6 +180,8 @@ def test_named_dungeon_spends_declared_energy_and_saves_checkpoints() -> None:
     assert advance_dungeon(data)[0]  # tactical enemy
     enemy = data["encounter"]
     assert enemy["atlas_room"] == 2
+    assert enemy["art_name"] != enemy["name"]
+    assert combat_art_path(enemy) is not None
     assert record_dungeon_victory(data, enemy)
     data["encounter"] = {}
     assert advance_dungeon(data)[0]  # records victory without energy

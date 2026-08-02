@@ -18,6 +18,7 @@ import discord
 from redbot.core import Config, bank, commands
 from redbot.core.utils.chat_formatting import humanize_list
 
+from .art import combat_art_path
 from .advanced_content import (
     BACKGROUNDS,
     BLESSINGS,
@@ -2165,10 +2166,12 @@ class DeepDelve(DashboardIntegration, commands.Cog):
         if not profile.get("created"):
             await interaction.edit_original_response(embed=self._not_created_embed(), view=None)
             return
+        attachments: list[discord.File] = []
         if screen == "resume":
             if profile.get("encounter"):
                 embed = self._combat_embed(profile, "Your unfinished battle resumes.")
                 view: discord.ui.View = CombatView(self, interaction.user.id, profile)
+                attachments = self._combat_attachments(profile)
             elif profile.get("choice"):
                 embed = self._choice_embed(profile)
                 view = ChoiceView(self, interaction.user.id, profile["choice"])
@@ -2216,7 +2219,7 @@ class DeepDelve(DashboardIntegration, commands.Cog):
             embed, view = self._season_archive_embed(profile), SeasonArchiveView(self, interaction.user.id, profile)
         else:
             embed, view = self._game_hub_embed(profile), GameHubView(self, interaction.user.id)
-        await interaction.edit_original_response(embed=embed, view=view)
+        await interaction.edit_original_response(embed=embed, view=view, attachments=attachments)
 
     async def _dispatch_persistent_button(self, interaction: discord.Interaction, route: str) -> None:
         """Dispatch a player control reconstructed after a restart."""
@@ -3962,6 +3965,9 @@ class DeepDelve(DashboardIntegration, commands.Cog):
             description=narrative or enemy.get("description", "Steel yourself—the creature advances!"),
             color=DANGER_COLOR if enemy.get("boss") else 0xD35400,
         )
+        art_path = combat_art_path(enemy)
+        if art_path:
+            embed.set_thumbnail(url=f"attachment://{art_path.name}")
         embed.add_field(
             name="Enemy",
             value=(
@@ -4008,6 +4014,16 @@ class DeepDelve(DashboardIntegration, commands.Cog):
                 embed.add_field(name="Conditions", value="\n".join(status_lines), inline=False)
         embed.set_footer(text="Combat progress is saved. You can resume it with /deepdelve adventure.")
         return embed
+
+    @staticmethod
+    def _combat_art_file(profile: dict[str, Any]) -> discord.File | None:
+        """Build a fresh Discord attachment for the current encounter portrait."""
+        path = combat_art_path(profile.get("encounter") or {})
+        return discord.File(path, filename=path.name) if path else None
+
+    def _combat_attachments(self, profile: dict[str, Any]) -> list[discord.File]:
+        art = self._combat_art_file(profile)
+        return [art] if art else []
 
     def _inventory_embed(
         self,
@@ -4387,7 +4403,7 @@ class DeepDelve(DashboardIntegration, commands.Cog):
             return
         profile, narrative = await self._explore(interaction.guild.id, interaction.user.id)
         if not profile["created"]:
-            await interaction.edit_original_response(embed=self._not_created_embed(), view=None)
+            await interaction.edit_original_response(embed=self._not_created_embed(), view=None, attachments=[])
         elif not profile.get("origin_complete", True):
             await interaction.edit_original_response(
                 embed=self._origin_embed(profile),
@@ -4397,26 +4413,31 @@ class DeepDelve(DashboardIntegration, commands.Cog):
             await interaction.edit_original_response(
                 embed=self._hardcore_death_embed(profile),
                 view=None,
+                attachments=[],
             )
         elif profile["encounter"]:
             await interaction.edit_original_response(
                 embed=self._combat_embed(profile, narrative),
                 view=CombatView(self, interaction.user.id, profile),
+                attachments=self._combat_attachments(profile),
             )
         elif profile["choice"]:
             await interaction.edit_original_response(
                 embed=self._choice_embed(profile),
                 view=ChoiceView(self, interaction.user.id, profile["choice"]),
+                attachments=[],
             )
         elif profile.get("active_puzzle"):
             await interaction.edit_original_response(
                 embed=self._puzzle_embed(profile, narrative),
                 view=PuzzleView(self, interaction.user.id, profile["active_puzzle"]),
+                attachments=[],
             )
         else:
             await interaction.edit_original_response(
                 embed=self._adventure_embed(profile, narrative),
                 view=AdventureView(self, interaction.user.id),
+                attachments=[],
             )
 
     async def _explore(self, guild_id: int, user_id: int) -> tuple[dict[str, Any], str]:
@@ -4817,16 +4838,19 @@ class DeepDelve(DashboardIntegration, commands.Cog):
             await interaction.edit_original_response(
                 embed=self._hardcore_death_embed(profile),
                 view=None,
+                attachments=[],
             )
         elif profile["encounter"]:
             await interaction.edit_original_response(
                 embed=self._combat_embed(profile, narrative),
                 view=CombatView(self, user_id, profile),
+                attachments=self._combat_attachments(profile),
             )
         else:
             await interaction.edit_original_response(
                 embed=self._adventure_embed(profile, narrative),
                 view=AdventureView(self, user_id),
+                attachments=[],
             )
 
     async def _puzzle_interaction(self, interaction: discord.Interaction, answer: str) -> None:
@@ -5101,21 +5125,24 @@ class DeepDelve(DashboardIntegration, commands.Cog):
         await interaction.response.defer()
         profile, narrative = await self._combat_turn(interaction.guild.id, interaction.user.id, action)
         if not profile["created"]:
-            await interaction.edit_original_response(embed=self._not_created_embed(), view=None)
+            await interaction.edit_original_response(embed=self._not_created_embed(), view=None, attachments=[])
         elif profile.get("hardcore_dead"):
             await interaction.edit_original_response(
                 embed=self._hardcore_death_embed(profile),
                 view=None,
+                attachments=[],
             )
         elif profile["encounter"]:
             await interaction.edit_original_response(
                 embed=self._combat_embed(profile, narrative),
                 view=CombatView(self, interaction.user.id, profile),
+                attachments=self._combat_attachments(profile),
             )
         else:
             await interaction.edit_original_response(
                 embed=self._adventure_embed(profile, narrative),
                 view=AdventureView(self, interaction.user.id),
+                attachments=[],
             )
 
     async def _combat_turn(
@@ -8095,6 +8122,7 @@ class DeepDelve(DashboardIntegration, commands.Cog):
             await ctx.send(
                 embed=self._combat_embed(profile, "Your unfinished battle resumes."),
                 view=CombatView(self, ctx.author.id, profile),
+                file=self._combat_art_file(profile),
             )
             return
         if profile["choice"]:
@@ -8114,6 +8142,7 @@ class DeepDelve(DashboardIntegration, commands.Cog):
             await ctx.send(
                 embed=self._combat_embed(profile, narrative),
                 view=CombatView(self, ctx.author.id, profile),
+                file=self._combat_art_file(profile),
             )
         elif profile["choice"]:
             await ctx.send(
@@ -10054,6 +10083,7 @@ class DeepDelve(DashboardIntegration, commands.Cog):
                 f"🌀 **{name} — Wave 1/{waves}**\nReality seals behind you.",
             ),
             view=CombatView(self, ctx.author.id, profile),
+            file=self._combat_art_file(profile),
         )
 
     @endgame_group.command(name="rift")
