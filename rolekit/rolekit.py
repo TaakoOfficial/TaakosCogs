@@ -6,7 +6,7 @@ import asyncio
 import math
 import random
 import time
-from typing import Any
+from typing import Any, ClassVar
 
 import discord
 from redbot.core import Config, commands
@@ -14,8 +14,8 @@ from redbot.core import Config, commands
 from .dashboard_integration import DashboardIntegration
 
 __red_end_user_data_statement__ = (
-    "This cog stores per-server message XP totals and message counts for members while "
-    "leveling is enabled. It does not store message content."
+    "This cog stores per-server message XP totals, message counts, and level-up ping "
+    "preferences for members. It does not store message content."
 )
 
 
@@ -26,7 +26,7 @@ class RoleKit(DashboardIntegration, commands.Cog):
     XP_PER_LEVEL_SQUARED = 100
     MAX_LEVEL = 500
 
-    PRONOUN_ROLES = [
+    PRONOUN_ROLES: ClassVar[list[str]] = [
         "he/him",
         "she/her",
         "they/them",
@@ -36,14 +36,14 @@ class RoleKit(DashboardIntegration, commands.Cog):
         "ze/zir",
     ]
 
-    COMMON_PING_ROLES = [
+    COMMON_PING_ROLES: ClassVar[list[str]] = [
         "Common Ping",
         "No Pings",
         "Ping on Important",
         "Ping for Events",
     ]
 
-    ZODIAC_SIGNS = [
+    ZODIAC_SIGNS: ClassVar[list[str]] = [
         "Aries",
         "Taurus",
         "Gemini",
@@ -58,7 +58,7 @@ class RoleKit(DashboardIntegration, commands.Cog):
         "Pisces",
     ]
 
-    COLOR_CHOICES = {
+    COLOR_CHOICES: ClassVar[dict[str, str]] = {
         "Red": "#FF0000",
         "Orange": "#FFA500",
         "Yellow": "#FFFF00",
@@ -77,7 +77,7 @@ class RoleKit(DashboardIntegration, commands.Cog):
         "Navy": "#000080",
     }
 
-    PLATFORM_ROLES = [
+    PLATFORM_ROLES: ClassVar[list[str]] = [
         "PC",
         "PlayStation",
         "Xbox",
@@ -86,7 +86,7 @@ class RoleKit(DashboardIntegration, commands.Cog):
         "Tabletop",
     ]
 
-    REGION_ROLES = [
+    REGION_ROLES: ClassVar[list[str]] = [
         "North America",
         "South America",
         "Europe",
@@ -95,7 +95,7 @@ class RoleKit(DashboardIntegration, commands.Cog):
         "Oceania",
     ]
 
-    INTEREST_ROLES = [
+    INTEREST_ROLES: ClassVar[list[str]] = [
         "Gaming",
         "Roleplay",
         "Art",
@@ -106,7 +106,7 @@ class RoleKit(DashboardIntegration, commands.Cog):
         "Sports",
     ]
 
-    DEFAULT_LEVEL_ROLES = {
+    DEFAULT_LEVEL_ROLES: ClassVar[dict[int, int]] = {
         5: 0x95A5A6,
         10: 0x2ECC71,
         20: 0x3498DB,
@@ -114,7 +114,7 @@ class RoleKit(DashboardIntegration, commands.Cog):
         50: 0xF1C40F,
     }
 
-    PACK_LABELS = {
+    PACK_LABELS: ClassVar[dict[str, str]] = {
         "zodiac": "Zodiac signs",
         "colors": "Display colors",
         "pronouns": "Pronouns",
@@ -125,7 +125,7 @@ class RoleKit(DashboardIntegration, commands.Cog):
         "levels": "Activity level rewards",
     }
 
-    PACK_ALIASES = {
+    PACK_ALIASES: ClassVar[dict[str, str]] = {
         "color": "colors",
         "colour": "colors",
         "colours": "colors",
@@ -153,11 +153,13 @@ class RoleKit(DashboardIntegration, commands.Cog):
             xp_cooldown=60,
             level_up_channel_id=None,
             level_up_message="🎉 {user} reached **Level {level}**!",
+            level_up_pings_enabled=True,
+            level_up_ping_blocked_role_ids=[],
             level_roles={},
             stack_level_roles=True,
             ignored_channel_ids=[],
         )
-        self.config.register_member(xp=0, message_count=0)
+        self.config.register_member(xp=0, message_count=0, level_up_ping=True)
         self._xp_cooldowns: dict[tuple[int, int], float] = {}
         self._xp_locks: dict[tuple[int, int], asyncio.Lock] = {}
 
@@ -172,6 +174,19 @@ class RoleKit(DashboardIntegration, commands.Cog):
     @staticmethod
     def _ephemeral(ctx: commands.Context) -> bool:
         return bool(ctx.interaction)
+
+    @staticmethod
+    def _member_has_blocked_level_ping_role(
+        member: discord.Member,
+        settings: dict[str, Any],
+    ) -> bool:
+        blocked_role_ids = set()
+        for raw_role_id in settings.get("level_up_ping_blocked_role_ids", []):
+            try:
+                blocked_role_ids.add(int(raw_role_id))
+            except (TypeError, ValueError):
+                continue
+        return any(role.id in blocked_role_ids for role in member.roles)
 
     async def _check_permissions(self, ctx: commands.Context) -> bool:
         """Check whether the bot can create and assign roles."""
@@ -221,10 +236,7 @@ class RoleKit(DashboardIntegration, commands.Cog):
         if pack == "zodiac":
             return [(name, None, None) for name in cls.ZODIAC_SIGNS]
         if pack == "colors":
-            return [
-                (f"Color {name}", discord.Color(int(hex_code[1:], 16)), None)
-                for name, hex_code in cls.COLOR_CHOICES.items()
-            ]
+            return [(f"Color {name}", discord.Color(int(hex_code[1:], 16)), None) for name, hex_code in cls.COLOR_CHOICES.items()]
         if pack == "pronouns":
             return [(name, None, None) for name in cls.PRONOUN_ROLES]
         if pack == "pings":
@@ -236,10 +248,7 @@ class RoleKit(DashboardIntegration, commands.Cog):
         if pack == "interests":
             return [(name, None, None) for name in cls.INTEREST_ROLES]
         if pack == "levels":
-            return [
-                (f"Level {level}", discord.Color(color), level)
-                for level, color in cls.DEFAULT_LEVEL_ROLES.items()
-            ]
+            return [(f"Level {level}", discord.Color(color), level) for level, color in cls.DEFAULT_LEVEL_ROLES.items()]
         raise commands.BadArgument(
             f"Unknown role pack. Choose from: {', '.join(cls.PACK_LABELS)}.",
         )
@@ -389,8 +398,7 @@ class RoleKit(DashboardIntegration, commands.Cog):
         for pack in self.PACK_LABELS:
             created, existing, failed = await self._create_role_pack(ctx.guild, pack)
             summaries.append(
-                f"**{self.PACK_LABELS[pack]}:** {len(created)} created, "
-                f"{len(existing)} existing, {len(failed)} failed",
+                f"**{self.PACK_LABELS[pack]}:** {len(created)} created, {len(existing)} existing, {len(failed)} failed",
             )
         await ctx.send("\n".join(summaries), ephemeral=self._ephemeral(ctx))
 
@@ -407,9 +415,7 @@ class RoleKit(DashboardIntegration, commands.Cog):
     @commands.guild_only()
     async def listcolorroles(self, ctx: commands.Context) -> None:
         """List all available color roles."""
-        choices = ", ".join(
-            f"{name} ({hex_code})" for name, hex_code in self.COLOR_CHOICES.items()
-        )
+        choices = ", ".join(f"{name} ({hex_code})" for name, hex_code in self.COLOR_CHOICES.items())
         await ctx.send(f"Available color roles: {choices}", ephemeral=self._ephemeral(ctx))
 
     @commands.hybrid_command(name="addzodiacrole")
@@ -540,6 +546,12 @@ class RoleKit(DashboardIntegration, commands.Cog):
         settings: dict[str, Any],
     ) -> None:
         await self._sync_level_roles(message.author, level, settings)
+        member_ping_enabled = await self.config.member(message.author).level_up_ping()
+        ping_member = bool(
+            settings.get("level_up_pings_enabled", True)
+            and member_ping_enabled
+            and not self._member_has_blocked_level_ping_role(message.author, settings),
+        )
         channel = None
         channel_id = settings.get("level_up_channel_id")
         if channel_id:
@@ -563,7 +575,7 @@ class RoleKit(DashboardIntegration, commands.Cog):
                 allowed_mentions=discord.AllowedMentions(
                     everyone=False,
                     roles=False,
-                    users=[message.author],
+                    users=[message.author] if ping_member else False,
                 ),
             )
         except discord.HTTPException:
@@ -599,11 +611,7 @@ class RoleKit(DashboardIntegration, commands.Cog):
         configured_roles = {role for _, role in manageable}
         wanted_set = set(wanted)
         to_add = [role for role in wanted if role not in member.roles]
-        to_remove = [
-            role
-            for role in member.roles
-            if role in configured_roles and role not in wanted_set
-        ]
+        to_remove = [role for role in member.roles if role in configured_roles and role not in wanted_set]
         try:
             if to_add:
                 await member.add_roles(*to_add, reason="Activity level rewards")
@@ -677,6 +685,47 @@ class RoleKit(DashboardIntegration, commands.Cog):
         )
         await ctx.send(embed=embed)
 
+    @commands.hybrid_command(name="levelping")
+    @commands.guild_only()
+    async def level_ping(self, ctx: commands.Context, setting: str | None = None) -> None:
+        """Enable or disable your personal level-up notification pings."""
+        member_conf = self.config.member(ctx.author)
+        if setting is None:
+            enabled = await member_conf.level_up_ping()
+            settings = await self.config.guild(ctx.guild).all()
+            if not enabled:
+                state = "disabled by your preference"
+            elif not settings.get("level_up_pings_enabled", True):
+                state = "enabled in your preference, but disabled server-wide"
+            elif self._member_has_blocked_level_ping_role(ctx.author, settings):
+                state = "enabled in your preference, but suppressed by one of your roles"
+            else:
+                state = "enabled"
+            await ctx.send(
+                f"Your level-up notification pings are {state}. Use `levelping enable` or "
+                "`levelping disable` to change this preference.",
+                ephemeral=self._ephemeral(ctx),
+            )
+            return
+
+        normalized = setting.casefold().strip()
+        if normalized not in {"enable", "enabled", "on", "disable", "disabled", "off"}:
+            raise commands.BadArgument("Choose `enable` or `disable`.")
+        enabled = normalized in {"enable", "enabled", "on"}
+        await member_conf.level_up_ping.set(enabled)
+        state = "enabled" if enabled else "disabled"
+        note = ""
+        if enabled:
+            settings = await self.config.guild(ctx.guild).all()
+            if not settings.get("level_up_pings_enabled", True):
+                note = " Server-wide pings are currently disabled."
+            elif self._member_has_blocked_level_ping_role(ctx.author, settings):
+                note = " One of your roles still suppresses the notification."
+        await ctx.send(
+            f"Your level-up notification pings are now {state}.{note}",
+            ephemeral=self._ephemeral(ctx),
+        )
+
     @commands.hybrid_group(name="leveling", invoke_without_command=True)
     @commands.guild_only()
     @commands.admin_or_permissions(manage_guild=True)
@@ -730,6 +779,91 @@ class RoleKit(DashboardIntegration, commands.Cog):
         await self.config.guild(ctx.guild).xp_cooldown.set(seconds)
         await ctx.send(
             f"The XP cooldown is now {seconds} seconds.",
+            ephemeral=self._ephemeral(ctx),
+        )
+
+    @leveling.command(name="pings")
+    @commands.guild_only()
+    @commands.admin_or_permissions(manage_guild=True)
+    async def leveling_pings(self, ctx: commands.Context, setting: str | None = None) -> None:
+        """Enable or disable level-up notification pings server-wide."""
+        guild_conf = self.config.guild(ctx.guild)
+        if setting is None:
+            enabled = await guild_conf.level_up_pings_enabled()
+            state = "enabled" if enabled else "disabled"
+            await ctx.send(
+                f"Server-wide level-up notification pings are {state}.",
+                ephemeral=self._ephemeral(ctx),
+            )
+            return
+
+        normalized = setting.casefold().strip()
+        if normalized not in {"enable", "enabled", "on", "disable", "disabled", "off"}:
+            raise commands.BadArgument("Choose `enable` or `disable`.")
+        enabled = normalized in {"enable", "enabled", "on"}
+        await guild_conf.level_up_pings_enabled.set(enabled)
+        state = "enabled" if enabled else "disabled"
+        await ctx.send(
+            f"Server-wide level-up notification pings are now {state}.",
+            ephemeral=self._ephemeral(ctx),
+        )
+
+    @leveling.command(name="ignorepingrole")
+    @commands.guild_only()
+    @commands.admin_or_permissions(manage_guild=True)
+    async def leveling_ignore_ping_role(
+        self,
+        ctx: commands.Context,
+        role: discord.Role | None = None,
+    ) -> None:
+        """List or toggle roles whose members should not receive level-up pings."""
+        guild_conf = self.config.guild(ctx.guild)
+        if role is None:
+            role_ids = await guild_conf.level_up_ping_blocked_role_ids()
+            valid_role_ids = []
+            names = []
+            for raw_role_id in role_ids:
+                try:
+                    configured_role = ctx.guild.get_role(int(raw_role_id))
+                except (TypeError, ValueError):
+                    continue
+                if configured_role is None or configured_role.is_default():
+                    continue
+                valid_role_ids.append(configured_role.id)
+                names.append(discord.utils.escape_markdown(configured_role.name))
+            if valid_role_ids != role_ids:
+                await guild_conf.level_up_ping_blocked_role_ids.set(valid_role_ids)
+            message = (
+                "Roles excluded from level-up pings: " + ", ".join(names)
+                if names
+                else "No roles are excluded from level-up pings."
+            )
+            await ctx.send(message, ephemeral=self._ephemeral(ctx))
+            return
+
+        if role.is_default():
+            raise commands.BadArgument(
+                "Use `leveling pings disable` instead of excluding the everyone role.",
+            )
+        async with guild_conf.level_up_ping_blocked_role_ids() as role_ids:
+            normalized_role_ids = []
+            for raw_role_id in role_ids:
+                try:
+                    configured_role_id = int(raw_role_id)
+                except (TypeError, ValueError):
+                    continue
+                if ctx.guild.get_role(configured_role_id) is not None:
+                    normalized_role_ids.append(configured_role_id)
+            role_ids[:] = list(dict.fromkeys(normalized_role_ids))
+            if role.id in role_ids:
+                role_ids.remove(role.id)
+                message = f"Members with {role.mention} may receive level-up pings again."
+            else:
+                role_ids.append(role.id)
+                message = f"Members with {role.mention} will not receive level-up pings."
+        await ctx.send(
+            message,
+            allowed_mentions=discord.AllowedMentions.none(),
             ephemeral=self._ephemeral(ctx),
         )
 
@@ -812,7 +946,9 @@ class RoleKit(DashboardIntegration, commands.Cog):
         member: discord.Member,
     ) -> None:
         """Reset one member's XP and remove configured level roles."""
-        await self.config.member(member).clear()
+        member_conf = self.config.member(member)
+        await member_conf.xp.set(0)
+        await member_conf.message_count.set(0)
         _added, removed = await self._sync_level_roles(member, 0)
         await ctx.send(
             f"Reset {member.mention}'s XP and removed {removed} level role(s).",

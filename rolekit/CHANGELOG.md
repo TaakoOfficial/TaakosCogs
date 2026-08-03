@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.1.0] - 2026-08-02
+
+- Added a per-member `levelping` command for opting in to or out of level-up notification pings.
+- Added server-wide level-up ping controls for admins through commands and the dashboard.
+- Added role-based ping exclusions with command and dashboard management.
+- Fixed the RoleKit README command table's unescaped pipe characters.
+
 ## [2.0.0] - 2026-07-16
 
 - Renamed the package and cog from `zodiaccolorroles` / `ZodiacColorRoles` to `rolekit` / `RoleKit`.

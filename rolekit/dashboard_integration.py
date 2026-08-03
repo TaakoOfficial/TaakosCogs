@@ -51,9 +51,7 @@ class DashboardIntegration:
             return {
                 "status": 1,
                 "error_title": "Insufficient Permissions",
-                "error_message": (
-                    "You need Manage Server, Red admin, or bot owner access."
-                ),
+                "error_message": ("You need Manage Server, Red admin, or bot owner access."),
             }
 
         notifications: list[dict[str, str]] = []
@@ -100,9 +98,7 @@ class DashboardIntegration:
         is_owner = user.id in getattr(self.bot, "owner_ids", set())
         is_admin = member is not None and await self.bot.is_admin(member)
         return bool(
-            is_owner
-            or is_admin
-            or (member is not None and member.guild_permissions.manage_guild),
+            is_owner or is_admin or (member is not None and member.guild_permissions.manage_guild),
         )
 
     async def _dashboard_handle_action(
@@ -122,10 +118,7 @@ class DashboardIntegration:
             if guild.me is None or not guild.me.guild_permissions.manage_roles:
                 raise commands.BotMissingPermissions(["manage_roles"])
             created, existing, failed = await self._create_role_pack(guild, pack)
-            return (
-                f"{self.PACK_LABELS[pack]}: {len(created)} created, "
-                f"{len(existing)} already present, {len(failed)} failed."
-            )
+            return f"{self.PACK_LABELS[pack]}: {len(created)} created, {len(existing)} already present, {len(failed)} failed."
         raise commands.BadArgument("Choose a valid dashboard action.")
 
     async def _dashboard_save_leveling(self, guild: discord.Guild, form: Any) -> str:
@@ -154,6 +147,21 @@ class DashboardIntegration:
                 raise commands.BadArgument("Choose only valid text channels to ignore.")
             if ignored_channel_id not in ignored_channel_ids:
                 ignored_channel_ids.append(ignored_channel_id)
+
+        blocked_role_ids = []
+        for raw_role_id in self._dashboard_values(
+            form,
+            "level_up_ping_blocked_role_ids",
+        ):
+            try:
+                blocked_role_id = int(raw_role_id)
+            except (TypeError, ValueError) as error:
+                raise commands.BadArgument("A level-up ping role ID is invalid.") from error
+            role = guild.get_role(blocked_role_id)
+            if role is None or role.is_default():
+                raise commands.BadArgument("Choose only valid roles to exclude from pings.")
+            if blocked_role_id not in blocked_role_ids:
+                blocked_role_ids.append(blocked_role_id)
 
         level_up_message = self._dashboard_value(form, "level_up_message").strip()
         if not 1 <= len(level_up_message) <= 2000:
@@ -186,6 +194,10 @@ class DashboardIntegration:
         await guild_conf.xp_cooldown.set(cooldown)
         await guild_conf.level_up_channel_id.set(channel_id)
         await guild_conf.level_up_message.set(level_up_message)
+        await guild_conf.level_up_pings_enabled.set(
+            self._dashboard_checked(form, "level_up_pings_enabled"),
+        )
+        await guild_conf.level_up_ping_blocked_role_ids.set(blocked_role_ids)
         await guild_conf.stack_level_roles.set(
             self._dashboard_checked(form, "stack_level_roles"),
         )
@@ -244,6 +256,10 @@ class DashboardIntegration:
             guild,
             settings.get("ignored_channel_ids", []),
         )
+        blocked_role_options = self._dashboard_ping_blocked_role_options(
+            guild,
+            settings.get("level_up_ping_blocked_role_ids", []),
+        )
         reward_lines = "\n".join(
             f"{level} = {role_id}"
             for level, role_id in sorted(
@@ -255,6 +271,9 @@ class DashboardIntegration:
         ranked_members = sum(1 for data in member_records.values() if int(data.get("xp", 0)) > 0)
         total_xp = sum(max(0, int(data.get("xp", 0))) for data in member_records.values())
         enabled = self._dashboard_checked_attr(settings.get("leveling_enabled", False))
+        pings_enabled = self._dashboard_checked_attr(
+            settings.get("level_up_pings_enabled", True),
+        )
         stacked = self._dashboard_checked_attr(settings.get("stack_level_roles", True))
 
         return f"""
@@ -301,13 +320,13 @@ class DashboardIntegration:
       <label class="zcr-check"><input type="checkbox" name="leveling_enabled"{enabled}> Enable message XP</label>
       <div class="zcr-row">
         <label class="zcr-field">Minimum XP per eligible message
-          <input type="number" name="xp_min" min="1" max="1000" value="{int(settings['xp_min'])}" required>
+          <input type="number" name="xp_min" min="1" max="1000" value="{int(settings["xp_min"])}" required>
         </label>
         <label class="zcr-field">Maximum XP per eligible message
-          <input type="number" name="xp_max" min="1" max="1000" value="{int(settings['xp_max'])}" required>
+          <input type="number" name="xp_max" min="1" max="1000" value="{int(settings["xp_max"])}" required>
         </label>
         <label class="zcr-field">Cooldown per member (seconds)
-          <input type="number" name="xp_cooldown" min="5" max="3600" value="{int(settings['xp_cooldown'])}" required>
+          <input type="number" name="xp_cooldown" min="5" max="3600" value="{int(settings["xp_cooldown"])}" required>
         </label>
       </div>
       <label class="zcr-field">Level-up announcement channel
@@ -315,8 +334,17 @@ class DashboardIntegration:
       </label>
       <label class="zcr-field">Level-up message
         <input name="level_up_message" maxlength="2000"
-               value="{html.escape(str(settings['level_up_message']), quote=True)}" required>
+               value="{html.escape(str(settings["level_up_message"]), quote=True)}" required>
         <span class="zcr-muted">Placeholders: {{user}}, {{display_name}}, {{level}}, {{server}}</span>
+      </label>
+      <label class="zcr-check">
+        <input type="checkbox" name="level_up_pings_enabled"{pings_enabled}>
+        Ping members in level-up announcements
+      </label>
+      <label class="zcr-field">Roles whose members should not be pinged
+        <select name="level_up_ping_blocked_role_ids" multiple size="6">{blocked_role_options}</select>
+        <span class="zcr-muted">Any matching role suppresses the notification. Members can also
+          opt out with <code>levelping disable</code>.</span>
       </label>
       <label class="zcr-check"><input type="checkbox" name="stack_level_roles"{stacked}> Keep every earned milestone role</label>
       <label class="zcr-field">Channels that should not award XP
@@ -359,7 +387,7 @@ class DashboardIntegration:
 <section class="zcr-card">
   <h4>{html.escape(label)}</h4>
   <p><strong>{existing}/{len(names)}</strong> roles already exist.</p>
-  <p class="zcr-muted zcr-pack-roles">{html.escape(', '.join(names))}</p>
+  <p class="zcr-muted zcr-pack-roles">{html.escape(", ".join(names))}</p>
   <form method="POST">
     {csrf}<input type="hidden" name="action" value="create_pack">
     <input type="hidden" name="pack" value="{html.escape(pack, quote=True)}">
@@ -392,20 +420,30 @@ class DashboardIntegration:
     ) -> str:
         ignored = {int(channel_id) for channel_id in ignored_channel_ids}
         return "".join(
-            f'<option value="{channel.id}"{" selected" if channel.id in ignored else ""}>'
-            f'#{html.escape(channel.name)}</option>'
+            f'<option value="{channel.id}"{" selected" if channel.id in ignored else ""}>#{html.escape(channel.name)}</option>'
             for channel in guild.text_channels
         )
 
-    def _dashboard_commands_html(self) -> str:
-        visible = sorted(
-            command.qualified_name
-            for command in self.walk_commands()
-            if not command.hidden
+    @staticmethod
+    def _dashboard_ping_blocked_role_options(
+        guild: discord.Guild,
+        blocked_role_ids: list[int],
+    ) -> str:
+        blocked = set()
+        for raw_role_id in blocked_role_ids:
+            try:
+                blocked.add(int(raw_role_id))
+            except (TypeError, ValueError):
+                continue
+        return "".join(
+            f'<option value="{role.id}"{" selected" if role.id in blocked else ""}>{html.escape(role.name)}</option>'
+            for role in reversed(guild.roles)
+            if not role.is_default()
         )
-        return "<ul>" + "".join(
-            f"<li><code>{html.escape(command)}</code></li>" for command in visible
-        ) + "</ul>"
+
+    def _dashboard_commands_html(self) -> str:
+        visible = sorted(command.qualified_name for command in self.walk_commands() if not command.hidden)
+        return "<ul>" + "".join(f"<li><code>{html.escape(command)}</code></li>" for command in visible) + "</ul>"
 
     @staticmethod
     def _dashboard_form(kwargs: dict[str, Any]) -> Any:
@@ -472,7 +510,4 @@ class DashboardIntegration:
         token = kwargs.get("csrf_token")
         if not isinstance(token, (tuple, list)) or len(token) != 2:
             return ""
-        return (
-            '<input type="hidden" name="csrf_token" value="'
-            f'{html.escape(str(token[1]), quote=True)}">'
-        )
+        return f'<input type="hidden" name="csrf_token" value="{html.escape(str(token[1]), quote=True)}">'

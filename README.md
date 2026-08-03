@@ -203,7 +203,7 @@ Some features also need Discord privileged intents:
 Each cog includes its own data statement in `info.json`. In short:
 
 - `flipper`, `randomweather`, `emojiporter`, `uppercase`, and `slashlink` do not persistently store end user data.
-- `rolekit` stores per-server XP and counted-message totals when activity leveling is enabled; it never stores message content.
+- `rolekit` stores per-server XP, counted-message totals, and level-up ping preferences; it never stores message content.
 - `messagestudio` stores saved message payloads, author IDs, lock settings, and usage counts when its storage commands are used.
 - `toolz` stores per-guild role-message settings such as role IDs, channel IDs, and message templates.
 - `rolemanager` stores role configuration, role-policy and role-change-rule settings, role costs, reaction/button/select message/channel IDs, emoji keys, temporary-role expiry timestamps, and Discord user IDs for sticky and temporary role assignment.

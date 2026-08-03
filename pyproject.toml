@@ -6,5 +6,5 @@ line-length = 130
 extend-select = [
     "F", "W", "E", "I", "UP", "C4", "FA", "ISC", "ICN",
     "RET", "SIM", "TID", "TC", "PTH", "NPY", "A", "BLE",
-    "COM", "DTZ", "N", "ASYNC"
+    "COM818", "DTZ", "N", "ASYNC"
 ]

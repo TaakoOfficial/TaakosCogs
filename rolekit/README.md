@@ -25,7 +25,7 @@ RoleKit uses the legacy internal Config namespace, so existing leveling settings
 
 ## Dashboard
 
-The purpose-built dashboard lets server managers create missing roles from any pack, enable and tune message XP, choose ignored and announcement channels, customize level-up messages, and map milestone levels to roles.
+The purpose-built dashboard lets server managers create missing roles from any pack, enable and tune message XP, choose ignored and announcement channels, control level-up pings, customize level-up messages, and map milestone levels to roles.
 
 ## Highlights
 
@@ -33,6 +33,7 @@ The purpose-built dashboard lets server managers create missing roles from any p
 - Cooldown-limited XP for real conversation; bot commands and ignored channels do not award XP.
 - Automatic milestone roles with stacked or highest-only reward modes.
 - Member rank cards and a top-ten server leaderboard.
+- Member-level, server-wide, and role-based controls for level-up notification pings.
 - Dashboard controls for every leveling setting and reward mapping.
 - Use `rolepack createall` to build every pack, or create only the packs that fit the server.
 - Hybrid command support for prefix and slash usage.
@@ -47,7 +48,10 @@ The purpose-built dashboard lets server managers create missing roles from any p
 | `[p]addlevelrole <level>`                                    | Create and register a custom milestone role.      |
 | `[p]rank [member]`                                           | Show activity XP, level, and progress.             |
 | `[p]levelboard`                                              | Show the server's top ten activity ranks.          |
-| `[p]leveling enable|disable`                                 | Turn message XP on or off without deleting ranks. |
+| `[p]levelping enable\|disable`                               | Opt in to or out of your level-up pings.          |
+| `[p]leveling enable\|disable`                                | Turn message XP on or off without deleting ranks. |
+| `[p]leveling pings enable\|disable`                          | Control level-up pings across the server.         |
+| `[p]leveling ignorepingrole [role]`                          | List or toggle roles excluded from level pings.   |
 | `[p]leveling xprange <minimum> <maximum>`                    | Configure XP earned per eligible message.         |
 | `[p]leveling cooldown <seconds>`                             | Configure the per-member XP cooldown.              |
 | `[p]leveling reward <level> <role>`                          | Map an existing role to a milestone.               |
@@ -70,4 +74,4 @@ The purpose-built dashboard lets server managers create missing roles from any p
 
 ## Data
 
-When leveling is enabled, the cog stores each member's XP and counted-message total in that server. It never stores message content. Data is removed when a member leaves and is supported by Red's data-deletion API.
+When leveling is enabled, the cog stores each member's XP, counted-message total, and level-up ping preference in that server. It never stores message content. Data is removed when a member leaves and is supported by Red's data-deletion API.
