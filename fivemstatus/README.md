@@ -84,7 +84,7 @@ If no port is provided for a direct host, the cog uses FiveM's default `30120` p
 
 - Red-DiscordBot 3.5.0 or newer.
 - Python 3.9 or newer.
-- `aiohttp`.
+- `aiohttp`; Red's Downloader installs it automatically from the cog metadata.
 - Bot permissions to `Send Messages`, `Embed Links`, `Read Message History`, and use external emoji/images in the status channel.
 - Manage Server permission, Red admin, or equivalent for configuration commands.
 - The configured FiveM endpoint must allow the bot host to reach `dynamic.json`, `info.json`, and `players.json`, or the public CFX server listing API for join codes.

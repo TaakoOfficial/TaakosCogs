@@ -9,6 +9,7 @@ from collections import defaultdict
 from pathlib import Path
 
 import tomllib
+import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 VERSION_RE = re.compile(r"^\d+\.\d+\.\d+$")
@@ -94,6 +95,26 @@ def test_locked_environment_covers_every_cog_requirement() -> None:
         for requirement in json.loads(path.read_text(encoding="utf-8"))["requirements"]
     }
     assert cog_requirements <= root_requirements
+
+
+def test_cog_readmes_document_declared_requirements() -> None:
+    for path in _cog_info_files():
+        requirements = json.loads(path.read_text(encoding="utf-8"))["requirements"]
+        if not requirements:
+            continue
+        readme = (path.parent / "README.md").read_text(encoding="utf-8")
+        assert "## Requirements" in readme, path
+        assert "Downloader" in readme, path
+        for requirement in requirements:
+            assert requirement.casefold() in readme.casefold(), (path, requirement)
+
+
+def test_dependabot_covers_every_locked_update_source() -> None:
+    config = yaml.safe_load((ROOT / ".github" / "dependabot.yml").read_text(encoding="utf-8"))
+    ecosystems = {update["package-ecosystem"] for update in config["updates"]}
+    assert ecosystems == {"uv", "github-actions", "pre-commit"}
+    assert all(update["directory"] == "/" for update in config["updates"])
+    assert all(update["schedule"]["interval"] == "weekly" for update in config["updates"])
 
 
 def test_fable_declares_its_import_time_google_dependencies() -> None:

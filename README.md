@@ -318,6 +318,8 @@ uv run --locked pre-commit install
 
 GitHub runs the lint and test workflow for pushes and pull requests. **Live Cog Load** automatically installs, loads, and unloads only the cogs changed by a push to `main` or by a pull request from a branch in this repository. Fork and Dependabot pull requests never receive `DISCORD_BOT_TOKEN` and therefore skip the live job; they still receive the full tokenless CI suite. Changes to the lockfile or live-test tooling conservatively exercise all cogs, as does a manual run on `main`. A dedicated CI bot token is strongly recommended so test sessions cannot interrupt a production bot using the same token.
 
+Dependabot checks the locked Python environment, GitHub Actions, and pre-commit hooks every Monday morning. Its pull requests run the same tokenless CI as other automated contributions; after a dependency update is reviewed and merged, the `main` push runs Live Cog Load against all cogs affected by the shared lockfile.
+
 ## License
 
 This repository is licensed under the GNU AGPLv3 unless an individual cog states otherwise. The [LICENSE](./LICENSE) file contains the complete, verbatim AGPLv3 text.

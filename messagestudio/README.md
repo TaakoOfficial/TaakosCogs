@@ -4,6 +4,14 @@ MessageStudio is a standalone EmbedUtils-compatible command suite for legacy emb
 
 Red 3.5.21 or newer is required because that release moved to discord.py 2.6, which introduced `LayoutView` and Components V2 support.
 
+## Requirements
+
+- Red-DiscordBot 3.5.21 or newer.
+- Python 3.10 or newer.
+- `PyYAML>=6.0`; Red's Downloader installs it automatically from the cog metadata.
+- Dashboard features require a configured Red-Web-Dashboard installation.
+- Message delivery requires the corresponding Discord channel permissions described below.
+
 ## Visual Dashboard Builder
 
 Open the builder with `[p]embed dashboard` (the `[p]cv2` alias also works). Its interface is inspired by [Merlin Fuchs' Embed Generator](https://github.com/merlinfuchs/embed-generator) and runs entirely inside Red-Web-Dashboard.

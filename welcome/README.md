@@ -64,8 +64,7 @@ Dashboard users with Manage Server, Red admin, or bot owner access can:
 ## Requirements
 
 - Red-DiscordBot 3.0.0 or newer.
-- `aiohttp`.
-- `Pillow`.
+- `aiohttp` and `Pillow`; Red's Downloader installs them automatically from the cog metadata.
 - `Send Messages`, `Embed Links`, and `Attach Files` permissions in the welcome channel.
 - Manage Server permission, Red admin, or equivalent for configuration commands.
 

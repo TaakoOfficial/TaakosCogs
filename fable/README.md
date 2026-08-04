@@ -49,6 +49,9 @@ This cog includes standalone Red-Web-Dashboard integration. Server managers can 
 ## Requirements
 
 - Red-DiscordBot 3.5.0 or newer.
+- Python 3.9 or newer.
+- `graphviz>=0.20.0`, `google-api-python-client>=2.0.0`, and `google-auth>=2.0.0`; Red's Downloader installs these Python packages automatically from the cog metadata.
+- Relationship and location graph images additionally require the Graphviz `dot` executable on the bot host (for Debian/Ubuntu: `sudo apt install graphviz`).
 - `Send Messages` and `Embed Links`.
 - Additional permissions may be needed for admin settings and export workflows.
 - Google API setup is optional and only needed for sync/export features.

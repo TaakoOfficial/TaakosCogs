@@ -46,7 +46,7 @@ This cog includes standalone Red-Web-Dashboard integration. Server managers can 
 ## Requirements
 
 - Red-DiscordBot 3.0.0 or newer.
-- `aiohttp>=3.8.0`.
+- `aiohttp>=3.8.0`; Red's Downloader installs it automatically from the cog metadata.
 - A working WHMCS installation with API access.
 - HTTPS access to your WHMCS endpoint.
 - Discord permissions for any channels/categories the integration manages.

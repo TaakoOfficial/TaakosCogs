@@ -47,7 +47,7 @@ Slash command equivalents are available for the same core weather actions.
 ## Requirements
 
 - Red-DiscordBot 3.5.0 or newer.
-- `pytz`.
+- `pytz`; Red's Downloader installs it automatically from the cog metadata.
 - `Send Messages` and `Embed Links` in the weather channel.
 - Administrator or equivalent permission for configuration commands.
 
