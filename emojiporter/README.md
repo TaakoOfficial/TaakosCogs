@@ -38,7 +38,7 @@ For selected copies, pass comma-separated names such as `blobwave,blobheart`.
 ## Requirements
 
 - Red-DiscordBot 3.0.0 or newer.
-- Python 3.9 or newer.
+- Python 3.10 or newer.
 - `aiohttp`; Red's Downloader installs it automatically from the cog metadata.
 - Bot must be in the source and destination servers.
 - `Manage Emojis and Stickers` in the destination server.

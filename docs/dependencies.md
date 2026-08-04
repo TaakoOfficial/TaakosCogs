@@ -28,4 +28,4 @@ Credentials should be entered only through the private slash-command or dashboar
 
 ## Updates
 
-Dependabot checks `uv.lock`, GitHub Actions, and pre-commit hooks weekly. Dependency pull requests run tokenless CI; merged lockfile changes trigger the complete live cog-load suite on `main`.
+Dependabot checks `uv.lock`, GitHub Actions, and pre-commit hooks weekly, while security updates open automatically for known vulnerable packages. Pull requests receive dependency review before merge; merged lockfile changes trigger the complete live cog-load suite on `main`.

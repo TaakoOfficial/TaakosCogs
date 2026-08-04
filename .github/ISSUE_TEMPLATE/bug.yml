@@ -1,0 +1,101 @@
+name: Bug report
+description: Report reproducible incorrect behavior in a cog.
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: dropdown
+    id: cog
+    attributes:
+      label: Cog
+      description: Which cog is affected?
+      options:
+        - accessreview
+        - applications
+        - captcha
+        - cfxstatus
+        - communitydigest
+        - communitypulse
+        - datasteward
+        - deepdelve
+        - emojiporter
+        - eventcheckin
+        - fable
+        - fivemstatus
+        - flipper
+        - forumflow
+        - giveaway
+        - invitetracker
+        - linksentinel
+        - messagestudio
+        - opsroom
+        - paranoia
+        - randomweather
+        - repboard
+        - reviewhub
+        - rolekit
+        - rolemanager
+        - rpcalander
+        - slashlink
+        - spinwheel
+        - sponsorsync
+        - staffops
+        - suggestionbox
+        - tempvoice
+        - tickethub
+        - toolz
+        - uppercase
+        - welcome
+        - whmcs
+        - yalc
+        - Repository or CI
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: Include the cog version, Red version, Python version, and discord.py version.
+      placeholder: "yalc 4.2.0; Red 3.5.24; Python 3.11.15; discord.py 2.7.1"
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Describe the actual and expected behavior.
+      placeholder: Tell us what went wrong and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction steps
+      description: Provide the smallest reliable sequence that reproduces the issue.
+      placeholder: |
+        1. Configure ...
+        2. Run ...
+        3. Observe ...
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: Remove tokens, credentials, user data, and other private information first.
+      render: shell
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Include screenshots, configuration details, and recent changes when useful.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Submission checks
+      options:
+        - label: I updated the repository and confirmed this issue still occurs.
+          required: true
+        - label: I removed secrets and private user data from this report.
+          required: true
+        - label: I searched existing issues for the same problem.
+          required: true

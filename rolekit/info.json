@@ -22,7 +22,7 @@
         "bulk"
     ],
     "min_bot_version": "3.5.0",
-    "min_python_version": [3, 9, 0],
+    "min_python_version": [3, 10, 0],
     "version": "2.1.0",
     "requirements": [],
     "end_user_data_statement": "When leveling is enabled, this cog stores each member's per-server XP total, counted-message total, and level-up ping preference. It does not store message content, and member data is deleted when the member leaves or through Red's data-deletion API.",

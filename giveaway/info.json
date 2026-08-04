@@ -8,7 +8,7 @@
   "short": "Timed reaction-based giveaways with auto-ending, rerolls, and dashboard support.",
   "tags": ["giveaway", "raffle", "events", "dashboard", "utility", "community"],
   "min_bot_version": "3.5.0",
-  "min_python_version": [3, 9, 0],
+  "min_python_version": [3, 10, 0],
   "requirements": [],
   "hidden": false,
   "disabled": false,

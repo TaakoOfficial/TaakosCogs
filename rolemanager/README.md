@@ -135,7 +135,7 @@ Live dashboard role operations require the confirmation checkbox. Imports also r
 
 ## Requirements
 
-- Red-DiscordBot 3.5.0 or newer on Python 3.9+.
+- Red-DiscordBot 3.5.0 or newer on Python 3.10+.
 - The bot needs `Manage Roles` and its top role must be above any managed role.
 - Reaction-role setup also needs `Add Reactions`, `Read Message History`, and access to the target channel.
 - Server Members intent is required for external role-change rules and recommended for autoroles, sticky roles, and accurate bulk targeting.

@@ -69,6 +69,9 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
+          # Downloader's local-repository helper requires a symbolic branch;
+          # pull_request's default synthetic merge checkout is detached.
+          ref: ${{ github.head_ref || github.ref }}
 
       - name: Install uv and Python
         uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9
