@@ -28,7 +28,8 @@ def ensure_relationships(profile: dict[str, Any]) -> dict[str, Any]:
     old_reputation = profile.get("npc_reputation", {})
     for key in CHARACTER_NAMES:
         entry = relationships.setdefault(
-            key, {"trust": int(old_reputation.get(key, 0)), "conflict": 0, "flags": [], "gift_date": ""},
+            key,
+            {"trust": int(old_reputation.get(key, 0)), "conflict": 0, "flags": [], "gift_date": ""},
         )
         entry.setdefault("trust", int(old_reputation.get(key, 0)))
         entry.setdefault("conflict", 0)

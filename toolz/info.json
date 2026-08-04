@@ -20,5 +20,6 @@
     "disabled": false,
     "type": "COG",
     "short": "Role and user utility tools for larger servers.",
-    "version": "0.4.5"
+    "version": "0.4.5",
+    "end_user_data_statement": "This cog stores per-guild role message settings, including role IDs, channel IDs, and configured message templates. Role member exports are generated on demand and sent directly to Discord without being saved locally."
 }

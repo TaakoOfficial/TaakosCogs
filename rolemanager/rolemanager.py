@@ -13,7 +13,7 @@ import time
 from collections import deque
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import TYPE_CHECKING, Any, Union
+from typing import TYPE_CHECKING, Any, ClassVar, Union
 
 import discord
 from discord.ext import tasks
@@ -81,7 +81,7 @@ class RoleManager(DashboardIntegration, commands.Cog):
         r"days?|d|hours?|hrs?|h|minutes?|mins?|m|seconds?|secs?|s)",
         re.IGNORECASE,
     )
-    TARGET_NAMES = {"everyone", "here", "humans", "bots"}
+    TARGET_NAMES: ClassVar[set[str]] = {"everyone", "here", "humans", "bots"}
 
     def __init__(self, bot: Red) -> None:
         self.bot = bot

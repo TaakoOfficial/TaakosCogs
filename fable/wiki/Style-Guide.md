@@ -8,12 +8,12 @@ A comprehensive guide for maintaining consistent visual design across Fable's fe
 
 ```python
 COLORS = {
-    "PRIMARY":    0x7289DA,  # Discord Blurple - Main brand color
-    "SUCCESS":    0x43B581,  # Green - Positive actions/success
-    "WARNING":    0xFAA61A,  # Yellow - Warnings/cautions
-    "ERROR":      0xF04747,  # Red - Errors/failures
-    "INFO":       0x4F545C,  # Gray - Neutral information
-    "BACKGROUND": 0x2F3136   # Dark - Background/secondary
+    "PRIMARY": 0x7289DA,  # Discord Blurple - Main brand color
+    "SUCCESS": 0x43B581,  # Green - Positive actions/success
+    "WARNING": 0xFAA61A,  # Yellow - Warnings/cautions
+    "ERROR": 0xF04747,  # Red - Errors/failures
+    "INFO": 0x4F545C,  # Gray - Neutral information
+    "BACKGROUND": 0x2F3136,  # Dark - Background/secondary
 }
 ```
 
@@ -240,35 +240,15 @@ COLORS = {
 ### Example Embed Generator
 
 ```python
-def create_styled_embed(
-    title: str,
-    description: str,
-    embed_type: str = "info"
-) -> discord.Embed:
+def create_styled_embed(title: str, description: str, embed_type: str = "info") -> discord.Embed:
     """Generate a styled embed following guide."""
-    colors = {
-        "character": 0x7289DA,
-        "location": 0x43B581,
-        "timeline": 0xFAA61A,
-        "info": 0x4F545C
-    }
+    colors = {"character": 0x7289DA, "location": 0x43B581, "timeline": 0xFAA61A, "info": 0x4F545C}
 
-    icons = {
-        "character": "🎭",
-        "location": "🗺️",
-        "timeline": "📅",
-        "info": "ℹ️"
-    }
+    icons = {"character": "🎭", "location": "🗺️", "timeline": "📅", "info": "ℹ️"}
 
-    embed = discord.Embed(
-        title=f"{icons[embed_type]} {title}",
-        description=description,
-        color=colors[embed_type]
-    )
+    embed = discord.Embed(title=f"{icons[embed_type]} {title}", description=description, color=colors[embed_type])
 
-    embed.set_footer(
-        text=f"Generated • {discord.utils.utcnow().strftime('%Y-%m-%d %H:%M UTC')}"
-    )
+    embed.set_footer(text=f"Generated • {discord.utils.utcnow().strftime('%Y-%m-%d %H:%M UTC')}")
 
     return embed
 ```

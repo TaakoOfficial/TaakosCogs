@@ -3,8 +3,7 @@ import logging  # Edited by Taako
 from datetime import datetime, timezone
 from pathlib import Path
 
-POST_TRACKER_PATH = Path(__file__).parent / \
-                         "post_tracker.json"  # Edited by Taako
+POST_TRACKER_PATH = Path(__file__).parent / "post_tracker.json"  # Edited by Taako
 
 log = logging.getLogger("red.taakoscogs.rpcalander")
 

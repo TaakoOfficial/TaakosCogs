@@ -8,7 +8,7 @@ import csv
 import io
 import logging
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 import discord
 from redbot.core import Config, commands
@@ -64,7 +64,7 @@ class SuggestionBox(DashboardIntegration, commands.Cog):
 
     CONFIG_IDENTIFIER = 2026051303
     DEFAULT_COLOR = 0x5865F2
-    STATUS_COLORS = {
+    STATUS_COLORS: ClassVar[dict[str, int]] = {
         "open": 0x5865F2,
         "considering": 0xFEE75C,
         "approved": 0x57F287,
@@ -72,7 +72,7 @@ class SuggestionBox(DashboardIntegration, commands.Cog):
         "implemented": 0x3BA55D,
         "closed": 0x747F8D,
     }
-    STATUS_LABELS = {
+    STATUS_LABELS: ClassVar[dict[str, str]] = {
         "open": "Open",
         "considering": "Considering",
         "approved": "Approved",
@@ -80,7 +80,7 @@ class SuggestionBox(DashboardIntegration, commands.Cog):
         "implemented": "Implemented",
         "closed": "Closed",
     }
-    VALID_STATUSES = set(STATUS_LABELS)
+    VALID_STATUSES: ClassVar[set[str]] = set(STATUS_LABELS)
     MAX_SUGGESTION_LENGTH = 1800
     MAX_REASON_LENGTH = 700
     MAX_COMMENT_LENGTH = 700
@@ -125,22 +125,12 @@ class SuggestionBox(DashboardIntegration, commands.Cog):
                         record["text"] = "[deleted by data request]"
                         record["status"] = "closed"
                         record["updated_at"] = self._now_ts()
-                    record["upvotes"] = [
-                        voter
-                        for voter in record.get("upvotes", [])
-                        if str(voter) != user_key
-                    ]
-                    record["downvotes"] = [
-                        voter
-                        for voter in record.get("downvotes", [])
-                        if str(voter) != user_key
-                    ]
+                    record["upvotes"] = [voter for voter in record.get("upvotes", []) if str(voter) != user_key]
+                    record["downvotes"] = [voter for voter in record.get("downvotes", []) if str(voter) != user_key]
                     if str(record.get("decision_by")) == user_key:
                         record["decision_by"] = None
                     record["staff_notes"] = [
-                        note
-                        for note in record.get("staff_notes", [])
-                        if str(note.get("staff_id")) != user_key
+                        note for note in record.get("staff_notes", []) if str(note.get("staff_id")) != user_key
                     ]
 
     def _guild_lock(self, guild_id: int) -> asyncio.Lock:
@@ -183,8 +173,7 @@ class SuggestionBox(DashboardIntegration, commands.Cog):
         if not cleaned:
             raise commands.BadArgument("Provide text.")
         if len(cleaned) > limit:
-            raise commands.BadArgument(
-                f"Text must be {limit} characters or fewer.")
+            raise commands.BadArgument(f"Text must be {limit} characters or fewer.")
         return cleaned
 
     async def _wait_for_setup_reply(
@@ -196,17 +185,12 @@ class SuggestionBox(DashboardIntegration, commands.Cog):
         await ctx.send(prompt)
 
         def check(message: discord.Message) -> bool:
-            return (
-                message.author.id == ctx.author.id
-                and message.channel.id == ctx.channel.id
-                and message.guild == ctx.guild
-            )
+            return message.author.id == ctx.author.id and message.channel.id == ctx.channel.id and message.guild == ctx.guild
 
         try:
             message = await self.bot.wait_for("message", check=check, timeout=timeout)
         except asyncio.TimeoutError as exc:
-            raise commands.CommandError(
-                "SuggestionBox walkthrough timed out.") from exc
+            raise commands.CommandError("SuggestionBox walkthrough timed out.") from exc
 
         answer = message.content.strip()
         if answer.lower() in {"cancel", "stop", "quit"}:
@@ -294,8 +278,7 @@ class SuggestionBox(DashboardIntegration, commands.Cog):
         normalized = aliases.get(normalized, normalized)
         if normalized not in cls.VALID_STATUSES:
             raise commands.BadArgument(
-                "Status must be one of: " + \
-                    ", ".join(sorted(cls.VALID_STATUSES)),
+                "Status must be one of: " + ", ".join(sorted(cls.VALID_STATUSES)),
             )
         return normalized
 
@@ -349,12 +332,10 @@ class SuggestionBox(DashboardIntegration, commands.Cog):
         else:
             embed.set_author(name=guild.name)
 
-        embed.add_field(
-            name="Status", value=self._status_label(status), inline=True)
+        embed.add_field(name="Status", value=self._status_label(status), inline=True)
         embed.add_field(
             name="Votes",
-            value=self._vote_text(record, bool(
-                settings.get("allow_downvotes"))),
+            value=self._vote_text(record, bool(settings.get("allow_downvotes"))),
             inline=True,
         )
         if not settings.get("anonymous") or record.get("author_removed"):
@@ -380,8 +361,7 @@ class SuggestionBox(DashboardIntegration, commands.Cog):
 
         thread_id = record.get("thread_id")
         if thread_id:
-            embed.add_field(name="Discussion",
-                            value=f"<#{thread_id}>", inline=True)
+            embed.add_field(name="Discussion", value=f"<#{thread_id}>", inline=True)
 
         decision_reason = record.get("decision_reason")
         if decision_reason:
@@ -516,8 +496,7 @@ class SuggestionBox(DashboardIntegration, commands.Cog):
                 raise commands.CommandError(
                     "I could not create a thread for that suggestion.",
                 ) from exc
-            log.exception(
-                "Failed to create suggestion thread in guild %s", guild.id)
+            log.exception("Failed to create suggestion thread in guild %s", guild.id)
             return None
 
         try:
@@ -615,8 +594,7 @@ class SuggestionBox(DashboardIntegration, commands.Cog):
         embed = discord.Embed(
             title=f"Suggestion {action}",
             description=f"Suggestion #{record.get('id')}",
-            color=self.STATUS_COLORS.get(
-                str(record.get("status")), self.DEFAULT_COLOR),
+            color=self.STATUS_COLORS.get(str(record.get("status")), self.DEFAULT_COLOR),
             timestamp=self._now(),
         )
         embed.add_field(
@@ -651,8 +629,7 @@ class SuggestionBox(DashboardIntegration, commands.Cog):
                 allowed_mentions=discord.AllowedMentions.none(),
             )
         except discord.HTTPException:
-            log.exception(
-                "Failed to send suggestion review log in guild %s", guild.id)
+            log.exception("Failed to send suggestion review log in guild %s", guild.id)
 
     async def _get_record(
         self,
@@ -791,8 +768,7 @@ class SuggestionBox(DashboardIntegration, commands.Cog):
 
         me = guild.me
         if me is None:
-            raise commands.CommandError(
-                "I could not inspect my server permissions.")
+            raise commands.CommandError("I could not inspect my server permissions.")
         permissions = channel.permissions_for(me)
         if not permissions.send_messages or not permissions.embed_links:
             raise commands.CommandError(
@@ -807,8 +783,7 @@ class SuggestionBox(DashboardIntegration, commands.Cog):
                 f"Threads are enabled, but I need `Create Public Threads` in {channel.mention}.",
             )
 
-        suggestion_text = self._clean_text(
-            suggestion_text, self.MAX_SUGGESTION_LENGTH)
+        suggestion_text = self._clean_text(suggestion_text, self.MAX_SUGGESTION_LENGTH)
         async with self._guild_lock(guild.id):
             next_id = int(await self.config.guild(guild).next_id())
             record: SuggestionRecord = {
@@ -913,10 +888,7 @@ class SuggestionBox(DashboardIntegration, commands.Cog):
             await ctx.send(str(error))
             return
 
-        thread_text = (
-            f"\nThread: <#{record['thread_id']}>" if record.get(
-                "thread_id") else ""
-        )
+        thread_text = f"\nThread: <#{record['thread_id']}>" if record.get("thread_id") else ""
         await ctx.send(
             f"Suggestion #{record['id']} submitted: {message.jump_url}{thread_text}",
         )
@@ -957,11 +929,7 @@ class SuggestionBox(DashboardIntegration, commands.Cog):
             review_channel.id if review_channel else None,
         )
         await self.config.guild(ctx.guild).enabled.set(True)
-        review_text = (
-            f" Review logs will post in {review_channel.mention}."
-            if review_channel
-            else ""
-        )
+        review_text = f" Review logs will post in {review_channel.mention}." if review_channel else ""
         await ctx.send(
             f"SuggestionBox is enabled in {suggestion_channel.mention}.{review_text}\n"
             f"Users submit with `{ctx.clean_prefix}suggest <suggestion>`. I will post a tracked "
@@ -981,20 +949,17 @@ class SuggestionBox(DashboardIntegration, commands.Cog):
         try:
             suggestion_channel = await self._prompt_text_channel(
                 ctx,
-                "Step 1/6: Which channel should suggestions be posted in? "
-                "Reply with a channel mention, channel ID, or `here`.",
+                "Step 1/6: Which channel should suggestions be posted in? Reply with a channel mention, channel ID, or `here`.",
             )
             assert suggestion_channel is not None
             review_channel = await self._prompt_text_channel(
                 ctx,
-                "Step 2/6: Which channel should staff review logs go to? "
-                "Reply with a channel, `here`, or `none`.",
+                "Step 2/6: Which channel should staff review logs go to? Reply with a channel, `here`, or `none`.",
                 allow_none=True,
             )
             anonymous = await self._prompt_bool(
                 ctx,
-                "Step 3/6: Hide suggestion authors on public embeds? Reply `yes` or `no`. "
-                "Reply `skip` for no.",
+                "Step 3/6: Hide suggestion authors on public embeds? Reply `yes` or `no`. Reply `skip` for no.",
                 default=False,
             )
             allow_downvotes = await self._prompt_bool(
@@ -1004,14 +969,12 @@ class SuggestionBox(DashboardIntegration, commands.Cog):
             )
             allow_self_vote = await self._prompt_bool(
                 ctx,
-                "Step 5/6: Allow users to vote on their own suggestions? Reply `yes` or `no`. "
-                "Reply `skip` for no.",
+                "Step 5/6: Allow users to vote on their own suggestions? Reply `yes` or `no`. Reply `skip` for no.",
                 default=False,
             )
             create_threads = await self._prompt_bool(
                 ctx,
-                "Step 6/6: Create a discussion thread for each suggestion? Reply `yes` or `no`. "
-                "Reply `skip` for yes.",
+                "Step 6/6: Create a discussion thread for each suggestion? Reply `yes` or `no`. Reply `skip` for yes.",
                 default=True,
             )
         except commands.CommandError as error:
@@ -1033,8 +996,7 @@ class SuggestionBox(DashboardIntegration, commands.Cog):
         thread_warning = ""
         if create_threads:
             me = ctx.guild.me
-            permissions = suggestion_channel.permissions_for(
-                me) if me else None
+            permissions = suggestion_channel.permissions_for(me) if me else None
             if permissions is None or not getattr(
                 permissions,
                 "create_public_threads",
@@ -1174,8 +1136,7 @@ class SuggestionBox(DashboardIntegration, commands.Cog):
             settings = await self.config.guild(ctx.guild).all()
             channel = await self._get_suggestion_channel(ctx.guild, settings)
             me = ctx.guild.me
-            permissions = channel.permissions_for(
-                me) if channel and me else None
+            permissions = channel.permissions_for(me) if channel and me else None
             if channel is None:
                 message += " Set a suggestion channel before submitting suggestions."
             elif permissions is None or not getattr(
@@ -1303,13 +1264,8 @@ class SuggestionBox(DashboardIntegration, commands.Cog):
 
         records = list(suggestions.values())
         if normalized_status:
-            records = [
-                record
-                for record in records
-                if str(record.get("status") or "open") == normalized_status
-            ]
-        records.sort(key=lambda record: int(
-            record.get("id") or 0), reverse=True)
+            records = [record for record in records if str(record.get("status") or "open") == normalized_status]
+        records.sort(key=lambda record: int(record.get("id") or 0), reverse=True)
         records = records[:limit]
         if not records:
             await ctx.send("No suggestions matched that filter.")
@@ -1322,8 +1278,7 @@ class SuggestionBox(DashboardIntegration, commands.Cog):
             if len(text) > 90:
                 text = text[:87] + "..."
             lines.append(
-                f"#{record.get('id')} | {self._status_label(str(record.get('status') or 'open'))} "
-                f"| score {score} | {text}",
+                f"#{record.get('id')} | {self._status_label(str(record.get('status') or 'open'))} | score {score} | {text}",
             )
 
         for page in pagify("\n".join(lines), page_length=1800):
@@ -1335,13 +1290,8 @@ class SuggestionBox(DashboardIntegration, commands.Cog):
         assert ctx.guild is not None
         limit = max(1, min(limit, 50))
         suggestions = await self.config.guild(ctx.guild).suggestions()
-        records = [
-            record
-            for record in suggestions.values()
-            if str(record.get("author_id")) == str(ctx.author.id)
-        ]
-        records.sort(key=lambda record: int(
-            record.get("id") or 0), reverse=True)
+        records = [record for record in suggestions.values() if str(record.get("author_id")) == str(ctx.author.id)]
+        records.sort(key=lambda record: int(record.get("id") or 0), reverse=True)
         if not records:
             await ctx.send("You do not have any tracked suggestions in this server.")
             return
@@ -1378,8 +1328,7 @@ class SuggestionBox(DashboardIntegration, commands.Cog):
             color=self.DEFAULT_COLOR,
             timestamp=self._now(),
         )
-        embed.add_field(name="Total", value=self._count(
-            len(suggestions)), inline=True)
+        embed.add_field(name="Total", value=self._count(len(suggestions)), inline=True)
         for status in sorted(self.VALID_STATUSES):
             embed.add_field(
                 name=self._status_label(status),
@@ -1402,8 +1351,7 @@ class SuggestionBox(DashboardIntegration, commands.Cog):
         reason: str | None = None,
     ) -> None:
         assert ctx.guild is not None
-        reason = self._clean_text(
-            reason, self.MAX_REASON_LENGTH) if reason else None
+        reason = self._clean_text(reason, self.MAX_REASON_LENGTH) if reason else None
         async with self._guild_lock(ctx.guild.id), self.config.guild(ctx.guild).suggestions() as suggestions:
             key = self._suggestion_key(suggestion_id)
             record = suggestions.get(key)
@@ -1428,9 +1376,7 @@ class SuggestionBox(DashboardIntegration, commands.Cog):
             ctx.author,
             reason,
         )
-        notice = (
-            f"Suggestion #{suggestion_id} was marked as {self._status_label(status)}."
-        )
+        notice = f"Suggestion #{suggestion_id} was marked as {self._status_label(status)}."
         if reason:
             notice += f"\nReason: {reason}"
         await self._send_thread_notice(ctx.guild, record, notice)
@@ -1560,8 +1506,7 @@ class SuggestionBox(DashboardIntegration, commands.Cog):
     ) -> None:
         """Delete a suggestion record and remove its message when possible."""
         assert ctx.guild is not None
-        reason = self._clean_text(
-            reason, self.MAX_REASON_LENGTH) if reason else None
+        reason = self._clean_text(reason, self.MAX_REASON_LENGTH) if reason else None
         async with self._guild_lock(ctx.guild.id), self.config.guild(ctx.guild).suggestions() as suggestions:
             key = self._suggestion_key(suggestion_id)
             record = suggestions.pop(key, None)

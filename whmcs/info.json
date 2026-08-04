@@ -22,5 +22,6 @@
     "disabled": false,
     "type": "COG",
     "short": "Integrate Discord with WHMCS billing and client management.",
-    "version": "1.0.14"
+    "version": "1.0.14",
+    "end_user_data_statement": "This cog stores WHMCS API credentials and configuration data. No end user data is persistently stored beyond what is necessary for WHMCS integration."
 }

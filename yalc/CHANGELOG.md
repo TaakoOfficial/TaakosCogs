@@ -1,5 +1,19 @@
 # 📝 YALC Changelog
 
+## [v4.2.0] - 2026-08-03
+
+- Added exact per-role audit correlation for rapid same-member role changes, including add/remove direction and multi-role audit entries.
+- Added changed-field correlation for nickname and timeout updates so simultaneous member changes cannot borrow the wrong moderator.
+- Coalesced concurrent audit fetches by guild/action, made the first lookup immediate, and reused the shared audit cache for multi-role changes.
+- Split member profile/role and timeout routing so simultaneous changes can produce both configured logs.
+- Added raw uncached reaction coverage, individual-emoji clears, poll vote changes, presence changes, global user-profile changes, and scheduled-event attendance changes.
+- Suppressed cached/raw and detailed/broad integration duplicates while preserving richer gateway events.
+- Removed the redundant five-second kick/leave delay and shortened the role audit fallback delay.
+- Made filtering fail closed when configuration checks fail, and made raw reactions/polls honor the uncached-event and ignore policies.
+- Expanded diagnostics with strict role/field match, audit fetch/cache, and delivery/fallback/failure counters.
+- Added explicit join/leave/kick journal identities, faster SQLite contention handling and indexes, and reliable deletion of nested user-ID references.
+- Added pure audit, structural coverage, real Red listener-registration, embed-rendering, and journal privacy tests.
+
 ## [v4.1.0] - 2026-07-16
 
 - Replaced the Flaticon footer image with a pinned, centrally attributed Twemoji scroll graphic.

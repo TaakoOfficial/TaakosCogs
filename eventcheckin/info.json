@@ -1,0 +1,17 @@
+{
+    "$schema": "https://raw.githubusercontent.com/Cog-Creators/Red-DiscordBot/V3/develop/schema/red_cog.schema.json",
+    "name": "eventcheckin",
+    "author": ["Taako"],
+    "version": "1.0.0",
+    "description": "Discord event registration with persistent RSVP and check-in controls, capacity limits, automatic waitlists and promotion, reminders, attendance/no-show finalization, role rewards, and CSV exports.",
+    "install_msg": "EventCheckin loaded. Create an event with `[p]eventcheckin create <unix_timestamp> <capacity> <title>`.",
+    "short": "RSVPs, waitlists, reminders, attendance check-ins, no-shows, and rewards.",
+    "tags": ["events", "rsvp", "attendance", "check-in", "waitlist", "reminder", "dashboard"],
+    "requirements": [],
+    "min_bot_version": "3.5.0",
+    "min_python_version": [3, 9, 0],
+    "hidden": false,
+    "disabled": false,
+    "type": "COG",
+    "end_user_data_statement": "This cog stores event configuration, channel/message/role IDs, event creator IDs, attendee Discord user IDs, RSVP/waitlist/check-in/no-show states, notes, timestamps, and staff actor IDs. CSV attendance reports are generated on demand."
+}

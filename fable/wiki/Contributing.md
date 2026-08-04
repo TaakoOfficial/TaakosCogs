@@ -51,25 +51,19 @@ Thank you for your interest in contributing to Fable! This guide will help you g
 from redbot.core import commands, Config
 import discord
 
+
 class YourFeature(commands.Cog):
     """Clear class docstring explaining feature."""
 
     def __init__(self, bot):
         self.bot = bot
-        self.config = Config.get_conf(
-            self,
-            identifier=1234567890,
-            force_registration=True
-        )
+        self.config = Config.get_conf(self, identifier=1234567890, force_registration=True)
 ```
 
 ### Command Implementation
 
 ```python
-@commands.hybrid_command(
-    name="commandname",
-    description="Clear command description"
-)
+@commands.hybrid_command(name="commandname", description="Clear command description")
 @commands.guild_only()
 @commands.cooldown(1, 5, commands.BucketType.user)
 async def your_command(self, ctx: commands.Context):

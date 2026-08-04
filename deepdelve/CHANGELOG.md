@@ -2,6 +2,14 @@
 
 All notable changes to `deepdelve` are documented here.
 
+## 5.0.2
+
+- Replaced the talent selector's non-emoji diamond glyph with a Discord-valid
+  Unicode emoji, preventing `50035 Invalid Form Body` failures when opening the
+  Progression hub screen.
+- Added regression coverage for the exact serialized select-option payload sent
+  to Discord.
+
 ## 5.0.1
 
 - Increased the default daily exploration allowance from 24 to 40 turns while

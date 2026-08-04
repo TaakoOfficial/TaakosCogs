@@ -52,8 +52,7 @@ class InviteTracker(DashboardIntegration, commands.Cog):
             unknown_joins=0,
         )
         self._locks: dict[int, asyncio.Lock] = {}
-        self._startup_task = asyncio.create_task(
-            self._refresh_enabled_guilds())
+        self._startup_task = asyncio.create_task(self._refresh_enabled_guilds())
 
     async def cog_unload(self) -> None:
         """Cancel startup work when the cog unloads."""
@@ -95,8 +94,7 @@ class InviteTracker(DashboardIntegration, commands.Cog):
             try:
                 await self._refresh_invite_cache(guild)
             except Exception:
-                log.exception(
-                    "Failed to refresh invite cache for guild %s", guild_id)
+                log.exception("Failed to refresh invite cache for guild %s", guild_id)
 
     @staticmethod
     def _now() -> datetime:
@@ -204,8 +202,7 @@ class InviteTracker(DashboardIntegration, commands.Cog):
             invites = await guild.invites()
         except discord.Forbidden as exc:
             raise commands.CommandError(
-                "I cannot read server invites. Give the bot `Manage Server` permission, "
-                "then run `[p]invitetracker refresh`.",
+                "I cannot read server invites. Give the bot `Manage Server` permission, then run `[p]invitetracker refresh`.",
             ) from exc
         except discord.HTTPException as exc:
             raise commands.CommandError(
@@ -270,8 +267,7 @@ class InviteTracker(DashboardIntegration, commands.Cog):
                 allowed_mentions=discord.AllowedMentions.none(),
             )
         except discord.HTTPException:
-            log.exception(
-                "Failed to send InviteTracker log in guild %s", guild.id)
+            log.exception("Failed to send InviteTracker log in guild %s", guild.id)
 
     def _join_embed(
         self,
@@ -294,8 +290,7 @@ class InviteTracker(DashboardIntegration, commands.Cog):
         if invite_code:
             invite_text = f"`{invite_code}`\n{self._invite_url(invite_code)}"
         embed.add_field(name="Invite", value=invite_text, inline=True)
-        embed.add_field(name="Inviter", value=self._user_ref(
-            inviter_id), inline=True)
+        embed.add_field(name="Inviter", value=self._user_ref(inviter_id), inline=True)
         embed.add_field(
             name="Account Created",
             value=self._format_ts(member.created_at.timestamp(), "R"),
@@ -306,13 +301,10 @@ class InviteTracker(DashboardIntegration, commands.Cog):
             channel_id = invite_record.get("channel_id")
             channel_text = f"<#{channel_id}>" if channel_id else "Unknown"
             uses = int(invite_record.get("uses") or 0)
-            embed.add_field(name="Invite Channel",
-                            value=channel_text, inline=True)
-            embed.add_field(name="Invite Uses",
-                            value=self._count(uses), inline=True)
+            embed.add_field(name="Invite Channel", value=channel_text, inline=True)
+            embed.add_field(name="Invite Uses", value=self._count(uses), inline=True)
 
-        embed.add_field(name="Fake Join",
-                        value="Yes" if is_fake else "No", inline=True)
+        embed.add_field(name="Fake Join", value="Yes" if is_fake else "No", inline=True)
         embed.set_footer(text=f"User ID: {member.id}")
         return embed
 
@@ -466,8 +458,7 @@ class InviteTracker(DashboardIntegration, commands.Cog):
         try:
             await self._record_join(member)
         except Exception:
-            log.exception(
-                "Failed to record invite join for guild %s", member.guild.id)
+            log.exception("Failed to record invite join for guild %s", member.guild.id)
 
     @commands.Cog.listener()
     async def on_member_remove(self, member: discord.Member) -> None:
@@ -476,8 +467,7 @@ class InviteTracker(DashboardIntegration, commands.Cog):
         try:
             await self._record_leave(member)
         except Exception:
-            log.exception(
-                "Failed to record invite leave for guild %s", member.guild.id)
+            log.exception("Failed to record invite leave for guild %s", member.guild.id)
 
     async def _send_settings(self, ctx: commands.Context) -> None:
         assert ctx.guild is not None
@@ -488,15 +478,10 @@ class InviteTracker(DashboardIntegration, commands.Cog):
         inviters = settings.get("inviters") or {}
         members = settings.get("members") or {}
 
-        total_joins = sum(int(stats.get("joins", 0))
-                          for stats in inviters.values())
-        total_leaves = sum(int(stats.get("leaves", 0))
-                           for stats in inviters.values())
-        total_fake = sum(int(stats.get("fake", 0))
-                         for stats in inviters.values())
-        active_tracked = sum(
-            1 for record in members.values() if not record.get("left_at")
-        )
+        total_joins = sum(int(stats.get("joins", 0)) for stats in inviters.values())
+        total_leaves = sum(int(stats.get("leaves", 0)) for stats in inviters.values())
+        total_fake = sum(int(stats.get("fake", 0)) for stats in inviters.values())
+        active_tracked = sum(1 for record in members.values() if not record.get("left_at"))
 
         embed = discord.Embed(
             title="InviteTracker Settings",
@@ -745,15 +730,11 @@ class InviteTracker(DashboardIntegration, commands.Cog):
             timestamp=self._now(),
         )
         embed.set_thumbnail(url=member.display_avatar.url)
-        embed.add_field(
-            name="Stats", value=self._stats_line(stats), inline=False)
+        embed.add_field(name="Stats", value=self._stats_line(stats), inline=False)
 
         members = await self.config.guild(ctx.guild).members()
         active = sum(
-            1
-            for record in members.values()
-            if str(record.get("inviter_id")) == str(member.id)
-            and not record.get("left_at")
+            1 for record in members.values() if str(record.get("inviter_id")) == str(member.id) and not record.get("left_at")
         )
         embed.add_field(
             name="Currently Tracked Members",
@@ -869,8 +850,7 @@ class InviteTracker(DashboardIntegration, commands.Cog):
         records = [
             record
             for record in members.values()
-            if str(record.get("inviter_id")) == str(inviter.id)
-            and not record.get("left_at")
+            if str(record.get("inviter_id")) == str(inviter.id) and not record.get("left_at")
         ]
         records.sort(
             key=lambda record: float(record.get("joined_at") or 0),
@@ -888,8 +868,7 @@ class InviteTracker(DashboardIntegration, commands.Cog):
             invite_code = record.get("invite_code") or "unknown"
             fake_text = " fake" if record.get("fake") else ""
             lines.append(
-                f"{self._user_ref(member_id)} - `{invite_code}` - "
-                f"{self._format_ts(record.get('joined_at'), 'R')}{fake_text}",
+                f"{self._user_ref(member_id)} - `{invite_code}` - {self._format_ts(record.get('joined_at'), 'R')}{fake_text}",
             )
 
         header = f"Current tracked members invited by {inviter} ({len(records)} total):"
@@ -912,8 +891,7 @@ class InviteTracker(DashboardIntegration, commands.Cog):
         output = io.StringIO()
         writer = csv.writer(output)
         writer.writerow(
-            ["member_id", "inviter_id", "invite_code",
-                "joined_at", "left_at", "fake"],
+            ["member_id", "inviter_id", "invite_code", "joined_at", "left_at", "fake"],
         )
         for record in members.values():
             writer.writerow(
@@ -928,8 +906,7 @@ class InviteTracker(DashboardIntegration, commands.Cog):
             )
 
         data = output.getvalue().encode("utf-8")
-        file = discord.File(io.BytesIO(
-            data), filename=f"invites-{ctx.guild.id}.csv")
+        file = discord.File(io.BytesIO(data), filename=f"invites-{ctx.guild.id}.csv")
         await ctx.send("Invite member records export:", file=file)
 
     @staticmethod

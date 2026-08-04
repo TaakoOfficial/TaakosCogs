@@ -46,6 +46,11 @@ from deepdelve.persistent_views import (
 )
 
 
+def _component(item):
+    """Return the wrapped Discord component across discord.py versions."""
+    return item.item if isinstance(item, (DeepDelveDynamicButton, DeepDelveDynamicSelect)) else item
+
+
 def _views() -> list:
     owner = 123456789
     cog = object()
@@ -185,7 +190,7 @@ def test_fully_dynamic_views_register_no_competing_live_callbacks() -> None:
         store = ViewStore(SimpleNamespace())
         view = AdventureView(object(), 123456789)
         store.add_view(view, message_id=42)
-        assert store._views[42] == {}
+        assert store._views.get(42, {}) == {}
         assert DeepDelveDynamicButton.__discord_ui_compiled_template__ in store._dynamic_items
 
     asyncio.run(check())
@@ -204,6 +209,27 @@ def test_dynamic_component_templates_reconstruct_routes() -> None:
                 assert rebuilt.route == match["route"]
 
     asyncio.run(check())
+
+
+def test_talent_select_serializes_an_api_valid_unicode_emoji() -> None:
+    view = ProgressionView(
+        object(),
+        123456789,
+        {
+            "attribute_points": 0,
+            "attributes": {"might": 0, "finesse": 0, "insight": 0, "vitality": 0, "fortune": 0},
+            "class_key": "vanguard",
+            "level": 1,
+            "subclass": "",
+            "talent_points": 1,
+            "talents": {},
+            "titles": [],
+        },
+    )
+
+    payload = view.to_components()
+    select = next(component for row in payload for component in row["components"] if "options" in component)
+    assert select["options"][0]["emoji"]["name"] == "🔹"
 
 
 def test_dynamic_router_is_the_single_handler_for_player_messages() -> None:
@@ -226,7 +252,7 @@ def test_dynamic_router_is_the_single_handler_for_player_messages() -> None:
 
 def test_adventure_view_has_a_direct_game_hub_route() -> None:
     view = AdventureView(object(), 123456789)
-    game_hub = next(item for item in view.children if item.label == "Game Hub")
+    game_hub = next(item for item in view.children if _component(item).label == "Game Hub")
     assert game_hub.custom_id == "deepdelve:b:123456789:adventure:game_hub"
 
 
@@ -309,13 +335,9 @@ def test_progression_menu_spends_one_attribute_point_and_refreshes() -> None:
         cog._save_profile.assert_awaited_once_with(1, 123456789, profile, 40)
         refreshed = interaction.edit_original_response.await_args.kwargs["view"]
         assert isinstance(refreshed, ProgressionView)
-        attribute_buttons = [
-            item
-            for item in refreshed.children
-            if str(getattr(item, "label", "")).endswith("+1")
-        ]
+        attribute_buttons = [item for item in refreshed.children if str(getattr(_component(item), "label", "")).endswith("+1")]
         assert len(attribute_buttons) == 5
-        assert all(not item.disabled for item in attribute_buttons)
+        assert all(not _component(item).disabled for item in attribute_buttons)
 
     asyncio.run(check())
 
@@ -406,7 +428,7 @@ def test_every_rendered_persistent_component_has_a_dispatch_route() -> None:
                     selected = str(item.item.options[0].value)
                     await cog._dispatch_persistent_select(interaction, item.route, [selected])
                 else:
-                    raise AssertionError(f"Unexpected persistent component: {type(item).__name__}")
+                    raise TypeError(f"Unexpected persistent component: {type(item).__name__}")
                 cog._persistent_error.assert_not_awaited()
 
     asyncio.run(check())
@@ -440,14 +462,8 @@ def test_inventory_selection_is_encoded_into_stateless_action_routes() -> None:
         assert action_ids
         assert all(custom_id.endswith(":abc123") for custom_id in action_ids)
         assert any(":inventory:identify:abc123" in custom_id for custom_id in action_ids)
-        assert any(
-            getattr(item, "custom_id", "").endswith(":inventory:game_hub")
-            for item in view.children
-        )
-        assert any(
-            getattr(item, "custom_id", "").endswith(":inventory:armory")
-            for item in view.children
-        )
+        assert any(getattr(item, "custom_id", "").endswith(":inventory:game_hub") for item in view.children)
+        assert any(getattr(item, "custom_id", "").endswith(":inventory:armory") for item in view.children)
 
     asyncio.run(check())
 

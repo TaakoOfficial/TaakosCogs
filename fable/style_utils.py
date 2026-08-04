@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 import discord
 
@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 class FableEmbed:
     """Manages consistent embed styling across Fable features."""
 
-    COLORS = {
+    COLORS: ClassVar[dict[str, int]] = {
         "PRIMARY": 0x7289DA,  # Discord Blurple - Main brand color
         "SUCCESS": 0x43B581,  # Green - Positive actions/success
         "WARNING": 0xFAA61A,  # Yellow - Warnings/cautions
@@ -22,7 +22,7 @@ class FableEmbed:
         "BACKGROUND": 0x2F3136,  # Dark - Background/secondary
     }
 
-    LOCATION_COLORS = {
+    LOCATION_COLORS: ClassVar[dict[str, int]] = {
         "tavern": 0xC19A6B,
         "castle": 0x808080,
         "house": 0x43B581,
@@ -31,7 +31,7 @@ class FableEmbed:
         "other": 0x7289DA,
     }
 
-    ICONS = {
+    ICONS: ClassVar[dict[str, str]] = {
         # Character Icons
         "character": "🎭",
         "milestone": "🎯",

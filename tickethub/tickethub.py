@@ -10,7 +10,7 @@ import io
 import logging
 import re
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, Union
+from typing import TYPE_CHECKING, Any, ClassVar, Union
 
 import discord
 from redbot.core import Config, commands
@@ -150,11 +150,7 @@ class AAA3APanelSelect(discord.ui.Select):
                 discord.SelectOption(
                     label=label[:100] or "Ticket",
                     value=str(config_identifier)[:100],
-                    description=(
-                        str(option.get("description"))[:100]
-                        if option.get("description")
-                        else None
-                    ),
+                    description=(str(option.get("description"))[:100] if option.get("description") else None),
                     emoji=cog._component_emoji(option.get("emoji")),
                 ),
             )
@@ -186,8 +182,7 @@ class AAA3APanelCompatView(discord.ui.View):
     def __init__(self, cog: TicketHub, record: AAA3APanelRecord) -> None:
         super().__init__(timeout=None)
         for config_identifier, option in (record.get("buttons") or {}).items():
-            self.add_item(AAA3APanelButton(
-                cog, str(config_identifier), option))
+            self.add_item(AAA3APanelButton(cog, str(config_identifier), option))
         dropdown_options = record.get("dropdown_options") or {}
         if dropdown_options:
             self.add_item(AAA3APanelSelect(cog, dropdown_options))
@@ -210,8 +205,7 @@ class TicketMultiPanelButton(discord.ui.Button):
             label=str(option["label"]),
             emoji=option.get("emoji") or None,
             style=discord.ButtonStyle.secondary,
-            custom_id=(
-                f"taakoscogs:tickethub:multi:{message_id}:{self.profile_name}"),
+            custom_id=(f"taakoscogs:tickethub:multi:{message_id}:{self.profile_name}"),
             row=row,
         )
 
@@ -230,9 +224,7 @@ class TicketMultiPanelSelect(discord.ui.Select):
     ) -> None:
         self.cog = cog
         super().__init__(
-            placeholder=str(record.get("placeholder") or "Choose a ticket type...")[
-                :100
-            ],
+            placeholder=str(record.get("placeholder") or "Choose a ticket type...")[:100],
             min_values=1,
             max_values=1,
             options=[
@@ -400,11 +392,7 @@ class TicketMemberSelect(discord.ui.UserSelect):
         self.parent_view = parent
         self.action = action
         super().__init__(
-            placeholder=(
-                "Select members to add"
-                if action == "add"
-                else "Select members to remove"
-            ),
+            placeholder=("Select members to add" if action == "add" else "Select members to remove"),
             min_values=1,
             max_values=10,
             row=0 if action == "add" else 1,
@@ -568,9 +556,7 @@ class TicketCloseReasonLauncherView(discord.ui.View):
         self.guild_id = guild_id
         self.ticket_id = ticket_id
         self.requester_id = requester_id
-        self.enter_reason.custom_id = (
-            f"taakoscogs:tickethub:close-reason:{ticket_id}:{requester_id}"
-        )
+        self.enter_reason.custom_id = f"taakoscogs:tickethub:close-reason:{ticket_id}:{requester_id}"
 
     @discord.ui.button(
         label="Enter Close Reason",
@@ -689,9 +675,7 @@ class TicketOpenModal(discord.ui.Modal):
             component: discord.ui.Item
             if MODAL_SELECTS_SUPPORTED and question_type == "choice":
                 component = discord.ui.Select(
-                    placeholder=str(field.get("placeholder") or "Choose an option")[
-                        :100
-                    ],
+                    placeholder=str(field.get("placeholder") or "Choose an option")[:100],
                     options=[
                         discord.SelectOption(
                             label=str(choice)[:100],
@@ -718,22 +702,15 @@ class TicketOpenModal(discord.ui.Modal):
                 style_value = int(
                     field.get("style") or discord.TextStyle.paragraph.value,
                 )
-                style = (
-                    discord.TextStyle.short
-                    if style_value == discord.TextStyle.short.value
-                    else discord.TextStyle.paragraph
-                )
+                style = discord.TextStyle.short if style_value == discord.TextStyle.short.value else discord.TextStyle.paragraph
                 default = field.get("default")
                 placeholder = field.get("placeholder")
                 component = discord.ui.TextInput(
                     label=None if MODAL_SELECTS_SUPPORTED else display_label,
                     style=style,
                     required=required,
-                    default=str(default)[:4000] if default not in (
-                        None, "") else None,
-                    placeholder=str(placeholder)[:100]
-                    if placeholder not in (None, "")
-                    else None,
+                    default=str(default)[:4000] if default not in (None, "") else None,
+                    placeholder=str(placeholder)[:100] if placeholder not in (None, "") else None,
                     min_length=field.get("min_length"),
                     max_length=field.get("max_length"),
                 )
@@ -776,10 +753,7 @@ class TicketOpenModal(discord.ui.Modal):
             if value:
                 form_answers.append({"label": label, "value": value[:4000]})
         reason = "Opened from ticket panel."
-        if (
-            len(form_answers) == 1
-            and form_answers[0]["label"].strip().lower() == "reason"
-        ):
+        if len(form_answers) == 1 and form_answers[0]["label"].strip().lower() == "reason":
             reason = form_answers[0]["value"][:1000]
 
         try:
@@ -830,18 +804,12 @@ class TicketQuestionTextModal(discord.ui.Modal):
         field_index: int,
         field: ModalFieldRecord,
     ) -> None:
-        label = str(field.get("label") or "Question").strip()[
-                    :45] or "Question"
+        label = str(field.get("label") or "Question").strip()[:45] or "Question"
         super().__init__(title="Open Ticket", timeout=300)
         self.questionnaire = questionnaire
         self.field_index = field_index
-        style_value = int(field.get("style")
-                          or discord.TextStyle.paragraph.value)
-        style = (
-            discord.TextStyle.short
-            if style_value == discord.TextStyle.short.value
-            else discord.TextStyle.paragraph
-        )
+        style_value = int(field.get("style") or discord.TextStyle.paragraph.value)
+        style = discord.TextStyle.short if style_value == discord.TextStyle.short.value else discord.TextStyle.paragraph
         default = field.get("default")
         placeholder = field.get("placeholder")
         self.answer = discord.ui.TextInput(
@@ -849,9 +817,7 @@ class TicketQuestionTextModal(discord.ui.Modal):
             style=style,
             required=bool(field.get("required", True)),
             default=str(default)[:4000] if default not in (None, "") else None,
-            placeholder=str(placeholder)[:100]
-            if placeholder not in (None, "")
-            else None,
+            placeholder=str(placeholder)[:100] if placeholder not in (None, "") else None,
             min_length=field.get("min_length"),
             max_length=field.get("max_length"),
         )
@@ -897,8 +863,7 @@ class TicketQuestionnaireView(discord.ui.View):
         question_type = str(field.get("type") or "text")
         description = str(field.get("label") or "Question")
         if question_type == "choice":
-            choices = "\n".join(
-                f"- {choice}" for choice in field.get("choices", []))
+            choices = "\n".join(f"- {choice}" for choice in field.get("choices", []))
             if choices:
                 description = f"{description}\n\n{choices}"
         embed = discord.Embed(
@@ -926,8 +891,7 @@ class TicketQuestionnaireView(discord.ui.View):
 
         if question_type == "choice":
             select = discord.ui.Select(
-                placeholder=str(field.get("placeholder")
-                                or "Choose an option")[:100],
+                placeholder=str(field.get("placeholder") or "Choose an option")[:100],
                 options=[
                     discord.SelectOption(
                         label=str(choice)[:100],
@@ -941,12 +905,10 @@ class TicketQuestionnaireView(discord.ui.View):
             select.callback = self._choice_callback
             self.add_item(select)
         elif question_type == "boolean":
-            yes = discord.ui.Button(
-                label="Yes", style=discord.ButtonStyle.success)
+            yes = discord.ui.Button(label="Yes", style=discord.ButtonStyle.success)
             yes.callback = self._yes_callback
             self.add_item(yes)
-            no = discord.ui.Button(
-                label="No", style=discord.ButtonStyle.danger)
+            no = discord.ui.Button(label="No", style=discord.ButtonStyle.danger)
             no.callback = self._no_callback
             self.add_item(no)
         else:
@@ -958,20 +920,17 @@ class TicketQuestionnaireView(discord.ui.View):
             self.add_item(answer)
 
         if not field.get("required", True):
-            skip = discord.ui.Button(
-                label="Skip", style=discord.ButtonStyle.secondary)
+            skip = discord.ui.Button(label="Skip", style=discord.ButtonStyle.secondary)
             skip.callback = self._skip_callback
             self.add_item(skip)
 
-        cancel = discord.ui.Button(
-            label="Cancel", style=discord.ButtonStyle.secondary)
+        cancel = discord.ui.Button(label="Cancel", style=discord.ButtonStyle.secondary)
         cancel.callback = self._cancel_callback
         self.add_item(cancel)
 
     async def _text_callback(self, interaction: discord.Interaction) -> None:
         await interaction.response.send_modal(
-            TicketQuestionTextModal(
-                self, self.field_index, self.current_field),
+            TicketQuestionTextModal(self, self.field_index, self.current_field),
         )
 
     async def _choice_callback(self, interaction: discord.Interaction) -> None:
@@ -1037,10 +996,7 @@ class TicketQuestionnaireView(discord.ui.View):
         self.stop()
         await interaction.response.defer()
         reason = "Opened from ticket panel."
-        if (
-            len(self.form_answers) == 1
-            and self.form_answers[0]["label"].strip().lower() == "reason"
-        ):
+        if len(self.form_answers) == 1 and self.form_answers[0]["label"].strip().lower() == "reason":
             reason = self.form_answers[0]["value"][:1000]
         try:
             record, channel = await self.cog._create_ticket(
@@ -1098,7 +1054,7 @@ class TicketHub(DashboardIntegration, commands.Cog):
     DEFAULT_CLOSE_REQUEST_TIMEOUT_MINUTES = 5
     MIN_CLOSE_REQUEST_TIMEOUT_MINUTES = 1
     MAX_CLOSE_REQUEST_TIMEOUT_MINUTES = 4320
-    CHANNEL_TEMPLATE_FIELDS = {
+    CHANNEL_TEMPLATE_FIELDS: ClassVar[set[str]] = {
         "id",
         "ticket_id",
         "profile_id",
@@ -1140,8 +1096,7 @@ class TicketHub(DashboardIntegration, commands.Cog):
             tuple[int, int],
             TicketCloseConfirmationView,
         ] = {}
-        self._close_confirmation_tasks: dict[tuple[int, int], asyncio.Task] = {
-            }
+        self._close_confirmation_tasks: dict[tuple[int, int], asyncio.Task] = {}
         self._auto_delete_tasks: dict[tuple[int, int], asyncio.Task] = {}
         self._control_refresh_task: asyncio.Task | None = None
 
@@ -1152,9 +1107,7 @@ class TicketHub(DashboardIntegration, commands.Cog):
             if command.name != "ticket":
                 continue
             command.name = "tickethub"
-            command.aliases = [
-                alias for alias in ("thub",) if self.bot.get_command(alias) is None
-            ]
+            command.aliases = [alias for alias in ("thub",) if self.bot.get_command(alias) is None]
             app_command = getattr(command, "app_command", None)
             if app_command is not None:
                 try:
@@ -1172,9 +1125,7 @@ class TicketHub(DashboardIntegration, commands.Cog):
             if command.name != "ticketset":
                 continue
             command.name = "tickethubset"
-            command.aliases = [
-                alias for alias in ("thubset",) if self.bot.get_command(alias) is None
-            ]
+            command.aliases = [alias for alias in ("thubset",) if self.bot.get_command(alias) is None]
             app_command = getattr(command, "app_command", None)
             if app_command is not None:
                 try:
@@ -1260,15 +1211,10 @@ class TicketHub(DashboardIntegration, commands.Cog):
                     if str(record.get("reopened_by")) == user_key:
                         record["reopened_by"] = None
                     pending_close = record.get("pending_close")
-                    if (
-                        isinstance(pending_close, dict)
-                        and str(pending_close.get("requested_by")) == user_key
-                    ):
+                    if isinstance(pending_close, dict) and str(pending_close.get("requested_by")) == user_key:
                         pending_close["requested_by"] = None
                     record["participants"] = [
-                        member_id
-                        for member_id in record.get("participants", [])
-                        if str(member_id) != user_key
+                        member_id for member_id in record.get("participants", []) if str(member_id) != user_key
                     ]
                     for event in record.get("events", []):
                         if str(event.get("actor_id")) == user_key:
@@ -1363,9 +1309,7 @@ class TicketHub(DashboardIntegration, commands.Cog):
             "next_profile_ticket_id": None,
             "panel_title": "Need Help?",
             "panel_message": "Open a ticket and staff will help you as soon as possible.",
-            "welcome_message": (
-                "Welcome {owner_mention}. A staff member will be with you shortly."
-            ),
+            "welcome_message": ("Welcome {owner_mention}. A staff member will be with you shortly."),
             "custom_message": "Please describe what you need help with.",
             "creating_modal": None,
             "transcripts": True,
@@ -1435,9 +1379,7 @@ class TicketHub(DashboardIntegration, commands.Cog):
         hour_text = f"{hours} hour{'s' if hours != 1 else ''}"
         if remaining_minutes == 0:
             return hour_text
-        minute_text = (
-            f"{remaining_minutes} minute{'s' if remaining_minutes != 1 else ''}"
-        )
+        minute_text = f"{remaining_minutes} minute{'s' if remaining_minutes != 1 else ''}"
         return f"{hour_text} {minute_text}"
 
     @staticmethod
@@ -1488,8 +1430,7 @@ class TicketHub(DashboardIntegration, commands.Cog):
     @staticmethod
     def _quote_text(value: Any, limit: int = 1024) -> str:
         text = str(value or "Not provided.").strip()
-        quoted = "\n".join(
-            f"> {line}" if line else ">" for line in text.splitlines())
+        quoted = "\n".join(f"> {line}" if line else ">" for line in text.splitlines())
         return quoted[:limit]
 
     @staticmethod
@@ -1650,8 +1591,7 @@ class TicketHub(DashboardIntegration, commands.Cog):
             label = cls._clean_modal_text(raw_field.get("label"), 45)
             if not label:
                 continue
-            question_type = cls._modal_type_name(
-                raw_field.get("type")) or "text"
+            question_type = cls._modal_type_name(raw_field.get("type")) or "text"
             choices = cls._clean_modal_choices(raw_field.get("choices"))
             if question_type == "choice" and len(choices) < 2:
                 question_type = "text"
@@ -1675,11 +1615,7 @@ class TicketHub(DashboardIntegration, commands.Cog):
                 minimum=1,
                 maximum=4000,
             )
-            if (
-                min_length is not None
-                and max_length is not None
-                and min_length > max_length
-            ):
+            if min_length is not None and max_length is not None and min_length > max_length:
                 min_length = None
             fields.append(
                 {
@@ -1716,33 +1652,25 @@ class TicketHub(DashboardIntegration, commands.Cog):
                 "blacklist_role_ids",
             ):
                 profile[key] = list(profile.get(key) or [])
-            profile["control_emojis"] = dict(
-                profile.get("control_emojis") or {})
+            profile["control_emojis"] = dict(profile.get("control_emojis") or {})
             profile["creating_modal"] = TicketHub._sanitize_modal_fields(
                 profile.get("creating_modal"),
             )
-            profile["panel_style"] = TicketHub._panel_style(
-                profile.get("panel_style"))
+            profile["panel_style"] = TicketHub._panel_style(profile.get("panel_style"))
             profile["ticket_mode"] = TicketHub._ticket_mode(profile)
             try:
                 next_profile_ticket_id = profile.get("next_profile_ticket_id")
                 profile["next_profile_ticket_id"] = (
-                    max(1, int(next_profile_ticket_id))
-                    if next_profile_ticket_id is not None
-                    else None
+                    max(1, int(next_profile_ticket_id)) if next_profile_ticket_id is not None else None
                 )
             except (TypeError, ValueError):
                 profile["next_profile_ticket_id"] = None
             try:
                 thread_parent_id = profile.get("thread_parent_channel_id")
-                profile["thread_parent_channel_id"] = (
-                    int(thread_parent_id) if thread_parent_id else None
-                )
+                profile["thread_parent_channel_id"] = int(thread_parent_id) if thread_parent_id else None
             except (TypeError, ValueError):
                 profile["thread_parent_channel_id"] = None
-            profile["close_request_timeout_minutes"] = (
-                TicketHub._close_request_timeout_minutes(profile)
-            )
+            profile["close_request_timeout_minutes"] = TicketHub._close_request_timeout_minutes(profile)
         return profile
 
     @staticmethod
@@ -1802,8 +1730,7 @@ class TicketHub(DashboardIntegration, commands.Cog):
         if not isinstance(value, dict):
             return None
         try:
-            cleaned_message_id = int(
-                value.get("message_id") or message_id or 0)
+            cleaned_message_id = int(value.get("message_id") or message_id or 0)
             channel_id = int(value.get("channel_id") or 0)
         except (TypeError, ValueError):
             return None
@@ -1815,8 +1742,7 @@ class TicketHub(DashboardIntegration, commands.Cog):
             if not isinstance(raw_option, dict):
                 continue
             try:
-                profile_name = cls._clean_name(
-                    str(raw_option.get("profile") or ""))
+                profile_name = cls._clean_name(str(raw_option.get("profile") or ""))
             except commands.BadArgument:
                 continue
             if profile_name in seen_profiles:
@@ -1824,8 +1750,7 @@ class TicketHub(DashboardIntegration, commands.Cog):
             label = str(raw_option.get("label") or "").strip()[:80]
             if not label:
                 continue
-            description = str(raw_option.get(
-                "description") or "").strip()[:100]
+            description = str(raw_option.get("description") or "").strip()[:100]
             emoji = str(raw_option.get("emoji") or "").strip()[:100]
             options.append(
                 {
@@ -1836,8 +1761,7 @@ class TicketHub(DashboardIntegration, commands.Cog):
                 },
             )
             seen_profiles.add(profile_name)
-        placeholder = str(value.get("placeholder")
-                          or "Choose a ticket type...").strip()
+        placeholder = str(value.get("placeholder") or "Choose a ticket type...").strip()
         return {
             "channel_id": channel_id,
             "message_id": cleaned_message_id,
@@ -1942,8 +1866,7 @@ class TicketHub(DashboardIntegration, commands.Cog):
         message: discord.Message,
         record: MultiPanelRecord,
     ) -> MultiPanelRecord:
-        cleaned = self._sanitize_multi_panel_record(
-            record, message_id=message.id)
+        cleaned = self._sanitize_multi_panel_record(record, message_id=message.id)
         if cleaned is None or not cleaned["options"]:
             raise commands.BadArgument(
                 "A multi-panel needs at least one valid profile option.",
@@ -2031,14 +1954,11 @@ class TicketHub(DashboardIntegration, commands.Cog):
                 if not clean_identifier:
                     continue
                 try:
-                    profile = cls._clean_name(
-                        str(raw_option.get("profile") or "main"))
+                    profile = cls._clean_name(str(raw_option.get("profile") or "main"))
                 except commands.BadArgument:
                     continue
-                label = cls._clean_modal_text(
-                    raw_option.get("label"), 80) or None
-                emoji = cls._clean_modal_text(
-                    raw_option.get("emoji"), 100) or None
+                label = cls._clean_modal_text(raw_option.get("label"), 80) or None
+                emoji = cls._clean_modal_text(raw_option.get("emoji"), 100) or None
                 if label is None and emoji is None:
                     label = "Open Ticket"
                 buttons[clean_identifier] = {
@@ -2064,8 +1984,7 @@ class TicketHub(DashboardIntegration, commands.Cog):
                 if not clean_identifier:
                     continue
                 try:
-                    profile = cls._clean_name(
-                        str(raw_option.get("profile") or "main"))
+                    profile = cls._clean_name(str(raw_option.get("profile") or "main"))
                 except commands.BadArgument:
                     continue
                 label = cls._clean_modal_text(raw_option.get("label"), 100)
@@ -2079,8 +1998,7 @@ class TicketHub(DashboardIntegration, commands.Cog):
                         100,
                     )
                     or None,
-                    "emoji": cls._clean_modal_text(raw_option.get("emoji"), 100)
-                    or None,
+                    "emoji": cls._clean_modal_text(raw_option.get("emoji"), 100) or None,
                 }
 
         if not buttons and not dropdown_options:
@@ -2221,10 +2139,7 @@ class TicketHub(DashboardIntegration, commands.Cog):
         if record is None:
             for raw_record in panels.values():
                 candidate = self._sanitize_aaa3a_panel_record(raw_record)
-                if (
-                    candidate is not None
-                    and int(candidate.get("message_id") or 0) == interaction.message.id
-                ):
+                if candidate is not None and int(candidate.get("message_id") or 0) == interaction.message.id:
                     record = candidate
                     break
         if record is None:
@@ -2257,10 +2172,7 @@ class TicketHub(DashboardIntegration, commands.Cog):
         if not raw_profiles:
             raw_profiles = {"main": self._default_profile()}
             await self.config.guild(guild).profiles.set(raw_profiles)
-        return {
-            self._clean_name(name): self._merge_profile(profile)
-            for name, profile in raw_profiles.items()
-        }
+        return {self._clean_name(name): self._merge_profile(profile) for name, profile in raw_profiles.items()}
 
     async def _get_profile(
         self,
@@ -2270,8 +2182,7 @@ class TicketHub(DashboardIntegration, commands.Cog):
         profiles = await self._get_profiles(guild)
         key = self._clean_name(profile_name)
         if key not in profiles:
-            raise commands.BadArgument(
-                f"No TicketHub profile named `{key}` exists.")
+            raise commands.BadArgument(f"No TicketHub profile named `{key}` exists.")
         return profiles[key]
 
     async def _set_profile(
@@ -2398,13 +2309,11 @@ class TicketHub(DashboardIntegration, commands.Cog):
         parent = self._thread_parent_channel(guild, profile)
         if parent is None:
             raise commands.CommandError(
-                "Thread ticket mode needs a thread parent channel. "
-                "Set one with `[p]ticketset threadparent <profile> #channel`.",
+                "Thread ticket mode needs a thread parent channel. Set one with `[p]ticketset threadparent <profile> #channel`.",
             )
         me = guild.me
         if me is None:
-            raise commands.CommandError(
-                "I could not inspect my server permissions.")
+            raise commands.CommandError("I could not inspect my server permissions.")
 
         bot_perms = parent.permissions_for(me)
         missing = []
@@ -2435,8 +2344,7 @@ class TicketHub(DashboardIntegration, commands.Cog):
             owner_missing.append("Read Message History")
         if owner_missing:
             raise commands.CommandError(
-                f"{owner.mention} needs {', '.join(owner_missing)} in {parent.mention} "
-                "to use thread tickets.",
+                f"{owner.mention} needs {', '.join(owner_missing)} in {parent.mention} to use thread tickets.",
             )
 
     async def _validate_ticket_open_request(
@@ -2473,8 +2381,7 @@ class TicketHub(DashboardIntegration, commands.Cog):
 
         me = guild.me
         if me is None:
-            raise commands.CommandError(
-                "I could not inspect my server permissions.")
+            raise commands.CommandError("I could not inspect my server permissions.")
         if self._ticket_mode(profile) == "thread":
             self._validate_thread_parent_permissions(guild, owner, profile)
         elif not me.guild_permissions.manage_channels:
@@ -2566,17 +2473,13 @@ class TicketHub(DashboardIntegration, commands.Cog):
         placeholders = set(re.findall(r"\{([^{}]+)\}", template))
         unknown = placeholders - cls.CHANNEL_TEMPLATE_FIELDS
         if unknown:
-            supported = ", ".join(
-                f"`{{{name}}}`" for name in sorted(cls.CHANNEL_TEMPLATE_FIELDS)
-            )
+            supported = ", ".join(f"`{{{name}}}`" for name in sorted(cls.CHANNEL_TEMPLATE_FIELDS))
             raise commands.BadArgument(
-                f"Unknown placeholder(s): {', '.join(sorted(unknown))}. "
-                f"Supported placeholders: {supported}.",
+                f"Unknown placeholder(s): {', '.join(sorted(unknown))}. Supported placeholders: {supported}.",
             )
         without_placeholders = re.sub(r"\{[^{}]+\}", "", template)
         if "{" in without_placeholders or "}" in without_placeholders:
-            raise commands.BadArgument(
-                "Channel name template braces are not balanced.")
+            raise commands.BadArgument("Channel name template braces are not balanced.")
         return template
 
     @staticmethod
@@ -2586,8 +2489,7 @@ class TicketHub(DashboardIntegration, commands.Cog):
         profile_name: str,
     ) -> int:
         try:
-            configured_next = max(
-                1, int(profile.get("next_profile_ticket_id") or 1))
+            configured_next = max(1, int(profile.get("next_profile_ticket_id") or 1))
         except (TypeError, ValueError):
             configured_next = 1
         existing_numbers = []
@@ -2596,8 +2498,7 @@ class TicketHub(DashboardIntegration, commands.Cog):
                 continue
             try:
                 existing_numbers.append(
-                    int(record.get("profile_ticket_id")
-                        or record.get("id") or 0),
+                    int(record.get("profile_ticket_id") or record.get("id") or 0),
                 )
             except (TypeError, ValueError):
                 continue
@@ -2614,8 +2515,7 @@ class TicketHub(DashboardIntegration, commands.Cog):
         if record.get("claimed_by") and status == "open":
             color = self.CLAIMED_COLOR
         profile_name = str(record.get("profile") or "main")
-        profile_label = profile_name.replace(
-            "-", " ").replace("_", " ").title()
+        profile_label = profile_name.replace("-", " ").replace("_", " ").title()
         reason = str(record.get("reason") or "No reason provided.")
         embed = discord.Embed(
             title=f"🎫 Ticket #{record.get('id')}  •  {profile_label}",
@@ -2623,25 +2523,16 @@ class TicketHub(DashboardIntegration, commands.Cog):
             color=color,
             timestamp=self._now(),
         )
-        owner = (
-            guild.get_member(int(record["owner_id"]))
-            if record.get("owner_id")
-            else None
-        )
+        owner = guild.get_member(int(record["owner_id"])) if record.get("owner_id") else None
         self._set_member_identity(
             embed,
             owner,
             fallback_name=f"Ticket owner ({record.get('owner_id') or 'unknown'})",
         )
-        embed.add_field(
-            name="Status", value=self._status_display(record), inline=True)
+        embed.add_field(name="Status", value=self._status_display(record), inline=True)
         embed.add_field(
             name="Claimed By",
-            value=(
-                self._user_ref(record.get("claimed_by"))
-                if record.get("claimed_by")
-                else "Waiting for staff"
-            ),
+            value=(self._user_ref(record.get("claimed_by")) if record.get("claimed_by") else "Waiting for staff"),
             inline=True,
         )
         embed.add_field(
@@ -2660,19 +2551,13 @@ class TicketHub(DashboardIntegration, commands.Cog):
         embed.add_field(name="Profile", value=profile_value, inline=True)
         embed.add_field(
             name="Created",
-            value=(
-                f"{self._format_ts(record.get('created_at'), 'F')}\n"
-                f"{self._format_ts(record.get('created_at'), 'R')}"
-            ),
+            value=(f"{self._format_ts(record.get('created_at'), 'F')}\n{self._format_ts(record.get('created_at'), 'R')}"),
             inline=True,
         )
         if record.get("closed_at"):
             embed.add_field(
                 name="Closed",
-                value=(
-                    f"{self._format_ts(record.get('closed_at'), 'F')}\n"
-                    f"{self._format_ts(record.get('closed_at'), 'R')}"
-                ),
+                value=(f"{self._format_ts(record.get('closed_at'), 'F')}\n{self._format_ts(record.get('closed_at'), 'R')}"),
                 inline=True,
             )
             if record.get("close_reason"):
@@ -2688,10 +2573,7 @@ class TicketHub(DashboardIntegration, commands.Cog):
                 inline=False,
             )
         for answer in self._clean_form_answers(record.get("form_answers")):
-            if (
-                answer["label"].strip().lower() == "reason"
-                and answer["value"].strip() == reason.strip()
-            ):
+            if answer["label"].strip().lower() == "reason" and answer["value"].strip() == reason.strip():
                 continue
             embed.add_field(
                 name=self._truncate_field(answer["label"], 256),
@@ -2793,11 +2675,7 @@ class TicketHub(DashboardIntegration, commands.Cog):
         )
         ticket_url = None
         if record is not None:
-            owner = (
-                guild.get_member(int(record["owner_id"]))
-                if record.get("owner_id")
-                else None
-            )
+            owner = guild.get_member(int(record["owner_id"])) if record.get("owner_id") else None
             self._set_member_identity(
                 embed,
                 owner,
@@ -2821,11 +2699,7 @@ class TicketHub(DashboardIntegration, commands.Cog):
             )
             embed.add_field(
                 name="Claimed By",
-                value=(
-                    self._user_ref(record.get("claimed_by"))
-                    if record.get("claimed_by")
-                    else "Not claimed"
-                ),
+                value=(self._user_ref(record.get("claimed_by")) if record.get("claimed_by") else "Not claimed"),
                 inline=True,
             )
             embed.add_field(
@@ -2844,11 +2718,9 @@ class TicketHub(DashboardIntegration, commands.Cog):
                 inline=True,
             )
             if include_jump:
-                ticket_url = self._ticket_url(
-                    guild.id, record.get("channel_id"))
+                ticket_url = self._ticket_url(guild.id, record.get("channel_id"))
         footer_icon = str(guild.icon.url) if guild.icon else None
-        embed.set_footer(
-            text=f"{guild.name}  •  TicketHub Logs", icon_url=footer_icon)
+        embed.set_footer(text=f"{guild.name}  •  TicketHub Logs", icon_url=footer_icon)
         try:
             await channel.send(
                 embed=embed,
@@ -2879,11 +2751,7 @@ class TicketHub(DashboardIntegration, commands.Cog):
             channel = await guild.fetch_channel(channel_id)
         except (discord.NotFound, discord.Forbidden, discord.HTTPException):
             return None
-        return (
-            channel
-            if isinstance(channel, (discord.TextChannel, discord.Thread))
-            else None
-        )
+        return channel if isinstance(channel, (discord.TextChannel, discord.Thread)) else None
 
     async def _find_ticket_by_channel(
         self,
@@ -2907,8 +2775,7 @@ class TicketHub(DashboardIntegration, commands.Cog):
         for key, record in tickets.items():
             if int(record.get("message_id") or 0) == int(message_id):
                 return key, record
-        raise commands.BadArgument(
-            "This message is not a tracked TicketHub ticket.")
+        raise commands.BadArgument("This message is not a tracked TicketHub ticket.")
 
     async def _find_panel_profile(
         self,
@@ -2957,9 +2824,7 @@ class TicketHub(DashboardIntegration, commands.Cog):
                     interaction.user,
                     profile_name,
                 )
-                if MODAL_SELECTS_SUPPORTED or all(
-                    str(field.get("type") or "text") == "text" for field in modal_fields
-                ):
+                if MODAL_SELECTS_SUPPORTED or all(str(field.get("type") or "text") == "text" for field in modal_fields):
                     await interaction.response.send_modal(
                         TicketOpenModal(
                             self,
@@ -3074,14 +2939,9 @@ class TicketHub(DashboardIntegration, commands.Cog):
                     interaction.guild,
                     str(record.get("profile") or "main"),
                 )
-                is_owner = interaction.user.id == int(
-                    record.get("owner_id") or 0)
+                is_owner = interaction.user.id == int(record.get("owner_id") or 0)
                 if not self._is_support_member(interaction.user, profile) and not (
-                    is_owner
-                    and (
-                        profile.get("owner_can_add_members")
-                        or profile.get("owner_can_remove_members")
-                    )
+                    is_owner and (profile.get("owner_can_add_members") or profile.get("owner_can_remove_members"))
                 ):
                     raise commands.CommandError(
                         "You do not have permission to manage this ticket's members.",
@@ -3099,8 +2959,7 @@ class TicketHub(DashboardIntegration, commands.Cog):
                 if str(member_id) != str(record.get("owner_id"))
             ]
             await interaction.response.send_message(
-                "Manage ticket members below.\nCurrent added members: "
-                + (", ".join(participant_mentions) or "None"),
+                "Manage ticket members below.\nCurrent added members: " + (", ".join(participant_mentions) or "None"),
                 view=TicketMembersView(self, int(record["id"])),
                 ephemeral=True,
             )
@@ -3199,8 +3058,7 @@ class TicketHub(DashboardIntegration, commands.Cog):
                 tickets,
                 profile_name,
             )
-            category = self._profile_category(
-                guild, profile, "ticket_category_id")
+            category = self._profile_category(guild, profile, "ticket_category_id")
             channel_name = self._format_template(
                 profile.get("channel_name"),
                 ticket_id=profile_ticket_id,
@@ -3244,10 +3102,7 @@ class TicketHub(DashboardIntegration, commands.Cog):
                 "owner_id": owner.id,
                 "channel_id": channel.id,
                 "location_type": mode,
-                "thread_parent_channel_id": (
-                    channel.parent_id if isinstance(
-                        channel, discord.Thread) else None
-                ),
+                "thread_parent_channel_id": (channel.parent_id if isinstance(channel, discord.Thread) else None),
                 "message_id": None,
                 "status": "open",
                 "claimed_by": None,
@@ -3293,16 +3148,13 @@ class TicketHub(DashboardIntegration, commands.Cog):
                 profile_ticket_id,
                 global_ticket_id=ticket_id,
             )
-            ping_text = self._role_mentions(
-                guild, profile.get("ping_role_ids") or [])
+            ping_text = self._role_mentions(guild, profile.get("ping_role_ids") or [])
             mention_parts = [ping_text] if ping_text else []
             if owner.mention not in welcome:
                 mention_parts.insert(0, owner.mention)
             mention_line = " ".join(mention_parts)
             welcome_line = f"### 👋 {welcome}" if welcome else ""
-            intro = "\n".join(
-                part for part in (mention_line, welcome_line, custom) if part
-            )
+            intro = "\n".join(part for part in (mention_line, welcome_line, custom) if part)
             embed = self._ticket_embed(guild, record, profile)
             try:
                 message = await channel.send(
@@ -3364,8 +3216,7 @@ class TicketHub(DashboardIntegration, commands.Cog):
         parent = self._thread_parent_channel(guild, profile)
         if parent is None:
             raise commands.CommandError(
-                "Thread ticket mode needs a thread parent channel. "
-                "Set one with `[p]ticketset threadparent <profile> #channel`.",
+                "Thread ticket mode needs a thread parent channel. Set one with `[p]ticketset threadparent <profile> #channel`.",
             )
         try:
             try:
@@ -3481,11 +3332,7 @@ class TicketHub(DashboardIntegration, commands.Cog):
             raise commands.CommandError(
                 "I could not find that ticket channel or thread.",
             )
-        owner = (
-            guild.get_member(int(record["owner_id"]))
-            if record.get("owner_id")
-            else None
-        )
+        owner = guild.get_member(int(record["owner_id"])) if record.get("owner_id") else None
         participant_ids = record.get("participants") or []
         if owner_locked is None:
             owner_locked = bool(record.get("locked"))
@@ -3531,18 +3378,12 @@ class TicketHub(DashboardIntegration, commands.Cog):
             allowed_ids.add(owner.id)
         if guild.me is not None:
             allowed_ids.add(guild.me.id)
-        administrators = [
-            member
-            for member in guild.members
-            if not member.bot and self._has_admin_permissions(member)
-        ]
+        administrators = [member for member in guild.members if not member.bot and self._has_admin_permissions(member)]
         allowed_ids.update(member.id for member in administrators)
         support_members = []
         if claimed_by is None:
             support_members = [
-                member
-                for member in guild.members
-                if not member.bot and self._can_speak_in_ticket(member, profile)
+                member for member in guild.members if not member.bot and self._can_speak_in_ticket(member, profile)
             ]
             allowed_ids.update(member.id for member in support_members)
         required_members = [claimed_by, *administrators, *support_members]
@@ -3662,11 +3503,7 @@ class TicketHub(DashboardIntegration, commands.Cog):
             can_send = (
                 not closed
                 and not owner_locked
-                and (
-                    not claim_locked
-                    or participant.id == claimed_by_id
-                    or self._has_admin_permissions(participant)
-                )
+                and (not claim_locked or participant.id == claimed_by_id or self._has_admin_permissions(participant))
             )
             overwrites[participant] = discord.PermissionOverwrite(
                 view_channel=True,
@@ -3756,8 +3593,7 @@ class TicketHub(DashboardIntegration, commands.Cog):
         except asyncio.CancelledError:
             raise
         except RECOVERABLE_EXCEPTIONS:
-            log.exception(
-                "Failed to refresh existing TicketHub control messages.")
+            log.exception("Failed to refresh existing TicketHub control messages.")
 
     async def _claim_ticket(
         self,
@@ -3767,8 +3603,7 @@ class TicketHub(DashboardIntegration, commands.Cog):
     ) -> None:
         profile = await self._get_profile(guild, str(record.get("profile") or "main"))
         if not self._is_support_member(member, profile):
-            raise commands.CommandError(
-                "Only support staff can claim tickets.")
+            raise commands.CommandError("Only support staff can claim tickets.")
         if record.get("status") != "open":
             raise commands.CommandError("Only open tickets can be claimed.")
         if record.get("claimed_by"):
@@ -3798,8 +3633,7 @@ class TicketHub(DashboardIntegration, commands.Cog):
     ) -> None:
         profile = await self._get_profile(guild, str(record.get("profile") or "main"))
         if not self._is_support_member(member, profile):
-            raise commands.CommandError(
-                "Only support staff can unclaim tickets.")
+            raise commands.CommandError("Only support staff can unclaim tickets.")
         if record.get("status") != "open":
             raise commands.CommandError("Only open tickets can be unclaimed.")
         if not record.get("claimed_by"):
@@ -3834,11 +3668,7 @@ class TicketHub(DashboardIntegration, commands.Cog):
             raise commands.CommandError("Only open tickets can be locked.")
         if record.get("locked"):
             raise commands.CommandError("This ticket is already locked.")
-        claimed_by = (
-            guild.get_member(int(record["claimed_by"]))
-            if record.get("claimed_by")
-            else None
-        )
+        claimed_by = guild.get_member(int(record["claimed_by"])) if record.get("claimed_by") else None
         await self._set_ticket_claim_access(
             guild,
             record,
@@ -3850,8 +3680,7 @@ class TicketHub(DashboardIntegration, commands.Cog):
         record["locked_by"] = member.id
         record["locked_at"] = self._now_ts()
         record.setdefault("events", []).append(
-            {"type": "locked", "actor_id": member.id,
-                "at": record["locked_at"]},
+            {"type": "locked", "actor_id": member.id, "at": record["locked_at"]},
         )
         async with self.config.guild(guild).tickets() as tickets:
             tickets[str(record["id"])] = record
@@ -3873,17 +3702,12 @@ class TicketHub(DashboardIntegration, commands.Cog):
     ) -> None:
         profile = await self._get_profile(guild, str(record.get("profile") or "main"))
         if not self._is_support_member(member, profile):
-            raise commands.CommandError(
-                "Only support staff can unlock tickets.")
+            raise commands.CommandError("Only support staff can unlock tickets.")
         if record.get("status") != "open":
             raise commands.CommandError("Only open tickets can be unlocked.")
         if not record.get("locked"):
             raise commands.CommandError("This ticket is not locked.")
-        claimed_by = (
-            guild.get_member(int(record["claimed_by"]))
-            if record.get("claimed_by")
-            else None
-        )
+        claimed_by = guild.get_member(int(record["claimed_by"])) if record.get("claimed_by") else None
         await self._set_ticket_claim_access(
             guild,
             record,
@@ -3895,8 +3719,7 @@ class TicketHub(DashboardIntegration, commands.Cog):
         record["unlocked_by"] = member.id
         record["unlocked_at"] = self._now_ts()
         record.setdefault("events", []).append(
-            {"type": "unlocked", "actor_id": member.id,
-                "at": record["unlocked_at"]},
+            {"type": "unlocked", "actor_id": member.id, "at": record["unlocked_at"]},
         )
         async with self.config.guild(guild).tickets() as tickets:
             tickets[str(record["id"])] = record
@@ -3921,9 +3744,7 @@ class TicketHub(DashboardIntegration, commands.Cog):
             return True
         if actor.id != int(record.get("owner_id") or 0):
             return False
-        setting = (
-            "owner_can_add_members" if action == "add" else "owner_can_remove_members"
-        )
+        setting = "owner_can_add_members" if action == "add" else "owner_can_remove_members"
         return bool(profile.get(setting))
 
     async def _add_ticket_member(
@@ -3939,14 +3760,10 @@ class TicketHub(DashboardIntegration, commands.Cog):
                 "You are not allowed to add members to this ticket.",
             )
         if record.get("status") != "open":
-            raise commands.CommandError(
-                "Members can only be added to open tickets.")
-        participant_ids = {
-            int(member_id) for member_id in record.get("participants", [])
-        }
+            raise commands.CommandError("Members can only be added to open tickets.")
+        participant_ids = {int(member_id) for member_id in record.get("participants", [])}
         if member.id in participant_ids:
-            raise commands.CommandError(
-                "That member is already in this ticket.")
+            raise commands.CommandError("That member is already in this ticket.")
         if member.id == int(record.get("owner_id") or 0) or self._is_support_member(
             member,
             profile,
@@ -3964,8 +3781,7 @@ class TicketHub(DashboardIntegration, commands.Cog):
         can_send_while_claimed = self._has_admin_permissions(
             member,
         ) or member.id == int(record.get("claimed_by") or 0)
-        can_send = not ticket_locked and (
-            not claim_locked or can_send_while_claimed)
+        can_send = not ticket_locked and (not claim_locked or can_send_while_claimed)
         try:
             if isinstance(channel, discord.Thread):
                 if can_send:
@@ -4020,13 +3836,8 @@ class TicketHub(DashboardIntegration, commands.Cog):
             raise commands.CommandError(
                 "You are not allowed to remove members from this ticket.",
             )
-        participant_ids = {
-            int(member_id) for member_id in record.get("participants", [])
-        }
-        if (
-            member.id == int(record.get("owner_id") or 0)
-            or member.id not in participant_ids
-        ):
+        participant_ids = {int(member_id) for member_id in record.get("participants", [])}
+        if member.id == int(record.get("owner_id") or 0) or member.id not in participant_ids:
             raise commands.CommandError(
                 "That member is not an added member of this ticket.",
             )
@@ -4087,8 +3898,7 @@ class TicketHub(DashboardIntegration, commands.Cog):
         results = []
         for member in members:
             if not isinstance(member, discord.Member):
-                results.append(
-                    f"{member}: that user is not a member of this server.")
+                results.append(f"{member}: that user is not a member of this server.")
                 continue
             try:
                 record = await self._get_ticket_record_by_id(
@@ -4123,8 +3933,7 @@ class TicketHub(DashboardIntegration, commands.Cog):
         tickets = await self.config.guild(guild).tickets()
         record = tickets.get(str(ticket_id))
         if record is None:
-            raise commands.BadArgument(
-                f"No ticket with ID `{ticket_id}` was found.")
+            raise commands.BadArgument(f"No ticket with ID `{ticket_id}` was found.")
         return record
 
     async def _validate_close_request(
@@ -4134,15 +3943,9 @@ class TicketHub(DashboardIntegration, commands.Cog):
         member: discord.Member,
     ) -> ProfileRecord:
         profile = await self._get_profile(guild, str(record.get("profile") or "main"))
-        owner = (
-            guild.get_member(int(record["owner_id"]))
-            if record.get("owner_id")
-            else None
-        )
+        owner = guild.get_member(int(record["owner_id"])) if record.get("owner_id") else None
         owner_is_closing = owner is not None and owner.id == member.id
-        if not self._is_support_member(member, profile) and not (
-            owner_is_closing and profile.get("owner_can_close")
-        ):
+        if not self._is_support_member(member, profile) and not (owner_is_closing and profile.get("owner_can_close")):
             raise commands.CommandError(
                 "You do not have permission to close this ticket.",
             )
@@ -4179,8 +3982,7 @@ class TicketHub(DashboardIntegration, commands.Cog):
         if state == "closed":
             return discord.Embed(
                 title="Ticket Closed",
-                description=(
-                    f"This ticket has been closed.\n\n**Reason:**\n{reason}"),
+                description=(f"This ticket has been closed.\n\n**Reason:**\n{reason}"),
                 color=self.CLOSED_COLOR,
                 timestamp=self._now(),
             )
@@ -4254,11 +4056,7 @@ class TicketHub(DashboardIntegration, commands.Cog):
         for guild_id, guild_data in all_guilds.items():
             for record in (guild_data.get("tickets") or {}).values():
                 pending = record.get("pending_close")
-                if (
-                    not isinstance(pending, dict)
-                    or record.get("status") != "open"
-                    or not pending.get("message_id")
-                ):
+                if not isinstance(pending, dict) or record.get("status") != "open" or not pending.get("message_id"):
                     continue
                 try:
                     ticket_id = int(record["id"])
@@ -4268,10 +4066,8 @@ class TicketHub(DashboardIntegration, commands.Cog):
                     continue
                 view = TicketCloseConfirmationView(self, ticket_id)
                 self.bot.add_view(view, message_id=message_id)
-                self._close_confirmation_views[(
-                    int(guild_id), ticket_id)] = view
-                self._schedule_close_confirmation(
-                    int(guild_id), ticket_id, expires_at)
+                self._close_confirmation_views[(int(guild_id), ticket_id)] = view
+                self._schedule_close_confirmation(int(guild_id), ticket_id, expires_at)
 
     async def _start_close_confirmation(
         self,
@@ -4301,10 +4097,7 @@ class TicketHub(DashboardIntegration, commands.Cog):
     ) -> discord.Message:
         profile = await self._validate_close_request(guild, record, requester)
         existing = record.get("pending_close")
-        if (
-            isinstance(existing, dict)
-            and float(existing.get("expires_at") or 0) > self._now_ts()
-        ):
+        if isinstance(existing, dict) and float(existing.get("expires_at") or 0) > self._now_ts():
             raise commands.CommandError(
                 "This ticket already has an active close confirmation.",
             )
@@ -4313,11 +4106,7 @@ class TicketHub(DashboardIntegration, commands.Cog):
             raise commands.CommandError(
                 "I could not find that ticket channel or thread.",
             )
-        owner = (
-            guild.get_member(int(record["owner_id"]))
-            if record.get("owner_id")
-            else None
-        )
+        owner = guild.get_member(int(record["owner_id"])) if record.get("owner_id") else None
         target = owner or requester
         clean_reason = reason.strip()[:1000] or "No reason provided."
         timeout_minutes = self._close_request_timeout_minutes(profile)
@@ -4371,8 +4160,7 @@ class TicketHub(DashboardIntegration, commands.Cog):
         reason: str,
     ) -> discord.Message:
         if interaction.guild_id != guild_id or interaction.user.id != requester_id:
-            raise commands.CommandError(
-                "This close request is not valid here.")
+            raise commands.CommandError("This close request is not valid here.")
         guild, record, requester = await self.validate_close_request_ids(
             guild_id,
             ticket_id,
@@ -4411,10 +4199,7 @@ class TicketHub(DashboardIntegration, commands.Cog):
                 raise commands.CommandError(
                     "This close confirmation is no longer active.",
                 )
-            if (
-                expected_expires_at is not None
-                and float(pending.get("expires_at") or 0) != expected_expires_at
-            ):
+            if expected_expires_at is not None and float(pending.get("expires_at") or 0) != expected_expires_at:
                 raise commands.CommandError(
                     "This close confirmation has been replaced.",
                 )
@@ -4507,8 +4292,7 @@ class TicketHub(DashboardIntegration, commands.Cog):
             with contextlib.suppress(discord.HTTPException):
                 await interaction.message.edit(
                     content=f"Ticket closed by {interaction.user}.",
-                    embed=self._close_confirmation_embed(
-                        reason, state="closed"),
+                    embed=self._close_confirmation_embed(reason, state="closed"),
                     view=None,
                 )
         await interaction.followup.send("Ticket closed.", ephemeral=True)
@@ -4533,8 +4317,7 @@ class TicketHub(DashboardIntegration, commands.Cog):
                 or float(pending.get("expires_at") or 0) != expires_at
             ):
                 return
-            actor = guild.get_member(
-                int(pending.get("requested_by") or 0)) or guild.me
+            actor = guild.get_member(int(pending.get("requested_by") or 0)) or guild.me
             if actor is None:
                 return
             message = await self._fetch_close_confirmation_message(
@@ -4554,8 +4337,7 @@ class TicketHub(DashboardIntegration, commands.Cog):
                 with contextlib.suppress(discord.HTTPException):
                     await message.edit(
                         content="Close confirmation timed out; ticket closed automatically.",
-                        embed=self._close_confirmation_embed(
-                            reason, state="closed"),
+                        embed=self._close_confirmation_embed(reason, state="closed"),
                         view=None,
                     )
         except asyncio.CancelledError:
@@ -4616,8 +4398,7 @@ class TicketHub(DashboardIntegration, commands.Cog):
                     continue
                 profile_name = str(record.get("profile") or "main")
                 profile = self._merge_profile(profiles.get(profile_name))
-                self._schedule_ticket_auto_delete(
-                    int(guild_id), record, profile)
+                self._schedule_ticket_auto_delete(int(guild_id), record, profile)
 
     async def _ticket_auto_delete_timeout(
         self,
@@ -4633,10 +4414,7 @@ class TicketHub(DashboardIntegration, commands.Cog):
             if guild is None:
                 return
             record = await self._get_ticket_record_by_id(guild, ticket_id)
-            if (
-                record.get("status") != "closed"
-                or float(record.get("closed_at") or 0) != expected_closed_at
-            ):
+            if record.get("status") != "closed" or float(record.get("closed_at") or 0) != expected_closed_at:
                 return
             await self._delete_ticket_channel(
                 guild,
@@ -4672,11 +4450,7 @@ class TicketHub(DashboardIntegration, commands.Cog):
                 raise commands.CommandError("This ticket is already closed.")
         else:
             profile = await self._validate_close_request(guild, record, member)
-        owner = (
-            guild.get_member(int(record["owner_id"]))
-            if record.get("owner_id")
-            else None
-        )
+        owner = guild.get_member(int(record["owner_id"])) if record.get("owner_id") else None
 
         record["status"] = "closed"
         record["pending_close"] = None
@@ -4716,8 +4490,7 @@ class TicketHub(DashboardIntegration, commands.Cog):
                         guild.id,
                     )
             else:
-                overwrites = self._ticket_overwrites(
-                    guild, owner, profile, closed=True)
+                overwrites = self._ticket_overwrites(guild, owner, profile, closed=True)
                 closed_category = self._profile_category(
                     guild,
                     profile,
@@ -4727,9 +4500,7 @@ class TicketHub(DashboardIntegration, commands.Cog):
                     await channel.edit(
                         category=closed_category or channel.category,
                         overwrites=overwrites,
-                        name=f"closed-{channel.name}"[:100]
-                        if not channel.name.startswith("closed-")
-                        else channel.name,
+                        name=f"closed-{channel.name}"[:100] if not channel.name.startswith("closed-") else channel.name,
                         reason=f"TicketHub ticket #{record['id']} closed",
                     )
                 except discord.HTTPException:
@@ -4764,9 +4535,7 @@ class TicketHub(DashboardIntegration, commands.Cog):
         if isinstance(channel, discord.Thread):
             try:
                 await channel.edit(
-                    name=f"closed-{channel.name}"[:100]
-                    if not channel.name.startswith("closed-")
-                    else channel.name,
+                    name=f"closed-{channel.name}"[:100] if not channel.name.startswith("closed-") else channel.name,
                     archived=True,
                     locked=True,
                     reason=f"TicketHub ticket #{record['id']} closed",
@@ -4785,15 +4554,9 @@ class TicketHub(DashboardIntegration, commands.Cog):
         member: discord.Member,
     ) -> ProfileRecord:
         profile = await self._get_profile(guild, str(record.get("profile") or "main"))
-        owner = (
-            guild.get_member(int(record["owner_id"]))
-            if record.get("owner_id")
-            else None
-        )
+        owner = guild.get_member(int(record["owner_id"])) if record.get("owner_id") else None
         owner_is_reopening = owner is not None and owner.id == member.id
-        if not self._is_support_member(member, profile) and not (
-            owner_is_reopening and profile.get("owner_can_reopen")
-        ):
+        if not self._is_support_member(member, profile) and not (owner_is_reopening and profile.get("owner_can_reopen")):
             raise commands.CommandError(
                 "You do not have permission to reopen this ticket.",
             )
@@ -4810,11 +4573,7 @@ class TicketHub(DashboardIntegration, commands.Cog):
         reason: str | None = None,
     ) -> None:
         profile = await self._validate_reopen_request(guild, record, member)
-        owner = (
-            guild.get_member(int(record["owner_id"]))
-            if record.get("owner_id")
-            else None
-        )
+        owner = guild.get_member(int(record["owner_id"])) if record.get("owner_id") else None
 
         record["status"] = "open"
         record["closed_at"] = None
@@ -4832,11 +4591,7 @@ class TicketHub(DashboardIntegration, commands.Cog):
                 "reason": record["reopen_reason"],
             },
         )
-        claimed_by = (
-            guild.get_member(int(record["claimed_by"]))
-            if record.get("claimed_by")
-            else None
-        )
+        claimed_by = guild.get_member(int(record["claimed_by"])) if record.get("claimed_by") else None
         channel = await self._fetch_ticket_channel(guild, record)
         if channel is not None:
             if isinstance(channel, discord.Thread):
@@ -4895,10 +4650,7 @@ class TicketHub(DashboardIntegration, commands.Cog):
             guild,
             profile,
             "Ticket Reopened",
-            (
-                f"Ticket #{record['id']} reopened by {member.mention}.\n"
-                f"Reason: {record['reopen_reason']}"
-            ),
+            (f"Ticket #{record['id']} reopened by {member.mention}.\nReason: {record['reopen_reason']}"),
             color=self.OPEN_COLOR,
             record=record,
             ticket_channel=channel,
@@ -4914,11 +4666,8 @@ class TicketHub(DashboardIntegration, commands.Cog):
         permission_checked: bool = False,
     ) -> None:
         profile = await self._get_profile(guild, str(record.get("profile") or "main"))
-        if not permission_checked and (
-            member is None or not self._is_support_member(member, profile)
-        ):
-            raise commands.CommandError(
-                "Only support staff can delete tickets.")
+        if not permission_checked and (member is None or not self._is_support_member(member, profile)):
+            raise commands.CommandError("Only support staff can delete tickets.")
         actor = member or guild.me
         channel = await self._fetch_ticket_channel(guild, record)
         if profile.get("transcripts"):
@@ -4971,12 +4720,8 @@ class TicketHub(DashboardIntegration, commands.Cog):
         actor: discord.Member,
     ) -> TicketRecord:
         tickets = await self.config.guild(guild).tickets()
-        if any(
-            str(record.get("channel_id")) == str(channel.id)
-            for record in tickets.values()
-        ):
-            raise commands.CommandError(
-                "That channel is already linked to a ticket.")
+        if any(str(record.get("channel_id")) == str(channel.id) for record in tickets.values()):
+            raise commands.CommandError("That channel is already linked to a ticket.")
         control_message = None
         control_embed = None
         try:
@@ -5002,12 +4747,10 @@ class TicketHub(DashboardIntegration, commands.Cog):
         footer = str(control_embed.footer.text or "")
         ticket_id_match = re.search(r"Ticket ID:\s*(\d+)", footer)
         if ticket_id_match is None:
-            raise commands.CommandError(
-                "The ticket control message has an invalid ID.")
+            raise commands.CommandError("The ticket control message has an invalid ID.")
         ticket_id = int(ticket_id_match.group(1))
         if str(ticket_id) in tickets:
-            raise commands.CommandError(
-                f"Ticket ID `{ticket_id}` is already in use.")
+            raise commands.CommandError(f"Ticket ID `{ticket_id}` is already in use.")
         fields = {field.name: field.value for field in control_embed.fields}
         owner_match = re.search(r"<@!?(\d+)>", str(fields.get("Owner") or ""))
         if owner_match is None:
@@ -5015,8 +4758,7 @@ class TicketHub(DashboardIntegration, commands.Cog):
                 "I could not recover the ticket owner from the embed.",
             )
         owner_id = int(owner_match.group(1))
-        profile_match = re.search(
-            r"`([^`]+)`", str(fields.get("Profile") or ""))
+        profile_match = re.search(r"`([^`]+)`", str(fields.get("Profile") or ""))
         profile_name = self._clean_name(
             profile_match.group(1) if profile_match else "main",
         )
@@ -5030,18 +4772,13 @@ class TicketHub(DashboardIntegration, commands.Cog):
             r"(?:Profile ID:\s*|[|•]\s*)\*\*#(\d+)\*\*",
             profile_value,
         )
-        profile_ticket_id = (
-            int(profile_id_match.group(1)) if profile_id_match else ticket_id
-        )
+        profile_ticket_id = int(profile_id_match.group(1)) if profile_id_match else ticket_id
         status_value = str(fields.get("Status") or "open").strip().lower()
         status = "closed" if "closed" in status_value else "open"
-        claimed_match = re.search(
-            r"<@!?(\d+)>", str(fields.get("Claimed By") or ""))
-        locked_value = str(fields.get("Access")
-                           or fields.get("Locked") or "No").lower()
+        claimed_match = re.search(r"<@!?(\d+)>", str(fields.get("Claimed By") or ""))
+        locked_value = str(fields.get("Access") or fields.get("Locked") or "No").lower()
         locked = "locked" in locked_value and "unlocked" not in locked_value
-        created_match = re.search(
-            r"<t:(\d+)", str(fields.get("Created") or ""))
+        created_match = re.search(r"<t:(\d+)", str(fields.get("Created") or ""))
         created_at = (
             float(created_match.group(1))
             if created_match
@@ -5063,13 +4800,8 @@ class TicketHub(DashboardIntegration, commands.Cog):
             "profile": profile_name,
             "owner_id": owner_id,
             "channel_id": channel.id,
-            "location_type": "thread"
-            if isinstance(channel, discord.Thread)
-            else "channel",
-            "thread_parent_channel_id": (
-                channel.parent_id if isinstance(
-                    channel, discord.Thread) else None
-            ),
+            "location_type": "thread" if isinstance(channel, discord.Thread) else "channel",
+            "thread_parent_channel_id": (channel.parent_id if isinstance(channel, discord.Thread) else None),
             "message_id": control_message.id,
             "status": status,
             "claimed_by": int(claimed_match.group(1)) if claimed_match else None,
@@ -5152,11 +4884,7 @@ class TicketHub(DashboardIntegration, commands.Cog):
             color=self.DEFAULT_COLOR,
             timestamp=self._now(),
         )
-        owner = (
-            guild.get_member(int(record["owner_id"]))
-            if record.get("owner_id")
-            else None
-        )
+        owner = guild.get_member(int(record["owner_id"])) if record.get("owner_id") else None
         self._set_member_identity(
             embed,
             owner,
@@ -5167,10 +4895,8 @@ class TicketHub(DashboardIntegration, commands.Cog):
             value=f"**#{record.get('id')}**  •  `{record.get('profile') or 'main'}`",
             inline=True,
         )
-        embed.add_field(
-            name="Status", value=self._status_display(record), inline=True)
-        embed.add_field(name="Messages", value=self._count(
-            message_count), inline=True)
+        embed.add_field(name="Status", value=self._status_display(record), inline=True)
+        embed.add_field(name="Messages", value=self._count(message_count), inline=True)
         embed.add_field(
             name="Owner",
             value=self._user_ref(record.get("owner_id")),
@@ -5261,10 +4987,8 @@ class TicketHub(DashboardIntegration, commands.Cog):
                 await target_channel.send(
                     embed=transcript_embed,
                     files=[
-                        discord.File(io.BytesIO(html_bytes),
-                                     filename=html_file_name),
-                        discord.File(io.BytesIO(text_bytes),
-                                     filename=text_file_name),
+                        discord.File(io.BytesIO(html_bytes), filename=html_file_name),
+                        discord.File(io.BytesIO(text_bytes), filename=text_file_name),
                     ],
                     view=jump_view,
                     allowed_mentions=discord.AllowedMentions.none(),
@@ -5298,15 +5022,13 @@ class TicketHub(DashboardIntegration, commands.Cog):
                                 filename=text_file_name,
                             ),
                         ],
-                        view=self._jump_view(
-                            self._ticket_url(guild.id, channel.id)),
+                        view=self._jump_view(self._ticket_url(guild.id, channel.id)),
                     )
                     sent_targets.append("ticket owner DM")
                 except discord.HTTPException:
                     failed_targets.append("ticket owner DM")
 
-        record["transcript_count"] = int(
-            record.get("transcript_count") or 0) + 1
+        record["transcript_count"] = int(record.get("transcript_count") or 0) + 1
         record.setdefault("events", []).append(
             {
                 "type": "transcript",
@@ -5322,15 +5044,10 @@ class TicketHub(DashboardIntegration, commands.Cog):
         if sent_targets:
             result = "Transcript sent to " + ", ".join(sent_targets) + "."
             if failed_targets:
-                result += " Failed to send to " + \
-                    ", ".join(failed_targets) + "."
+                result += " Failed to send to " + ", ".join(failed_targets) + "."
             return result
         if failed_targets:
-            return (
-                "Transcript generated, but failed to send to "
-                + ", ".join(failed_targets)
-                + "."
-            )
+            return "Transcript generated, but failed to send to " + ", ".join(failed_targets) + "."
         return "Transcript generated, but I could not send it to any configured destination."
 
     async def _collect_messages(self, channel: TicketLocation) -> list[discord.Message]:
@@ -5399,8 +5116,7 @@ class TicketHub(DashboardIntegration, commands.Cog):
                 f"[{timestamp}] {message.author} ({message.author.id}): {content}",
             )
             for attachment in message.attachments:
-                lines.append(
-                    f"  Attachment: {attachment.filename} - {attachment.url}")
+                lines.append(f"  Attachment: {attachment.filename} - {attachment.url}")
             for embed in message.embeds:
                 if embed.title:
                     lines.append(f"  Embed title: {embed.title}")
@@ -5419,11 +5135,8 @@ class TicketHub(DashboardIntegration, commands.Cog):
         rows = []
         for message in messages:
             rows.append(self._render_html_message(message))
-        events = "".join(
-            self._render_html_event(event) for event in record.get("events", [])
-        )
-        generated = datetime.now(timezone.utc).strftime(
-            "%Y-%m-%d %H:%M:%S UTC")
+        events = "".join(self._render_html_event(event) for event in record.get("events", []))
+        generated = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
         owner = self._user_ref(record.get("owner_id"))
         return f"""<!doctype html>
 <html lang="en">
@@ -5562,14 +5275,12 @@ search.addEventListener('input', () => {{
         content = html.escape(message.clean_content or "")
         bot_tag = '<span class="bot">BOT</span>' if message.author.bot else ""
         attachments = "".join(
-            f'<a href="{html.escape(attachment.url)}" target="_blank" rel="noreferrer">'
-            f"{html.escape(attachment.filename)}</a>"
+            f'<a href="{html.escape(attachment.url)}" target="_blank" rel="noreferrer">{html.escape(attachment.filename)}</a>'
             for attachment in message.attachments
         )
         if attachments:
             attachments = f'<div class="attachments">{attachments}</div>'
-        embeds = "".join(self._render_html_embed(embed)
-                         for embed in message.embeds)
+        embeds = "".join(self._render_html_embed(embed) for embed in message.embeds)
         return f"""<article class="message" data-author="{author}" data-author-id="{author_id}">
   <img class="avatar" src="{avatar}" alt="">
   <div>
@@ -5630,12 +5341,8 @@ search.addEventListener('input', () => {{
         tickets = await self.config.guild(ctx.guild).tickets()
         multi_panels = await self.config.guild(ctx.guild).multi_panels()
         enabled = await self.config.guild(ctx.guild).enabled()
-        open_count = sum(
-            1 for record in tickets.values() if record.get("status") == "open"
-        )
-        closed_count = sum(
-            1 for record in tickets.values() if record.get("status") == "closed"
-        )
+        open_count = sum(1 for record in tickets.values() if record.get("status") == "open")
+        closed_count = sum(1 for record in tickets.values() if record.get("status") == "closed")
         set_command_root = self._prefixed_set_root(ctx)
         embed = discord.Embed(
             title="TicketHub",
@@ -5752,8 +5459,7 @@ search.addEventListener('input', () => {{
             )
             log_channel = await self._prompt_text_channel(
                 ctx,
-                "Step 3/4: Which channel should ticket logs/transcripts go to? "
-                "Reply with a channel, `here`, or `none`.",
+                "Step 3/4: Which channel should ticket logs/transcripts go to? Reply with a channel, `here`, or `none`.",
                 allow_none=True,
             )
             support_roles = await self._prompt_roles(
@@ -5800,17 +5506,12 @@ search.addEventListener('input', () => {{
         await ctx.send(prompt)
 
         def check(message: discord.Message) -> bool:
-            return (
-                message.author.id == ctx.author.id
-                and message.channel.id == ctx.channel.id
-                and message.guild == ctx.guild
-            )
+            return message.author.id == ctx.author.id and message.channel.id == ctx.channel.id and message.guild == ctx.guild
 
         try:
             message = await self.bot.wait_for("message", check=check, timeout=timeout)
         except asyncio.TimeoutError as exc:
-            raise commands.CommandError(
-                "TicketHub walkthrough timed out.") from exc
+            raise commands.CommandError("TicketHub walkthrough timed out.") from exc
         answer = message.content.strip()
         if answer.lower() in {"cancel", "stop", "quit"}:
             raise commands.CommandError("TicketHub walkthrough cancelled.")
@@ -5896,13 +5597,10 @@ search.addEventListener('input', () => {{
         for index, field in enumerate(fields, start=1):
             label = cls._clean_modal_text(field.get("label"), 45) or "Question"
             question_type = cls._modal_type_name(field.get("type")) or "text"
-            required = "required" if field.get(
-                "required", True) else "optional"
-            placeholder = cls._clean_modal_text(
-                field.get("placeholder"), 100) or "none"
+            required = "required" if field.get("required", True) else "optional"
+            placeholder = cls._clean_modal_text(field.get("placeholder"), 100) or "none"
             if question_type == "choice":
-                choices = ", ".join(
-                    cls._clean_modal_choices(field.get("choices")))
+                choices = ", ".join(cls._clean_modal_choices(field.get("choices")))
                 details = f"choice, {required}, options: {choices}"
             elif question_type == "boolean":
                 details = f"boolean, {required}"
@@ -6007,8 +5705,7 @@ search.addEventListener('input', () => {{
     ) -> discord.Message:
         me = guild.me
         if me is None:
-            raise commands.CommandError(
-                "I could not inspect my server permissions.")
+            raise commands.CommandError("I could not inspect my server permissions.")
         perms = channel.permissions_for(me)
         if not perms.send_messages or not perms.embed_links:
             raise commands.CommandError(
@@ -6022,8 +5719,7 @@ search.addEventListener('input', () => {{
                 view=self._panel_view_for_style(style),
             )
         except discord.HTTPException as exc:
-            raise commands.CommandError(
-                "I could not post the ticket panel.") from exc
+            raise commands.CommandError("I could not post the ticket panel.") from exc
         profile["panel_channel_id"] = channel.id
         profile["panel_message_id"] = message.id
         profile["panel_style"] = style
@@ -6040,11 +5736,9 @@ search.addEventListener('input', () => {{
     ) -> discord.Message:
         me = guild.me
         if me is None:
-            raise commands.CommandError(
-                "I could not inspect my server identity.")
+            raise commands.CommandError("I could not inspect my server identity.")
         if message.guild is None or message.guild.id != guild.id:
-            raise commands.BadArgument(
-                "The panel message must be in this server.")
+            raise commands.BadArgument("The panel message must be in this server.")
         if message.author.id != me.id:
             raise commands.BadArgument(
                 "I can only attach a panel to a message sent by this bot.",
@@ -6064,8 +5758,7 @@ search.addEventListener('input', () => {{
             )
         if message.components and profile_name not in tracked_profile_names:
             raise commands.BadArgument(
-                "That message already has components. Remove them before attaching "
-                "a TicketHub panel.",
+                "That message already has components. Remove them before attaching a TicketHub panel.",
             )
         style = self._parse_panel_style(style)
         try:
@@ -6175,8 +5868,7 @@ search.addEventListener('input', () => {{
             return
         await self.config.guild(ctx.guild).enabled.set(True)
         await ctx.send(
-            f"Ticket {profile['panel_style']} panel posted for `{profile_name}`: "
-            f"{message.jump_url}",
+            f"Ticket {profile['panel_style']} panel posted for `{profile_name}`: {message.jump_url}",
         )
 
     @tickethub_set.command(name="attachpanel")
@@ -6205,8 +5897,7 @@ search.addEventListener('input', () => {{
             return
         await self.config.guild(ctx.guild).enabled.set(True)
         await ctx.send(
-            f"Ticket {profile['panel_style']} panel attached for `{profile_name}`: "
-            f"{message.jump_url}",
+            f"Ticket {profile['panel_style']} panel attached for `{profile_name}`: {message.jump_url}",
         )
 
     @tickethub_set.command(name="clearpanel")
@@ -6282,8 +5973,7 @@ search.addEventListener('input', () => {{
         assert ctx.guild is not None
         try:
             if message.guild is None or message.guild.id != ctx.guild.id:
-                raise commands.BadArgument(
-                    "The panel message must be in this server.")
+                raise commands.BadArgument("The panel message must be in this server.")
             if ctx.guild.me is None or message.author.id != ctx.guild.me.id:
                 raise commands.BadArgument(
                     "I can only attach a multi-panel to a message sent by this bot.",
@@ -6299,16 +5989,11 @@ search.addEventListener('input', () => {{
             if raw_record is None:
                 if message.components:
                     raise commands.BadArgument(
-                        "That message already has components. Remove them before "
-                        "creating a TicketHub multi-panel.",
+                        "That message already has components. Remove them before creating a TicketHub multi-panel.",
                     )
                 profiles = await self._get_profiles(ctx.guild)
                 tracked_profile = next(
-                    (
-                        name
-                        for name, profile in profiles.items()
-                        if int(profile.get("panel_message_id") or 0) == message.id
-                    ),
+                    (name for name, profile in profiles.items() if int(profile.get("panel_message_id") or 0) == message.id),
                     None,
                 )
                 if tracked_profile:
@@ -6333,13 +6018,9 @@ search.addEventListener('input', () => {{
                     )
                 if record["style"] != style:
                     raise commands.BadArgument(
-                        f"That multi-panel uses `{record['style']}`. Use the `style` "
-                        "subcommand to change all its options.",
+                        f"That multi-panel uses `{record['style']}`. Use the `style` subcommand to change all its options.",
                     )
-            if any(
-                option["profile"] == profile_name
-                for option in record.get("options", [])
-            ):
+            if any(option["profile"] == profile_name for option in record.get("options", [])):
                 raise commands.BadArgument(
                     f"Profile `{profile_name}` is already on that multi-panel.",
                 )
@@ -6368,8 +6049,7 @@ search.addEventListener('input', () => {{
             else ""
         )
         await ctx.send(
-            f"Added **{label}** (`{profile_name}`) to the {record['style']} "
-            f"multi-panel: {message.jump_url}.{description_note}",
+            f"Added **{label}** (`{profile_name}`) to the {record['style']} multi-panel: {message.jump_url}.{description_note}",
         )
 
     @tickethub_multi_panel.command(name="remove", aliases=["multi-remove"])
@@ -6385,11 +6065,7 @@ search.addEventListener('input', () => {{
         try:
             profile_name = self._clean_name(profile_name)
             record = await self._get_multi_panel_record(ctx.guild, message.id)
-            options = [
-                option
-                for option in record["options"]
-                if option["profile"] != profile_name
-            ]
+            options = [option for option in record["options"] if option["profile"] != profile_name]
             if len(options) == len(record["options"]):
                 raise commands.BadArgument(
                     f"Profile `{profile_name}` is not on that multi-panel.",
@@ -6472,13 +6148,9 @@ search.addEventListener('input', () => {{
         ]
         for index, option in enumerate(record["options"], start=1):
             emoji_text = f"{option['emoji']} " if option.get("emoji") else ""
-            description_text = (
-                f" — {option['description']}" if option.get(
-                    "description") else ""
-            )
+            description_text = f" — {option['description']}" if option.get("description") else ""
             lines.append(
-                f"{index}. {emoji_text}{option['label']} (`{option['profile']}`)"
-                f"{description_text}",
+                f"{index}. {emoji_text}{option['label']} (`{option['profile']}`){description_text}",
             )
         await ctx.send(box("\n".join(lines)))
 
@@ -6514,8 +6186,7 @@ search.addEventListener('input', () => {{
         enabled_text = "Enabled" if profile.get("enabled") else "Disabled"
         ticket_mode = self._ticket_mode(profile)
         mode_text = ticket_mode.title()
-        panel_channel = self._profile_channel(
-            ctx.guild, profile, "panel_channel_id")
+        panel_channel = self._profile_channel(ctx.guild, profile, "panel_channel_id")
         ticket_category = self._profile_category(
             ctx.guild,
             profile,
@@ -6527,15 +6198,13 @@ search.addEventListener('input', () => {{
             "closed_category_id",
         )
         thread_parent = self._thread_parent_channel(ctx.guild, profile)
-        log_channel = self._profile_channel(
-            ctx.guild, profile, "log_channel_id")
+        log_channel = self._profile_channel(ctx.guild, profile, "log_channel_id")
         transcript_channel = self._profile_channel(
             ctx.guild,
             profile,
             "transcript_channel_id",
         )
-        ticket_role = ctx.guild.get_role(
-            int(profile.get("ticket_role_id") or 0))
+        ticket_role = ctx.guild.get_role(int(profile.get("ticket_role_id") or 0))
         auto_delete_hours = profile.get("auto_delete_on_close_hours")
         if auto_delete_hours is None:
             auto_delete_text = "Off"
@@ -6548,15 +6217,8 @@ search.addEventListener('input', () => {{
                 if auto_delete_value == 0:
                     auto_delete_text = "Immediate, after a short grace period"
                 else:
-                    auto_delete_text = (
-                        f"{auto_delete_value} "
-                        f"hour{'s' if auto_delete_value != 1 else ''} after close"
-                    )
-        thread_parent_text = (
-            thread_parent.mention
-            if ticket_mode == "thread" and thread_parent
-            else "Not used"
-        )
+                    auto_delete_text = f"{auto_delete_value} hour{'s' if auto_delete_value != 1 else ''} after close"
+        thread_parent_text = thread_parent.mention if ticket_mode == "thread" and thread_parent else "Not used"
         embed = discord.Embed(
             title="TicketHub Profile",
             description=(
@@ -6632,19 +6294,10 @@ search.addEventListener('input', () => {{
         multi_panels = await self.config.guild(ctx.guild).multi_panels()
         lines = [f"TicketHub profiles: {len(profiles)}"]
         for name, profile in sorted(profiles.items()):
-            profile_tickets = [
-                record
-                for record in tickets.values()
-                if str(record.get("profile") or "main") == name
-            ]
-            open_count = sum(
-                1 for record in profile_tickets if record.get("status") == "open"
-            )
-            closed_count = sum(
-                1 for record in profile_tickets if record.get("status") == "closed"
-            )
-            panel = self._profile_channel(
-                ctx.guild, profile, "panel_channel_id")
+            profile_tickets = [record for record in tickets.values() if str(record.get("profile") or "main") == name]
+            open_count = sum(1 for record in profile_tickets if record.get("status") == "open")
+            closed_count = sum(1 for record in profile_tickets if record.get("status") == "closed")
+            panel = self._profile_channel(ctx.guild, profile, "panel_channel_id")
             multi_count = 0
             for message_id, raw_record in multi_panels.items():
                 try:
@@ -6748,18 +6401,10 @@ search.addEventListener('input', () => {{
             return
 
         tickets = await self.config.guild(ctx.guild).tickets()
-        profile_tickets = [
-            record
-            for record in tickets.values()
-            if str(record.get("profile") or "main") == clean_profile_name
-        ]
+        profile_tickets = [record for record in tickets.values() if str(record.get("profile") or "main") == clean_profile_name]
         if profile_tickets:
-            open_count = sum(
-                1 for record in profile_tickets if record.get("status") == "open"
-            )
-            closed_count = sum(
-                1 for record in profile_tickets if record.get("status") == "closed"
-            )
+            open_count = sum(1 for record in profile_tickets if record.get("status") == "open")
+            closed_count = sum(1 for record in profile_tickets if record.get("status") == "closed")
             await ctx.send(
                 f"`{clean_profile_name}` is still used by {len(profile_tickets)} "
                 f"tracked ticket(s): {open_count} open, {closed_count} closed. "
@@ -6786,9 +6431,7 @@ search.addEventListener('input', () => {{
                 record = None
             if record is None:
                 continue
-            if any(
-                option["profile"] == clean_profile_name for option in record["options"]
-            ):
+            if any(option["profile"] == clean_profile_name for option in record["options"]):
                 multi_refs.append(message_id)
         if multi_refs:
             await ctx.send(
@@ -7054,8 +6697,7 @@ search.addEventListener('input', () => {{
         profile["creating_modal"] = self._sanitize_modal_fields(fields)
         await self._set_profile(ctx.guild, profile_name, profile)
         await ctx.send(
-            f"Modal for `{profile_name}` saved.\n"
-            + box("\n".join(self._modal_summary_lines(profile["creating_modal"]))),
+            f"Modal for `{profile_name}` saved.\n" + box("\n".join(self._modal_summary_lines(profile["creating_modal"]))),
         )
 
     @tickethub_modal.command(name="add")
@@ -7200,8 +6842,7 @@ search.addEventListener('input', () => {{
         """Add a support role."""
         assert ctx.guild is not None
         profile = await self._ensure_profile(ctx.guild, profile_name)
-        role_ids = {int(role_id)
-                        for role_id in profile.get("support_role_ids") or []}
+        role_ids = {int(role_id) for role_id in profile.get("support_role_ids") or []}
         role_ids.add(role.id)
         profile["support_role_ids"] = sorted(role_ids)
         await self._set_profile(ctx.guild, profile_name, profile)
@@ -7234,8 +6875,7 @@ search.addEventListener('input', () => {{
         """Remove a support role."""
         assert ctx.guild is not None
         profile = await self._ensure_profile(ctx.guild, profile_name)
-        role_ids = {int(role_id)
-                        for role_id in profile.get("support_role_ids") or []}
+        role_ids = {int(role_id) for role_id in profile.get("support_role_ids") or []}
         role_ids.discard(role.id)
         profile["support_role_ids"] = sorted(role_ids)
         await self._set_profile(ctx.guild, profile_name, profile)
@@ -7338,8 +6978,7 @@ search.addEventListener('input', () => {{
         profile["ticket_role_id"] = role.id if role is not None else None
         await self._set_profile(ctx.guild, profile_name, profile)
         await ctx.send(
-            f"Ticket role for `{profile_name}` set to "
-            f"{role.mention if role is not None else 'disabled'}.",
+            f"Ticket role for `{profile_name}` set to {role.mention if role is not None else 'disabled'}.",
         )
 
     @tickethub_set.group(name="behavior", invoke_without_command=True)
@@ -7373,8 +7012,7 @@ search.addEventListener('input', () => {{
         profile[field] = enabled
         await self._set_profile(ctx.guild, profile_name, profile)
         await ctx.send(
-            f"Ticket owners can now{'' if enabled else ' not'} `{action.lower()}` "
-            f"for `{profile_name}`.",
+            f"Ticket owners can now{'' if enabled else ' not'} `{action.lower()}` for `{profile_name}`.",
         )
 
     @tickethub_behavior.command(name="closeonleave")
@@ -7391,8 +7029,7 @@ search.addEventListener('input', () => {{
         profile["close_on_leave"] = enabled
         await self._set_profile(ctx.guild, profile_name, profile)
         await ctx.send(
-            f"Close-on-leave for `{profile_name}` is now "
-            f"{'enabled' if enabled else 'disabled'}.",
+            f"Close-on-leave for `{profile_name}` is now {'enabled' if enabled else 'disabled'}.",
         )
 
     @tickethub_behavior.command(
@@ -7444,15 +7081,9 @@ search.addEventListener('input', () => {{
                     f"{self.MAX_CLOSE_REQUEST_TIMEOUT_MINUTES}, or `default`.",
                 )
                 return
-        if not (
-            self.MIN_CLOSE_REQUEST_TIMEOUT_MINUTES
-            <= configured_minutes
-            <= self.MAX_CLOSE_REQUEST_TIMEOUT_MINUTES
-        ):
+        if not (self.MIN_CLOSE_REQUEST_TIMEOUT_MINUTES <= configured_minutes <= self.MAX_CLOSE_REQUEST_TIMEOUT_MINUTES):
             await ctx.send(
-                "Minutes must be between "
-                f"{self.MIN_CLOSE_REQUEST_TIMEOUT_MINUTES} and "
-                f"{self.MAX_CLOSE_REQUEST_TIMEOUT_MINUTES}.",
+                f"Minutes must be between {self.MIN_CLOSE_REQUEST_TIMEOUT_MINUTES} and {self.MAX_CLOSE_REQUEST_TIMEOUT_MINUTES}.",
             )
             return
 
@@ -7491,19 +7122,11 @@ search.addEventListener('input', () => {{
         await self._set_profile(ctx.guild, profile_name, profile)
         tickets = await self.config.guild(ctx.guild).tickets()
         for record in tickets.values():
-            if (
-                str(record.get("profile") or "main") == profile_name
-                and record.get("status") == "closed"
-            ):
-                self._schedule_ticket_auto_delete(
-                    ctx.guild.id, record, profile)
+            if str(record.get("profile") or "main") == profile_name and record.get("status") == "closed":
+                self._schedule_ticket_auto_delete(ctx.guild.id, record, profile)
         await ctx.send(
             f"Auto-delete for `{profile_name}` set to "
-            + (
-                "off."
-                if configured_hours is None
-                else f"{configured_hours} hour(s) after closing."
-            ),
+            + ("off." if configured_hours is None else f"{configured_hours} hour(s) after closing."),
         )
 
     @tickethub_behavior.command(name="emoji")
@@ -7522,8 +7145,7 @@ search.addEventListener('input', () => {{
         defaults = self._default_profile()["control_emojis"]
         if action not in defaults:
             await ctx.send(
-                "Action must be claim, unclaim, lock, unlock, close, reopen, members, "
-                "transcript, or delete.",
+                "Action must be claim, unclaim, lock, unlock, close, reopen, members, transcript, or delete.",
             )
             return
         profile_name = self._clean_name(profile_name)
@@ -7542,10 +7164,7 @@ search.addEventListener('input', () => {{
             except (TypeError, ValueError):
                 await ctx.send("That is not a valid Unicode or custom Discord emoji.")
                 return
-            if (
-                parsed_emoji.id is not None
-                and self.bot.get_emoji(parsed_emoji.id) is None
-            ):
+            if parsed_emoji.id is not None and self.bot.get_emoji(parsed_emoji.id) is None:
                 await ctx.send("I cannot access that custom Discord emoji.")
                 return
             configured[action] = selected
@@ -7900,28 +7519,14 @@ search.addEventListener('input', () => {{
         tickets = await self.config.guild(ctx.guild).tickets()
         records = list(tickets.values())
         if status in {"open", "closed"}:
-            records = [record for record in records if record.get(
-                "status") == status]
+            records = [record for record in records if record.get("status") == status]
         elif status == "claimed":
-            records = [
-                record
-                for record in records
-                if record.get("status") == "open" and record.get("claimed_by")
-            ]
+            records = [record for record in records if record.get("status") == "open" and record.get("claimed_by")]
         elif status == "unclaimed":
-            records = [
-                record
-                for record in records
-                if record.get("status") == "open" and not record.get("claimed_by")
-            ]
+            records = [record for record in records if record.get("status") == "open" and not record.get("claimed_by")]
         if owner is not None:
-            records = [
-                record
-                for record in records
-                if str(record.get("owner_id")) == str(owner.id)
-            ]
-        records.sort(key=lambda record: int(
-            record.get("id") or 0), reverse=True)
+            records = [record for record in records if str(record.get("owner_id")) == str(owner.id)]
+        records.sort(key=lambda record: int(record.get("id") or 0), reverse=True)
         if not records:
             await ctx.send("No tickets matched that filter.")
             return
@@ -7933,18 +7538,10 @@ search.addEventListener('input', () => {{
                 str(record.get("profile") or "main"),
             )
             is_owner = ctx.author.id == int(record.get("owner_id") or 0)
-            can_view_channel = (
-                channel is not None and channel.permissions_for(
-                    ctx.author).view_channel
-            )
-            if (
-                not is_owner
-                and not self._is_support_member(ctx.author, profile)
-                and not can_view_channel
-            ):
+            can_view_channel = channel is not None and channel.permissions_for(ctx.author).view_channel
+            if not is_owner and not self._is_support_member(ctx.author, profile) and not can_view_channel:
                 continue
-            profile_ticket_id = record.get(
-                "profile_ticket_id") or record.get("id")
+            profile_ticket_id = record.get("profile_ticket_id") or record.get("id")
             lines.append(
                 f"#{record.get('id')} | `{record.get('profile')}` #{profile_ticket_id} "
                 f"| {record.get('status')} | {self._user_ref(record.get('owner_id'))} "
@@ -7980,8 +7577,7 @@ search.addEventListener('input', () => {{
             ) and ctx.author.id != int(
                 record.get("owner_id") or 0,
             ):
-                raise commands.CommandError(
-                    "You cannot view that ticket's details.")
+                raise commands.CommandError("You cannot view that ticket's details.")
         except commands.CommandError as error:
             await ctx.send(str(error))
             return
@@ -8032,13 +7628,8 @@ search.addEventListener('input', () => {{
             return
         target_profile = self._clean_name(aaa3a_profile)
         panel_count = len(panel_records)
-        button_count = sum(
-            len(record.get("buttons") or {}) for record in panel_records.values()
-        )
-        dropdown_count = sum(
-            len(record.get("dropdown_options") or {})
-            for record in panel_records.values()
-        )
+        button_count = sum(len(record.get("buttons") or {}) for record in panel_records.values())
+        dropdown_count = sum(len(record.get("dropdown_options") or {}) for record in panel_records.values())
         if panel_count:
             summary.append(
                 "- buttons_dropdowns -> aaa3a_panels: "
@@ -8058,14 +7649,9 @@ search.addEventListener('input', () => {{
         await self._set_profile(ctx.guild, target_profile, mapped_profile)
         saved_panels = await self._set_aaa3a_panel_records(ctx.guild, panel_records)
         await self.config.guild(ctx.guild).enabled.set(True)
-        panel_note = (
-            f" Imported {len(saved_panels)} existing AAA3A panel message(s)."
-            if saved_panels
-            else ""
-        )
+        panel_note = f" Imported {len(saved_panels)} existing AAA3A panel message(s)." if saved_panels else ""
         await ctx.send(
-            f"Imported AAA3A Tickets profile `{aaa3a_profile}` into TicketHub "
-            f"profile `{target_profile}`.{panel_note}",
+            f"Imported AAA3A Tickets profile `{aaa3a_profile}` into TicketHub profile `{target_profile}`.{panel_note}",
         )
 
     @tickethub_import.command(name="import-aaa3a", hidden=True)
@@ -8119,26 +7705,16 @@ search.addEventListener('input', () => {{
             return
 
         panel_count = len(panel_records)
-        button_count = sum(
-            len(record.get("buttons") or {}) for record in panel_records.values()
-        )
-        dropdown_count = sum(
-            len(record.get("dropdown_options") or {})
-            for record in panel_records.values()
-        )
+        button_count = sum(len(record.get("buttons") or {}) for record in panel_records.values())
+        dropdown_count = sum(len(record.get("dropdown_options") or {}) for record in panel_records.values())
         preview_lines = [
             "AAA3A Tickets import-all preview. Nothing has been changed yet.",
             f"Profiles to import: {len(mapped_profiles)}",
             "Profile mappings:",
         ]
-        preview_lines.extend(
-            f"- {source_name} -> {target_name}"
-            for source_name, target_name in profile_mappings
-        )
+        preview_lines.extend(f"- {source_name} -> {target_name}" for source_name, target_name in profile_mappings)
         preview_lines.append(
-            "Panel routing: "
-            f"{panel_count} panel message(s), {button_count} button(s), "
-            f"{dropdown_count} dropdown option(s)",
+            f"Panel routing: {panel_count} panel message(s), {button_count} button(s), {dropdown_count} dropdown option(s)",
         )
         preview_lines.append(
             f"Run `{self._prefixed_set_root(ctx)} data importaaa3aall confirm` to apply.",
@@ -8225,8 +7801,7 @@ search.addEventListener('input', () => {{
                 profile[target_key] = [int(role_id) for role_id in value or []]
             elif source_key == "logs_channel":
                 profile[target_key] = int(value) if value else None
-                profile["transcript_channel_id"] = int(
-                    value) if value else None
+                profile["transcript_channel_id"] = int(value) if value else None
             elif source_key in {"category_open", "category_closed"}:
                 profile[target_key] = int(value) if value else None
             elif source_key == "channel_name" and not value:
@@ -8246,17 +7821,13 @@ search.addEventListener('input', () => {{
             if isinstance(forum_channel, discord.TextChannel):
                 profile["ticket_mode"] = "thread"
                 profile["thread_parent_channel_id"] = forum_channel.id
-                profile["panel_channel_id"] = (
-                    profile.get("panel_channel_id") or forum_channel.id
-                )
+                profile["panel_channel_id"] = profile.get("panel_channel_id") or forum_channel.id
                 summary.append(
-                    "- forum_channel -> ticket_mode/thread_parent_channel_id: "
-                    f"thread in #{forum_channel.name}",
+                    f"- forum_channel -> ticket_mode/thread_parent_channel_id: thread in #{forum_channel.name}",
                 )
             else:
                 summary.append(
-                    "- forum_channel -> thread_parent_channel_id: skipped "
-                    "(TicketHub supports text-channel private threads)",
+                    "- forum_channel -> thread_parent_channel_id: skipped (TicketHub supports text-channel private threads)",
                 )
 
         auto_delete = source.get("auto_delete_on_close")
@@ -8285,18 +7856,15 @@ search.addEventListener('input', () => {{
                     source_emoji = str(cached_emoji)
                 control_emojis[action] = source_emoji
         profile["control_emojis"] = control_emojis
-        summary.append(
-            "- emojis -> control_emojis: imported supported controls")
-        modal_fields = self._sanitize_modal_fields(
-            source.get("creating_modal"))
+        summary.append("- emojis -> control_emojis: imported supported controls")
+        modal_fields = self._sanitize_modal_fields(source.get("creating_modal"))
         uses_default_reason_modal = False
         if modal_fields is None and not source.get("disable_default_open_modal", False):
             modal_fields = self._default_reason_modal()
             uses_default_reason_modal = True
         profile["creating_modal"] = modal_fields
         if uses_default_reason_modal:
-            summary.append(
-                "- creating_modal -> creating_modal: default reason field")
+            summary.append("- creating_modal -> creating_modal: default reason field")
         elif modal_fields:
             summary.append(
                 f"- creating_modal -> creating_modal: {len(modal_fields)} field(s)",

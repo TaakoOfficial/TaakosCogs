@@ -510,20 +510,8 @@ LIVING_ITEM_SETS: dict[str, dict[str, Any]] = {
         "classes": ("vanguard", "shadow", "arcanist"),
         "two": f"Adopt a balanced {identity} stance.",
         "three": f"Complete the set to {identity}.",
-        "two_stats": (
-            {"defense": 6}
-            if path == "radiant"
-            else {"luck": 4}
-            if path == "pragmatic"
-            else {"attack": 4}
-        ),
-        "three_stats": (
-            {"hp": 12}
-            if path == "radiant"
-            else {"mana": 9}
-            if path == "pragmatic"
-            else {"defense": 4}
-        ),
+        "two_stats": ({"defense": 6} if path == "radiant" else {"luck": 4} if path == "pragmatic" else {"attack": 4}),
+        "three_stats": ({"hp": 12} if path == "radiant" else {"mana": 9} if path == "pragmatic" else {"defense": 4}),
         "pieces": tuple(
             {
                 "slot": slot,
@@ -578,20 +566,12 @@ LIVING_CONSUMABLES: dict[str, dict[str, Any]] = {
         "grade": grade,
         "value": 15 * grade,
         "bound": False,
-        "emoji": ("🛡️", "🧂", "🌿", "⚡", "💨", "🔩")[
-            tuple(entry[0] for entry in CONSUMABLE_ARCHETYPES).index(key)
-        ],
+        "emoji": ("🛡️", "🧂", "🌿", "⚡", "💨", "🔩")[tuple(entry[0] for entry in CONSUMABLE_ARCHETYPES).index(key)],
         "region": min(4, grade),
         "effect": ("guard", "reroll", "cleanse", "mana", "escape", "reroll")[
             tuple(entry[0] for entry in CONSUMABLE_ARCHETYPES).index(key)
         ],
-        "power": (
-            (20 + grade * 8)
-            if key == "ward_chalk"
-            else (5 + grade * 3)
-            if key == "borrowed_spark"
-            else grade
-        ),
+        "power": ((20 + grade * 8) if key == "ward_chalk" else (5 + grade * 3) if key == "borrowed_spark" else grade),
     }
     for grade in range(1, 5)
     for key, name, description in CONSUMABLE_ARCHETYPES

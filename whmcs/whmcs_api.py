@@ -27,19 +27,13 @@ RECOVERABLE_API_EXCEPTIONS = (
 class WHMCSAPIError(Exception):
     """Base exception for WHMCS API errors."""
 
-    pass
-
 
 class WHMCSAuthenticationError(WHMCSAPIError):
     """Raised when authentication fails."""
 
-    pass
-
 
 class WHMCSRateLimitError(WHMCSAPIError):
     """Raised when rate limit is exceeded."""
-
-    pass
 
 
 class WHMCSAPIClient:
@@ -133,8 +127,7 @@ class WHMCSAPIClient:
 
         # Remove timestamps older than 1 minute
         cutoff = now - 60
-        self.request_timestamps = [
-            ts for ts in self.request_timestamps if ts > cutoff]
+        self.request_timestamps = [ts for ts in self.request_timestamps if ts > cutoff]
 
         # Check if we're at the rate limit
         if len(self.request_timestamps) >= self.rate_limit:
@@ -174,8 +167,7 @@ class WHMCSAPIClient:
             data["username"] = self.username
             data["password"] = self.password
         else:
-            raise WHMCSAuthenticationError(
-                "No authentication credentials provided")
+            raise WHMCSAuthenticationError("No authentication credentials provided")
 
         # Add access key if provided
         if self.access_key:
@@ -231,8 +223,7 @@ class WHMCSAPIClient:
 
                 # Check for API errors
                 if response_data.get("result") == "error":
-                    error_msg = response_data.get(
-                        "message", "Unknown API error")
+                    error_msg = response_data.get("message", "Unknown API error")
 
                     # Handle specific error types
                     if "authentication" in error_msg.lower():
@@ -421,8 +412,7 @@ class WHMCSAPIClient:
                 "ticketnum": clean_ticket_id,
                 "repliessort": "ASC",
             }
-            log.info(
-                f"WHMCS API: Calling GetTicket with payload: {getticket_params}")
+            log.info(f"WHMCS API: Calling GetTicket with payload: {getticket_params}")
             resp = await self._make_request("GetTicket", getticket_params)
             log.info(f"WHMCS API: GetTicket response: {resp}")
             if resp.get("result") == "success" and resp.get("ticket"):
@@ -431,8 +421,7 @@ class WHMCSAPIClient:
             log.warning(
                 f"WHMCS API: GetTicket with ticketnum={clean_ticket_id} failed: {e}",
             )
-        log.warning(
-            f"WHMCS API: Ticket {clean_ticket_id} not found using ticketnum.")
+        log.warning(f"WHMCS API: Ticket {clean_ticket_id} not found using ticketnum.")
         return {}
 
     async def add_ticket_reply(
@@ -476,8 +465,7 @@ class WHMCSAPIClient:
         if id_field and id_field == "ticketid":
             # Use provided ticketid directly
             parameters["ticketid"] = clean_ticket_id
-            log.info(
-                f"WHMCS API: Using provided ticketid field: {clean_ticket_id}")
+            log.info(f"WHMCS API: Using provided ticketid field: {clean_ticket_id}")
         elif clean_ticket_id.isdigit():
             # If clean_ticket_id is numeric, assume it's the internal ticketid
             parameters["ticketid"] = clean_ticket_id
@@ -493,9 +481,7 @@ class WHMCSAPIClient:
                 )
                 ticket_resp = await self.get_ticket(clean_ticket_id)
                 if ticket_resp.get("ticket"):
-                    internal_id = ticket_resp["ticket"].get("id") or ticket_resp[
-                        "ticket"
-                    ].get("ticketid")
+                    internal_id = ticket_resp["ticket"].get("id") or ticket_resp["ticket"].get("ticketid")
                     if internal_id:
                         parameters["ticketid"] = str(internal_id)
                         log.info(
@@ -516,16 +502,14 @@ class WHMCSAPIClient:
                         "message": f"Ticket {clean_ticket_id} not found",
                     }
             except RECOVERABLE_API_EXCEPTIONS as e:
-                log.error(
-                    f"WHMCS API: Failed to lookup ticket {clean_ticket_id}: {e}")
+                log.error(f"WHMCS API: Failed to lookup ticket {clean_ticket_id}: {e}")
                 return {
                     "result": "error",
                     "message": f"Failed to lookup ticket {clean_ticket_id}: {e}",
                 }
 
         try:
-            log.info(
-                f"WHMCS API: Calling AddTicketReply with parameters: {parameters}")
+            log.info(f"WHMCS API: Calling AddTicketReply with parameters: {parameters}")
             resp = await self._make_request("AddTicketReply", parameters)
             log.info(f"WHMCS API: AddTicketReply response: {resp}")
             return resp

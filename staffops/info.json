@@ -1,0 +1,17 @@
+{
+    "$schema": "https://raw.githubusercontent.com/Cog-Creators/Red-DiscordBot/V3/develop/schema/red_cog.schema.json",
+    "name": "staffops",
+    "author": ["Taako"],
+    "version": "1.0.0",
+    "description": "Staff and volunteer operations with clock-in shifts, availability, leave requests, on-call rotations, handoffs, coverage visibility, and CSV reports.",
+    "install_msg": "StaffOps loaded. Configure it with `[p]staffops staffrole` and `[p]staffops logchannel`.",
+    "short": "Staff shifts, availability, leave, on-call rotations, handoffs, and reports.",
+    "tags": ["staff", "shifts", "attendance", "volunteer", "on-call", "scheduling", "dashboard"],
+    "requirements": [],
+    "min_bot_version": "3.5.0",
+    "min_python_version": [3, 9, 0],
+    "hidden": false,
+    "disabled": false,
+    "type": "COG",
+    "end_user_data_statement": "This cog stores staff Discord user IDs, shift start/end times and notes, availability text, leave requests, on-call assignments, handoffs, and staff actor IDs. CSV reports are generated on demand."
+}

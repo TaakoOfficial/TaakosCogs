@@ -68,8 +68,7 @@ class DashboardIntegration:
                     form_data,
                 )
             except commands.CommandError as error:
-                notifications.append(
-                    {"message": str(error), "category": "error"})
+                notifications.append({"message": str(error), "category": "error"})
             except Exception as error:
                 log.exception("TempVoice dashboard action failed.")
                 notifications.append(
@@ -99,11 +98,7 @@ class DashboardIntegration:
         member = guild.get_member(user.id)
         is_owner = user.id in getattr(self.bot, "owner_ids", set())
         is_admin = member is not None and await self.bot.is_admin(member)
-        can_manage = (
-            is_owner
-            or is_admin
-            or (member is not None and member.guild_permissions.manage_guild)
-        )
+        can_manage = is_owner or is_admin or (member is not None and member.guild_permissions.manage_guild)
         return member, can_manage
 
     def _dashboard_form_data(self, kwargs: dict[str, typing.Any]) -> typing.Any:
@@ -116,11 +111,7 @@ class DashboardIntegration:
         form_data = self._dashboard_form_data(kwargs)
         selected = self._dash_value(form_data, "active_tab").lower()
         valid = set(action_tabs.values()) | {default}
-        return (
-            selected
-            if selected in valid
-            else action_tabs.get(self._dash_value(form_data, "action").lower(), default)
-        )
+        return selected if selected in valid else action_tabs.get(self._dash_value(form_data, "action").lower(), default)
 
     def _dashboard_tab_button(self, name: str, label: str, active: str) -> str:
         selected = name == active
@@ -255,8 +246,7 @@ class DashboardIntegration:
         try:
             return int(value)
         except (TypeError, ValueError) as exc:
-            raise commands.BadArgument(
-                f"`{key}` must be a Discord ID.") from exc
+            raise commands.BadArgument(f"`{key}` must be a Discord ID.") from exc
 
     def _dash_required_id(self, form_data: typing.Any, key: str) -> int:
         value = self._dash_optional_id(form_data, key)
@@ -268,10 +258,7 @@ class DashboardIntegration:
         csrf_token = kwargs.get("csrf_token")
         if not isinstance(csrf_token, (tuple, list)) or len(csrf_token) != 2:
             return ""
-        return (
-            '<input type="hidden" name="csrf_token" value="'
-            f'{html.escape(str(csrf_token[1]), quote=True)}">'
-        )
+        return f'<input type="hidden" name="csrf_token" value="{html.escape(str(csrf_token[1]), quote=True)}">'
 
     async def _dashboard_handle_action(
         self,
@@ -288,10 +275,7 @@ class DashboardIntegration:
             deleted, stale = await self._dashboard_cleanup(guild, user)
             return [
                 {
-                    "message": (
-                        f"Deleted {deleted} empty channel(s) and removed "
-                        f"{stale} stale record(s)."
-                    ),
+                    "message": (f"Deleted {deleted} empty channel(s) and removed {stale} stale record(s)."),
                     "category": "success",
                 },
             ]
@@ -326,8 +310,7 @@ class DashboardIntegration:
         enabled = self._dash_bool(form_data, "enabled")
         join_channel_id = self._dash_optional_id(form_data, "join_channel_id")
         category_id = self._dash_optional_id(form_data, "category_id")
-        panel_channel_id = self._dash_optional_id(
-            form_data, "panel_channel_id")
+        panel_channel_id = self._dash_optional_id(form_data, "panel_channel_id")
         default_limit = self._dash_int(
             form_data,
             "default_user_limit",
@@ -343,11 +326,9 @@ class DashboardIntegration:
             maximum=self.MAX_DELETE_DELAY,
         )
         template = self._clean_channel_name(
-            self._dash_value(form_data, "channel_name_template",
-                             self.DEFAULT_TEMPLATE),
+            self._dash_value(form_data, "channel_name_template", self.DEFAULT_TEMPLATE),
         )
-        clone_permissions = self._dash_bool(
-            form_data, "clone_trigger_permissions")
+        clone_permissions = self._dash_bool(form_data, "clone_trigger_permissions")
 
         if enabled and join_channel_id is None:
             raise commands.BadArgument(
@@ -375,8 +356,7 @@ class DashboardIntegration:
                 )
             me = guild.me
             if me is None:
-                raise commands.CommandError(
-                    "I could not check my channel permissions.")
+                raise commands.CommandError("I could not check my channel permissions.")
             permissions = panel_channel.permissions_for(me)
             if not permissions.send_messages or not permissions.embed_links:
                 raise commands.CommandError(
@@ -438,8 +418,7 @@ class DashboardIntegration:
         record = await self._get_temp_record(guild, channel_id)
         channel = guild.get_channel(channel_id)
         if not record or not isinstance(channel, discord.VoiceChannel):
-            raise commands.BadArgument(
-                "That is not an active TempVoice channel.")
+            raise commands.BadArgument("That is not an active TempVoice channel.")
         settings = await self.config.guild(guild).all()
         message = await self._send_control_panel(guild, channel, record, settings)
         if message is None:
@@ -461,16 +440,13 @@ class DashboardIntegration:
         form_data: typing.Any,
     ) -> int:
         channel_id = self._dash_required_id(form_data, "channel_id")
-        confirmation = self._dash_value(
-            form_data, "delete_confirm").strip().lower()
+        confirmation = self._dash_value(form_data, "delete_confirm").strip().lower()
         if confirmation != "delete":
-            raise commands.BadArgument(
-                "Type `delete` to confirm channel cleanup.")
+            raise commands.BadArgument("Type `delete` to confirm channel cleanup.")
 
         record = await self._get_temp_record(guild, channel_id)
         if not record:
-            raise commands.BadArgument(
-                "That channel is not tracked by TempVoice.")
+            raise commands.BadArgument("That channel is not tracked by TempVoice.")
         channel = guild.get_channel(channel_id)
         if not isinstance(channel, discord.VoiceChannel):
             await self._remove_temp_record(guild, channel_id)
@@ -555,8 +531,7 @@ color: #07111f; }}
 </style>
 <div class="tv-dash" data-dashboard-tabs="1">
   <div class="tv-stats">
-    <div class="tv-stat"><strong>{self._h("Enabled" if settings.get("enabled") else
-    "Disabled")}</strong><span>Status</span></div>
+    <div class="tv-stat"><strong>{self._h("Enabled" if settings.get("enabled") else "Disabled")}</strong><span>Status</span></div>
     <div class="tv-stat"><strong>{active_count}</strong><span>active records</span></div>
     <div class="tv-stat"><strong>{stale_count}</strong><span>stale records</span></div>
     <div class="tv-stat"><strong>{self._h(settings.get("auto_delete_delay") or 0)}s</strong><span>empty cleanup
@@ -574,20 +549,50 @@ color: #07111f; }}
       <input type="hidden" name="action" value="save_settings">
       <h2>Settings</h2>
       {self._checkbox("enabled", "Enable join-to-create", settings.get("enabled"))}
-      {self._select("join_channel_id", "Join-to-create voice channel", self._voice_options(guild),
-      settings.get("join_channel_id"))}
-      {self._select("category_id", "Temporary channel category", self._category_options(guild),
-      settings.get("category_id"), "Use trigger category")}
-      {self._select("panel_channel_id", "Control panel text channel", self._text_options(guild),
-      settings.get("panel_channel_id"), "Use voice channel chat")}
-      {self._input("default_user_limit", "Default user limit", settings.get("default_user_limit") or 0, "number", 0,
-      99)}
-      {self._input("auto_delete_delay", "Auto delete delay seconds", settings.get("auto_delete_delay") or 0, "number",
-      0, self.MAX_DELETE_DELAY)}
-      {self._input("channel_name_template", "Channel name template", settings.get("channel_name_template") or
-      self.DEFAULT_TEMPLATE)}
-      {self._checkbox("clone_trigger_permissions", "Clone trigger channel permissions",
-      settings.get("clone_trigger_permissions", True))}
+      {
+            self._select(
+                "join_channel_id", "Join-to-create voice channel", self._voice_options(guild), settings.get("join_channel_id")
+            )
+        }
+      {
+            self._select(
+                "category_id",
+                "Temporary channel category",
+                self._category_options(guild),
+                settings.get("category_id"),
+                "Use trigger category",
+            )
+        }
+      {
+            self._select(
+                "panel_channel_id",
+                "Control panel text channel",
+                self._text_options(guild),
+                settings.get("panel_channel_id"),
+                "Use voice channel chat",
+            )
+        }
+      {self._input("default_user_limit", "Default user limit", settings.get("default_user_limit") or 0, "number", 0, 99)}
+      {
+            self._input(
+                "auto_delete_delay",
+                "Auto delete delay seconds",
+                settings.get("auto_delete_delay") or 0,
+                "number",
+                0,
+                self.MAX_DELETE_DELAY,
+            )
+        }
+      {
+            self._input(
+                "channel_name_template", "Channel name template", settings.get("channel_name_template") or self.DEFAULT_TEMPLATE
+            )
+        }
+      {
+            self._checkbox(
+                "clone_trigger_permissions", "Clone trigger channel permissions", settings.get("clone_trigger_permissions", True)
+            )
+        }
       <div class="tv-actions"><button type="submit">Save settings</button></div>
     </form>
   </div></section>
@@ -637,8 +642,7 @@ color: #07111f; }}
                 active += 1
                 channel_name = channel.name
                 members = str(len(self._human_members(channel)))
-            owner_id = record.get("owner_id") if isinstance(
-                record, dict) else None
+            owner_id = record.get("owner_id") if isinstance(record, dict) else None
             owner = self._member_label(guild, owner_id)
             created = self._format_dashboard_time(record.get("created_at"))
             locked = "Locked" if record.get("locked") else "Unlocked"
@@ -694,8 +698,7 @@ color: #07111f; }}
         option_html = [f'<option value="">{self._h(empty_label)}</option>']
         for value, text in options:
             option_html.append(
-                f'<option value="{self._h(value)}" {self._selected(value, selected)}>'
-                f"{self._h(text)}</option>",
+                f'<option value="{self._h(value)}" {self._selected(value, selected)}>{self._h(text)}</option>',
             )
         return (
             f'<div class="tv-field"><label>{self._h(label)}</label>'

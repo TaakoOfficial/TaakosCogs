@@ -308,9 +308,7 @@ class TempVoice(DashboardIntegration, commands.Cog):
                         record["owner_id"] = None
                         record["owner_removed"] = True
                     record["permitted_ids"] = [
-                        member_id
-                        for member_id in record.get("permitted_ids", [])
-                        if str(member_id) != user_key
+                        member_id for member_id in record.get("permitted_ids", []) if str(member_id) != user_key
                     ]
 
     def _guild_lock(self, guild_id: int) -> asyncio.Lock:
@@ -352,9 +350,7 @@ class TempVoice(DashboardIntegration, commands.Cog):
         channel: discord.VoiceChannel,
     ) -> bool:
         return bool(
-            member.voice
-            and member.voice.channel
-            and member.voice.channel.id == channel.id,
+            member.voice and member.voice.channel and member.voice.channel.id == channel.id,
         )
 
     @classmethod
@@ -443,10 +439,7 @@ class TempVoice(DashboardIntegration, commands.Cog):
         record: TempVoiceRecord,
         channel: discord.VoiceChannel,
     ) -> bool:
-        if (
-            member.guild_permissions.administrator
-            or member.guild_permissions.manage_channels
-        ):
+        if member.guild_permissions.administrator or member.guild_permissions.manage_channels:
             return True
         try:
             owner_id = int(record.get("owner_id") or 0)
@@ -503,8 +496,7 @@ class TempVoice(DashboardIntegration, commands.Cog):
     async def _resolve_member(self, guild: discord.Guild, raw: str) -> discord.Member:
         match = self.USER_ID_RE.search(raw)
         if not match:
-            raise commands.BadArgument(
-                "Enter a member mention or Discord user ID.")
+            raise commands.BadArgument("Enter a member mention or Discord user ID.")
         member_id = int(match.group(1))
         member = guild.get_member(member_id)
         if member is not None:
@@ -574,8 +566,7 @@ class TempVoice(DashboardIntegration, commands.Cog):
             value=self._format_ts(record.get("created_at")),
             inline=True,
         )
-        embed.add_field(name="Channel ID",
-                        value=f"`{channel.id}`", inline=True)
+        embed.add_field(name="Channel ID", value=f"`{channel.id}`", inline=True)
         embed.set_footer(
             text="Owner controls are available while the owner is in the voice channel.",
         )
@@ -708,8 +699,6 @@ class TempVoice(DashboardIntegration, commands.Cog):
                 channel_id,
                 reason="TempVoice channel was empty.",
             )
-        except asyncio.CancelledError:
-            raise
         finally:
             self._delete_tasks.pop(channel_id, None)
 
@@ -803,25 +792,18 @@ class TempVoice(DashboardIntegration, commands.Cog):
                 category = trigger.category
 
             name = self._render_channel_name(
-                str(settings.get("channel_name_template")
-                    or self.DEFAULT_TEMPLATE),
+                str(settings.get("channel_name_template") or self.DEFAULT_TEMPLATE),
                 member,
                 guild,
             )
-            user_limit = max(
-                0, min(int(settings.get("default_user_limit") or 0), 99))
+            user_limit = max(0, min(int(settings.get("default_user_limit") or 0), 99))
 
-            overwrites = (
-                dict(trigger.overwrites)
-                if settings.get("clone_trigger_permissions", True)
-                else {}
-            )
+            overwrites = dict(trigger.overwrites) if settings.get("clone_trigger_permissions", True) else {}
             default_overwrite = overwrites.get(
                 guild.default_role,
                 discord.PermissionOverwrite(),
             )
-            owner_overwrite = overwrites.get(
-                member, discord.PermissionOverwrite())
+            owner_overwrite = overwrites.get(member, discord.PermissionOverwrite())
             owner_overwrite.view_channel = True
             owner_overwrite.connect = True
             overwrites[member] = owner_overwrite
@@ -918,10 +900,7 @@ class TempVoice(DashboardIntegration, commands.Cog):
         if isinstance(after.channel, discord.VoiceChannel):
             self._cancel_cleanup(after.channel.id)
             settings = await self.config.guild(member.guild).all()
-            if (
-                settings.get("enabled")
-                and int(settings.get("join_channel_id") or 0) == after.channel.id
-            ):
+            if settings.get("enabled") and int(settings.get("join_channel_id") or 0) == after.channel.id:
                 await self._create_temp_channel_for(member, after.channel)
 
         if before.channel is not None:
@@ -1057,8 +1036,7 @@ class TempVoice(DashboardIntegration, commands.Cog):
             )
             return
         if self._owner_present(channel.guild, record, channel) and not (
-            member.guild_permissions.administrator
-            or member.guild_permissions.manage_channels
+            member.guild_permissions.administrator or member.guild_permissions.manage_channels
         ):
             await self._send_interaction_message(
                 interaction,
@@ -1352,11 +1330,7 @@ class TempVoice(DashboardIntegration, commands.Cog):
             )
             return
 
-        permitted_ids = [
-            member_id
-            for member_id in record.get("permitted_ids", [])
-            if int(member_id) != target.id
-        ]
+        permitted_ids = [member_id for member_id in record.get("permitted_ids", []) if int(member_id) != target.id]
         updated = await self._update_record(
             channel.guild,
             channel.id,
@@ -1394,8 +1368,7 @@ class TempVoice(DashboardIntegration, commands.Cog):
     ) -> discord.Embed:
         embed = discord.Embed(
             title="TempVoice Settings",
-            color=self.SUCCESS_COLOR if settings.get(
-                "enabled") else self.ERROR_COLOR,
+            color=self.SUCCESS_COLOR if settings.get("enabled") else self.ERROR_COLOR,
         )
         embed.add_field(
             name="Enabled",
@@ -1413,11 +1386,7 @@ class TempVoice(DashboardIntegration, commands.Cog):
             inline=True,
         )
         panel_channel_id = settings.get("panel_channel_id")
-        panel_value = (
-            self._channel_ref(guild, panel_channel_id)
-            if panel_channel_id
-            else "Voice channel chat"
-        )
+        panel_value = self._channel_ref(guild, panel_channel_id) if panel_channel_id else "Voice channel chat"
         embed.add_field(name="Control Panels", value=panel_value, inline=True)
         embed.add_field(
             name="Default User Limit",
@@ -1653,8 +1622,7 @@ class TempVoice(DashboardIntegration, commands.Cog):
         template = self._clean_channel_name(template)
         await self.config.guild(ctx.guild).channel_name_template.set(template)
         await ctx.send(
-            "Temporary voice channels will use this template: "
-            f"`{discord.utils.escape_markdown(template)}`",
+            f"Temporary voice channels will use this template: `{discord.utils.escape_markdown(template)}`",
         )
 
     @tempvoice.command(
@@ -1708,11 +1676,9 @@ class TempVoice(DashboardIntegration, commands.Cog):
             title="Active TempVoice Channels",
             color=self.DEFAULT_COLOR,
         )
-        embed.description = "\n".join(
-            lines[:20]) or "No active channels found."
+        embed.description = "\n".join(lines[:20]) or "No active channels found."
         if len(lines) > 20:
-            embed.set_footer(
-                text=f"Showing 20 of {len(lines)} active channels.")
+            embed.set_footer(text=f"Showing 20 of {len(lines)} active channels.")
         elif stale:
             embed.set_footer(
                 text=f"{stale} stale record(s) can be removed with cleanup.",
@@ -1742,8 +1708,7 @@ class TempVoice(DashboardIntegration, commands.Cog):
             await ctx.send("You are not in a TempVoice-managed channel.")
             return
         if self._owner_present(ctx.guild, record, channel) and not (
-            ctx.author.guild_permissions.administrator
-            or ctx.author.guild_permissions.manage_channels
+            ctx.author.guild_permissions.administrator or ctx.author.guild_permissions.manage_channels
         ):
             await ctx.send("The current owner is still in the channel.")
             return

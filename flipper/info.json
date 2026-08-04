@@ -18,5 +18,6 @@
     "disabled": false,
     "type": "COG",
     "short": "Coin flip utility for Red.",
-    "version": "0.1.1"
+    "version": "0.1.1",
+    "end_user_data_statement": "This cog does not persistently store any end user data."
 }

@@ -98,8 +98,7 @@ class FiveMStatus(DashboardIntegration, commands.Cog):
             try:
                 await self._update_status_message(guild, settings)
             except RECOVERABLE_EXCEPTIONS:
-                log.exception(
-                    "Failed to update FiveM status for guild %s", guild_id)
+                log.exception("Failed to update FiveM status for guild %s", guild_id)
 
     @status_loop.before_loop
     async def before_status_loop(self) -> None:
@@ -436,9 +435,7 @@ class FiveMStatus(DashboardIntegration, commands.Cog):
             lines.append(f"{player_id}: {name}{ping_text}")
 
         header = f"{len(players)} player(s) online"
-        pages = [
-            f"{header}\n\n{page}" for page in pagify("\n".join(lines), page_length=1800)
-        ]
+        pages = [f"{header}\n\n{page}" for page in pagify("\n".join(lines), page_length=1800)]
         for page in pages:
             await ctx.send(box(page))
 
@@ -481,13 +478,11 @@ class FiveMStatus(DashboardIntegration, commands.Cog):
         if cleaned.startswith("fivem://connect/"):
             cleaned = cleaned.split("/", 3)[-1]
 
-        join_match = re.search(
-            r"(?:cfx\.re/join/|servers/single/)([a-z0-9]+)", cleaned)
+        join_match = re.search(r"(?:cfx\.re/join/|servers/single/)([a-z0-9]+)", cleaned)
         if join_match:
             cleaned = join_match.group(1)
 
-        if cleaned.startswith("cfx:"):
-            cleaned = cleaned[4:]
+        cleaned = cleaned.removeprefix("cfx:")
 
         if not cls.CFX_JOIN_CODE_RE.fullmatch(cleaned):
             raise commands.BadArgument(
@@ -512,16 +507,11 @@ class FiveMStatus(DashboardIntegration, commands.Cog):
             server = server.split("/", 3)[-1]
             lowered = server.lower()
 
-        join_match = re.search(
-            r"(?:cfx\.re/join/|servers/single/)([a-z0-9]+)", lowered)
+        join_match = re.search(r"(?:cfx\.re/join/|servers/single/)([a-z0-9]+)", lowered)
         if join_match:
             return f"cfx:{join_match.group(1)}"
 
-        if (
-            cls.CFX_JOIN_CODE_RE.fullmatch(lowered)
-            and "." not in lowered
-            and ":" not in lowered
-        ):
+        if cls.CFX_JOIN_CODE_RE.fullmatch(lowered) and "." not in lowered and ":" not in lowered:
             return f"cfx:{lowered}"
 
         if "://" in server:
@@ -544,13 +534,11 @@ class FiveMStatus(DashboardIntegration, commands.Cog):
     def _parse_restart_time(value: str) -> str:
         match = re.fullmatch(r"(\d{1,2}):?(\d{2})", value.strip())
         if not match:
-            raise commands.BadArgument(
-                "Use 24-hour time like `06:00` or `1800`.")
+            raise commands.BadArgument("Use 24-hour time like `06:00` or `1800`.")
         hour = int(match.group(1))
         minute = int(match.group(2))
         if hour > 23 or minute > 59:
-            raise commands.BadArgument(
-                "Restart times must be valid 24-hour times.")
+            raise commands.BadArgument("Restart times must be valid 24-hour times.")
         return f"{hour:02d}:{minute:02d}"
 
     async def _session_get_json(self, url: str) -> Any:
@@ -588,20 +576,12 @@ class FiveMStatus(DashboardIntegration, commands.Cog):
         url = f"https://servers-frontend.fivem.net/api/servers/single/{join_code}"
         try:
             payload = await self._session_get_json(url)
-            data = payload.get("Data", payload) if isinstance(
-                payload, dict) else {}
+            data = payload.get("Data", payload) if isinstance(payload, dict) else {}
             players = data.get("players") or data.get("Players") or []
             vars_data = data.get("vars") or data.get("Vars") or {}
-            endpoints = (
-                data.get("connectEndPoints") or data.get(
-                    "connectEndpoints") or []
-            )
+            endpoints = data.get("connectEndPoints") or data.get("connectEndpoints") or []
             connect_endpoint = endpoints[0] if endpoints else f"cfx.re/join/{join_code}"
-            hostname = (
-                data.get("hostname")
-                or vars_data.get("sv_projectName")
-                or "FiveM Server"
-            )
+            hostname = data.get("hostname") or vars_data.get("sv_projectName") or "FiveM Server"
             clients = self._to_int(data.get("clients"), len(players))
             max_clients = self._to_int(
                 data.get("svMaxclients")
@@ -651,19 +631,12 @@ class FiveMStatus(DashboardIntegration, commands.Cog):
             dynamic_data = dynamic if isinstance(dynamic, dict) else {}
             info_data = info if isinstance(info, dict) else {}
             players_data = players if isinstance(players, list) else []
-            vars_data = (
-                info_data.get("vars") if isinstance(
-                    info_data.get("vars"), dict) else {}
-            )
+            vars_data = info_data.get("vars") if isinstance(info_data.get("vars"), dict) else {}
 
             hostname = (
-                dynamic_data.get("hostname")
-                or vars_data.get("sv_projectName")
-                or vars_data.get("sv_hostname")
-                or "FiveM Server"
+                dynamic_data.get("hostname") or vars_data.get("sv_projectName") or vars_data.get("sv_hostname") or "FiveM Server"
             )
-            clients = self._to_int(dynamic_data.get(
-                "clients"), len(players_data))
+            clients = self._to_int(dynamic_data.get("clients"), len(players_data))
             max_clients = self._to_int(
                 dynamic_data.get("sv_maxclients")
                 or dynamic_data.get("sv_maxClients")
@@ -750,10 +723,8 @@ class FiveMStatus(DashboardIntegration, commands.Cog):
         candidates = []
         for raw_time in restart_times:
             try:
-                hour, minute = [int(part)
-                                    for part in str(raw_time).split(":", 1)]
-                restart_at = datetime.combine(
-                    now.date(), time(hour, minute), tzinfo=tz)
+                hour, minute = [int(part) for part in str(raw_time).split(":", 1)]
+                restart_at = datetime.combine(now.date(), time(hour, minute), tzinfo=tz)
             except (TypeError, ValueError):
                 continue
             if restart_at <= now:
@@ -873,21 +844,16 @@ class FiveMStatus(DashboardIntegration, commands.Cog):
         data: ServerData,
     ) -> discord.Embed:
         online = bool(data.get("online"))
-        configured_color = (
-            self._to_int(settings.get("embed_color"), self.DEFAULT_COLOR)
-            or self.DEFAULT_COLOR
-        )
+        configured_color = self._to_int(settings.get("embed_color"), self.DEFAULT_COLOR) or self.DEFAULT_COLOR
         color = configured_color if online else self.OFFLINE_COLOR
-        title = settings.get("display_name") or data.get(
-            "hostname") or "FiveM Server"
+        title = settings.get("display_name") or data.get("hostname") or "FiveM Server"
         description = settings.get("status_message") or ""
         if not online and data.get("error"):
             description = "The city is currently offline or unreachable."
 
         embed = discord.Embed(
             title=self._shorten(str(title), 256),
-            description=self._shorten(
-                str(description), 350) if description else None,
+            description=self._shorten(str(description), 350) if description else None,
             color=discord.Color(color),
             timestamp=discord.utils.utcnow(),
         )
@@ -903,21 +869,16 @@ class FiveMStatus(DashboardIntegration, commands.Cog):
         status_text = "🟢 Online" if online else "🔴 Offline"
         max_clients = data.get("max_clients")
         max_text = str(max_clients) if max_clients is not None else "?"
-        players_text = (
-            f"{data.get('clients', 0)}/{max_text}" if online else f"0/{max_text}"
-        )
+        players_text = f"{data.get('clients', 0)}/{max_text}" if online else f"0/{max_text}"
         connect_endpoint = str(
-            data.get("connect_endpoint")
-            or settings.get("server_address")
-            or "not configured",
+            data.get("connect_endpoint") or settings.get("server_address") or "not configured",
         )
         connect_command = f"connect {connect_endpoint}"
 
         online_since = self._to_int(settings.get("online_since"), None)
         uptime_seconds = None
         if online and online_since:
-            uptime_seconds = datetime.now(
-                timezone.utc).timestamp() - online_since
+            uptime_seconds = datetime.now(timezone.utc).timestamp() - online_since
 
         embed.add_field(name="STATUS", value=f"`{status_text}`", inline=True)
         embed.add_field(name="PLAYERS", value=f"`{players_text}`", inline=True)
@@ -970,17 +931,12 @@ class FiveMStatus(DashboardIntegration, commands.Cog):
         if not connect_url:
             join_code = data.get("join_code")
             server_address = settings.get("server_address")
-            if (
-                not join_code
-                and isinstance(server_address, str)
-                and server_address.startswith("cfx:")
-            ):
+            if not join_code and isinstance(server_address, str) and server_address.startswith("cfx:"):
                 join_code = server_address[4:]
             if join_code:
                 connect_url = self._cfx_join_url(str(join_code))
         if connect_url:
-            view.add_item(discord.ui.Button(
-                label="Join Server", url=connect_url))
+            view.add_item(discord.ui.Button(label="Join Server", url=connect_url))
 
         discord_url = settings.get("discord_url")
         if discord_url:
@@ -995,11 +951,7 @@ class FiveMStatus(DashboardIntegration, commands.Cog):
     async def _send_settings(self, ctx: commands.Context) -> None:
         assert ctx.guild is not None
         settings = await self.config.guild(ctx.guild).all()
-        channel = (
-            ctx.guild.get_channel(settings["status_channel_id"])
-            if settings.get("status_channel_id")
-            else None
-        )
+        channel = ctx.guild.get_channel(settings["status_channel_id"]) if settings.get("status_channel_id") else None
         restarts = ", ".join(settings.get("restart_times") or []) or "Not set"
         lines = [
             f"Enabled: {settings.get('enabled')}",

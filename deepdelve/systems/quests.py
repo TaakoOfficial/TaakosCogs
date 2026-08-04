@@ -129,11 +129,7 @@ def requirement_status(profile: dict[str, Any], quest: dict[str, Any]) -> tuple[
         if campaign_act in campaign.get("completed", []):
             return False, "This act is already written in your Living Chronicle."
         current_index = int(campaign.get("act", 0))
-        current_key = (
-            MAIN_CAMPAIGN_ACTS[current_index]["key"]
-            if 0 <= current_index < len(MAIN_CAMPAIGN_ACTS)
-            else ""
-        )
+        current_key = MAIN_CAMPAIGN_ACTS[current_index]["key"] if 0 <= current_index < len(MAIN_CAMPAIGN_ACTS) else ""
         if campaign_act != current_key:
             return False, "Complete the preceding Living Chronicle act."
     faction_required = int(requirement.get("faction_reputation", 0))

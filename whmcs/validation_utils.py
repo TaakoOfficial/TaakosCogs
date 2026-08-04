@@ -12,8 +12,6 @@ log = logging.getLogger("red.taakoscogs.whmcs.validation")
 class ValidationError(Exception):
     """Exception raised for validation errors."""
 
-    pass
-
 
 def validate_client_id(client_id: str | int) -> int:
     """Validate and convert client ID.
@@ -78,7 +76,7 @@ def validate_ticket_id(ticket_id: str | int) -> int:
         raise ValidationError("Ticket ID must be a valid integer")
 
 
-def validate_amount(amount: str | float | int) -> float:
+def validate_amount(amount: str | float) -> float:
     """Validate and convert monetary amount.
 
     Args:
@@ -249,8 +247,7 @@ def validate_search_term(search_term: str) -> str:
     forbidden_chars = ["<", ">", '"', "'", "&", "\x00"]
     for char in forbidden_chars:
         if char in search_term:
-            raise ValidationError(
-                f"Search term contains forbidden character: {char}")
+            raise ValidationError(f"Search term contains forbidden character: {char}")
 
     return search_term
 
@@ -430,8 +427,7 @@ def validate_client_data(data: dict[str, Any]) -> dict[str, Any]:
         if len(name) < 1:
             raise ValidationError(f"{name_field} cannot be empty")
         if len(name) > 50:
-            raise ValidationError(
-                f"{name_field} is too long (max: 50 characters)")
+            raise ValidationError(f"{name_field} is too long (max: 50 characters)")
         # Check for potentially dangerous characters
         if re.search(r'[<>"\']', name):
             raise ValidationError(f"{name_field} contains invalid characters")
@@ -450,7 +446,7 @@ def validate_client_data(data: dict[str, Any]) -> dict[str, Any]:
     }
 
     for field, max_length in optional_fields.items():
-        if field in data and data[field]:
+        if data.get(field):
             value = str(data[field]).strip()
             if len(value) > max_length:
                 raise ValidationError(

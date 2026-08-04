@@ -1,0 +1,17 @@
+{
+    "$schema": "https://raw.githubusercontent.com/Cog-Creators/Red-DiscordBot/V3/develop/schema/red_cog.schema.json",
+    "name": "forumflow",
+    "author": ["Taako"],
+    "version": "1.0.0",
+    "description": "Discord forum help workflows with intake tracking, persistent staff controls, assignments, accepted answers, lifecycle tags, stale queues, metrics, and CSV exports.",
+    "install_msg": "ForumFlow loaded. Use `[p]forumflow addforum` inside a forum post or provide a forum channel, then run `[p]forumflow settings`.",
+    "short": "Solved help-forum workflows, assignments, tags, stale queues, and metrics.",
+    "tags": ["forum", "solved", "help", "workflow", "support", "dashboard", "utility"],
+    "requirements": [],
+    "min_bot_version": "3.5.0",
+    "min_python_version": [3, 9, 0],
+    "hidden": false,
+    "disabled": false,
+    "type": "COG",
+    "end_user_data_statement": "This cog stores configured forum, log, role, thread, message, author, assignee, accepted-answer author, and staff actor IDs; workflow states; timestamps; and aggregate resolution metrics. Export files are generated on demand."
+}

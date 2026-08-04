@@ -1,0 +1,17 @@
+{
+    "$schema": "https://raw.githubusercontent.com/Cog-Creators/Red-DiscordBot/V3/develop/schema/red_cog.schema.json",
+    "name": "accessreview",
+    "author": ["Taako"],
+    "version": "1.0.0",
+    "description": "Periodic access certification campaigns for sensitive Discord roles with member snapshots, reviewer attestations, separation of decisions from enforcement, completion tracking, and CSV evidence exports.",
+    "install_msg": "AccessReview loaded. Start a campaign with `[p]accessreview create <name> <role>`.",
+    "short": "Review and certify sensitive role access with safe, auditable campaigns.",
+    "tags": ["access", "roles", "review", "compliance", "permissions", "audit", "dashboard"],
+    "requirements": [],
+    "min_bot_version": "3.5.0",
+    "min_python_version": [3, 9, 0],
+    "hidden": false,
+    "disabled": false,
+    "type": "COG",
+    "end_user_data_statement": "This cog stores access-review campaign names, role IDs, snapshotted member Discord user IDs, reviewer Discord user IDs, keep/remove decisions, review notes, timestamps, enforcement results, and campaign actor IDs. CSV evidence is generated on demand."
+}

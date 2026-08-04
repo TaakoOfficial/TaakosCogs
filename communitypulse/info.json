@@ -1,0 +1,17 @@
+{
+    "$schema": "https://raw.githubusercontent.com/Cog-Creators/Red-DiscordBot/V3/develop/schema/red_cog.schema.json",
+    "name": "communitypulse",
+    "author": ["Taako"],
+    "version": "1.0.0",
+    "description": "Privacy-conscious community health analytics with onboarding funnels, activation, retention cohorts, role adoption, inactivity queues, churn counts, buffered writes, and CSV exports.",
+    "install_msg": "CommunityPulse loaded disabled. Review its data statement, then enable it with `[p]communitypulse enable`.",
+    "short": "Onboarding, activation, retention, churn, inactivity, and role-adoption analytics.",
+    "tags": ["analytics", "retention", "churn", "cohort", "community", "onboarding", "dashboard"],
+    "requirements": [],
+    "min_bot_version": "3.5.0",
+    "min_python_version": [3, 9, 0],
+    "hidden": false,
+    "disabled": false,
+    "type": "COG",
+    "end_user_data_statement": "When enabled, this cog stores Discord user IDs, join/leave/first-message/last-message timestamps, aggregate message counts, and current non-managed role IDs for community health analysis. It does not store message content. Buffered activity is written every five minutes."
+}

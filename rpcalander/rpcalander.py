@@ -47,8 +47,7 @@ class RPCAGroup(app_commands.Group):
             return
         await interaction.response.defer(ephemeral=True)
         guild_settings = await self.cog._config.guild(interaction.guild).all()
-        embed_color = discord.Color(
-            guild_settings.get("embed_color", 0x0000FF))
+        embed_color = discord.Color(guild_settings.get("embed_color", 0x0000FF))
         embed = discord.Embed(title="RP Calendar Settings", color=embed_color)
         start_date = guild_settings["start_date"] or "Not set"
         current_date = guild_settings["current_date"] or "Not set"
@@ -69,10 +68,8 @@ class RPCAGroup(app_commands.Group):
             tomorrow_str = "Error"
         embed.add_field(name="Start Date", value=start_date, inline=False)
         embed.add_field(name="Current Date", value=current_date, inline=False)
-        embed.add_field(name="Tomorrow's Date",
-                        value=tomorrow_str, inline=False)
-        next_post_time = now.replace(
-            hour=0, minute=0, second=0) + timedelta(days=1)
+        embed.add_field(name="Tomorrow's Date", value=tomorrow_str, inline=False)
+        next_post_time = now.replace(hour=0, minute=0, second=0) + timedelta(days=1)
         time_until_next_post = next_post_time - now
         days, seconds = divmod(time_until_next_post.total_seconds(), 86400)
         hours, remainder = divmod(seconds, 3600)
@@ -94,8 +91,7 @@ class RPCAGroup(app_commands.Group):
         )
         embed.add_field(name="Update Channel", value=channel, inline=False)
         embed.add_field(name="Time Zone", value=time_zone, inline=False)
-        embed.add_field(name="Embed Color", value=str(
-            embed_color), inline=False)
+        embed.add_field(name="Embed Color", value=str(embed_color), inline=False)
         embed.add_field(name="Embed Title", value=embed_title, inline=False)
 
         # Add moon phase settings
@@ -105,15 +101,11 @@ class RPCAGroup(app_commands.Group):
 
         moon_status = "Enabled" if show_moon_phase else "Disabled"
         blood_moon_status = "Enabled" if blood_moon_enabled else "Disabled"
-        moon_channel = (
-            f"<#{moon_channel_id}>" if moon_channel_id else "Same as calendar"
-        )
+        moon_channel = f"<#{moon_channel_id}>" if moon_channel_id else "Same as calendar"
 
         embed.add_field(
             name="🌙 Moon Phase Settings",
-            value=f"**Status:** {moon_status}\n"
-            f"**Blood Moon:** {blood_moon_status}\n"
-            f"**Moon Channel:** {moon_channel}",
+            value=f"**Status:** {moon_status}\n**Blood Moon:** {blood_moon_status}\n**Moon Channel:** {moon_channel}",
             inline=False,
         )
 
@@ -150,7 +142,7 @@ class RPCAGroup(app_commands.Group):
             )
             return
         await interaction.response.defer(ephemeral=True)
-        status, message = await self.cog.force_post_slash(interaction.guild)
+        _status, message = await self.cog.force_post_slash(interaction.guild)
         await interaction.followup.send(message, ephemeral=True)
 
     @app_commands.command(
@@ -322,7 +314,7 @@ class RPCAGroup(app_commands.Group):
             await interaction.followup.send(embed=embed, ephemeral=False)
         except RECOVERABLE_EXCEPTIONS as e:
             await interaction.followup.send(
-                f"Error displaying moon phase: {str(e)}",
+                f"Error displaying moon phase: {e!s}",
                 ephemeral=True,
             )
 
@@ -369,7 +361,7 @@ class RPCAGroup(app_commands.Group):
             )
         except RECOVERABLE_EXCEPTIONS as e:
             await interaction.followup.send(
-                f"Error posting moon phase update: {str(e)}",
+                f"Error posting moon phase update: {e!s}",
                 ephemeral=True,
             )
 
@@ -436,8 +428,7 @@ class RPCAGroup(app_commands.Group):
 
         elif action == "bloodmoon":
             # Simply toggle blood moon mode on/off
-            blood_moon_enabled = guild_settings.get(
-                "blood_moon_enabled", False)
+            blood_moon_enabled = guild_settings.get("blood_moon_enabled", False)
 
             # Toggle the setting
             new_setting = not blood_moon_enabled
@@ -531,11 +522,7 @@ class RPCAGroup(app_commands.Group):
         await self.cog._config.guild(interaction.guild).current_date.set(date)
 
         # Format for display
-        display_date = (
-            datetime.strptime(date, "%m-%d-%Y")
-            .replace(tzinfo=timezone.utc)
-            .strftime("%A %m-%d-%Y")
-        )
+        display_date = datetime.strptime(date, "%m-%d-%Y").replace(tzinfo=timezone.utc).strftime("%A %m-%d-%Y")
         await interaction.response.send_message(
             f"RP Calendar date set to: **{display_date}**",
             ephemeral=True,
@@ -638,8 +625,7 @@ class RPCalander(DashboardIntegration, commands.Cog):
 
                 if today_date_obj > current_date_obj:
                     days_missed = (today_date_obj - current_date_obj).days
-                    new_date_obj = current_date_obj + \
-                        timedelta(days=days_missed)
+                    new_date_obj = current_date_obj + timedelta(days=days_missed)
                     await self._config.guild_from_id(guild_id).current_date.set(
                         new_date_obj.strftime("%m-%d-%Y"),
                     )
@@ -665,8 +651,7 @@ class RPCalander(DashboardIntegration, commands.Cog):
             current_date = guild_settings.get("current_date")
             time_zone = guild_settings.get("time_zone") or "America/Chicago"
             embed_color = guild_settings.get("embed_color") or 0x0000FF
-            embed_title = guild_settings.get(
-                "embed_title") or "📅 RP Calendar Update"
+            embed_title = guild_settings.get("embed_title") or "📅 RP Calendar Update"
             show_footer = guild_settings.get("show_footer", True)
             last_posted = guild_settings.get("last_posted")
             if not channel_id or not current_date:
@@ -676,8 +661,7 @@ class RPCalander(DashboardIntegration, commands.Cog):
             # Calculate the next post time (00:00 in the configured timezone)
             if last_posted:
                 try:
-                    last_posted_dt = datetime.fromisoformat(
-                        last_posted).astimezone(tz)
+                    last_posted_dt = datetime.fromisoformat(last_posted).astimezone(tz)
                 except RECOVERABLE_EXCEPTIONS:
                     last_posted_dt = now - timedelta(days=1)
             else:
@@ -691,7 +675,8 @@ class RPCalander(DashboardIntegration, commands.Cog):
             if now >= next_post_time:
                 try:
                     current_date_obj = datetime.strptime(
-                        current_date, "%m-%d-%Y",
+                        current_date,
+                        "%m-%d-%Y",
                     ).replace(tzinfo=timezone.utc)
                 except RECOVERABLE_EXCEPTIONS:
                     current_date_obj = now
@@ -725,8 +710,7 @@ class RPCalander(DashboardIntegration, commands.Cog):
                             if guild:
                                 await self._post_moon_update(guild)
                     except RECOVERABLE_EXCEPTIONS as e:
-                        log.error(
-                            f"Failed to send daily calendar update: {e}")
+                        log.error(f"Failed to send daily calendar update: {e}")
 
     @_daily_update_loop.error
     async def _daily_update_loop_error(self, error):
@@ -740,7 +724,7 @@ class RPCalander(DashboardIntegration, commands.Cog):
     @commands.admin_or_permissions(administrator=True)
     async def rpca_force(self, ctx: commands.Context) -> None:
         """Force post a calendar update to the configured channel immediately."""
-        status, message = await self.force_post(ctx.guild)
+        _status, message = await self.force_post(ctx.guild)
         await ctx.send(message)
 
     async def force_post(self, guild: discord.Guild) -> tuple[bool, str]:
@@ -754,8 +738,7 @@ class RPCalander(DashboardIntegration, commands.Cog):
             return False, "No current date set for the calendar."
         time_zone = guild_settings.get("time_zone") or "America/Chicago"
         embed_color = guild_settings.get("embed_color") or 0x0000FF
-        embed_title = guild_settings.get(
-            "embed_title") or "📅 RP Calendar Update"
+        embed_title = guild_settings.get("embed_title") or "📅 RP Calendar Update"
         show_footer = guild_settings.get("show_footer", True)
         tz = pytz.timezone(time_zone)
         now = datetime.now(tz)
@@ -763,15 +746,10 @@ class RPCalander(DashboardIntegration, commands.Cog):
             current_date_obj = datetime.strptime(current_date, "%m-%d-%Y").replace(
                 tzinfo=tz,
             )
-            today_date_obj = now.replace(
-                hour=0, minute=0, second=0, microsecond=0)
+            today_date_obj = now.replace(hour=0, minute=0, second=0, microsecond=0)
             if not self._is_same_month_day(current_date_obj, today_date_obj):
-                days_missed = (
-                    today_date_obj - \
-                        current_date_obj.replace(year=today_date_obj.year)
-                ).days
-                if days_missed < 1:
-                    days_missed = 1
+                days_missed = (today_date_obj - current_date_obj.replace(year=today_date_obj.year)).days
+                days_missed = max(days_missed, 1)
                 new_date_obj = current_date_obj + timedelta(days=days_missed)
             else:
                 new_date_obj = current_date_obj
@@ -876,7 +854,7 @@ class RPCalander(DashboardIntegration, commands.Cog):
 
         except RECOVERABLE_EXCEPTIONS as e:
             log.error(
-                f"Error posting moon phase update for guild {guild.name}: {str(e)}",
+                f"Error posting moon phase update for guild {guild.name}: {e!s}",
             )
 
     if _dashboard_available:
@@ -894,8 +872,7 @@ class RPCalander(DashboardIntegration, commands.Cog):
                 data = await request.post()
                 embed_title = data.get("embed_title", settings["embed_title"])
                 time_zone = data.get("time_zone", settings["time_zone"])
-                embed_color = int(
-                    data.get("embed_color", settings["embed_color"]))
+                embed_color = int(data.get("embed_color", settings["embed_color"]))
                 show_footer = data.get("show_footer", "off") == "on"
                 show_moon_phase = data.get("show_moon_phase", "off") == "on"
 
@@ -924,8 +901,7 @@ class RPCalander(DashboardIntegration, commands.Cog):
     async def rpca_info(self, ctx: commands.Context) -> None:
         """View the current settings for the RP calendar including moon phase information if enabled."""
         guild_settings = await self._config.guild(ctx.guild).all()
-        embed_color = discord.Color(
-            guild_settings.get("embed_color", 0x0000FF))
+        embed_color = discord.Color(guild_settings.get("embed_color", 0x0000FF))
         embed = discord.Embed(title="RP Calendar Settings", color=embed_color)
         start_date = guild_settings["start_date"] or "Not set"
         current_date = guild_settings["current_date"] or "Not set"
@@ -946,10 +922,8 @@ class RPCalander(DashboardIntegration, commands.Cog):
             tomorrow_str = "Error"
         embed.add_field(name="Start Date", value=start_date, inline=False)
         embed.add_field(name="Current Date", value=current_date, inline=False)
-        embed.add_field(name="Tomorrow's Date",
-                        value=tomorrow_str, inline=False)
-        next_post_time = now.replace(
-            hour=0, minute=0, second=0) + timedelta(days=1)
+        embed.add_field(name="Tomorrow's Date", value=tomorrow_str, inline=False)
+        next_post_time = now.replace(hour=0, minute=0, second=0) + timedelta(days=1)
         time_until_next_post = next_post_time - now
         days, seconds = divmod(time_until_next_post.total_seconds(), 86400)
         hours, remainder = divmod(seconds, 3600)
@@ -971,8 +945,7 @@ class RPCalander(DashboardIntegration, commands.Cog):
         )
         embed.add_field(name="Update Channel", value=channel, inline=False)
         embed.add_field(name="Time Zone", value=time_zone, inline=False)
-        embed.add_field(name="Embed Color", value=str(
-            embed_color), inline=False)
+        embed.add_field(name="Embed Color", value=str(embed_color), inline=False)
         embed.add_field(name="Embed Title", value=embed_title, inline=False)
 
         # Add moon phase settings
@@ -982,15 +955,11 @@ class RPCalander(DashboardIntegration, commands.Cog):
 
         moon_status = "Enabled" if show_moon_phase else "Disabled"
         blood_moon_status = "Enabled" if blood_moon_enabled else "Disabled"
-        moon_channel = (
-            f"<#{moon_channel_id}>" if moon_channel_id else "Same as calendar"
-        )
+        moon_channel = f"<#{moon_channel_id}>" if moon_channel_id else "Same as calendar"
 
         embed.add_field(
             name="🌙 Moon Phase Settings",
-            value=f"**Status:** {moon_status}\n"
-            f"**Blood Moon:** {blood_moon_status}\n"
-            f"**Moon Channel:** {moon_channel}",
+            value=f"**Status:** {moon_status}\n**Blood Moon:** {blood_moon_status}\n**Moon Channel:** {moon_channel}",
             inline=False,
         )
 
@@ -1124,7 +1093,7 @@ class RPCalander(DashboardIntegration, commands.Cog):
 
             await ctx.send(embed=embed)
         except RECOVERABLE_EXCEPTIONS as e:
-            await ctx.send(f"Error displaying moon phase: {str(e)}")
+            await ctx.send(f"Error displaying moon phase: {e!s}")
 
     @rpca_group_command.command(name="forcemoonupdate")
     @commands.guild_only()
@@ -1153,7 +1122,7 @@ class RPCalander(DashboardIntegration, commands.Cog):
             await self._post_moon_update(ctx.guild)
             await ctx.send("Moon phase update has been posted.")
         except RECOVERABLE_EXCEPTIONS as e:
-            await ctx.send(f"Error posting moon phase update: {str(e)}")
+            await ctx.send(f"Error posting moon phase update: {e!s}")
 
     @rpca_group_command.group(name="moonconfig", invoke_without_command=True)
     @commands.guild_only()
@@ -1255,9 +1224,5 @@ class RPCalander(DashboardIntegration, commands.Cog):
         await self._config.guild(ctx.guild).current_date.set(date)
 
         # Format for display
-        display_date = (
-            datetime.strptime(date, "%m-%d-%Y")
-            .replace(tzinfo=timezone.utc)
-            .strftime("%A %m-%d-%Y")
-        )
+        display_date = datetime.strptime(date, "%m-%d-%Y").replace(tzinfo=timezone.utc).strftime("%A %m-%d-%Y")
         await ctx.send(f"RP Calendar date set to: **{display_date}**")

@@ -11,9 +11,7 @@ from redbot.core import commands
 
 from .dashboard_integration import DashboardIntegration
 
-__red_end_user_data_statement__ = (
-    "This cog does not persistently store any end user data."
-)
+__red_end_user_data_statement__ = "This cog does not persistently store any end user data."
 
 RECOVERABLE_EXCEPTIONS = (
     aiohttp.ClientError,
@@ -41,10 +39,7 @@ class EmojiPorter(DashboardIntegration, commands.Cog):
         """Check if the bot has necessary permissions."""
         required_perms = []
 
-        if (
-            manage_emojis
-            and not ctx.guild.me.guild_permissions.manage_emojis_and_stickers
-        ):
+        if manage_emojis and not ctx.guild.me.guild_permissions.manage_emojis_and_stickers:
             required_perms.append("Manage Emojis and Stickers")
 
         if required_perms:
@@ -72,8 +67,7 @@ class EmojiPorter(DashboardIntegration, commands.Cog):
         """Copy a single emoji to the target guild."""
         try:
             # Check if emoji already exists
-            existing = discord.utils.get(
-                target_guild.emojis, name=source_emoji.name)
+            existing = discord.utils.get(target_guild.emojis, name=source_emoji.name)
             if existing:
                 return existing
 
@@ -88,15 +82,12 @@ class EmojiPorter(DashboardIntegration, commands.Cog):
             )
 
         except discord.Forbidden:
-            raise commands.BotMissingPermissions(
-                ["manage_emojis_and_stickers"])
+            raise commands.BotMissingPermissions(["manage_emojis_and_stickers"])
         except discord.HTTPException as e:
             if e.code == 30008:  # Maximum number of emojis reached
-                raise commands.CommandError(
-                    "Target server has reached emoji limit")
+                raise commands.CommandError("Target server has reached emoji limit")
             if e.code == 50045:  # File too large
-                raise commands.CommandError(
-                    f"Emoji '{source_emoji.name}' is too large")
+                raise commands.CommandError(f"Emoji '{source_emoji.name}' is too large")
             raise commands.CommandError(
                 f"Failed to copy emoji '{source_emoji.name}': {e}",
             )
@@ -130,18 +121,15 @@ class EmojiPorter(DashboardIntegration, commands.Cog):
                 name=source_sticker.name,
                 description=source_sticker.description or "Imported sticker",
                 emoji=source_sticker.emoji,
-                file=discord.File(
-                    fp=file_obj, filename=f"{source_sticker.name}.png"),
+                file=discord.File(fp=file_obj, filename=f"{source_sticker.name}.png"),
                 reason="Copied via EmojiPorter",
             )
 
         except discord.Forbidden:
-            raise commands.BotMissingPermissions(
-                ["manage_emojis_and_stickers"])
+            raise commands.BotMissingPermissions(["manage_emojis_and_stickers"])
         except discord.HTTPException as e:
             if e.code == 30039:  # Maximum number of stickers reached
-                raise commands.CommandError(
-                    "Target server has reached sticker limit")
+                raise commands.CommandError("Target server has reached sticker limit")
             raise commands.CommandError(
                 f"Failed to copy sticker '{source_sticker.name}': {e}",
             )
@@ -193,13 +181,10 @@ class EmojiPorter(DashboardIntegration, commands.Cog):
         # Get emojis to copy
         if emoji_names:
             requested_names = [name.strip() for name in emoji_names.split(",")]
-            emojis_to_copy = [
-                emoji for emoji in source_guild.emojis if emoji.name in requested_names
-            ]
+            emojis_to_copy = [emoji for emoji in source_guild.emojis if emoji.name in requested_names]
             if len(emojis_to_copy) != len(requested_names):
                 found_names = [emoji.name for emoji in emojis_to_copy]
-                missing = [
-                    name for name in requested_names if name not in found_names]
+                missing = [name for name in requested_names if name not in found_names]
                 await ctx.send(
                     f"⚠️ Could not find emojis: {', '.join(missing)}",
                     ephemeral=bool(ctx.interaction),
@@ -238,7 +223,7 @@ class EmojiPorter(DashboardIntegration, commands.Cog):
                     skipped.append(f"{emoji.name} (already exists)")
 
             except (commands.CommandError, commands.BotMissingPermissions) as e:
-                failed.append(f"{emoji.name}: {str(e)}")
+                failed.append(f"{emoji.name}: {e!s}")
 
             # Small delay to avoid rate limits
             await asyncio.sleep(0.5)
@@ -246,25 +231,17 @@ class EmojiPorter(DashboardIntegration, commands.Cog):
         # Update final message
         result_parts = []
         if copied:
-            result_parts.append(
-                f"✅ **Copied ({len(copied)}):** {', '.join(copied)}")
+            result_parts.append(f"✅ **Copied ({len(copied)}):** {', '.join(copied)}")
         if skipped:
-            result_parts.append(
-                f"⏭️ **Skipped ({len(skipped)}):** {', '.join(skipped)}")
+            result_parts.append(f"⏭️ **Skipped ({len(skipped)}):** {', '.join(skipped)}")
         if failed:
-            result_parts.append(
-                f"❌ **Failed ({len(failed)}):** {', '.join(failed)}")
+            result_parts.append(f"❌ **Failed ({len(failed)}):** {', '.join(failed)}")
 
-        final_message = (
-            "\n".join(
-                result_parts) if result_parts else "No emojis were processed."
-        )
+        final_message = "\n".join(result_parts) if result_parts else "No emojis were processed."
 
         # Discord has a 2000 character limit, so truncate if needed
         if len(final_message) > 1900:
-            final_message = (
-                final_message[:1900] + "...\n*Message truncated due to length*"
-            )
+            final_message = final_message[:1900] + "...\n*Message truncated due to length*"
 
         await progress_msg.edit(content=final_message)
 
@@ -310,17 +287,11 @@ class EmojiPorter(DashboardIntegration, commands.Cog):
 
         # Get stickers to copy
         if sticker_names:
-            requested_names = [name.strip()
-                                          for name in sticker_names.split(",")]
-            stickers_to_copy = [
-                sticker
-                for sticker in source_guild.stickers
-                if sticker.name in requested_names
-            ]
+            requested_names = [name.strip() for name in sticker_names.split(",")]
+            stickers_to_copy = [sticker for sticker in source_guild.stickers if sticker.name in requested_names]
             if len(stickers_to_copy) != len(requested_names):
                 found_names = [sticker.name for sticker in stickers_to_copy]
-                missing = [
-                    name for name in requested_names if name not in found_names]
+                missing = [name for name in requested_names if name not in found_names]
                 await ctx.send(
                     f"⚠️ Could not find stickers: {', '.join(missing)}",
                     ephemeral=bool(ctx.interaction),
@@ -359,7 +330,7 @@ class EmojiPorter(DashboardIntegration, commands.Cog):
                     skipped.append(f"{sticker.name} (already exists)")
 
             except (commands.CommandError, commands.BotMissingPermissions) as e:
-                failed.append(f"{sticker.name}: {str(e)}")
+                failed.append(f"{sticker.name}: {e!s}")
 
             # Small delay to avoid rate limits
             await asyncio.sleep(0.5)
@@ -367,25 +338,17 @@ class EmojiPorter(DashboardIntegration, commands.Cog):
         # Update final message
         result_parts = []
         if copied:
-            result_parts.append(
-                f"✅ **Copied ({len(copied)}):** {', '.join(copied)}")
+            result_parts.append(f"✅ **Copied ({len(copied)}):** {', '.join(copied)}")
         if skipped:
-            result_parts.append(
-                f"⏭️ **Skipped ({len(skipped)}):** {', '.join(skipped)}")
+            result_parts.append(f"⏭️ **Skipped ({len(skipped)}):** {', '.join(skipped)}")
         if failed:
-            result_parts.append(
-                f"❌ **Failed ({len(failed)}):** {', '.join(failed)}")
+            result_parts.append(f"❌ **Failed ({len(failed)}):** {', '.join(failed)}")
 
-        final_message = (
-            "\n".join(
-                result_parts) if result_parts else "No stickers were processed."
-        )
+        final_message = "\n".join(result_parts) if result_parts else "No stickers were processed."
 
         # Discord has a 2000 character limit, so truncate if needed
         if len(final_message) > 1900:
-            final_message = (
-                final_message[:1900] + "...\n*Message truncated due to length*"
-            )
+            final_message = final_message[:1900] + "...\n*Message truncated due to length*"
 
         await progress_msg.edit(content=final_message)
 
@@ -396,8 +359,7 @@ class EmojiPorter(DashboardIntegration, commands.Cog):
     @commands.guild_only()
     async def listemojis(self, ctx: commands.Context, guild_id: int | None = None):
         """List all emojis in the current server or another server."""
-        target_guild = ctx.guild if guild_id is None else self.bot.get_guild(
-            guild_id)
+        target_guild = ctx.guild if guild_id is None else self.bot.get_guild(guild_id)
 
         if not target_guild:
             await ctx.send(
@@ -420,8 +382,7 @@ class EmojiPorter(DashboardIntegration, commands.Cog):
         for emoji in target_guild.emojis:
             if emoji.animated:
                 animated_count += 1
-                emoji_list.append(
-                    f"<a:{emoji.name}:{emoji.id}> `{emoji.name}`")
+                emoji_list.append(f"<a:{emoji.name}:{emoji.id}> `{emoji.name}`")
             else:
                 static_count += 1
                 emoji_list.append(f"<:{emoji.name}:{emoji.id}> `{emoji.name}`")
@@ -430,8 +391,7 @@ class EmojiPorter(DashboardIntegration, commands.Cog):
         embed = discord.Embed(
             title=f"📊 Emojis in {target_guild.name}",
             description=(
-                f"**Total:** {len(target_guild.emojis)} emojis\n"
-                f"**Static:** {static_count} | **Animated:** {animated_count}"
+                f"**Total:** {len(target_guild.emojis)} emojis\n**Static:** {static_count} | **Animated:** {animated_count}"
             ),
             color=discord.Color.blue(),
         )
@@ -457,8 +417,7 @@ class EmojiPorter(DashboardIntegration, commands.Cog):
     @commands.guild_only()
     async def liststickers(self, ctx: commands.Context, guild_id: int | None = None):
         """List all stickers in the current server or another server."""
-        target_guild = ctx.guild if guild_id is None else self.bot.get_guild(
-            guild_id)
+        target_guild = ctx.guild if guild_id is None else self.bot.get_guild(guild_id)
 
         if not target_guild:
             await ctx.send(

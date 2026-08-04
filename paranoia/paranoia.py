@@ -75,10 +75,7 @@ class Paranoia(DashboardIntegration, commands.Cog):
 
     async def _migrate_config_identifier(self) -> None:
         """Copy legacy guild data once, retaining the old namespace for rollback."""
-        if (
-            await self.config.identifier_migration_version()
-            >= self.IDENTIFIER_MIGRATION_VERSION
-        ):
+        if await self.config.identifier_migration_version() >= self.IDENTIFIER_MIGRATION_VERSION:
             return
 
         legacy_guilds = await self._legacy_config.all_guilds()
@@ -115,11 +112,7 @@ class Paranoia(DashboardIntegration, commands.Cog):
         # Check for Tupperbox message format indicators
         return bool(
             message.webhook_id
-            and (
-                message.author.discriminator == "0000"
-                or hasattr(message, "interaction")
-                and message.interaction is None
-            ),
+            and (message.author.discriminator == "0000" or hasattr(message, "interaction") and message.interaction is None),
         )
 
     async def _get_tupperbox_user(
@@ -144,8 +137,7 @@ class Paranoia(DashboardIntegration, commands.Cog):
         matches = re.findall(user_id_pattern, content)
 
         for match in matches:
-            user_id = match[0] or match[1] if isinstance(
-                match, tuple) else match
+            user_id = match[0] or match[1] if isinstance(match, tuple) else match
             if user_id and user_id.isdigit():
                 try:
                     member = guild.get_member(int(user_id))
@@ -163,10 +155,7 @@ class Paranoia(DashboardIntegration, commands.Cog):
                     continue
 
                 # Check if this could be a Tupperbox trigger
-                if any(
-                    prefix in hist_msg.content.lower()
-                    for prefix in ["tupper:", "tb:", "proxy:"]
-                ):
+                if any(prefix in hist_msg.content.lower() for prefix in ["tupper:", "tb:", "proxy:"]):
                     return hist_msg.author
 
         except discord.HTTPException:
@@ -303,11 +292,7 @@ class Paranoia(DashboardIntegration, commands.Cog):
         player_mentions = humanize_list([p.mention for p in players])
 
         tupperbox_status = await self.config.guild(ctx.guild).tupperbox_support()
-        tupperbox_note = (
-            "\n🎭 **Tupperbox users:** Your proxy characters can participate!"
-            if tupperbox_status
-            else ""
-        )
+        tupperbox_note = "\n🎭 **Tupperbox users:** Your proxy characters can participate!" if tupperbox_status else ""
 
         embed = discord.Embed(
             title="🎭 Paranoia Game Started!",
@@ -423,8 +408,7 @@ class Paranoia(DashboardIntegration, commands.Cog):
         if len(game_data["current_answers"]) == len(game_data["players"]):
             await self._reveal_answers(ctx, game_data)
         else:
-            remaining = len(game_data["players"]) - \
-                            len(game_data["current_answers"])
+            remaining = len(game_data["players"]) - len(game_data["current_answers"])
             await ctx.send(f"⏳ Waiting for {remaining} more answer(s)...")
 
         await self.config.guild(ctx.guild).active_games.set(guild_data)
@@ -447,8 +431,7 @@ class Paranoia(DashboardIntegration, commands.Cog):
                     "answerer_display_name",
                     player.display_name,
                 )
-                answer_name = answer_data.get(
-                    "answer_name", answer_player.display_name)
+                answer_name = answer_data.get("answer_name", answer_player.display_name)
 
                 embed.add_field(
                     name=f"{answerer_name}'s Answer",
@@ -592,10 +575,7 @@ class Paranoia(DashboardIntegration, commands.Cog):
 
         game_data = guild_data[str(ctx.channel.id)]
 
-        if (
-            ctx.author.id != game_data["host"]
-            and not ctx.author.guild_permissions.manage_messages
-        ):
+        if ctx.author.id != game_data["host"] and not ctx.author.guild_permissions.manage_messages:
             await ctx.send(
                 "❌ Only the game host or someone with Manage Messages permission can stop the game!",
             )
@@ -695,8 +675,7 @@ class Paranoia(DashboardIntegration, commands.Cog):
             color=discord.Color.blue(),
         )
         embed.add_field(name="Round", value=game_data["round"], inline=True)
-        embed.add_field(name="Players", value=humanize_list(
-            players), inline=False)
+        embed.add_field(name="Players", value=humanize_list(players), inline=False)
         embed.add_field(
             name="Progress",
             value=f"{answers_submitted}/{total_players} answers submitted",
@@ -769,8 +748,7 @@ class Paranoia(DashboardIntegration, commands.Cog):
         else:
             embed.add_field(
                 name="Tupperbox Features Disabled",
-                value="• Only regular Discord users can participate\n"
-                "• Proxy messages will be ignored",
+                value="• Only regular Discord users can participate\n• Proxy messages will be ignored",
                 inline=False,
             )
 

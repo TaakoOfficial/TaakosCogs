@@ -13,9 +13,7 @@ from .dashboard_integration import DashboardIntegration
 if TYPE_CHECKING:
     from redbot.core.bot import Red
 
-__red_end_user_data_statement__ = (
-    "This cog does not persistently store any end user data."
-)
+__red_end_user_data_statement__ = "This cog does not persistently store any end user data."
 
 
 class Uppercase(DashboardIntegration, commands.Cog):

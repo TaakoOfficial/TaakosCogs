@@ -13,11 +13,15 @@ CAMPAIGN_CHAPTERS: tuple[dict[str, Any], ...] = (
         "floor": 1,
         "summary": "A dead delver arrives at Lastlight carrying a lantern that still whispers your name.",
         "scenes": (
-            "At Lastlight's gate, the corpse of a missing surveyor grips a blue lantern. "
-            "Its flame leans toward you despite the wind.",
+            (
+                "At Lastlight's gate, the corpse of a missing surveyor grips a blue lantern. "
+                "Its flame leans toward you despite the wind."
+            ),
             "Vesper identifies the lantern as one carried during the First Descent. Its base hides a map drawn in fresh ink.",
-            "Beneath the Warrens, the map leads to a sealed watchroom. A voice behind the door asks "
-            "whether Lastlight deserves the truth.",
+            (
+                "Beneath the Warrens, the map leads to a sealed watchroom. A voice behind the door asks "
+                "whether Lastlight deserves the truth."
+            ),
         ),
         "choice": {
             "prompt": "What will guide your first descent?",
@@ -105,8 +109,10 @@ CAMPAIGN_CHAPTERS: tuple[dict[str, Any], ...] = (
         "scenes": (
             "Four bells toll above. A fifth answers from far below, and every locked door in Lastlight opens.",
             "The Deep was never a prison under the city. Lastlight is the lock built inside the prison.",
-            "At the Margin of the World, the architect of the dungeon offers one last bargain: descend, "
-            "seal the way, or let the world learn what waits beneath it.",
+            (
+                "At the Margin of the World, the architect of the dungeon offers one last bargain: descend, "
+                "seal the way, or let the world learn what waits beneath it."
+            ),
         ),
         "choice": {
             "prompt": "Write the ending of the First Chronicle.",
@@ -283,10 +289,7 @@ PUZZLES: tuple[dict[str, Any], ...] = (
         "emoji": "⚙️",
         "min_floor": 11,
         "max_floor": 15,
-        "text": (
-            "Gear A turns clockwise and drives Gear B. Gear B drives Gear C. "
-            "Which direction does Gear C turn?"
-        ),
+        "text": ("Gear A turns clockwise and drives Gear B. Gear B drives Gear C. Which direction does Gear C turn?"),
         "options": {"clockwise": "Clockwise", "counter": "Counterclockwise", "still": "It remains still"},
         "answer": "clockwise",
         "success": "Clockwise after two reversals",
@@ -298,10 +301,7 @@ PUZZLES: tuple[dict[str, Any], ...] = (
         "emoji": "🔨",
         "min_floor": 11,
         "max_floor": 15,
-        "text": (
-            "A memory-smith strikes an anvil 2, 3, 5, 8, then 12 times. "
-            "How many strikes complete the next phrase?"
-        ),
+        "text": ("A memory-smith strikes an anvil 2, 3, 5, 8, then 12 times. How many strikes complete the next phrase?"),
         "options": {"fifteen": "Fifteen", "sixteen": "Sixteen", "seventeen": "Seventeen"},
         "answer": "seventeen",
         "success": "Seventeen strikes",
@@ -383,8 +383,7 @@ PUZZLES: tuple[dict[str, Any], ...] = (
         "min_floor": 16,
         "max_floor": 20,
         "text": (
-            "The duke is older than the queen. The queen is older than the heir. "
-            "Whose portrait belongs between the other two?"
+            "The duke is older than the queen. The queen is older than the heir. Whose portrait belongs between the other two?"
         ),
         "options": {"duke": "The duke", "queen": "The queen", "heir": "The heir"},
         "answer": "queen",
@@ -461,8 +460,7 @@ PUZZLES: tuple[dict[str, Any], ...] = (
         "min_floor": 21,
         "max_floor": 999,
         "text": (
-            "A sealed object says: “I hold countless voices but never speak, and preserve the dead without graves. "
-            "What am I?”"
+            "A sealed object says: “I hold countless voices but never speak, and preserve the dead without graves. What am I?”"
         ),
         "options": {"book": "A book", "mirror": "A mirror", "bell": "A bell"},
         "answer": "book",

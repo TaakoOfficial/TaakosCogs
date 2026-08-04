@@ -99,7 +99,6 @@ class WHMCS(DashboardIntegration, commands.Cog):
     async def cog_unload(self):
         """Clean up when cog is unloaded."""
         # No API client cache to clean up.
-        pass
 
     async def _sync_ticket_replies_loop(self):
         await self.bot.wait_until_ready()
@@ -113,12 +112,10 @@ class WHMCS(DashboardIntegration, commands.Cog):
     async def _sync_all_ticket_channels(self):
         # For each guild, for each mapped ticket/channel, fetch latest replies and post new ones
         for guild in self.bot.guilds:
-            log.info(
-                f"[WHMCS SYNC] Processing guild {guild.id} ({guild.name})")
+            log.info(f"[WHMCS SYNC] Processing guild {guild.id} ({guild.name})")
             api_client = await self._get_api_client(guild)
             if not api_client:
-                log.info(
-                    f"[WHMCS SYNC] No API client for guild {guild.id}, skipping")
+                log.info(f"[WHMCS SYNC] No API client for guild {guild.id}, skipping")
                 continue
             async with api_client:
                 ticket_mappings = await self.config.guild(guild).ticket_mappings()
@@ -128,8 +125,7 @@ class WHMCS(DashboardIntegration, commands.Cog):
             log.info(
                 f"[WHMCS SYNC] Ticket mappings types: {[type(k) for k in ticket_mappings]}",
             )
-            log.info(
-                f"[WHMCS SYNC] Ticket mappings before cleanup: {ticket_mappings}")
+            log.info(f"[WHMCS SYNC] Ticket mappings before cleanup: {ticket_mappings}")
 
             # Normalize ticket mapping keys: always store as int if possible, never remove if convertible
             converted_mappings = {}
@@ -145,16 +141,14 @@ class WHMCS(DashboardIntegration, commands.Cog):
                     else:
                         converted_mappings[key] = value
                 except (ValueError, TypeError):
-                    log.warning(
-                        f"[WHMCS SYNC] Skipping invalid mapping key: {key}")
+                    log.warning(f"[WHMCS SYNC] Skipping invalid mapping key: {key}")
 
             # Only update if normalization changed the mapping
             if converted_mappings != ticket_mappings:
                 async with self.config.guild(guild).ticket_mappings() as mappings:
                     mappings.clear()
                     mappings.update(converted_mappings)
-                log.info(
-                    "[WHMCS SYNC] Updated ticket mappings with integer keys")
+                log.info("[WHMCS SYNC] Updated ticket mappings with integer keys")
                 ticket_mappings = converted_mappings
 
             # After normalization, do not remove any mapping that can be converted to int
@@ -179,8 +173,7 @@ class WHMCS(DashboardIntegration, commands.Cog):
                 async with self.config.guild(guild).ticket_mappings() as mappings:
                     for k in keys_to_remove:
                         if k in mappings:
-                            log.warning(
-                                f"Removing corrupted ticket mapping key: {k}")
+                            log.warning(f"Removing corrupted ticket mapping key: {k}")
                             del mappings[k]
                 ticket_mappings = await self.config.guild(guild).ticket_mappings()
             # Do not reassign or clean further; int keys persist
@@ -194,9 +187,7 @@ class WHMCS(DashboardIntegration, commands.Cog):
                         f"Skipping invalid ticket_mappings key (cannot convert to int): {channel_id}",
                     )
                     continue
-                if isinstance(channel_id_int, dict) or (
-                    isinstance(info, dict) and "ticket_ids" not in info
-                ):
+                if isinstance(channel_id_int, dict) or (isinstance(info, dict) and "ticket_ids" not in info):
                     log.warning(
                         f"Skipping corrupted ticket_mappings entry: key={channel_id}, value={info}",
                     )
@@ -263,11 +254,9 @@ class WHMCS(DashboardIntegration, commands.Cog):
                         )
                         if last_reply_time is None or (date and date > last_reply_time):
                             new_replies.append(reply)
-                            log.info(
-                                f"[WHMCS SYNC] Reply {i} is new (date={date})")
+                            log.info(f"[WHMCS SYNC] Reply {i} is new (date={date})")
                         else:
-                            log.info(
-                                f"[WHMCS SYNC] Reply {i} is old (date={date})")
+                            log.info(f"[WHMCS SYNC] Reply {i} is old (date={date})")
                     log.info(
                         "[WHMCS SYNC] Final new replies count: %s for ticket %s in channel %s",
                         len(new_replies),
@@ -275,8 +264,7 @@ class WHMCS(DashboardIntegration, commands.Cog):
                         channel_id,
                     )
                     for reply in new_replies:
-                        author = reply.get("admin") or reply.get(
-                            "name", "Unknown")
+                        author = reply.get("admin") or reply.get("name", "Unknown")
                         date = reply.get("date", "N/A")
                         rmsg = reply.get("message", "")
                         if len(rmsg) > 1000:
@@ -316,8 +304,7 @@ class WHMCS(DashboardIntegration, commands.Cog):
                     ticket_id = channel_id
                     # Ensure info is converted to int if it's a string
                     try:
-                        channel_id_int = int(info) if isinstance(
-                            info, str) else info
+                        channel_id_int = int(info) if isinstance(info, str) else info
                         channel = guild.get_channel(channel_id_int)
                     except (ValueError, TypeError):
                         channel = None
@@ -345,13 +332,10 @@ class WHMCS(DashboardIntegration, commands.Cog):
                         new_replies = []
                         for reply in replies:
                             date = reply.get("date")
-                            if last_reply_time is None or (
-                                date and date > last_reply_time
-                            ):
+                            if last_reply_time is None or (date and date > last_reply_time):
                                 new_replies.append(reply)
                         for reply in new_replies:
-                            author = reply.get("admin") or reply.get(
-                                "name", "Unknown")
+                            author = reply.get("admin") or reply.get("name", "Unknown")
                             date = reply.get("date", "N/A")
                             rmsg = reply.get("message", "")
                             if len(rmsg) > 1000:
@@ -382,9 +366,7 @@ class WHMCS(DashboardIntegration, commands.Cog):
             Configured API client or None if not configured
         """
         config = await self.config.guild(guild).api_config()
-        if not config.get("url") or not (
-            config.get("identifier") or config.get("username")
-        ):
+        if not config.get("url") or not (config.get("identifier") or config.get("username")):
             return None
         client = WHMCSAPIClient(config["url"])
         if config.get("identifier") and config.get("secret"):
@@ -431,9 +413,7 @@ class WHMCS(DashboardIntegration, commands.Cog):
 
         for i in range(required_index, len(permission_hierarchy)):
             level = permission_hierarchy[i]
-            if any(
-                role in permissions.get(f"{level}_roles", []) for role in user_roles
-            ):
+            if any(role in permissions.get(f"{level}_roles", []) for role in user_roles):
                 return True
 
         return False
@@ -605,10 +585,7 @@ class WHMCS(DashboardIntegration, commands.Cog):
         for channel_id, info in ticket_mappings.items():
             if isinstance(info, dict) and "ticket_ids" in info:
                 ids = info["ticket_ids"]
-                if any(
-                    str(ticket_data.get(f)) == str(ids.get(f))
-                    for f in ["ticketid", "ticketnum", "tid", "maskid"]
-                ):
+                if any(str(ticket_data.get(f)) == str(ids.get(f)) for f in ["ticketid", "ticketnum", "tid", "maskid"]):
                     channel = guild.get_channel(channel_id)
                     if channel:
                         return channel
@@ -665,8 +642,7 @@ class WHMCS(DashboardIntegration, commands.Cog):
 
             # Store mapping: {channel_id: {"ticket_ids": {...}}}
             # Always resolve and store the internal ticketid for this mapping
-            internal_ticketid = ticket_data.get(
-                "id") or ticket_data.get("ticketid")
+            internal_ticketid = ticket_data.get("id") or ticket_data.get("ticketid")
             if not internal_ticketid:
                 # Try to resolve using API if missing
                 api_client = await self._get_api_client(guild)
@@ -759,9 +735,7 @@ class WHMCS(DashboardIntegration, commands.Cog):
                 value=(
                     "**Messages sent in this channel will automatically be added as replies to the WHMCS ticket.**\n\n"
                     "📝 Simply type your response and it will be posted to WHMCS\n"
-                    "🎫 Use `/whmcs support ticket "
-                    + ticket_id
-                    + "` to view full ticket details\n"
+                    "🎫 Use `/whmcs support ticket " + ticket_id + "` to view full ticket details\n"
                     "🔒 Channel will be archived when ticket is closed"
                 ),
                 inline=False,
@@ -792,8 +766,7 @@ class WHMCS(DashboardIntegration, commands.Cog):
                     )
                     await channel.send(embed=reply_embed)
         except RECOVERABLE_EXCEPTIONS:
-            log.exception(
-                f"Failed to send ticket info to channel {channel.id}")
+            log.exception(f"Failed to send ticket info to channel {channel.id}")
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
@@ -861,10 +834,7 @@ class WHMCS(DashboardIntegration, commands.Cog):
             for tid, channel_id in ticket_mappings.items():
                 # Ensure channel_id is converted to int for comparison
                 try:
-                    channel_id_int = (
-                        int(channel_id) if isinstance(
-                            channel_id, str) else channel_id
-                    )
+                    channel_id_int = int(channel_id) if isinstance(channel_id, str) else channel_id
                     if channel_id_int == message.channel.id:
                         ticket_ids = {"tid": tid}
                         log.info(
@@ -904,8 +874,7 @@ class WHMCS(DashboardIntegration, commands.Cog):
                 ticketnum = ticket_ids.get("ticketnum")
                 found_ticket = None
                 if ticketnum:
-                    log.info(
-                        f"[WHMCS Discord Auto-Reply] Trying ticketnum={ticketnum}")
+                    log.info(f"[WHMCS Discord Auto-Reply] Trying ticketnum={ticketnum}")
                     ticket_resp = await api_client.get_ticket(str(ticketnum))
                     log.info(
                         f"[WHMCS Discord Auto-Reply] API response for ticketnum={ticketnum}: {ticket_resp}",
@@ -935,13 +904,10 @@ class WHMCS(DashboardIntegration, commands.Cog):
                 reply_success = False
                 tried_ids = []
                 # AddTicketReply API requires internal ticketid (database ID), but we only look up by ticketnum now
-                internal_id = found_ticket.get(
-                    "id") or found_ticket.get("ticketid")
+                internal_id = found_ticket.get("id") or found_ticket.get("ticketid")
                 if internal_id:
                     tried_ids.append(f"internal_id={internal_id}")
-                    payload_preview = message.content[:100] + (
-                        "..." if len(message.content) > 100 else ""
-                    )
+                    payload_preview = message.content[:100] + ("..." if len(message.content) > 100 else "")
                     log.info(
                         "[WHMCS Discord Auto-Reply] Attempting add_ticket_reply using internal ID: %s, "
                         "admin_username=%s, message_preview=%s",
@@ -964,8 +930,7 @@ class WHMCS(DashboardIntegration, commands.Cog):
                             )
                             reply_success = True
                         else:
-                            error_msg = response.get(
-                                "message", "No error message")
+                            error_msg = response.get("message", "No error message")
                             log.warning(
                                 f"[WHMCS Discord Auto-Reply] API call failed for internal_id={internal_id}: {error_msg}",
                             )
@@ -1006,7 +971,6 @@ class WHMCS(DashboardIntegration, commands.Cog):
     @commands.hybrid_group(name="whmcs", description="WHMCS management commands")
     async def whmcs(self, ctx: commands.Context):
         """WHMCS integration commands."""
-        pass
 
     # Client management group
     @whmcs.group(name="client", description="Client management commands")
@@ -1058,17 +1022,14 @@ class WHMCS(DashboardIntegration, commands.Cog):
 
                 if await ctx.embed_requested():
                     embed = self._create_embed("👥 Client Directory")
-                    embed.description = (
-                        f"**Page {page} of {total_pages}** • {total} total clients"
-                    )
+                    embed.description = f"**Page {page} of {total_pages}** • {total} total clients"
 
                     clients = response["clients"]["client"]
                     if not isinstance(clients, list):
                         clients = [clients]
 
                     for client in clients:
-                        name = f"{client.get('firstname', '')} {client.get('lastname', '')}".strip(
-                        )
+                        name = f"{client.get('firstname', '')} {client.get('lastname', '')}".strip()
                         if not name:
                             name = f"Client {client.get('id')}"
 
@@ -1087,9 +1048,7 @@ class WHMCS(DashboardIntegration, commands.Cog):
 
                     # Add navigation hints in footer if multiple pages
                     if total_pages > 1:
-                        navigation_text = (
-                            f"WHMCS Integration • Page {page}/{total_pages}"
-                        )
+                        navigation_text = f"WHMCS Integration • Page {page}/{total_pages}"
                         if page > 1:
                             navigation_text += f" • Use `{ctx.prefix}whmcs client list {page - 1}` for previous"
                         if page < total_pages:
@@ -1103,8 +1062,7 @@ class WHMCS(DashboardIntegration, commands.Cog):
                     await ctx.send(embed=embed)
                 else:
                     # Plain text format for when embeds are disabled
-                    output = [
-                        f"👥 **Client Directory - Page {page} of {total_pages}**"]
+                    output = [f"👥 **Client Directory - Page {page} of {total_pages}**"]
                     output.append(f"📊 {total} total clients\n")
 
                     clients = response["clients"]["client"]
@@ -1112,8 +1070,7 @@ class WHMCS(DashboardIntegration, commands.Cog):
                         clients = [clients]
 
                     for client in clients:
-                        name = f"{client.get('firstname', '')} {client.get('lastname', '')}".strip(
-                        )
+                        name = f"{client.get('firstname', '')} {client.get('lastname', '')}".strip()
                         if not name:
                             name = f"Client {client.get('id')}"
 
@@ -1189,8 +1146,7 @@ class WHMCS(DashboardIntegration, commands.Cog):
 
                 client = response["client"]
 
-                client_name = f"{client.get('firstname', '')} {client.get('lastname', '')}".strip(
-                )
+                client_name = f"{client.get('firstname', '')} {client.get('lastname', '')}".strip()
                 if not client_name:
                     client_name = f"Client {client_id}"
 
@@ -1261,8 +1217,7 @@ class WHMCS(DashboardIntegration, commands.Cog):
                         inline=False,
                     )
 
-                embed.set_footer(
-                    text=f"WHMCS Integration • Client ID: {client_id}")
+                embed.set_footer(text=f"WHMCS Integration • Client ID: {client_id}")
 
                 await ctx.send(embed=embed)
 
@@ -1315,18 +1270,12 @@ class WHMCS(DashboardIntegration, commands.Cog):
 
                 embed = self._create_embed("🔍 Search Results")
                 total_results = response.get("totalresults", len(clients))
-                embed.description = (
-                    f"**Search term:** '{search_term}' • {total_results} results found"
-                )
+                embed.description = f"**Search term:** '{search_term}' • {total_results} results found"
 
-                for client in clients[
-                    :5
-                ]:  # Limit to first 5 results for better display
-                    name = f"{client.get('firstname', '')} {client.get('lastname', '')}".strip(
-                    )
+                for client in clients[:5]:  # Limit to first 5 results for better display
+                    name = f"{client.get('firstname', '')} {client.get('lastname', '')}".strip()
                     if not name:
-                        name = client.get(
-                            "email", f"Client {client.get('id')}")
+                        name = client.get("email", f"Client {client.get('id')}")
 
                     # Consistent formatting with emoji indicators
                     client_info = (
@@ -1347,8 +1296,7 @@ class WHMCS(DashboardIntegration, commands.Cog):
                         text=f"WHMCS Integration • Showing first 5 of {total} results",
                     )
                 else:
-                    embed.set_footer(
-                        text=f"WHMCS Integration • {total} results found")
+                    embed.set_footer(text=f"WHMCS Integration • {total} results found")
 
                 await ctx.send(embed=embed)
 
@@ -1514,15 +1462,10 @@ class WHMCS(DashboardIntegration, commands.Cog):
 
                 # If we now have URL and credentials, suggest testing
                 config = await self.config.guild(ctx.guild).api_config()
-                if (
-                    config.get("url")
-                    and config.get("identifier")
-                    and config.get("secret")
-                ):
+                if config.get("url") and config.get("identifier") and config.get("secret"):
                     embed = self._create_embed(
                         "💡 Suggestion",
-                        "Configuration appears complete! Test the connection with:\n"
-                        "`[p]whmcs admin test`",
+                        "Configuration appears complete! Test the connection with:\n`[p]whmcs admin test`",
                         color=0x00BFFF,
                     )
                     await ctx.send(embed=embed)
@@ -1616,8 +1559,8 @@ class WHMCS(DashboardIntegration, commands.Cog):
 
             embed = self._create_embed("🔐 Current Role Permissions")
 
-            for level in valid_levels:
-                role_ids = permissions.get(f"{level}_roles", [])
+            for permission_level in valid_levels:
+                role_ids = permissions.get(f"{permission_level}_roles", [])
                 if role_ids:
                     roles = []
                     for role_id in role_ids:
@@ -1628,13 +1571,13 @@ class WHMCS(DashboardIntegration, commands.Cog):
                             roles.append(f"Unknown Role ({role_id})")
 
                     embed.add_field(
-                        name=f"{level.title()} Roles",
+                        name=f"{permission_level.title()} Roles",
                         value="\n".join(roles) if roles else "None",
                         inline=True,
                     )
                 else:
                     embed.add_field(
-                        name=f"{level.title()} Roles",
+                        name=f"{permission_level.title()} Roles",
                         value="None",
                         inline=True,
                     )
@@ -1745,9 +1688,7 @@ class WHMCS(DashboardIntegration, commands.Cog):
             embed = self._create_embed("🎫 Current Ticket Channel Settings")
 
             # Channel Configuration
-            enabled_status = (
-                "🟢 Enabled" if config.get("enabled", False) else "🔴 Disabled"
-            )
+            enabled_status = "🟢 Enabled" if config.get("enabled", False) else "🔴 Disabled"
 
             category_info = "Not set"
             if config.get("category_id"):
@@ -1759,16 +1700,11 @@ class WHMCS(DashboardIntegration, commands.Cog):
 
             archive_category_info = "Not set"
             if config.get("archive_category_id"):
-                archive_category = ctx.guild.get_channel(
-                    config["archive_category_id"])
+                archive_category = ctx.guild.get_channel(config["archive_category_id"])
                 if archive_category:
-                    archive_category_info = (
-                        f"{archive_category.name} ({config['archive_category_id']})"
-                    )
+                    archive_category_info = f"{archive_category.name} ({config['archive_category_id']})"
                 else:
-                    archive_category_info = (
-                        f"Unknown Category ({config['archive_category_id']})"
-                    )
+                    archive_category_info = f"Unknown Category ({config['archive_category_id']})"
 
             embed.add_field(
                 name="🎫 Channel Settings",
@@ -1831,8 +1767,7 @@ class WHMCS(DashboardIntegration, commands.Cog):
                 return
 
             setting = setting.lower()
-            valid_settings = ["category",
-                "archive_category", "prefix", "auto_archive"]
+            valid_settings = ["category", "archive_category", "prefix", "auto_archive"]
 
             if setting not in valid_settings:
                 await self._send_error(
@@ -1921,8 +1856,7 @@ class WHMCS(DashboardIntegration, commands.Cog):
                     # Sanitize prefix for Discord channel names
                     import re
 
-                    sanitized_prefix = re.sub(
-                        r"[^a-z0-9\-]", "-", value.lower())
+                    sanitized_prefix = re.sub(r"[^a-z0-9\-]", "-", value.lower())
                     if not sanitized_prefix.endswith("-"):
                         sanitized_prefix += "-"
 
@@ -2021,9 +1955,7 @@ class WHMCS(DashboardIntegration, commands.Cog):
         ticket_mappings = await self.config.guild(ctx.guild).ticket_mappings()
         key_types = [type(k).__name__ for k in ticket_mappings]
         value_types = [type(v).__name__ for v in ticket_mappings.values()]
-        key_value_types = [
-            (type(k).__name__, type(v).__name__) for k, v in ticket_mappings.items()
-        ]
+        key_value_types = [(type(k).__name__, type(v).__name__) for k, v in ticket_mappings.items()]
 
         # Prepare output
         import pprint
@@ -2092,20 +2024,14 @@ class WHMCS(DashboardIntegration, commands.Cog):
                     async with api_client:
                         tickets_response = await api_client.get_tickets(limit=50)
                     found_ticket = None
-                    if tickets_response.get("tickets") and tickets_response[
-                        "tickets"
-                    ].get("ticket"):
+                    if tickets_response.get("tickets") and tickets_response["tickets"].get("ticket"):
                         tickets = tickets_response["tickets"]["ticket"]
                         if not isinstance(tickets, list):
                             tickets = [tickets]
                         search_lower = ticket_id.lower().lstrip("#").strip()
                         for t in tickets:
                             for id_field in ["tid", "ticketnum", "maskid", "id"]:
-                                if (
-                                    t.get(id_field)
-                                    and search_lower
-                                    == str(t[id_field]).lower().lstrip("#").strip()
-                                ):
+                                if t.get(id_field) and search_lower == str(t[id_field]).lower().lstrip("#").strip():
                                     found_ticket = t
                                     break
                             if found_ticket:
@@ -2130,8 +2056,7 @@ class WHMCS(DashboardIntegration, commands.Cog):
                 if len(raw) <= 2000:
                     await ctx.send(f"```py\n{raw[:1990]}```")
                 else:
-                    blocks = [raw[i : i + max_len]
-                        for i in range(0, len(raw), max_len)]
+                    blocks = [raw[i : i + max_len] for i in range(0, len(raw), max_len)]
                     for block in blocks:
                         await ctx.send(f"```py\n{block.strip()}```")
         except RECOVERABLE_EXCEPTIONS as e:
@@ -2174,8 +2099,7 @@ class WHMCS(DashboardIntegration, commands.Cog):
                 debug_info = []
                 debug_info.append(f"**Original ID:** {ticket_id}")
                 debug_info.append(f"**Cleaned ID:** {clean_ticket_id}")
-                debug_info.append(
-                    f"**Is Numeric:** {clean_ticket_id.isdigit()}")
+                debug_info.append(f"**Is Numeric:** {clean_ticket_id.isdigit()}")
 
                 # Try both API parameter methods
                 success_count = 0
@@ -2185,16 +2109,14 @@ class WHMCS(DashboardIntegration, commands.Cog):
                     async with api_client:
                         response1 = await api_client.get_ticket(clean_ticket_id)
                     if response1.get("ticket"):
-                        debug_info.append(
-                            "✅ **get_ticket() wrapper:** SUCCESS")
+                        debug_info.append("✅ **get_ticket() wrapper:** SUCCESS")
                         success_count += 1
                     else:
                         debug_info.append(
                             "❌ **get_ticket() wrapper:** No ticket returned",
                         )
                 except RECOVERABLE_EXCEPTIONS as e:
-                    debug_info.append(
-                        f"❌ **get_ticket() wrapper:** Error - {e}")
+                    debug_info.append(f"❌ **get_ticket() wrapper:** Error - {e}")
 
                 # Test 2: Try direct API call with ticketid parameter
                 try:
@@ -2228,8 +2150,7 @@ class WHMCS(DashboardIntegration, commands.Cog):
                             "❌ **ticketnum parameter:** No ticket returned",
                         )
                 except RECOVERABLE_EXCEPTIONS as e:
-                    debug_info.append(
-                        f"❌ **ticketnum parameter:** Error - {e}")
+                    debug_info.append(f"❌ **ticketnum parameter:** Error - {e}")
 
                 # Test 4: Try direct API call with tid parameter (some WHMCS versions)
                 try:
@@ -2242,8 +2163,7 @@ class WHMCS(DashboardIntegration, commands.Cog):
                         debug_info.append("✅ **tid parameter:** SUCCESS")
                         success_count += 1
                     else:
-                        debug_info.append(
-                            "❌ **tid parameter:** No ticket returned")
+                        debug_info.append("❌ **tid parameter:** No ticket returned")
                 except RECOVERABLE_EXCEPTIONS as e:
                     debug_info.append(f"❌ **tid parameter:** Error - {e}")
 
@@ -2382,18 +2302,12 @@ class WHMCS(DashboardIntegration, commands.Cog):
                         matches.append(f"email: {ticket['email']}")
 
                     # Check subject
-                    if (
-                        ticket.get("subject")
-                        and search_lower in ticket["subject"].lower()
-                    ):
+                    if ticket.get("subject") and search_lower in ticket["subject"].lower():
                         matches.append(f"subject: {ticket['subject']}")
 
                     # Check ticket IDs
                     for id_field in ["tid", "ticketnum", "maskid"]:
-                        if (
-                            ticket.get(id_field)
-                            and search_lower in str(ticket[id_field]).lower()
-                        ):
+                        if ticket.get(id_field) and search_lower in str(ticket[id_field]).lower():
                             matches.append(f"{id_field}: {ticket[id_field]}")
 
                     # Check client name
@@ -2415,9 +2329,7 @@ class WHMCS(DashboardIntegration, commands.Cog):
                     f"Search term: **{search_term}** • Found {len(matching_tickets)} matches",
                 )
 
-                for ticket_data, matches in matching_tickets[
-                    :5
-                ]:  # Limit to first 5 results
+                for ticket_data, matches in matching_tickets[:5]:  # Limit to first 5 results
                     ticket = ticket_data
                     # Show ALL possible ID fields to help identify the correct one
                     id_info = []
@@ -2657,8 +2569,7 @@ class WHMCS(DashboardIntegration, commands.Cog):
 
                 # Client information
                 if invoice.get("userid"):
-                    client_name = f"{invoice.get('firstname', '')} {invoice.get('lastname', '')}".strip(
-                    )
+                    client_name = f"{invoice.get('firstname', '')} {invoice.get('lastname', '')}".strip()
                     embed.add_field(
                         name="👤 Client Information",
                         value=(
@@ -2677,8 +2588,7 @@ class WHMCS(DashboardIntegration, commands.Cog):
                         inline=False,
                     )
 
-                embed.set_footer(
-                    text=f"WHMCS Integration • Invoice ID: {invoice_id}")
+                embed.set_footer(text=f"WHMCS Integration • Invoice ID: {invoice_id}")
 
                 await ctx.send(embed=embed)
 
@@ -2742,11 +2652,7 @@ class WHMCS(DashboardIntegration, commands.Cog):
                     )
                     embed.add_field(
                         name="📝 Details",
-                        value=(
-                            f"**Client ID:** {client_id}\n"
-                            f"**Amount:** ${amount:.2f}\n"
-                            f"**Description:** {description}"
-                        ),
+                        value=(f"**Client ID:** {client_id}\n**Amount:** ${amount:.2f}\n**Description:** {description}"),
                         inline=False,
                     )
                     await ctx.send(embed=embed)
@@ -2828,14 +2734,11 @@ class WHMCS(DashboardIntegration, commands.Cog):
                 # Add a reply to the WHMCS ticket noting the Discord channel creation
                 try:
                     admin_username = f"Discord-{ctx.author.display_name}"
-                    channel_url = (
-                        f"https://discord.com/channels/{ctx.guild.id}/{channel.id}"
-                    )
+                    channel_url = f"https://discord.com/channels/{ctx.guild.id}/{channel.id}"
                     note_message = f"A Discord channel has been created for this ticket: {channel_url} (created by {ctx.author})"
                     # Only use the minimal, proven working approach for ticket lookup
                     reply_success = False
-                    internal_id = found_ticket.get(
-                        "id") or found_ticket.get("ticketid")
+                    internal_id = found_ticket.get("id") or found_ticket.get("ticketid")
                     if internal_id:
                         try:
                             response = await api_client.add_ticket_reply(
@@ -3017,9 +2920,7 @@ class WHMCS(DashboardIntegration, commands.Cog):
                         filter_parts.append(f"client {client_id}")
                     if status_filter:
                         filter_parts.append(f"status '{status_filter}'")
-                    filter_text = (
-                        f" for {' and '.join(filter_parts)}" if filter_parts else ""
-                    )
+                    filter_text = f" for {' and '.join(filter_parts)}" if filter_parts else ""
                     await self._send_error(ctx, f"No tickets found{filter_text}.")
                     return
 
@@ -3030,11 +2931,7 @@ class WHMCS(DashboardIntegration, commands.Cog):
 
                 # Filter tickets by status if specified (client-side filtering as backup)
                 if status_filter:
-                    tickets = [
-                        ticket
-                        for ticket in tickets
-                        if ticket.get("status") == status_filter
-                    ]
+                    tickets = [ticket for ticket in tickets if ticket.get("status") == status_filter]
 
                 # Use filtered count for more accurate pagination
                 total = len(tickets)
@@ -3076,9 +2973,7 @@ class WHMCS(DashboardIntegration, commands.Cog):
                             await self._get_or_create_ticket_channel(
                                 ctx.guild,
                                 str(
-                                    ticket.get("tid")
-                                    or ticket.get("ticketnum")
-                                    or ticket.get("maskid"),
+                                    ticket.get("tid") or ticket.get("ticketnum") or ticket.get("maskid"),
                                 ),
                                 ticket,
                             )
@@ -3102,11 +2997,9 @@ class WHMCS(DashboardIntegration, commands.Cog):
                         if tid_value:
                             # Determine if tid is actually numeric (internal) or alphanumeric (ticket number)
                             if str(tid_value).isdigit():
-                                id_display_parts.append(
-                                    f"Internal: {tid_value}")
+                                id_display_parts.append(f"Internal: {tid_value}")
                             else:
-                                id_display_parts.append(
-                                    f"Ticket Number: {tid_value}")
+                                id_display_parts.append(f"Ticket Number: {tid_value}")
 
                         if ticket.get("ticketnum") and ticket.get("ticketnum") != str(
                             tid_value,
@@ -3115,16 +3008,9 @@ class WHMCS(DashboardIntegration, commands.Cog):
                                 f"Number: {ticket.get('ticketnum')}",
                             )
                         if ticket.get("maskid"):
-                            id_display_parts.append(
-                                f"Mask: {ticket.get('maskid')}")
+                            id_display_parts.append(f"Mask: {ticket.get('maskid')}")
 
-                        id_display = (
-                            " • ".join(id_display_parts)
-                            if id_display_parts
-                            else str(tid_value)
-                            if tid_value
-                            else "N/A"
-                        )
+                        id_display = " • ".join(id_display_parts) if id_display_parts else str(tid_value) if tid_value else "N/A"
 
                         ticket_info = (
                             f"🆔 **IDs:** {id_display}\n"
@@ -3184,20 +3070,14 @@ class WHMCS(DashboardIntegration, commands.Cog):
                         elif status_filter == "Closed":
                             cmd_name = "closed"
 
-                        navigation_text = (
-                            f"WHMCS Integration • Page {page}/{total_pages}"
-                        )
+                        navigation_text = f"WHMCS Integration • Page {page}/{total_pages}"
                         if page > 1:
-                            navigation_text += (
-                                f" • Use `{ctx.prefix}whmcs support {cmd_name}"
-                            )
+                            navigation_text += f" • Use `{ctx.prefix}whmcs support {cmd_name}"
                             if client_id:
                                 navigation_text += f" {client_id}"
                             navigation_text += f" {page - 1}` for previous"
                         if page < total_pages:
-                            navigation_text += (
-                                f" • Use `{ctx.prefix}whmcs support {cmd_name}"
-                            )
+                            navigation_text += f" • Use `{ctx.prefix}whmcs support {cmd_name}"
                             if client_id:
                                 navigation_text += f" {client_id}"
                             navigation_text += f" {page + 1}` for next"
@@ -3243,11 +3123,9 @@ class WHMCS(DashboardIntegration, commands.Cog):
                         if tid_value:
                             # Determine if tid is actually numeric (internal) or alphanumeric (ticket number)
                             if str(tid_value).isdigit():
-                                id_display_parts.append(
-                                    f"Internal: {tid_value}")
+                                id_display_parts.append(f"Internal: {tid_value}")
                             else:
-                                id_display_parts.append(
-                                    f"Ticket Number: {tid_value}")
+                                id_display_parts.append(f"Ticket Number: {tid_value}")
 
                         if ticket.get("ticketnum") and ticket.get("ticketnum") != str(
                             tid_value,
@@ -3256,16 +3134,9 @@ class WHMCS(DashboardIntegration, commands.Cog):
                                 f"Number: {ticket.get('ticketnum')}",
                             )
                         if ticket.get("maskid"):
-                            id_display_parts.append(
-                                f"Mask: {ticket.get('maskid')}")
+                            id_display_parts.append(f"Mask: {ticket.get('maskid')}")
 
-                        id_display = (
-                            " • ".join(id_display_parts)
-                            if id_display_parts
-                            else str(tid_value)
-                            if tid_value
-                            else "N/A"
-                        )
+                        id_display = " • ".join(id_display_parts) if id_display_parts else str(tid_value) if tid_value else "N/A"
 
                         subject = ticket.get("subject", "No Subject")
                         output.append(f"🎫 **{subject}**")
@@ -3355,20 +3226,14 @@ class WHMCS(DashboardIntegration, commands.Cog):
                     async with api_client:
                         tickets_response = await api_client.get_tickets(limit=50)
                     found_ticket = None
-                    if tickets_response.get("tickets") and tickets_response[
-                        "tickets"
-                    ].get("ticket"):
+                    if tickets_response.get("tickets") and tickets_response["tickets"].get("ticket"):
                         tickets = tickets_response["tickets"]["ticket"]
                         if not isinstance(tickets, list):
                             tickets = [tickets]
                         search_lower = ticket_id.lower().lstrip("#").strip()
                         for ticket in tickets:
                             for id_field in ["tid", "ticketnum", "maskid"]:
-                                if (
-                                    ticket.get(id_field)
-                                    and search_lower
-                                    == str(ticket[id_field]).lower().lstrip("#").strip()
-                                ):
+                                if ticket.get(id_field) and search_lower == str(ticket[id_field]).lower().lstrip("#").strip():
                                     found_ticket = ticket
                                     break
                             if found_ticket:
@@ -3406,11 +3271,8 @@ class WHMCS(DashboardIntegration, commands.Cog):
                     id_lines.append(f"**tid:** {ticket['tid']}")
                 if ticket.get("maskid"):
                     id_lines.append(f"**maskid:** {ticket['maskid']}")
-                id_block = "\n".join(
-                    id_lines) if id_lines else "No ID fields found"
-                embed.description = (
-                    f"{id_block}\n\n**#{ticket.get('tid')} - {subject}**"
-                )
+                id_block = "\n".join(id_lines) if id_lines else "No ID fields found"
+                embed.description = f"{id_block}\n\n**#{ticket.get('tid')} - {subject}**"
 
                 # Status and priority with consistent emoji formatting
                 embed.add_field(
@@ -3437,10 +3299,7 @@ class WHMCS(DashboardIntegration, commands.Cog):
                 # Timing information
                 embed.add_field(
                     name="📅 Timing Information",
-                    value=(
-                        f"📅 **Created:** {ticket.get('date', 'N/A')}\n"
-                        f"💬 **Last Reply:** {ticket.get('lastreply', 'N/A')}"
-                    ),
+                    value=(f"📅 **Created:** {ticket.get('date', 'N/A')}\n💬 **Last Reply:** {ticket.get('lastreply', 'N/A')}"),
                     inline=False,
                 )
 
@@ -3470,8 +3329,7 @@ class WHMCS(DashboardIntegration, commands.Cog):
                     )
                     # Show up to 3 most recent replies
                     for reply in replies[-3:]:
-                        author = reply.get(
-                            "admin", reply.get("name", "Unknown"))
+                        author = reply.get("admin", reply.get("name", "Unknown"))
                         date = reply.get("date", "N/A")
                         message = reply.get("message", "")
                         if len(message) > 300:
@@ -3482,8 +3340,7 @@ class WHMCS(DashboardIntegration, commands.Cog):
                             inline=False,
                         )
 
-                embed.set_footer(
-                    text=f"WHMCS Integration • Ticket ID: {ticket_id}")
+                embed.set_footer(text=f"WHMCS Integration • Ticket ID: {ticket_id}")
 
                 await ctx.send(embed=embed)
 
@@ -3561,8 +3418,7 @@ class WHMCS(DashboardIntegration, commands.Cog):
                         debug_payload = {
                             "internal_id": internal_id,
                             "admin_username": admin_username,
-                            "message": message[:100]
-                            + ("..." if len(message) > 100 else ""),
+                            "message": message[:100] + ("..." if len(message) > 100 else ""),
                         }
                         # Always include bot name/email for non-client replies
                         response = await api_client.add_ticket_reply(
@@ -3625,8 +3481,7 @@ class WHMCS(DashboardIntegration, commands.Cog):
                         inline=False,
                     )
                     # Show preview of message (truncated)
-                    preview = message if len(
-                        message) <= 200 else message[:197] + "..."
+                    preview = message if len(message) <= 200 else message[:197] + "..."
                     embed.add_field(
                         name="💬 Message Preview",
                         value=f"```{preview}```",

@@ -2,8 +2,7 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
-POST_TRACKER_PATH = Path(__file__).parent / \
-                         "post_tracker.json"  # Edited by Taako
+POST_TRACKER_PATH = Path(__file__).parent / "post_tracker.json"  # Edited by Taako
 
 
 def read_last_posted():

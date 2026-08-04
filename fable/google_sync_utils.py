@@ -99,10 +99,7 @@ def get_character_template(char_data: dict) -> str:
 
     # Traits
     if char_data.get("traits"):
-        content += (
-            "### Traits\n" + \
-                "\n".join(f"• {t}" for t in char_data["traits"]) + "\n\n"
-        )
+        content += "### Traits\n" + "\n".join(f"• {t}" for t in char_data["traits"]) + "\n\n"
 
     return content
 
@@ -141,12 +138,12 @@ def export_to_doc(doc_id: str, api_key: str, data: dict):
 
     # Add each character with proper formatting
     if "characters" in data:
-        for char_name, char_data in data["characters"].items():
+        for char_data in data["characters"].values():
             content += get_character_template(char_data)
             content += "\n\n" + "═" * 50 + "\n\n"  # Separator between characters
 
     # Add timeline if events exist
-    if "events" in data and data["events"]:
+    if data.get("events"):
         content += "\n\n『 CHARACTER TIMELINE 』\n\n"
         content += get_timeline_template(data["events"].values())
 
@@ -160,8 +157,7 @@ def export_to_doc(doc_id: str, api_key: str, data: dict):
                     "deleteContentRange": {
                         "range": {
                             "startIndex": 1,
-                            "endIndex": len(document.get("body", {}).get("content", ""))
-                            - 1,
+                            "endIndex": len(document.get("body", {}).get("content", "")) - 1,
                         },
                     },
                 },

@@ -66,8 +66,7 @@ class DocumentTemplates:
             )
         if data.get("languages"):
             traits_content.append(
-                "## Languages\n"
-                + "\n".join(f"- {language}" for language in data["languages"]),
+                "## Languages\n" + "\n".join(f"- {language}" for language in data["languages"]),
             )
         if traits_content:
             sections.append(
@@ -232,7 +231,7 @@ class DocumentTemplates:
 
         grouped = {k: [] for k in rel_types.values()}
 
-        for rel_id, rel_data in relationships.items():
+        for rel_data in relationships.values():
             rel_type = rel_data.get("type", "custom").lower()
             group = rel_types.get(rel_type, "Other Relationships")
             intensity = "⭐" * rel_data.get("intensity", 1)
@@ -244,12 +243,12 @@ class DocumentTemplates:
             grouped[group].append(rel_text)
 
         # Create sections for each relationship type
-        for group_name, relationships in grouped.items():
-            if relationships:
+        for group_name, group_relationships in grouped.items():
+            if group_relationships:
                 sections.append(
                     {
                         "title": group_name,
-                        "content": "\n".join(relationships),
+                        "content": "\n".join(group_relationships),
                     },
                 )
 

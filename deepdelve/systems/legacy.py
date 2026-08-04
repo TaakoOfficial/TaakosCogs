@@ -199,8 +199,10 @@ def progress_oath(profile: dict[str, Any], objective: str, amount: int = 1) -> l
     entry["claimed"] = True
     state["oath"] = ""
     return [
-        f"📜 **Oath fulfilled: {entry['name']}** — +{reward['gold']} currency, "
-        f"+{reward['xp']} XP, +{reward['faction_reputation']} faction reputation.",
+        (
+            f"📜 **Oath fulfilled: {entry['name']}** — +{reward['gold']} currency, "
+            f"+{reward['xp']} XP, +{reward['faction_reputation']} faction reputation."
+        ),
     ]
 
 

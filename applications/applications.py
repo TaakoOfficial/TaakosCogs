@@ -11,7 +11,7 @@ import logging
 import re
 import time
 import uuid
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 import discord
 from redbot.core import Config, app_commands, commands
@@ -111,13 +111,10 @@ class QuestionChoiceView(discord.ui.View):
         self.skipped = False
 
         options = [
-            discord.SelectOption(label=truncate(
-                choice, 100), value=choice[:100])
-            for choice in question.get("choices", [])[:25]
+            discord.SelectOption(label=truncate(choice, 100), value=choice[:100]) for choice in question.get("choices", [])[:25]
         ]
         if question.get("allow_other"):
-            options.append(discord.SelectOption(
-                label="Other", value="__other__"))
+            options.append(discord.SelectOption(label="Other", value="__other__"))
 
         select = discord.ui.Select(
             placeholder="Choose an answer",
@@ -129,13 +126,11 @@ class QuestionChoiceView(discord.ui.View):
         self.add_item(select)
 
         if not question.get("required", True):
-            skip = discord.ui.Button(
-                label="Skip", style=discord.ButtonStyle.secondary)
+            skip = discord.ui.Button(label="Skip", style=discord.ButtonStyle.secondary)
             skip.callback = self._skip_callback
             self.add_item(skip)
 
-        cancel = discord.ui.Button(
-            label="Cancel", style=discord.ButtonStyle.danger)
+        cancel = discord.ui.Button(label="Cancel", style=discord.ButtonStyle.danger)
         cancel.callback = self._cancel_callback
         self.add_item(cancel)
 
@@ -195,13 +190,11 @@ class QuestionBooleanView(discord.ui.View):
         self.add_item(no)
 
         if not required:
-            skip = discord.ui.Button(
-                label="Skip", style=discord.ButtonStyle.secondary)
+            skip = discord.ui.Button(label="Skip", style=discord.ButtonStyle.secondary)
             skip.callback = self._skip_callback
             self.add_item(skip)
 
-        cancel = discord.ui.Button(
-            label="Cancel", style=discord.ButtonStyle.secondary)
+        cancel = discord.ui.Button(label="Cancel", style=discord.ButtonStyle.secondary)
         cancel.callback = self._cancel_callback
         self.add_item(cancel)
 
@@ -313,11 +306,7 @@ class ApplicationFormModal(discord.ui.Modal):
                     max_values=1,
                     required=required,
                 )
-            elif (
-                MODAL_SELECTS_SUPPORTED
-                and question_type == "choice"
-                and not question.get("allow_other")
-            ):
+            elif MODAL_SELECTS_SUPPORTED and question_type == "choice" and not question.get("allow_other"):
                 component = discord.ui.Select(
                     placeholder="Choose an answer",
                     options=[
@@ -337,9 +326,7 @@ class ApplicationFormModal(discord.ui.Modal):
                     max_length = 5
                     style = discord.TextStyle.short
                 elif question_type == "choice":
-                    choices = ", ".join(
-                        str(choice)[:100] for choice in question.get("choices", [])
-                    )
+                    choices = ", ".join(str(choice)[:100] for choice in question.get("choices", []))
                     placeholder = truncate(f"Choose: {choices}", 100)
                     max_length = 100
                     style = discord.TextStyle.short
@@ -388,14 +375,9 @@ class ApplicationFormModal(discord.ui.Modal):
                     )
                     return
             elif question_type == "choice":
-                choices = [str(choice)[:100]
-                               for choice in question.get("choices", [])]
+                choices = [str(choice)[:100] for choice in question.get("choices", [])]
                 matched = next(
-                    (
-                        choice
-                        for choice in choices
-                        if choice.casefold() == value.casefold()
-                    ),
+                    (choice for choice in choices if choice.casefold() == value.casefold()),
                     None,
                 )
                 if matched is not None:
@@ -678,7 +660,7 @@ class Applications(DashboardIntegration, commands.Cog):
     VALID_QUESTION_TYPES = ("text", "boolean", "choice", "attachment")
     VALID_BUTTON_STYLES = ("green", "red", "gray", "blurple")
     VALID_NOTIFICATION_ROLE_TARGETS = ("channel", "thread", "both")
-    ROLE_LISTS = {
+    ROLE_LISTS: ClassVar[dict[str, str]] = {
         "manager": "manager",
         "whitelist": "whitelist",
         "allowlist": "whitelist",
@@ -706,7 +688,7 @@ class Applications(DashboardIntegration, commands.Cog):
 
     async def red_delete_data_for_user(self, *, requester: str, user_id: int) -> None:
         all_guilds = await self.config.all_guilds()
-        for guild_id, data in all_guilds.items():
+        for guild_id in all_guilds:
             async with self.config.guild_from_id(guild_id).applications() as apps:
                 for app in apps.values():
                     for response in app.get("responses", []):
@@ -719,9 +701,7 @@ class Applications(DashboardIntegration, commands.Cog):
                             {"up": [], "neutral": [], "down": []},
                         )
                         for key in ("up", "neutral", "down"):
-                            votes[key] = [
-                                vote for vote in votes.get(key, []) if vote != user_id
-                            ]
+                            votes[key] = [vote for vote in votes.get(key, []) if vote != user_id]
             async with self.config.guild_from_id(guild_id).polls() as polls:
                 for poll in polls.values():
                     votes = poll.setdefault("votes", {})
@@ -772,20 +752,13 @@ class Applications(DashboardIntegration, commands.Cog):
             "thread_enabled": True,
             "thread_name": "{application} - {user}",
             "notification_enabled": True,
-            "notification_message": (
-                "New application submitted by {user_mention} for **{application}**."
-            ),
+            "notification_message": ("New application submitted by {user_mention} for **{application}**."),
             "notification_channel_ids": [],
             "notification_role_ids": [],
             "notification_role_target": "channel",
-            "completion_message": (
-                "Your application for **{application}** was submitted.\n"
-                "Response ID: `{response_id}`"
-            ),
+            "completion_message": ("Your application for **{application}** was submitted.\nResponse ID: `{response_id}`"),
             "accept_message": "Your application for **{application}** was accepted.",
-            "deny_message": (
-                "Your application for **{application}** was denied.\nReason: {reason}"
-            ),
+            "deny_message": ("Your application for **{application}** was denied.\nReason: {reason}"),
             "questions": [],
             "responses": [],
             "roles": cls._default_roles(),
@@ -806,8 +779,7 @@ class Applications(DashboardIntegration, commands.Cog):
         app.setdefault("allow_multiple_pending", False)
         if app.get("form_mode") not in {"dm", "modal"}:
             app["form_mode"] = "dm"
-        app.setdefault("panel_message",
-                       "Click below to apply for **{application}**.")
+        app.setdefault("panel_message", "Click below to apply for **{application}**.")
         app.setdefault("button_label", "Apply")
         app.setdefault("button_style", "green")
         app.setdefault("button_emoji", None)
@@ -846,8 +818,7 @@ class Applications(DashboardIntegration, commands.Cog):
 
     @classmethod
     def _notification_role_target(cls, app: ApplicationDict) -> str:
-        target = str(app.get("notification_role_target")
-                     or "channel").strip().lower()
+        target = str(app.get("notification_role_target") or "channel").strip().lower()
         aliases = {
             "channels": "channel",
             "response": "channel",
@@ -871,11 +842,7 @@ class Applications(DashboardIntegration, commands.Cog):
                 migrated_apps[key] = self._migrate_application(key, app)
 
             for panel in data.get("panels", {}).values():
-                app_list = [
-                    migrated_apps[key]
-                    for key in panel.get("applications", [])
-                    if key in migrated_apps
-                ]
+                app_list = [migrated_apps[key] for key in panel.get("applications", []) if key in migrated_apps]
                 if app_list:
                     self.bot.add_view(
                         ApplicationPanelView(
@@ -943,9 +910,7 @@ class Applications(DashboardIntegration, commands.Cog):
 
     async def _get_apps(self, guild_id: int) -> dict[str, ApplicationDict]:
         apps = await self.config.guild_from_id(guild_id).applications()
-        migrated = {
-            key: self._migrate_application(key, app) for key, app in apps.items()
-        }
+        migrated = {key: self._migrate_application(key, app) for key, app in apps.items()}
         if migrated != apps:
             await self.config.guild_from_id(guild_id).applications.set(migrated)
         return migrated
@@ -959,8 +924,7 @@ class Applications(DashboardIntegration, commands.Cog):
         for possible_key, app in apps.items():
             if app.get("name", "").lower() == lowered:
                 return possible_key, app
-        raise commands.UserFeedbackCheckFailure(
-            "That application does not exist.")
+        raise commands.UserFeedbackCheckFailure("That application does not exist.")
 
     async def _save_app(self, guild_id: int, app: ApplicationDict) -> None:
         key = app["key"]
@@ -974,8 +938,7 @@ class Applications(DashboardIntegration, commands.Cog):
             rid = str(response.get("id", "")).lower()
             if rid == response_id or rid.startswith(response_id):
                 return response
-        raise commands.UserFeedbackCheckFailure(
-            "That response does not exist.")
+        raise commands.UserFeedbackCheckFailure("That response does not exist.")
 
     @staticmethod
     def _member_has_any(member: discord.Member, role_ids: Iterable[int]) -> bool:
@@ -983,10 +946,7 @@ class Applications(DashboardIntegration, commands.Cog):
         return any(role_id in member_role_ids for role_id in role_ids)
 
     async def _is_setup_manager(self, member: discord.Member) -> bool:
-        if (
-            member.guild_permissions.manage_guild
-            or member.guild_permissions.administrator
-        ):
+        if member.guild_permissions.manage_guild or member.guild_permissions.administrator:
             return True
         return await self.bot.is_owner(member)
 
@@ -1046,10 +1006,7 @@ class Applications(DashboardIntegration, commands.Cog):
 
         if not app.get("allow_multiple_pending", False):
             for response in app.get("responses", []):
-                if (
-                    response.get("user_id") == member.id
-                    and response.get("status") == "pending"
-                ):
+                if response.get("user_id") == member.id and response.get("status") == "pending":
                     return "You already have a pending response for this application."
 
         cooldown = int(app.get("cooldown_minutes") or 0)
@@ -1072,11 +1029,7 @@ class Applications(DashboardIntegration, commands.Cog):
     ) -> None:
         if member is None:
             return
-        roles = [
-            role
-            for role_id in app.get("roles", {}).get(role_list, [])
-            if (role := member.guild.get_role(role_id))
-        ]
+        roles = [role for role_id in app.get("roles", {}).get(role_list, []) if (role := member.guild.get_role(role_id))]
         if not roles:
             return
         with contextlib.suppress(discord.HTTPException):
@@ -1126,14 +1079,9 @@ class Applications(DashboardIntegration, commands.Cog):
         channel = guild.get_channel(app.get("channel_id"))
         questions = app.get("questions", [])
         responses = app.get("responses", [])
-        pending = sum(
-            1 for response in responses if response.get("status") == "pending"
-        )
-        accepted = sum(
-            1 for response in responses if response.get("status") == "accepted"
-        )
-        denied = sum(1 for response in responses if response.get(
-            "status") == "denied")
+        pending = sum(1 for response in responses if response.get("status") == "pending")
+        accepted = sum(1 for response in responses if response.get("status") == "accepted")
+        denied = sum(1 for response in responses if response.get("status") == "denied")
         embed = discord.Embed(
             title=app.get("name", "Application"),
             description=app.get("description", ""),
@@ -1182,8 +1130,7 @@ class Applications(DashboardIntegration, commands.Cog):
         member = guild.get_member(user_id) if user_id else None
         user_text = member.mention if member else f"`{user_id}`"
         status = response.get("status", "pending")
-        votes = response.setdefault(
-            "votes", {"up": [], "neutral": [], "down": []})
+        votes = response.setdefault("votes", {"up": [], "neutral": [], "down": []})
         embed = discord.Embed(
             title=f"{app.get('name', 'Application')} Response",
             description=(
@@ -1198,8 +1145,7 @@ class Applications(DashboardIntegration, commands.Cog):
             timestamp=discord.utils.utcnow(),
         )
         if member:
-            embed.set_author(name=str(member),
-                             icon_url=member.display_avatar.url)
+            embed.set_author(name=str(member), icon_url=member.display_avatar.url)
         for idx, answer in enumerate(response.get("answers", [])[:25], start=1):
             value = answer.get("answer", "")
             if answer.get("type") == "attachment" and answer.get("url"):
@@ -1211,9 +1157,7 @@ class Applications(DashboardIntegration, commands.Cog):
             )
         if response.get("reviewed_by"):
             reviewer = guild.get_member(int(response["reviewed_by"]))
-            reviewer_text = (
-                reviewer.mention if reviewer else f"`{response['reviewed_by']}`"
-            )
+            reviewer_text = reviewer.mention if reviewer else f"`{response['reviewed_by']}`"
             embed.add_field(
                 name="Review",
                 value=(
@@ -1255,16 +1199,9 @@ class Applications(DashboardIntegration, commands.Cog):
             return "Modal forms need at least one question."
         if len(questions) > 5:
             return "Modal forms can contain at most 5 questions."
-        if any(
-            str(question.get("type") or "text").lower() == "attachment"
-            for question in questions
-        ):
+        if any(str(question.get("type") or "text").lower() == "attachment" for question in questions):
             return "Modal forms cannot contain attachment questions."
-        if any(
-            str(question.get("type") or "text").lower() == "choice"
-            and not question.get("choices")
-            for question in questions
-        ):
+        if any(str(question.get("type") or "text").lower() == "choice" and not question.get("choices") for question in questions):
             return "Every modal choice question needs at least one configured choice."
         return None
 
@@ -1276,8 +1213,7 @@ class Applications(DashboardIntegration, commands.Cog):
         return discord.Embed(
             title=app.get("name", "Application"),
             description=(
-                f"{app.get('description', '')}\n\n"
-                "Answer each question in this DM. You can type `cancel` on text prompts."
+                f"{app.get('description', '')}\n\nAnswer each question in this DM. You can type `cancel` on text prompts."
             ),
             color=discord.Color(int(app.get("color", self.DEFAULT_COLOR))),
         ).set_footer(text=guild.name)
@@ -1446,8 +1382,7 @@ class Applications(DashboardIntegration, commands.Cog):
             )
         target = member or ctx.author
         if not isinstance(target, discord.Member):
-            raise commands.UserFeedbackCheckFailure(
-                "Could not resolve that member.")
+            raise commands.UserFeedbackCheckFailure("Could not resolve that member.")
         key, app = await self._get_app(ctx.guild.id, name)
         reason = await self._can_member_apply(target, app, bypass=bypass)
         if reason:
@@ -1483,14 +1418,10 @@ class Applications(DashboardIntegration, commands.Cog):
             await self._send_application_intro(ctx.guild, target, app)
         except discord.HTTPException:
             if target.id == ctx.author.id:
-                failure = (
-                    "I couldn't send you a DM. Enable direct messages from server "
-                    "members and try again."
-                )
+                failure = "I couldn't send you a DM. Enable direct messages from server members and try again."
             else:
                 failure = (
-                    f"I couldn't DM {target.mention}. They need to enable direct "
-                    "messages from server members and try again."
+                    f"I couldn't DM {target.mention}. They need to enable direct messages from server members and try again."
                 )
             await ctx.send(
                 failure,
@@ -1554,8 +1485,7 @@ class Applications(DashboardIntegration, commands.Cog):
             await self._send_application_intro(interaction.guild, interaction.user, app)
         except discord.HTTPException:
             await interaction.response.send_message(
-                "I couldn't send you a DM. Enable direct messages from server members "
-                "and try again.",
+                "I couldn't send you a DM. Enable direct messages from server members and try again.",
                 ephemeral=True,
             )
             return
@@ -1714,8 +1644,7 @@ class Applications(DashboardIntegration, commands.Cog):
             "votes": {"up": [], "neutral": [], "down": []},
         }
 
-        voting_enabled = bool(latest_app.get(
-            "voting", {}).get("enabled", True))
+        voting_enabled = bool(latest_app.get("voting", {}).get("enabled", True))
         view = ReviewView(
             self,
             guild.id,
@@ -1776,16 +1705,13 @@ class Applications(DashboardIntegration, commands.Cog):
             response=response,
         )
         role_mentions = " ".join(
-            role.mention
-            for role_id in app.get("notification_role_ids", [])
-            if (role := guild.get_role(role_id))
+            role.mention for role_id in app.get("notification_role_ids", []) if (role := guild.get_role(role_id))
         )
         role_target = self._notification_role_target(app)
         channel_content = content
         if role_mentions and role_target in {"channel", "both"}:
             channel_content = f"{role_mentions} {content}".strip()
-        allowed = discord.AllowedMentions(
-            roles=True, users=True, everyone=False)
+        allowed = discord.AllowedMentions(roles=True, users=True, everyone=False)
         channel_ids = unique_ids(
             [app.get("channel_id"), *app.get("notification_channel_ids", [])],
         )
@@ -1852,11 +1778,7 @@ class Applications(DashboardIntegration, commands.Cog):
         response["reviewed_at"] = utc_ts()
         response["review_reason"] = reason
 
-        member = (
-            guild.get_member(response.get("user_id"))
-            if response.get("user_id")
-            else None
-        )
+        member = guild.get_member(response.get("user_id")) if response.get("user_id") else None
         if decision == "accepted":
             await self._apply_role_action(member, app, "accept_add")
             await self._apply_role_action(member, app, "accept_remove")
@@ -1949,7 +1871,7 @@ class Applications(DashboardIntegration, commands.Cog):
             return
         await interaction.response.defer(ephemeral=True)
         try:
-            key, app = await self._get_app(guild_id, application)
+            _key, app = await self._get_app(guild_id, application)
             response = self._find_response(app, response_id)
         except commands.UserFeedbackCheckFailure as exc:
             await interaction.followup.send(str(exc), ephemeral=True)
@@ -1967,8 +1889,7 @@ class Applications(DashboardIntegration, commands.Cog):
             )
             return
 
-        votes = response.setdefault(
-            "votes", {"up": [], "neutral": [], "down": []})
+        votes = response.setdefault("votes", {"up": [], "neutral": [], "down": []})
         for voters in votes.values():
             if interaction.user.id in voters:
                 voters.remove(interaction.user.id)
@@ -1999,8 +1920,7 @@ class Applications(DashboardIntegration, commands.Cog):
             color=discord.Color(self.DEFAULT_COLOR),
             timestamp=discord.utils.utcnow(),
         )
-        embed.set_footer(
-            text=f"Poll ID: {poll.get('id')} | Total votes: {total}")
+        embed.set_footer(text=f"Poll ID: {poll.get('id')} | Total votes: {total}")
         if poll.get("closed"):
             embed.title = f"{embed.title} (Closed)"
         return embed
@@ -2135,7 +2055,7 @@ class Applications(DashboardIntegration, commands.Cog):
     @app_commands.describe(name="Application name")
     async def application_view(self, ctx: commands.GuildContext, *, name: str) -> None:
         """Show one application's settings."""
-        key, app = await self._get_app(ctx.guild.id, name)
+        _key, app = await self._get_app(ctx.guild.id, name)
         await self._require_app_manager(ctx, app)
         await ctx.send(embed=self._application_embed(ctx.guild, app))
         questions = app.get("questions", [])
@@ -2144,8 +2064,7 @@ class Applications(DashboardIntegration, commands.Cog):
             for idx, question in enumerate(questions, start=1):
                 choices = ", ".join(question.get("choices", []))
                 question_lines.append(
-                    f"{idx}. [{question.get('type')}] {question.get('text')}"
-                    f"{' | ' + choices if choices else ''}",
+                    f"{idx}. [{question.get('type')}] {question.get('text')}{' | ' + choices if choices else ''}",
                 )
             for page in pagify("\n".join(question_lines), page_length=1800):
                 await ctx.send(box(page))
@@ -2255,7 +2174,7 @@ class Applications(DashboardIntegration, commands.Cog):
         member: discord.Member | None = None,
     ) -> None:
         """List responses for an application."""
-        key, app = await self._get_app(ctx.guild.id, name)
+        _key, app = await self._get_app(ctx.guild.id, name)
         await self._require_app_manager(ctx, app)
         status = status.lower()
         rows = []
@@ -2264,11 +2183,7 @@ class Applications(DashboardIntegration, commands.Cog):
                 continue
             if member and response.get("user_id") != member.id:
                 continue
-            user = (
-                ctx.guild.get_member(response.get("user_id"))
-                if response.get("user_id")
-                else None
-            )
+            user = ctx.guild.get_member(response.get("user_id")) if response.get("user_id") else None
             rows.append(
                 "`{id}` | {status} | {user} | <t:{created}:R>".format(
                     id=response.get("id"),
@@ -2292,7 +2207,7 @@ class Applications(DashboardIntegration, commands.Cog):
         response_id: str,
     ) -> None:
         """Show one response by ID."""
-        key, app = await self._get_app(ctx.guild.id, name)
+        _key, app = await self._get_app(ctx.guild.id, name)
         await self._require_app_manager(ctx, app)
         response = self._find_response(app, response_id)
         await ctx.send(embed=self._response_embed(ctx.guild, app, response))
@@ -2313,8 +2228,7 @@ class Applications(DashboardIntegration, commands.Cog):
         await self._require_app_manager(ctx, app)
         output = io.StringIO()
         writer = csv.writer(output)
-        questions = [question.get("text", "")
-                                  for question in app.get("questions", [])]
+        questions = [question.get("text", "") for question in app.get("questions", [])]
         writer.writerow(
             [
                 "response_id",
@@ -2328,9 +2242,7 @@ class Applications(DashboardIntegration, commands.Cog):
         for response in app.get("responses", []):
             if status != "all" and response.get("status") != status:
                 continue
-            answers = [
-                answer.get("answer", "") for answer in response.get("answers", [])
-            ]
+            answers = [answer.get("answer", "") for answer in response.get("answers", [])]
             writer.writerow(
                 [
                     response.get("id"),
@@ -2379,7 +2291,7 @@ class Applications(DashboardIntegration, commands.Cog):
     ) -> None:
         """Set the response channel."""
         await self._require_setup_manager(ctx)
-        key, app = await self._get_app(ctx.guild.id, name)
+        _key, app = await self._get_app(ctx.guild.id, name)
         app["channel_id"] = channel.id
         await self._save_app(ctx.guild.id, app)
         await ctx.send(
@@ -2395,11 +2307,10 @@ class Applications(DashboardIntegration, commands.Cog):
     ) -> None:
         """Open or close an application."""
         await self._require_setup_manager(ctx)
-        key, app = await self._get_app(ctx.guild.id, name)
+        _key, app = await self._get_app(ctx.guild.id, name)
         status = status.lower()
         if status not in ("open", "close", "closed"):
-            raise commands.UserFeedbackCheckFailure(
-                "Status must be `open` or `close`.")
+            raise commands.UserFeedbackCheckFailure("Status must be `open` or `close`.")
         app["open"] = status == "open"
         await self._save_app(ctx.guild.id, app)
         await ctx.send(
@@ -2415,7 +2326,7 @@ class Applications(DashboardIntegration, commands.Cog):
     ) -> None:
         """Set the application embed color."""
         await self._require_setup_manager(ctx)
-        key, app = await self._get_app(ctx.guild.id, name)
+        _key, app = await self._get_app(ctx.guild.id, name)
         try:
             discord_color = discord.Color.from_str(color)
         except ValueError:
@@ -2425,8 +2336,7 @@ class Applications(DashboardIntegration, commands.Cog):
         app["color"] = discord_color.value
         await self._save_app(ctx.guild.id, app)
         await ctx.send(
-            embed=discord.Embed(
-                description="Color updated.", color=discord_color),
+            embed=discord.Embed(description="Color updated.", color=discord_color),
         )
 
     @application_config_group.command(name="cooldown")
@@ -2438,7 +2348,7 @@ class Applications(DashboardIntegration, commands.Cog):
     ) -> None:
         """Set the cooldown between applications for one user."""
         await self._require_setup_manager(ctx)
-        key, app = await self._get_app(ctx.guild.id, name)
+        _key, app = await self._get_app(ctx.guild.id, name)
         app["cooldown_minutes"] = int(minutes)
         await self._save_app(ctx.guild.id, app)
         await ctx.send(f"Cooldown for **{app['name']}** set to {minutes} minute(s).")
@@ -2452,7 +2362,7 @@ class Applications(DashboardIntegration, commands.Cog):
     ) -> None:
         """Allow or block multiple pending responses from the same user."""
         await self._require_setup_manager(ctx)
-        key, app = await self._get_app(ctx.guild.id, name)
+        _key, app = await self._get_app(ctx.guild.id, name)
         app["allow_multiple_pending"] = enabled
         await self._save_app(ctx.guild.id, app)
         await ctx.send(f"Multiple pending responses are now {bool_text(enabled)}.")
@@ -2466,7 +2376,7 @@ class Applications(DashboardIntegration, commands.Cog):
     ) -> None:
         """Choose whether applicants answer in DMs or a native Discord modal."""
         await self._require_setup_manager(ctx)
-        key, app = await self._get_app(ctx.guild.id, name)
+        _key, app = await self._get_app(ctx.guild.id, name)
         mode = mode.lower()
         if mode not in {"dm", "modal"}:
             raise commands.UserFeedbackCheckFailure(
@@ -2491,7 +2401,7 @@ class Applications(DashboardIntegration, commands.Cog):
     ) -> None:
         """Configure response thread creation."""
         await self._require_setup_manager(ctx)
-        key, app = await self._get_app(ctx.guild.id, name)
+        _key, app = await self._get_app(ctx.guild.id, name)
         app["thread_enabled"] = enabled
         app["thread_name"] = template
         await self._save_app(ctx.guild.id, app)
@@ -2508,7 +2418,7 @@ class Applications(DashboardIntegration, commands.Cog):
     ) -> None:
         """Set panel, notification, completion, accept, or deny messages."""
         await self._require_setup_manager(ctx)
-        key, app = await self._get_app(ctx.guild.id, name)
+        _key, app = await self._get_app(ctx.guild.id, name)
         fields = {
             "panel": "panel_message",
             "notification": "notification_message",
@@ -2538,7 +2448,7 @@ class Applications(DashboardIntegration, commands.Cog):
     ) -> None:
         """Set panel button label, emoji, or style."""
         await self._require_setup_manager(ctx)
-        key, app = await self._get_app(ctx.guild.id, name)
+        _key, app = await self._get_app(ctx.guild.id, name)
         field = field.lower()
         if field == "label":
             app["button_label"] = value
@@ -2566,7 +2476,7 @@ class Applications(DashboardIntegration, commands.Cog):
     ) -> None:
         """Enable or disable application notifications."""
         await self._require_setup_manager(ctx)
-        key, app = await self._get_app(ctx.guild.id, name)
+        _key, app = await self._get_app(ctx.guild.id, name)
         app["notification_enabled"] = enabled
         await self._save_app(ctx.guild.id, app)
         await ctx.send(
@@ -2583,13 +2493,9 @@ class Applications(DashboardIntegration, commands.Cog):
     ) -> None:
         """Set extra notification channels with IDs or mentions separated by commas/spaces."""
         await self._require_setup_manager(ctx)
-        key, app = await self._get_app(ctx.guild.id, name)
+        _key, app = await self._get_app(ctx.guild.id, name)
         ids = parse_mentions_or_ids(channels)
-        valid = [
-            channel_id
-            for channel_id in ids
-            if isinstance(ctx.guild.get_channel(channel_id), discord.TextChannel)
-        ]
+        valid = [channel_id for channel_id in ids if isinstance(ctx.guild.get_channel(channel_id), discord.TextChannel)]
         app["notification_channel_ids"] = valid
         await self._save_app(ctx.guild.id, app)
         await ctx.send(f"Stored {len(valid)} notification channel(s).")
@@ -2604,7 +2510,7 @@ class Applications(DashboardIntegration, commands.Cog):
     ) -> None:
         """Set roles to ping on new responses with IDs or mentions separated by commas/spaces."""
         await self._require_setup_manager(ctx)
-        key, app = await self._get_app(ctx.guild.id, name)
+        _key, app = await self._get_app(ctx.guild.id, name)
         ids = parse_mentions_or_ids(roles)
         valid = [role_id for role_id in ids if ctx.guild.get_role(role_id)]
         app["notification_role_ids"] = valid
@@ -2693,7 +2599,7 @@ class Applications(DashboardIntegration, commands.Cog):
     ) -> None:
         """Add a question to an application."""
         await self._require_setup_manager(ctx)
-        key, app = await self._get_app(ctx.guild.id, name)
+        _key, app = await self._get_app(ctx.guild.id, name)
         question_type = question_type.lower()
         if question_type not in self.VALID_QUESTION_TYPES:
             raise commands.UserFeedbackCheckFailure(
@@ -2706,8 +2612,7 @@ class Applications(DashboardIntegration, commands.Cog):
         allow_other = False
         text = question.strip()
         if not text:
-            raise commands.UserFeedbackCheckFailure(
-                "Question text cannot be empty.")
+            raise commands.UserFeedbackCheckFailure("Question text cannot be empty.")
         if app.get("form_mode", "dm") == "modal":
             if question_type == "attachment":
                 raise commands.UserFeedbackCheckFailure(
@@ -2728,11 +2633,8 @@ class Applications(DashboardIntegration, commands.Cog):
                 raise commands.UserFeedbackCheckFailure(
                     "Choice questions can have at most 25 choices.",
                 )
-            allow_other = any(choice.lower() ==
-                              "other" for choice in choice_values)
-            parsed_choices = [
-                choice for choice in choice_values if choice.lower() != "other"
-            ]
+            allow_other = any(choice.lower() == "other" for choice in choice_values)
+            parsed_choices = [choice for choice in choice_values if choice.lower() != "other"]
         else:
             parsed_choices = []
         app.setdefault("questions", []).append(
@@ -2757,7 +2659,7 @@ class Applications(DashboardIntegration, commands.Cog):
     ) -> None:
         """Remove a question by position."""
         await self._require_setup_manager(ctx)
-        key, app = await self._get_app(ctx.guild.id, name)
+        _key, app = await self._get_app(ctx.guild.id, name)
         questions = app.get("questions", [])
         if position > len(questions):
             raise commands.UserFeedbackCheckFailure(
@@ -2775,7 +2677,7 @@ class Applications(DashboardIntegration, commands.Cog):
         name: str,
     ) -> None:
         """List questions for an application."""
-        key, app = await self._get_app(ctx.guild.id, name)
+        _key, app = await self._get_app(ctx.guild.id, name)
         await self._require_app_manager(ctx, app)
         questions = app.get("questions", [])
         if not questions:
@@ -2809,29 +2711,20 @@ class Applications(DashboardIntegration, commands.Cog):
     ) -> None:
         """Manage roles: manager, whitelist, blacklist, apply, submit, accept, acceptremove, deny, denyremove."""
         await self._require_setup_manager(ctx)
-        key, app = await self._get_app(ctx.guild.id, name)
+        _key, app = await self._get_app(ctx.guild.id, name)
         target = self.ROLE_LISTS.get(role_type.lower())
         if not target:
             raise commands.UserFeedbackCheckFailure(
-                "Role type must be manager, whitelist, blacklist, apply, submit, "
-                "accept, acceptremove, deny, or denyremove.",
+                "Role type must be manager, whitelist, blacklist, apply, submit, accept, acceptremove, deny, or denyremove.",
             )
         if add_or_remove.lower() not in ("add", "remove"):
             raise commands.UserFeedbackCheckFailure("Use `add` or `remove`.")
-        role_ids_to_change = [
-            role_id
-            for role_id in parse_mentions_or_ids(roles)
-            if ctx.guild.get_role(role_id)
-        ]
+        role_ids_to_change = [role_id for role_id in parse_mentions_or_ids(roles) if ctx.guild.get_role(role_id)]
         if not role_ids_to_change:
-            raise commands.UserFeedbackCheckFailure(
-                "Provide at least one role.")
-        role_ids = app.setdefault(
-            "roles", self._default_roles()).setdefault(target, [])
+            raise commands.UserFeedbackCheckFailure("Provide at least one role.")
+        role_ids = app.setdefault("roles", self._default_roles()).setdefault(target, [])
         if add_or_remove.lower() == "add":
-            role_ids.extend(
-                role_id for role_id in role_ids_to_change if role_id not in role_ids
-            )
+            role_ids.extend(role_id for role_id in role_ids_to_change if role_id not in role_ids)
         else:
             for role_id in role_ids_to_change:
                 if role_id in role_ids:
@@ -2848,16 +2741,11 @@ class Applications(DashboardIntegration, commands.Cog):
         name: str,
     ) -> None:
         """View configured role lists."""
-        key, app = await self._get_app(ctx.guild.id, name)
+        _key, app = await self._get_app(ctx.guild.id, name)
         await self._require_app_manager(ctx, app)
         lines = []
         for role_key, role_ids in app.get("roles", {}).items():
-            mentions = [
-                role.mention
-                if (role := ctx.guild.get_role(role_id))
-                else f"`{role_id}`"
-                for role_id in role_ids
-            ]
+            mentions = [role.mention if (role := ctx.guild.get_role(role_id)) else f"`{role_id}`" for role_id in role_ids]
             lines.append(
                 f"**{role_key}:** {', '.join(mentions) if mentions else 'none'}",
             )
@@ -2893,8 +2781,7 @@ class Applications(DashboardIntegration, commands.Cog):
         question, option_text = poll.split("|", 1)
         options = parse_csv_values(option_text)
         if len(options) < 2:
-            raise commands.UserFeedbackCheckFailure(
-                "Polls need at least two options.")
+            raise commands.UserFeedbackCheckFailure("Polls need at least two options.")
         if len(options) > 25:
             raise commands.UserFeedbackCheckFailure(
                 "Polls can have at most 25 options.",
@@ -2926,8 +2813,7 @@ class Applications(DashboardIntegration, commands.Cog):
         async with self.config.guild(ctx.guild).polls() as polls:
             poll = polls.get(poll_id)
             if not poll:
-                raise commands.UserFeedbackCheckFailure(
-                    "That poll does not exist.")
+                raise commands.UserFeedbackCheckFailure("That poll does not exist.")
             poll["closed"] = True
         channel = ctx.guild.get_channel(poll.get("channel_id"))
         if isinstance(channel, discord.TextChannel):

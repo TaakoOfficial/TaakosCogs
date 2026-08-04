@@ -22,5 +22,6 @@
     "disabled": false,
     "type": "COG",
     "short": "Copy emojis and stickers between Discord servers.",
-    "version": "1.0.2"
+    "version": "1.0.2",
+    "end_user_data_statement": "This cog does not persistently store any end user data."
 }

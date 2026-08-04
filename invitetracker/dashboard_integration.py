@@ -63,8 +63,7 @@ class DashboardIntegration:
             try:
                 messages = await self._dashboard_handle_action(guild, action, form_data)
             except commands.CommandError as error:
-                notifications.append(
-                    {"message": str(error), "category": "error"})
+                notifications.append({"message": str(error), "category": "error"})
             except Exception as error:
                 log.exception("InviteTracker dashboard action failed.")
                 notifications.append(
@@ -94,11 +93,7 @@ class DashboardIntegration:
         member = guild.get_member(user.id)
         is_owner = user.id in getattr(self.bot, "owner_ids", set())
         is_admin = member is not None and await self.bot.is_admin(member)
-        can_manage = (
-            is_owner
-            or is_admin
-            or (member is not None and member.guild_permissions.manage_guild)
-        )
+        can_manage = is_owner or is_admin or (member is not None and member.guild_permissions.manage_guild)
         return member, can_manage
 
     def _dashboard_form_data(self, kwargs: dict[str, typing.Any]) -> typing.Any:
@@ -111,11 +106,7 @@ class DashboardIntegration:
         form_data = self._dashboard_form_data(kwargs)
         selected = self._dash_value(form_data, "active_tab").lower()
         valid = set(action_tabs.values()) | {default}
-        return (
-            selected
-            if selected in valid
-            else action_tabs.get(self._dash_value(form_data, "action").lower(), default)
-        )
+        return selected if selected in valid else action_tabs.get(self._dash_value(form_data, "action").lower(), default)
 
     def _dashboard_tab_button(self, name: str, label: str, active: str) -> str:
         selected = name == active
@@ -247,17 +238,13 @@ class DashboardIntegration:
         try:
             return int(value)
         except (TypeError, ValueError) as exc:
-            raise commands.BadArgument(
-                f"`{key}` must be a Discord ID.") from exc
+            raise commands.BadArgument(f"`{key}` must be a Discord ID.") from exc
 
     def _dash_csrf(self, kwargs: dict[str, typing.Any]) -> str:
         csrf_token = kwargs.get("csrf_token")
         if not isinstance(csrf_token, (tuple, list)) or len(csrf_token) != 2:
             return ""
-        return (
-            '<input type="hidden" name="csrf_token" value="'
-            f'{html.escape(str(csrf_token[1]), quote=True)}">'
-        )
+        return f'<input type="hidden" name="csrf_token" value="{html.escape(str(csrf_token[1]), quote=True)}">'
 
     async def _dashboard_handle_action(
         self,
@@ -276,10 +263,7 @@ class DashboardIntegration:
             invite_cache = await self._refresh_invite_cache(guild)
             return [
                 {
-                    "message": (
-                        f"Invite cache refreshed. Cached "
-                        f"{self._count(len(invite_cache))} invite(s)."
-                    ),
+                    "message": (f"Invite cache refreshed. Cached {self._count(len(invite_cache))} invite(s)."),
                     "category": "success",
                 },
             ]
@@ -288,8 +272,7 @@ class DashboardIntegration:
             return await self._dashboard_reset_stats(guild, form_data)
 
         if action:
-            raise commands.BadArgument(
-                "Unknown InviteTracker dashboard action.")
+            raise commands.BadArgument("Unknown InviteTracker dashboard action.")
         return []
 
     async def _dashboard_save_settings(
@@ -316,8 +299,7 @@ class DashboardIntegration:
                 )
             me = guild.me
             if me is None:
-                raise commands.CommandError(
-                    "I could not check my channel permissions.")
+                raise commands.CommandError("I could not check my channel permissions.")
             permissions = channel.permissions_for(me)
             if not permissions.send_messages or not permissions.embed_links:
                 raise commands.CommandError(
@@ -341,8 +323,7 @@ class DashboardIntegration:
         guild: discord.Guild,
         form_data: typing.Any,
     ) -> list[dict[str, str]]:
-        confirmation = self._dash_value(
-            form_data, "reset_confirm").strip().lower()
+        confirmation = self._dash_value(form_data, "reset_confirm").strip().lower()
         if confirmation != "confirm":
             raise commands.BadArgument(
                 "Type `confirm` to reset all InviteTracker stats.",
@@ -356,19 +337,13 @@ class DashboardIntegration:
         except commands.CommandError as error:
             return [
                 {
-                    "message": (
-                        "InviteTracker stats were reset, but the invite cache could "
-                        f"not be refreshed: {error}"
-                    ),
+                    "message": (f"InviteTracker stats were reset, but the invite cache could not be refreshed: {error}"),
                     "category": "warning",
                 },
             ]
         return [
             {
-                "message": (
-                    "InviteTracker stats reset. Cached "
-                    f"{self._count(len(invite_cache))} invite(s)."
-                ),
+                "message": (f"InviteTracker stats reset. Cached {self._count(len(invite_cache))} invite(s)."),
                 "category": "success",
             },
         ]
@@ -384,15 +359,10 @@ class DashboardIntegration:
         members = settings.get("members") or {}
         csrf = self._dash_csrf(kwargs)
 
-        total_joins = sum(int(stats.get("joins", 0))
-                          for stats in inviters.values())
-        total_leaves = sum(int(stats.get("leaves", 0))
-                           for stats in inviters.values())
-        total_fake = sum(int(stats.get("fake", 0))
-                         for stats in inviters.values())
-        active_members = sum(
-            1 for record in members.values() if not record.get("left_at")
-        )
+        total_joins = sum(int(stats.get("joins", 0)) for stats in inviters.values())
+        total_leaves = sum(int(stats.get("leaves", 0)) for stats in inviters.values())
+        total_fake = sum(int(stats.get("fake", 0)) for stats in inviters.values())
+        active_members = sum(1 for record in members.values() if not record.get("left_at"))
         leaderboard = self._leaderboard_rows(guild, inviters)
         recent_members = self._recent_member_rows(guild, members)
         active_tab = self._dashboard_active_tab(
@@ -449,8 +419,7 @@ color: #07111f; }}
 </style>
 <div class="it-dash" data-dashboard-tabs="1">
   <div class="it-stats">
-    <div class="it-stat"><strong>{self._h("Enabled" if settings.get("enabled") else
-    "Disabled")}</strong><span>Status</span></div>
+    <div class="it-stat"><strong>{self._h("Enabled" if settings.get("enabled") else "Disabled")}</strong><span>Status</span></div>
     <div class="it-stat"><strong>{self._count(total_joins)}</strong><span>joins</span></div>
     <div class="it-stat"><strong>{self._count(total_leaves)}</strong><span>leaves</span></div>
     <div class="it-stat"><strong>{self._count(total_fake)}</strong><span>fake joins</span></div>
@@ -469,10 +438,16 @@ color: #07111f; }}
       <input type="hidden" name="action" value="save_settings">
       <h2>Settings</h2>
       {self._checkbox("enabled", "Enable invite tracking", settings.get("enabled"))}
-      {self._select("log_channel_id", "Invite log channel", self._text_options(guild), settings.get("log_channel_id"),
-      "No log channel")}
-      {self._input("fake_age_hours", "Fake join threshold hours", settings.get("fake_age_hours") or 0, "number", 0,
-      8760)}
+      {
+            self._select(
+                "log_channel_id",
+                "Invite log channel",
+                self._text_options(guild),
+                settings.get("log_channel_id"),
+                "No log channel",
+            )
+        }
+      {self._input("fake_age_hours", "Fake join threshold hours", settings.get("fake_age_hours") or 0, "number", 0, 8760)}
       {self._checkbox("include_bots", "Track bot joins", settings.get("include_bots"))}
       <div class="it-actions"><button type="submit">Save settings</button></div>
     </form>
@@ -540,9 +515,7 @@ color: #07111f; }}
             )
         return (
             '<table class="it-table"><thead><tr><th>#</th><th>Inviter</th>'
-            "<th>Net</th><th>Joins</th><th>Leaves</th><th>Fake</th></tr></thead><tbody>"
-            + "".join(rows)
-            + "</tbody></table>"
+            "<th>Net</th><th>Joins</th><th>Leaves</th><th>Fake</th></tr></thead><tbody>" + "".join(rows) + "</tbody></table>"
         )
 
     def _recent_member_rows(
@@ -551,9 +524,7 @@ color: #07111f; }}
         members: dict[str, typing.Any],
     ) -> str:
         if not members:
-            return (
-                '<p class="it-muted">No member join sources have been tracked yet.</p>'
-            )
+            return '<p class="it-muted">No member join sources have been tracked yet.</p>'
         records = sorted(
             members.values(),
             key=lambda record: float(record.get("joined_at") or 0),
@@ -577,9 +548,7 @@ color: #07111f; }}
             )
         return (
             '<table class="it-table"><thead><tr><th>Member</th><th>Inviter</th>'
-            "<th>Invite</th><th>Joined</th><th>Left</th><th>Fake</th></tr></thead><tbody>"
-            + "".join(rows)
-            + "</tbody></table>"
+            "<th>Invite</th><th>Joined</th><th>Left</th><th>Fake</th></tr></thead><tbody>" + "".join(rows) + "</tbody></table>"
         )
 
     def _text_options(self, guild: discord.Guild) -> list[tuple[int, str]]:
@@ -596,8 +565,7 @@ color: #07111f; }}
         option_html = [f'<option value="">{self._h(empty_label)}</option>']
         for value, text in options:
             option_html.append(
-                f'<option value="{self._h(value)}" {self._selected(value, selected)}>'
-                f"{self._h(text)}</option>",
+                f'<option value="{self._h(value)}" {self._selected(value, selected)}>{self._h(text)}</option>',
             )
         return (
             f'<div class="it-field"><label>{self._h(label)}</label>'

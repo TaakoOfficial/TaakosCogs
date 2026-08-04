@@ -1,0 +1,17 @@
+{
+    "$schema": "https://raw.githubusercontent.com/Cog-Creators/Red-DiscordBot/V3/develop/schema/red_cog.schema.json",
+    "name": "opsroom",
+    "author": ["Taako"],
+    "version": "1.0.0",
+    "description": "Discord-native incident response with dedicated channels, severity and status tracking, incident commanders, timestamped timelines, stakeholder updates, action items, and Markdown postmortems.",
+    "install_msg": "OpsRoom loaded. Configure an incident category with `[p]opsroom category`, then create one with `[p]opsroom create`.",
+    "short": "Incident channels, commanders, timelines, updates, actions, and postmortems.",
+    "tags": ["incident", "response", "runbook", "operations", "status", "hosting", "dashboard"],
+    "requirements": [],
+    "min_bot_version": "3.5.0",
+    "min_python_version": [3, 9, 0],
+    "hidden": false,
+    "disabled": false,
+    "type": "COG",
+    "end_user_data_statement": "This cog stores incident channel and message IDs, incident commander and participant Discord user IDs, timeline notes, action items, status updates, severity, timestamps, and staff actor IDs. Postmortems are generated on demand."
+}

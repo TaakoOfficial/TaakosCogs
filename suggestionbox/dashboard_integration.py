@@ -69,8 +69,7 @@ class DashboardIntegration:
                     form_data,
                 )
             except commands.CommandError as error:
-                notifications.append(
-                    {"message": str(error), "category": "error"})
+                notifications.append({"message": str(error), "category": "error"})
             except Exception as error:
                 log.exception("SuggestionBox dashboard action failed.")
                 notifications.append(
@@ -100,11 +99,7 @@ class DashboardIntegration:
         member = guild.get_member(user.id)
         is_owner = user.id in getattr(self.bot, "owner_ids", set())
         is_admin = member is not None and await self.bot.is_admin(member)
-        can_manage = (
-            is_owner
-            or is_admin
-            or (member is not None and member.guild_permissions.manage_guild)
-        )
+        can_manage = is_owner or is_admin or (member is not None and member.guild_permissions.manage_guild)
         return member, can_manage
 
     def _dashboard_form_data(self, kwargs: dict[str, typing.Any]) -> typing.Any:
@@ -117,11 +112,7 @@ class DashboardIntegration:
         form_data = self._dashboard_form_data(kwargs)
         selected = self._dash_value(form_data, "active_tab").lower()
         valid = set(action_tabs.values()) | {default}
-        return (
-            selected
-            if selected in valid
-            else action_tabs.get(self._dash_value(form_data, "action").lower(), default)
-        )
+        return selected if selected in valid else action_tabs.get(self._dash_value(form_data, "action").lower(), default)
 
     def _dashboard_tab_button(self, name: str, label: str, active: str) -> str:
         selected = name == active
@@ -256,17 +247,13 @@ class DashboardIntegration:
         try:
             return int(value)
         except (TypeError, ValueError) as exc:
-            raise commands.BadArgument(
-                f"`{key}` must be a Discord ID.") from exc
+            raise commands.BadArgument(f"`{key}` must be a Discord ID.") from exc
 
     def _dash_csrf(self, kwargs: dict[str, typing.Any]) -> str:
         csrf_token = kwargs.get("csrf_token")
         if not isinstance(csrf_token, (tuple, list)) or len(csrf_token) != 2:
             return ""
-        return (
-            '<input type="hidden" name="csrf_token" value="'
-            f'{html.escape(str(csrf_token[1]), quote=True)}">'
-        )
+        return f'<input type="hidden" name="csrf_token" value="{html.escape(str(csrf_token[1]), quote=True)}">'
 
     async def _dashboard_handle_action(
         self,
@@ -364,8 +351,7 @@ class DashboardIntegration:
             )
 
         elif action:
-            raise commands.BadArgument(
-                "Unknown SuggestionBox dashboard action.")
+            raise commands.BadArgument("Unknown SuggestionBox dashboard action.")
 
         return messages
 
@@ -378,29 +364,21 @@ class DashboardIntegration:
             form_data,
             "suggestion_channel_id",
         )
-        suggestion_channel = (
-            guild.get_channel(
-                suggestion_channel_id) if suggestion_channel_id else None
-        )
+        suggestion_channel = guild.get_channel(suggestion_channel_id) if suggestion_channel_id else None
         if suggestion_channel_id and not isinstance(
             suggestion_channel,
             discord.TextChannel,
         ):
-            raise commands.BadArgument(
-                "Suggestion channel must be a text channel.")
+            raise commands.BadArgument("Suggestion channel must be a text channel.")
         if self._dash_bool(form_data, "enabled") and suggestion_channel is None:
             raise commands.BadArgument(
                 "Choose a suggestion channel before enabling SuggestionBox.",
             )
 
-        review_channel_id = self._dash_optional_id(
-            form_data, "review_channel_id")
-        review_channel = (
-            guild.get_channel(review_channel_id) if review_channel_id else None
-        )
+        review_channel_id = self._dash_optional_id(form_data, "review_channel_id")
+        review_channel = guild.get_channel(review_channel_id) if review_channel_id else None
         if review_channel_id and not isinstance(review_channel, discord.TextChannel):
-            raise commands.BadArgument(
-                "Review channel must be a text channel.")
+            raise commands.BadArgument("Review channel must be a text channel.")
 
         archive_minutes = self._dash_int(
             form_data,
@@ -449,8 +427,7 @@ class DashboardIntegration:
         if not text:
             raise commands.BadArgument("Suggestion text cannot be empty.")
         author_id = self._dash_optional_id(form_data, "suggestion_author_id")
-        author = guild.get_member(
-            author_id) if author_id else guild.get_member(user.id)
+        author = guild.get_member(author_id) if author_id else guild.get_member(user.id)
         if author is None:
             author = user
         return await self._submit_suggestion(guild, author, text)
@@ -462,17 +439,12 @@ class DashboardIntegration:
         member: discord.Member | None,
         form_data: typing.Any,
     ) -> tuple[int, str]:
-        suggestion_id = self._dash_int(
-            form_data, "status_suggestion_id", minimum=1)
+        suggestion_id = self._dash_int(form_data, "status_suggestion_id", minimum=1)
         status = self._normalise_status(
             self._dash_value(form_data, "suggestion_status", "open"),
         )
         reason_text = self._dash_value(form_data, "status_reason").strip()
-        reason = (
-            self._clean_text(reason_text, self.MAX_REASON_LENGTH)
-            if reason_text
-            else None
-        )
+        reason = self._clean_text(reason_text, self.MAX_REASON_LENGTH) if reason_text else None
         actor = member or user
 
         async with self._guild_lock(guild.id), self.config.guild(guild).suggestions() as suggestions:
@@ -498,9 +470,7 @@ class DashboardIntegration:
             actor,
             reason,
         )
-        notice = (
-            f"Suggestion #{suggestion_id} was marked as {self._status_label(status)}."
-        )
+        notice = f"Suggestion #{suggestion_id} was marked as {self._status_label(status)}."
         if reason:
             notice += f"\nReason: {reason}"
         await self._send_thread_notice(guild, record, notice)
@@ -512,8 +482,7 @@ class DashboardIntegration:
         user: discord.User,
         form_data: typing.Any,
     ) -> int:
-        suggestion_id = self._dash_int(
-            form_data, "comment_suggestion_id", minimum=1)
+        suggestion_id = self._dash_int(form_data, "comment_suggestion_id", minimum=1)
         comment = self._clean_text(
             self._dash_value(form_data, "staff_comment"),
             self.MAX_COMMENT_LENGTH,
@@ -551,8 +520,7 @@ class DashboardIntegration:
         guild: discord.Guild,
         form_data: typing.Any,
     ) -> tuple[int, discord.Thread]:
-        suggestion_id = self._dash_int(
-            form_data, "thread_suggestion_id", minimum=1)
+        suggestion_id = self._dash_int(form_data, "thread_suggestion_id", minimum=1)
         async with self._guild_lock(guild.id):
             settings = await self.config.guild(guild).all()
             suggestions = settings.get("suggestions") or {}
@@ -569,8 +537,7 @@ class DashboardIntegration:
 
             message = await self._fetch_suggestion_message(guild, record)
             if message is None:
-                raise commands.BadArgument(
-                    "I could not find the suggestion message.")
+                raise commands.BadArgument("I could not find the suggestion message.")
 
             thread = await self._create_suggestion_thread(
                 guild,
@@ -598,14 +565,9 @@ class DashboardIntegration:
         user: discord.User,
         form_data: typing.Any,
     ) -> int:
-        suggestion_id = self._dash_int(
-            form_data, "delete_suggestion_id", minimum=1)
+        suggestion_id = self._dash_int(form_data, "delete_suggestion_id", minimum=1)
         reason_text = self._dash_value(form_data, "delete_reason").strip()
-        reason = (
-            self._clean_text(reason_text, self.MAX_REASON_LENGTH)
-            if reason_text
-            else None
-        )
+        reason = self._clean_text(reason_text, self.MAX_REASON_LENGTH) if reason_text else None
         async with self._guild_lock(guild.id), self.config.guild(guild).suggestions() as suggestions:
             key = self._suggestion_key(suggestion_id)
             record = suggestions.pop(key, None)
@@ -635,10 +597,7 @@ class DashboardIntegration:
         guild: discord.Guild,
         form_data: typing.Any,
     ) -> None:
-        if (
-            self._dash_value(form_data, "reset_confirmation").strip().lower()
-            != "confirm"
-        ):
+        if self._dash_value(form_data, "reset_confirmation").strip().lower() != "confirm":
             raise commands.BadArgument(
                 "Type `confirm` before resetting suggestion records.",
             )
@@ -721,12 +680,11 @@ class DashboardIntegration:
                     <div><div class="sb-muted">Total Suggestions</div><div
                     class="sb-stat">{len(suggestions)}</div></div>
                     <div><div class="sb-muted">Open</div><div class="sb-stat">{counts.get("open", 0)}</div></div>
-                    <div><div class="sb-muted">Approved</div><div class="sb-stat">{counts.get("approved",
-                    0)}</div></div>
-                    <div><div class="sb-muted">Implemented</div><div class="sb-stat">{counts.get("implemented",
-                    0)}</div></div>
-                    <div><div class="sb-muted">Top Score</div><div class="sb-stat">{self._score(top_record) if
-                    top_record else 0}</div></div>
+                    <div><div class="sb-muted">Approved</div><div class="sb-stat">{counts.get("approved", 0)}</div></div>
+                    <div><div class="sb-muted">Implemented</div><div class="sb-stat">{counts.get("implemented", 0)}</div></div>
+                    <div><div class="sb-muted">Top Score</div><div class="sb-stat">{
+            self._score(top_record) if top_record else 0
+        }</div></div>
                 </div>
             </div>
             <div class="dash-tabs" role="tablist" aria-label="SuggestionBox sections">
@@ -773,13 +731,16 @@ class DashboardIntegration:
                         {self._checked(settings.get("create_threads"))}> Create Discussion Threads</label>
                     </div>
                     <div class="sb-row">
-                        {self._channel_select(guild, "suggestion_channel_id", "Suggestion Channel",
-                        settings.get("suggestion_channel_id"), include_none=False)}
-                        {self._channel_select(guild, "review_channel_id", "Review Log Channel",
-                        settings.get("review_channel_id"))}
+                        {
+            self._channel_select(
+                guild, "suggestion_channel_id", "Suggestion Channel", settings.get("suggestion_channel_id"), include_none=False
+            )
+        }
+                        {
+            self._channel_select(guild, "review_channel_id", "Review Log Channel", settings.get("review_channel_id"))
+        }
                         {self._input("embed_color", "Open Embed Color", self._color_hex(settings.get("embed_color")))}
-                        {self._input("next_id", "Next Suggestion ID", settings.get("next_id") or 1, "number",
-                        min_value=1)}
+                        {self._input("next_id", "Next Suggestion ID", settings.get("next_id") or 1, "number", min_value=1)}
                         <div class="sb-field"><label>Thread Auto-Archive</label><select
                         name="thread_auto_archive_duration">
                             {self._option(60, "1 hour", settings.get("thread_auto_archive_duration"))}
@@ -819,9 +780,7 @@ class DashboardIntegration:
                 f"<td>{self._h(self._short_text(record.get('text'), 140))}</td>"
                 "</tr>",
             )
-        table = "".join(rows) or (
-            '<tr><td colspan="7" class="sb-muted">No suggestions have been stored.</td></tr>'
-        )
+        table = "".join(rows) or ('<tr><td colspan="7" class="sb-muted">No suggestions have been stored.</td></tr>')
         return f"""
         <div id="suggestions" class="sb-card">
             <h3>Recent Suggestions</h3>
@@ -838,10 +797,7 @@ class DashboardIntegration:
         csrf: str,
     ) -> str:
         options = self._suggestion_options(suggestions)
-        status_options = "".join(
-            self._option(status, label, "approved")
-            for status, label in self.STATUS_LABELS.items()
-        )
+        status_options = "".join(self._option(status, label, "approved") for status, label in self.STATUS_LABELS.items())
         return f"""
         <div id="actions" class="sb-card">
             <h3>Actions</h3>

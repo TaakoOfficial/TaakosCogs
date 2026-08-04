@@ -7,9 +7,7 @@ from redbot.core import commands
 
 from .dashboard_integration import DashboardIntegration
 
-__red_end_user_data_statement__ = (
-    "This cog does not persistently store any end user data."
-)
+__red_end_user_data_statement__ = "This cog does not persistently store any end user data."
 
 
 class Flipper(DashboardIntegration, commands.Cog):

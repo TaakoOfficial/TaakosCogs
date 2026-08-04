@@ -69,8 +69,7 @@ class DashboardIntegration:
                     form_data,
                 )
             except commands.CommandError as error:
-                notifications.append(
-                    {"message": str(error), "category": "error"})
+                notifications.append({"message": str(error), "category": "error"})
             except Exception as error:
                 log.exception("Welcome dashboard action failed.")
                 notifications.append(
@@ -100,11 +99,7 @@ class DashboardIntegration:
         member = guild.get_member(user.id)
         is_owner = user.id in getattr(self.bot, "owner_ids", set())
         is_admin = member is not None and await self.bot.is_admin(member)
-        can_manage = (
-            is_owner
-            or is_admin
-            or (member is not None and member.guild_permissions.manage_guild)
-        )
+        can_manage = is_owner or is_admin or (member is not None and member.guild_permissions.manage_guild)
         return member, can_manage
 
     def _dashboard_form_data(self, kwargs: dict[str, typing.Any]) -> typing.Any:
@@ -236,17 +231,13 @@ class DashboardIntegration:
         try:
             return int(value)
         except (TypeError, ValueError) as exc:
-            raise commands.BadArgument(
-                f"`{key}` must be a Discord ID.") from exc
+            raise commands.BadArgument(f"`{key}` must be a Discord ID.") from exc
 
     def _dash_csrf(self, kwargs: dict[str, typing.Any]) -> str:
         csrf_token = kwargs.get("csrf_token")
         if not isinstance(csrf_token, (tuple, list)) or len(csrf_token) != 2:
             return ""
-        return (
-            '<input type="hidden" name="csrf_token" value="'
-            f'{html.escape(str(csrf_token[1]), quote=True)}">'
-        )
+        return f'<input type="hidden" name="csrf_token" value="{html.escape(str(csrf_token[1]), quote=True)}">'
 
     async def _dashboard_handle_action(
         self,
@@ -320,8 +311,7 @@ class DashboardIntegration:
         channel_id = self._dash_optional_id(form_data, "channel_id")
         channel = guild.get_channel(channel_id) if channel_id else None
         if channel_id and not isinstance(channel, discord.TextChannel):
-            raise commands.BadArgument(
-                "Welcome channel must be a text channel.")
+            raise commands.BadArgument("Welcome channel must be a text channel.")
         enabled = self._dash_bool(form_data, "enabled")
         if enabled and channel is None:
             raise commands.BadArgument(
@@ -331,11 +321,9 @@ class DashboardIntegration:
         message_template = self._dash_value(form_data, "message_template")
         self._validate_placeholders(message_template)
 
-        image_mode = self._dash_value(
-            form_data, "image_mode", "embed").strip().lower()
+        image_mode = self._dash_value(form_data, "image_mode", "embed").strip().lower()
         if image_mode not in {"embed", "attachment"}:
-            raise commands.BadArgument(
-                "Image mode must be `embed` or `attachment`.")
+            raise commands.BadArgument("Image mode must be `embed` or `attachment`.")
 
         current_overlay = self._normalize_avatar_overlay(
             await self.config.guild(guild).avatar_overlay(),
@@ -379,8 +367,7 @@ class DashboardIntegration:
         if embed_json_text:
             embed_data = self._dashboard_parse_embed_json(embed_json_text)
             self._validate_placeholders(embed_data)
-            preview_member = self._dashboard_preview_member(
-                guild, preview_user)
+            preview_member = self._dashboard_preview_member(guild, preview_user)
             try:
                 self._build_embed(embed_data, preview_member, None, image_mode)
             except Exception as exc:
@@ -423,15 +410,10 @@ class DashboardIntegration:
         ) or settings.get("channel_id")
         channel = guild.get_channel(channel_id) if channel_id else None
         if not isinstance(channel, discord.TextChannel):
-            raise commands.BadArgument(
-                "Choose a text channel for the welcome preview.")
+            raise commands.BadArgument("Choose a text channel for the welcome preview.")
 
         member_id = self._dash_optional_id(form_data, "test_member_id")
-        member = (
-            guild.get_member(member_id)
-            if member_id
-            else self._dashboard_preview_member(guild, preview_user)
-        )
+        member = guild.get_member(member_id) if member_id else self._dashboard_preview_member(guild, preview_user)
         if not isinstance(member, discord.Member):
             raise commands.BadArgument(
                 "Choose a server member for the welcome preview.",
@@ -448,15 +430,9 @@ class DashboardIntegration:
         settings = await self._get_guild_settings(guild)
         csrf = self._dash_csrf(kwargs)
         image_data = settings.get("image") or self._empty_image_data()
-        avatar_overlay = (
-            settings.get("avatar_overlay") or self._default_avatar_overlay()
-        )
+        avatar_overlay = settings.get("avatar_overlay") or self._default_avatar_overlay()
         channel = guild.get_channel(settings.get("channel_id"))
-        embed_json_text = (
-            json.dumps(settings.get("embed_json"), indent=2)
-            if settings.get("embed_json")
-            else ""
-        )
+        embed_json_text = json.dumps(settings.get("embed_json"), indent=2) if settings.get("embed_json") else ""
         active_tab = self._dashboard_active_tab(
             kwargs,
             {
@@ -510,14 +486,18 @@ class DashboardIntegration:
             <div class="wel-card">
                 <h2>Welcome Dashboard</h2>
                 <div class="wel-grid">
-                    <div><div class="wel-muted">Enabled</div><div class="wel-stat">{"Yes" if settings.get("enabled")
-                    else "No"}</div></div>
-                    <div><div class="wel-muted">Channel</div><div class="wel-stat">{self._h("#" + channel.name if
-                    channel else "Not Set")}</div></div>
-                    <div><div class="wel-muted">Embed JSON</div><div class="wel-stat">{"Yes" if
-                    settings.get("embed_json") else "No"}</div></div>
-                    <div><div class="wel-muted">Cached Image</div><div class="wel-stat">{"Yes" if
-                    image_data.get("data_base64") else "No"}</div></div>
+                    <div><div class="wel-muted">Enabled</div><div class="wel-stat">{
+            "Yes" if settings.get("enabled") else "No"
+        }</div></div>
+                    <div><div class="wel-muted">Channel</div><div class="wel-stat">{
+            self._h("#" + channel.name if channel else "Not Set")
+        }</div></div>
+                    <div><div class="wel-muted">Embed JSON</div><div class="wel-stat">{
+            "Yes" if settings.get("embed_json") else "No"
+        }</div></div>
+                    <div><div class="wel-muted">Cached Image</div><div class="wel-stat">{
+            "Yes" if image_data.get("data_base64") else "No"
+        }</div></div>
                 </div>
             </div>
             <div class="dash-tabs" role="tablist" aria-label="Welcome sections">
@@ -527,8 +507,9 @@ class DashboardIntegration:
                 {self._dashboard_tab_button("reference", "Placeholders", active_tab)}
             </div>
             <section class="dash-panel{" active" if active_tab == "settings" else ""}"
-            data-tab-panel="settings">{self._dashboard_settings_section(guild, settings, avatar_overlay,
-            embed_json_text, csrf)}</section>
+            data-tab-panel="settings">{
+            self._dashboard_settings_section(guild, settings, avatar_overlay, embed_json_text, csrf)
+        }</section>
             <section class="dash-panel{" active" if active_tab == "image" else ""}"
             data-tab-panel="image">{self._dashboard_image_section(image_data, csrf)}</section>
             <section class="dash-panel{" active" if active_tab == "preview" else ""}"
@@ -564,19 +545,46 @@ class DashboardIntegration:
                     </div>
                     <div class="wel-row">
                         {self._channel_select(guild, "channel_id", "Welcome Channel", settings.get("channel_id"))}
-                        <div class="wel-field"><label>Image Mode</label><select name="image_mode">{self._option("embed",
-                         "Embed Image", settings.get("image_mode"))}{self._option("attachment", "Attachment",
-                        settings.get("image_mode"))}</select></div>
+                        <div class="wel-field"><label>Image Mode</label><select name="image_mode">{
+            self._option("embed", "Embed Image", settings.get("image_mode"))
+        }{self._option("attachment", "Attachment", settings.get("image_mode"))}</select></div>
                     </div>
                 </div>
                 {self._textarea("message_template", "Message Template", settings.get("message_template") or "", rows=4)}
                 <div class="wel-row">
-                    {self._input("avatar_overlay_x_percent", "Avatar Center X Percent", avatar_overlay.get("x_percent",
-                    82.0), "number", min_value=0, max_value=100, step="0.1")}
-                    {self._input("avatar_overlay_y_percent", "Avatar Center Y Percent", avatar_overlay.get("y_percent",
-                    52.0), "number", min_value=0, max_value=100, step="0.1")}
-                    {self._input("avatar_overlay_size_percent", "Avatar Diameter Percent",
-                    avatar_overlay.get("size_percent", 17.0), "number", min_value=1, max_value=100, step="0.1")}
+                    {
+            self._input(
+                "avatar_overlay_x_percent",
+                "Avatar Center X Percent",
+                avatar_overlay.get("x_percent", 82.0),
+                "number",
+                min_value=0,
+                max_value=100,
+                step="0.1",
+            )
+        }
+                    {
+            self._input(
+                "avatar_overlay_y_percent",
+                "Avatar Center Y Percent",
+                avatar_overlay.get("y_percent", 52.0),
+                "number",
+                min_value=0,
+                max_value=100,
+                step="0.1",
+            )
+        }
+                    {
+            self._input(
+                "avatar_overlay_size_percent",
+                "Avatar Diameter Percent",
+                avatar_overlay.get("size_percent", 17.0),
+                "number",
+                min_value=1,
+                max_value=100,
+                step="0.1",
+            )
+        }
                 </div>
                 <div id="embed" class="wel-field">
                     <label>Embed JSON</label>
@@ -684,8 +692,7 @@ class DashboardIntegration:
                 f"Invalid JSON near line {exc.lineno}, column {exc.colno}: {exc.msg}",
             ) from exc
         if not isinstance(parsed, dict):
-            raise commands.BadArgument(
-                "Embed JSON must be a single JSON object.")
+            raise commands.BadArgument("Embed JSON must be a single JSON object.")
         embed_object = self._extract_embed_object(parsed)
         cleaned = self._sanitize_embed_dict(embed_object)
         return self._normalise_embed_dict(cleaned)
@@ -734,8 +741,8 @@ class DashboardIntegration:
         value: typing.Any,
         input_type: str = "text",
         *,
-        min_value: int | float | None = None,
-        max_value: int | float | None = None,
+        min_value: float | None = None,
+        max_value: float | None = None,
         step: str | None = None,
     ) -> str:
         attrs = []

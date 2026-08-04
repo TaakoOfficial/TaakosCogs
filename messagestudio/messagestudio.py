@@ -428,8 +428,10 @@ class MessageStudio(DashboardIntegration, commands.Cog):
 
     @staticmethod
     def _payload_kind(payload) -> str:
-        if isinstance(payload, dict) and "components" in payload and not (
-            payload.get("legacy") is True or any(key in payload for key in ("content", "embed", "embeds"))
+        if (
+            isinstance(payload, dict)
+            and "components" in payload
+            and not (payload.get("legacy") is True or any(key in payload for key in ("content", "embed", "embeds")))
         ):
             return "Components V2"
         return "legacy message"
@@ -555,9 +557,7 @@ class MessageStudio(DashboardIntegration, commands.Cog):
                 seen_custom_ids.add(custom_id)
             raw_actions = component.get("actions")
             if raw_actions is not None:
-                if component_type not in {2, 3, 5, 6, 7, 8} or (
-                    component_type == 2 and button_style not in {1, 2, 3, 4}
-                ):
+                if component_type not in {2, 3, 5, 6, 7, 8} or (component_type == 2 and button_style not in {1, 2, 3, 4}):
                     raise ComponentsV2Error("Actions can only be attached to custom buttons and select menus.")
                 if not isinstance(custom_id, str) or not 1 <= len(custom_id) <= 100:
                     raise ComponentsV2Error("A component with actions requires a 1 to 100 character `custom_id`.")

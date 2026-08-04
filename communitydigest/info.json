@@ -1,0 +1,17 @@
+{
+    "$schema": "https://raw.githubusercontent.com/Cog-Creators/Red-DiscordBot/V3/develop/schema/red_cog.schema.json",
+    "name": "communitydigest",
+    "author": ["Taako"],
+    "version": "1.0.0",
+    "description": "Privacy-conscious scheduled community recaps with channel and forum activity, top discussions, popular links, contributor counts, previews, and automatic posting without requiring an AI provider.",
+    "install_msg": "CommunityDigest loaded. Add sources with `[p]communitydigest source add`, set a destination, then preview or run it.",
+    "short": "Scheduled channel and forum recaps with highlights, links, and activity summaries.",
+    "tags": ["digest", "recap", "community", "analytics", "forum", "schedule", "dashboard"],
+    "requirements": [],
+    "min_bot_version": "3.5.0",
+    "min_python_version": [3, 9, 0],
+    "hidden": false,
+    "disabled": false,
+    "type": "COG",
+    "end_user_data_statement": "This cog stores guild configuration, source and destination channel IDs, scheduling timestamps, and aggregate digest run metadata. It reads recent messages when generating a digest but does not persistently store message content or author IDs."
+}

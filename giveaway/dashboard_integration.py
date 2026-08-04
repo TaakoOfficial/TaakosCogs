@@ -69,8 +69,7 @@ class DashboardIntegration:
                     form_data,
                 )
             except commands.CommandError as error:
-                notifications.append(
-                    {"message": str(error), "category": "error"})
+                notifications.append({"message": str(error), "category": "error"})
             except Exception as error:
                 log.exception("Giveaway dashboard action failed.")
                 notifications.append(
@@ -100,11 +99,7 @@ class DashboardIntegration:
         member = guild.get_member(user.id)
         is_owner = user.id in getattr(self.bot, "owner_ids", set())
         is_admin = member is not None and await self.bot.is_admin(member)
-        can_manage = (
-            is_owner
-            or is_admin
-            or (member is not None and member.guild_permissions.manage_guild)
-        )
+        can_manage = is_owner or is_admin or (member is not None and member.guild_permissions.manage_guild)
         return member, can_manage
 
     def _dashboard_form_data(self, kwargs: dict[str, typing.Any]) -> typing.Any:
@@ -241,17 +236,13 @@ class DashboardIntegration:
         try:
             return int(value)
         except (TypeError, ValueError) as exc:
-            raise commands.BadArgument(
-                f"`{key}` must be a Discord ID.") from exc
+            raise commands.BadArgument(f"`{key}` must be a Discord ID.") from exc
 
     def _dash_csrf(self, kwargs: dict[str, typing.Any]) -> str:
         csrf_token = kwargs.get("csrf_token")
         if not isinstance(csrf_token, (tuple, list)) or len(csrf_token) != 2:
             return ""
-        return (
-            '<input type="hidden" name="csrf_token" value="'
-            f'{html.escape(str(csrf_token[1]), quote=True)}">'
-        )
+        return f'<input type="hidden" name="csrf_token" value="{html.escape(str(csrf_token[1]), quote=True)}">'
 
     async def _dashboard_handle_action(
         self,
@@ -301,20 +292,14 @@ class DashboardIntegration:
             )
             messages.append(
                 {
-                    "message": (
-                        f"Giveaway attached. It ends in {duration_text}. "
-                        f"Entry: {entry_url} Status: {status_url}"
-                    ),
+                    "message": (f"Giveaway attached. It ends in {duration_text}. Entry: {entry_url} Status: {status_url}"),
                     "category": "success",
                 },
             )
 
         elif action == "end_giveaway":
             record, winners = await self._dashboard_end_giveaway(guild, form_data)
-            winner_text = (
-                ", ".join(str(winner)
-                          for winner in winners) or "No valid entries"
-            )
+            winner_text = ", ".join(str(winner) for winner in winners) or "No valid entries"
             messages.append(
                 {
                     "message": f"Giveaway `{record['message_id']}` ended. Winner(s): {winner_text}",
@@ -377,10 +362,7 @@ class DashboardIntegration:
             maximum=self.MAX_WINNERS,
         )
         prize = self._dash_value(form_data, "start_prize").strip()
-        host_id = (
-            self._dash_optional_id(
-                form_data, "start_host_id") or (member or user).id
-        )
+        host_id = self._dash_optional_id(form_data, "start_host_id") or (member or user).id
         return await self._create_giveaway(
             guild,
             channel,
@@ -397,15 +379,10 @@ class DashboardIntegration:
         member: discord.Member | None,
         form_data: typing.Any,
     ) -> tuple[dict[str, typing.Any], discord.Message, discord.Message, str]:
-        current_channel_id = self._dash_optional_id(
-            form_data, "attach_channel_id")
-        current_channel = (
-            guild.get_channel(
-                current_channel_id) if current_channel_id else None
-        )
+        current_channel_id = self._dash_optional_id(form_data, "attach_channel_id")
+        current_channel = guild.get_channel(current_channel_id) if current_channel_id else None
         if current_channel_id and not isinstance(current_channel, discord.TextChannel):
-            raise commands.BadArgument(
-                "Attach channel must be a text channel.")
+            raise commands.BadArgument("Attach channel must be a text channel.")
         reference = self._dash_value(form_data, "attach_reference").strip()
         duration = self._dash_value(form_data, "attach_duration").strip()
         winner_count = self._dash_int(
@@ -416,15 +393,10 @@ class DashboardIntegration:
             maximum=self.MAX_WINNERS,
         )
         prize = self._dash_value(form_data, "attach_prize").strip() or None
-        host_id = (
-            self._dash_optional_id(
-                form_data, "attach_host_id") or (member or user).id
-        )
+        host_id = self._dash_optional_id(form_data, "attach_host_id") or (member or user).id
         return await self._attach_giveaway(
             guild,
-            current_channel
-            if isinstance(current_channel, discord.TextChannel)
-            else None,
+            current_channel if isinstance(current_channel, discord.TextChannel) else None,
             host_id,
             reference,
             duration,
@@ -489,13 +461,9 @@ class DashboardIntegration:
             key=lambda record: float(record.get("ends_at") or 0),
             reverse=True,
         )
-        active_count = sum(
-            1 for record in records if record.get("status") == "active")
-        ended_count = sum(
-            1 for record in records if record.get("status") == "ended")
-        cancelled_count = sum(
-            1 for record in records if record.get("status") == "cancelled"
-        )
+        active_count = sum(1 for record in records if record.get("status") == "active")
+        ended_count = sum(1 for record in records if record.get("status") == "ended")
+        cancelled_count = sum(1 for record in records if record.get("status") == "cancelled")
         active_tab = self._dashboard_active_tab(
             kwargs,
             {
@@ -561,11 +529,13 @@ class DashboardIntegration:
             <section class="dash-panel{" active" if active_tab == "overview" else ""}"
             data-tab-panel="overview">{self._dashboard_records_section(guild, records)}</section>
             <section class="dash-panel{" active" if active_tab == "create" else ""}"
-            data-tab-panel="create">{self._dashboard_start_section(guild, csrf)}{self._dashboard_attach_section(guild,
-            csrf)}</section>
+            data-tab-panel="create">{self._dashboard_start_section(guild, csrf)}{
+            self._dashboard_attach_section(guild, csrf)
+        }</section>
             <section class="dash-panel{" active" if active_tab == "manage" else ""}"
-            data-tab-panel="manage">{self._dashboard_manage_section(giveaways,
-            csrf)}{self._dashboard_reroll_section(giveaways, csrf)}</section>
+            data-tab-panel="manage">{self._dashboard_manage_section(giveaways, csrf)}{
+            self._dashboard_reroll_section(giveaways, csrf)
+        }</section>
             {self._dashboard_tabs_script()}
         </div>
         """
@@ -577,8 +547,7 @@ class DashboardIntegration:
     ) -> str:
         rows = []
         for record in records[:100]:
-            channel = self._get_text_channel(
-                guild, int(record.get("channel_id") or 0))
+            channel = self._get_text_channel(guild, int(record.get("channel_id") or 0))
             jump_url = self._build_jump_url(
                 guild.id,
                 int(record.get("channel_id") or 0),
@@ -597,9 +566,7 @@ class DashboardIntegration:
                 f'<td><a href="{self._h(jump_url)}">Jump</a></td>'
                 "</tr>",
             )
-        table = "".join(rows) or (
-            '<tr><td colspan="9" class="gw-muted">No giveaways are tracked.</td></tr>'
-        )
+        table = "".join(rows) or ('<tr><td colspan="9" class="gw-muted">No giveaways are tracked.</td></tr>')
         return f"""
         <div id="giveaways" class="gw-card">
             <h3>Tracked Giveaways</h3>
@@ -621,8 +588,7 @@ class DashboardIntegration:
                 <div class="gw-row">
                     {self._channel_select(guild, "start_channel_id", "Channel", None)}
                     {self._input("start_duration", "Duration", "1h")}
-                    {self._input("start_winner_count", "Winner Count", 1, "number", min_value=1,
-                    max_value=self.MAX_WINNERS)}
+                    {self._input("start_winner_count", "Winner Count", 1, "number", min_value=1, max_value=self.MAX_WINNERS)}
                     {self._input("start_host_id", "Host User ID", "")}
                 </div>
                 {self._textarea("start_prize", "Prize", "", rows=3)}
@@ -642,8 +608,7 @@ class DashboardIntegration:
                     {self._channel_select(guild, "attach_channel_id", "Message Channel", None)}
                     {self._input("attach_reference", "Message ID or Link", "")}
                     {self._input("attach_duration", "Duration", "1h")}
-                    {self._input("attach_winner_count", "Winner Count", 1, "number", min_value=1,
-                    max_value=self.MAX_WINNERS)}
+                    {self._input("attach_winner_count", "Winner Count", 1, "number", min_value=1, max_value=self.MAX_WINNERS)}
                     {self._input("attach_host_id", "Host User ID", "")}
                 </div>
                 {self._textarea("attach_prize", "Prize Override", "", rows=3)}
@@ -703,8 +668,7 @@ class DashboardIntegration:
                 <div class="gw-row">
                     <div class="gw-field"><label>Ended Giveaway</label><select
                     name="reroll_reference">{options}</select></div>
-                    {self._input("reroll_winner_count", "Winner Count", "", "number", min_value=1,
-                    max_value=self.MAX_WINNERS)}
+                    {self._input("reroll_winner_count", "Winner Count", "", "number", min_value=1, max_value=self.MAX_WINNERS)}
                 </div>
                 <button class="gw-btn secondary" type="submit">Reroll Winners</button>
             </form>
@@ -724,8 +688,7 @@ class DashboardIntegration:
             records.append((key, record))
         if not records:
             return '<option value="">No matching giveaways</option>'
-        records.sort(key=lambda item: float(
-            item[1].get("ends_at") or 0), reverse=True)
+        records.sort(key=lambda item: float(item[1].get("ends_at") or 0), reverse=True)
         options = []
         for key, record in records[:100]:
             label = (
@@ -733,8 +696,7 @@ class DashboardIntegration:
                 f"{record.get('status') or 'active'} - "
                 f"{self._shorten(str(record.get('prize') or ''), 70)}"
             )
-            options.append(
-                f'<option value="{self._h(key)}">{self._h(label)}</option>')
+            options.append(f'<option value="{self._h(key)}">{self._h(label)}</option>')
         return "".join(options)
 
     def _dashboard_required_text_channel(

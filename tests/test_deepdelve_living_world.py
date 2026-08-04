@@ -163,9 +163,7 @@ def test_journal_has_every_category_prerequisites_and_timed_failure() -> None:
     assert not accept_quest(data, second_faction)[0]
     bounty_key = next(key for key, quest in QUESTS.items() if quest["category"] == "bounty")
     assert accept_quest(data, bounty_key)[0]
-    data["quests_v2"]["active"][bounty_key]["expires_at"] = (
-        datetime.now(timezone.utc) - timedelta(seconds=1)
-    ).isoformat()
+    data["quests_v2"]["active"][bounty_key]["expires_at"] = (datetime.now(timezone.utc) - timedelta(seconds=1)).isoformat()
     assert expire_quests(data)
     assert bounty_key in data["quests_v2"]["failed"]
     assert bounty_key not in data["quests_v2"]["active"]

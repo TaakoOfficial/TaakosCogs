@@ -195,31 +195,25 @@ class Fable(DashboardIntegration, commands.Cog):
         # Create field groups in embed
         embed.add_field(
             name="📝 Identity",
-            value="\n".join(f"`{fname}` - {fdesc}" for fname,
-                            fdesc in identity_fields),
+            value="\n".join(f"`{fname}` - {fdesc}" for fname, fdesc in identity_fields),
             inline=False,
         )
 
         embed.add_field(
             name="ℹ️ Basic Information",
-            value="\n".join(f"`{fname}` - {fdesc}" for fname,
-                            fdesc in basic_fields),
+            value="\n".join(f"`{fname}` - {fdesc}" for fname, fdesc in basic_fields),
             inline=False,
         )
 
         embed.add_field(
             name="🎭 Personality & Background",
-            value="\n".join(
-                f"`{fname}` - {fdesc}" for fname, fdesc in personality_fields
-            ),
+            value="\n".join(f"`{fname}` - {fdesc}" for fname, fdesc in personality_fields),
             inline=False,
         )
 
         embed.add_field(
             name="👥 Relationships",
-            value="\n".join(
-                f"`{fname}` - {fdesc}" for fname, fdesc in relationship_fields
-            ),
+            value="\n".join(f"`{fname}` - {fdesc}" for fname, fdesc in relationship_fields),
             inline=False,
         )
 
@@ -238,10 +232,8 @@ class Fable(DashboardIntegration, commands.Cog):
     async def create(
         self,
         ctx: commands.Context,
-        name: str = commands.parameter(
-            description="Short name for the character."),
-        description: str = commands.parameter(
-            description="A detailed description."),
+        name: str = commands.parameter(description="Short name for the character."),
+        description: str = commands.parameter(description="A detailed description."),
         image_url: str | None = commands.parameter(
             default=None,
             description="URL to character's image/avatar.",
@@ -286,10 +278,8 @@ class Fable(DashboardIntegration, commands.Cog):
             default=None,
             description="Job or role.",
         ),
-        height: str | None = commands.parameter(
-            default=None, description="Height."),
-        weight: str | None = commands.parameter(
-            default=None, description="Weight."),
+        height: str | None = commands.parameter(default=None, description="Height."),
+        weight: str | None = commands.parameter(default=None, description="Weight."),
         sexual_orientation: str | None = commands.parameter(
             default=None,
             description="Sexual orientation.",
@@ -367,32 +357,14 @@ class Fable(DashboardIntegration, commands.Cog):
                 return
 
         # Parse comma-separated fields
-        traits_list = (
-            [t.strip() for t in traits.split(",") if t.strip()] if traits else []
-        )
-        goals_list = [g.strip() for g in goals.split(",")
-                              if g.strip()] if goals else []
-        languages_list = (
-            [language.strip() for language in languages.split(",")
-             if language.strip()] if languages else []
-        )
-        inventory_list = (
-            [i.strip() for i in inventory.split(",")
-                     if i.strip()] if inventory else []
-        )
-        family_list = (
-            [f.strip() for f in family.split(",") if f.strip()] if family else []
-        )
-        allies_list = (
-            [a.strip() for a in allies.split(",") if a.strip()] if allies else []
-        )
-        rivals_list = (
-            [r.strip() for r in rivals.split(",") if r.strip()] if rivals else []
-        )
-        neutrals_list = (
-            [n.strip() for n in neutrals.split(",")
-                     if n.strip()] if neutrals else []
-        )
+        traits_list = [t.strip() for t in traits.split(",") if t.strip()] if traits else []
+        goals_list = [g.strip() for g in goals.split(",") if g.strip()] if goals else []
+        languages_list = [language.strip() for language in languages.split(",") if language.strip()] if languages else []
+        inventory_list = [i.strip() for i in inventory.split(",") if i.strip()] if inventory else []
+        family_list = [f.strip() for f in family.split(",") if f.strip()] if family else []
+        allies_list = [a.strip() for a in allies.split(",") if a.strip()] if allies else []
+        rivals_list = [r.strip() for r in rivals.split(",") if r.strip()] if rivals else []
+        neutrals_list = [n.strip() for n in neutrals.split(",") if n.strip()] if neutrals else []
 
         character_data = {
             "name": name,
@@ -434,8 +406,7 @@ class Fable(DashboardIntegration, commands.Cog):
             title=f"Character Created: {name}",
             color=0x43B581,
         )
-        embed.set_author(name=user.display_name,
-                         icon_url=user.display_avatar.url)
+        embed.set_author(name=user.display_name, icon_url=user.display_avatar.url)
         if image_url:
             embed.set_thumbnail(url=image_url)
 
@@ -454,8 +425,7 @@ class Fable(DashboardIntegration, commands.Cog):
         if true_age:
             identity.append(f"**True Age:** {true_age}")
         if identity:
-            embed.add_field(name="📝 Identity",
-                            value="\n".join(identity), inline=False)
+            embed.add_field(name="📝 Identity", value="\n".join(identity), inline=False)
 
         # Basic Info Section
         basics = []
@@ -488,8 +458,7 @@ class Fable(DashboardIntegration, commands.Cog):
                 inline=False,
             )
         if background:
-            embed.add_field(name="📜 Background",
-                            value=background[:1024], inline=False)
+            embed.add_field(name="📜 Background", value=background[:1024], inline=False)
         if quote:
             embed.add_field(name="💭 Quote", value=quote, inline=False)
 
@@ -613,8 +582,7 @@ class Fable(DashboardIntegration, commands.Cog):
             field_name = list_fields[field]
             if field_name not in character:
                 character[field_name] = []
-            new_items = [item.strip()
-                                    for item in new_value.split(",") if item.strip()]
+            new_items = [item.strip() for item in new_value.split(",") if item.strip()]
             character[field_name] = new_items
             updated = True
 
@@ -744,8 +712,7 @@ class Fable(DashboardIntegration, commands.Cog):
             color=0x7289DA,
         )
         if owner:
-            embed.set_author(name=owner.display_name,
-                             icon_url=owner.display_avatar.url)
+            embed.set_author(name=owner.display_name, icon_url=owner.display_avatar.url)
         if character.get("image_url"):
             embed.set_thumbnail(url=character["image_url"])
         if character.get("quote"):
@@ -762,13 +729,11 @@ class Fable(DashboardIntegration, commands.Cog):
         if character.get("date_of_birth"):
             identity.append(f"**Date of Birth:** {character['date_of_birth']}")
         if character.get("age_appearance"):
-            identity.append(
-                f"**Age Appearance:** {character['age_appearance']}")
+            identity.append(f"**Age Appearance:** {character['age_appearance']}")
         if character.get("true_age"):
             identity.append(f"**True Age:** {character['true_age']}")
         if identity:
-            embed.add_field(name="📝 Identity",
-                            value="\n".join(identity), inline=False)
+            embed.add_field(name="📝 Identity", value="\n".join(identity), inline=False)
 
         # Basic Info Section
         basics = []
@@ -781,8 +746,7 @@ class Fable(DashboardIntegration, commands.Cog):
         if character.get("weight"):
             basics.append(f"**Weight:** {character['weight']}")
         if character.get("sexual_orientation"):
-            basics.append(
-                f"**Sexual Orientation:** {character['sexual_orientation']}")
+            basics.append(f"**Sexual Orientation:** {character['sexual_orientation']}")
         if character.get("zodiac"):
             basics.append(f"**Zodiac:** {character['zodiac']}")
         if character.get("alignment"):
@@ -804,8 +768,7 @@ class Fable(DashboardIntegration, commands.Cog):
                     inline=False,
                 )
             else:
-                embed.add_field(name="📖 Description",
-                                value=description, inline=False)
+                embed.add_field(name="📖 Description", value=description, inline=False)
 
         if character.get("background"):
             background = character["background"]
@@ -816,8 +779,7 @@ class Fable(DashboardIntegration, commands.Cog):
                     inline=False,
                 )
             else:
-                embed.add_field(name="📜 Background",
-                                value=background, inline=False)
+                embed.add_field(name="📜 Background", value=background, inline=False)
 
         # Character Details
         if character.get("traits"):
@@ -835,9 +797,7 @@ class Fable(DashboardIntegration, commands.Cog):
         if character.get("languages"):
             embed.add_field(
                 name="🗣️ Languages",
-                value="\n".join(
-                    f"• {language}" for language in character["languages"]
-                ),
+                value="\n".join(f"• {language}" for language in character["languages"]),
                 inline=False,
             )
         if character.get("inventory"):
@@ -851,14 +811,12 @@ class Fable(DashboardIntegration, commands.Cog):
         relationships = []
         if character.get("family"):
             relationships.append(
-                "**Family:**\n" + \
-                    "\n".join(f"• {f}" for f in character["family"]),
+                "**Family:**\n" + "\n".join(f"• {f}" for f in character["family"]),
             )
         for rel_type, rel_list in character.get("relationships", {}).items():
             if rel_list and rel_type != "family":  # Family is handled separately
                 relationships.append(
-                    f"**{rel_type.capitalize()}s:**\n"
-                    + "\n".join(f"• {r}" for r in rel_list),
+                    f"**{rel_type.capitalize()}s:**\n" + "\n".join(f"• {r}" for r in rel_list),
                 )
         if relationships:
             embed.add_field(
@@ -943,8 +901,7 @@ class Fable(DashboardIntegration, commands.Cog):
         pages = [filtered[i : i + 10] for i in range(0, len(filtered), 10)]
         for idx, page in enumerate(pages, 1):
             embed = discord.Embed(
-                title=title + \
-                    (f" (Page {idx}/{len(pages)})" if len(pages) > 1 else ""),
+                title=title + (f" (Page {idx}/{len(pages)})" if len(pages) > 1 else ""),
                 color=0x7289DA,
             )
             for char in page:
@@ -1131,10 +1088,7 @@ class Fable(DashboardIntegration, commands.Cog):
             await ctx.send("❌ Both characters must exist to set a relationship.")
             return
 
-        if not (
-            str(user.id) == char1["owner_id"]
-            or ctx.author.guild_permissions.administrator
-        ):
+        if not (str(user.id) == char1["owner_id"] or ctx.author.guild_permissions.administrator):
             await ctx.send(
                 "❌ Only the owner of the first character or an admin can set relationships.",
             )
@@ -1150,9 +1104,7 @@ class Fable(DashboardIntegration, commands.Cog):
         relationship_data = {
             "type": relationship_type.lower(),
             "intensity": intensity,
-            "intensity_label": intensity_levels[intensity - 1]
-            if intensity_levels
-            else str(intensity),
+            "intensity_label": intensity_levels[intensity - 1] if intensity_levels else str(intensity),
             "description": description,
             "updated_at": discord.utils.utcnow().isoformat(),
             "updated_by": str(user.id),
@@ -1250,17 +1202,13 @@ class Fable(DashboardIntegration, commands.Cog):
             name="Current Relationship",
             value=f"**Type:** {current_rel['type'].title()}\n"
             f"**Intensity:** {current_rel['intensity']}/5 ({current_rel['intensity_label']})\n"
-            + (
-                f"**Description:** {current_rel['description']}"
-                if current_rel.get("description")
-                else ""
-            ),
+            + (f"**Description:** {current_rel['description']}" if current_rel.get("description") else ""),
             inline=False,
         )
 
         # Relationship history
         history = await self.config.guild(guild).relationship_history()
-        if rel_key in history and history[rel_key]:
+        if history.get(rel_key):
             history_text = ""
             # Show last 3 changes
             for past_rel in reversed(history[rel_key][-3:]):
@@ -1375,13 +1323,10 @@ class Fable(DashboardIntegration, commands.Cog):
             description=description,
             color=0x43B581,
         )
-        embed.add_field(name="Characters",
-                        value=", ".join(involved), inline=False)
-        embed.add_field(
-            name="IC Date", value=event_data["ic_date"], inline=True)
+        embed.add_field(name="Characters", value=", ".join(involved), inline=False)
+        embed.add_field(name="IC Date", value=event_data["ic_date"], inline=True)
         embed.add_field(name="Event ID", value=str(event_id), inline=True)
-        embed.set_footer(
-            text=f"Logged by {ctx.author.display_name} • Fable RP Tracker")
+        embed.set_footer(text=f"Logged by {ctx.author.display_name} • Fable RP Tracker")
         await ctx.send(embed=embed)
 
     @event.command(
@@ -1453,8 +1398,7 @@ class Fable(DashboardIntegration, commands.Cog):
             description=f"Event {event_id} description updated.",
             color=0x43B581,
         )
-        embed.add_field(name="New Description",
-                        value=new_description, inline=False)
+        embed.add_field(name="New Description", value=new_description, inline=False)
         embed.set_footer(
             text="Fable RP Tracker • Event Edit",
             icon_url="https://cdn.jsdelivr.net/gh/jdecked/twemoji@v17.0.3/assets/72x72/1f4d6.png",
@@ -1558,12 +1502,9 @@ class Fable(DashboardIntegration, commands.Cog):
             if character not in characters:
                 await ctx.send(f"❌ Character '{character}' not found.")
                 return
-            rel_data = {character: characters[character].get(
-                "relationships", {})}
+            rel_data = {character: characters[character].get("relationships", {})}
         else:
-            rel_data = {
-                name: char.get("relationships", {}) for name, char in characters.items()
-            }
+            rel_data = {name: char.get("relationships", {}) for name, char in characters.items()}
 
         # Generate DOT graph
         dot_string = create_relationship_graph(rel_data)
@@ -2229,8 +2170,7 @@ class Fable(DashboardIntegration, commands.Cog):
         )
         embed.set_author(name=f"{character} - Character Development")
         embed.add_field(name="Category", value=category.title(), inline=True)
-        embed.add_field(name="Recorded by",
-                        value=ctx.author.display_name, inline=True)
+        embed.add_field(name="Recorded by", value=ctx.author.display_name, inline=True)
         embed.set_footer(text="Fable RP Tracker • Character Development")
         await ctx.send(embed=embed)
 
@@ -2266,8 +2206,7 @@ class Fable(DashboardIntegration, commands.Cog):
 
         if category:
             category = category.title()
-            char_milestones = [
-                m for m in char_milestones if m["category"] == category]
+            char_milestones = [m for m in char_milestones if m["category"] == category]
 
         embed = discord.Embed(
             title=f"📈 {character}'s Development Timeline",
@@ -2398,8 +2337,7 @@ class Fable(DashboardIntegration, commands.Cog):
             color=0x43B581,
         )
         embed.add_field(name="Category", value=category, inline=True)
-        embed.add_field(name="Created by",
-                        value=ctx.author.display_name, inline=True)
+        embed.add_field(name="Created by", value=ctx.author.display_name, inline=True)
         embed.set_footer(text="Fable RP Tracker • Locations")
         await ctx.send(embed=embed)
 
@@ -2517,8 +2455,7 @@ class Fable(DashboardIntegration, commands.Cog):
             color=0x43B581,
         )
         if description:
-            embed.add_field(name="Connection Details",
-                            value=description, inline=False)
+            embed.add_field(name="Connection Details", value=description, inline=False)
         embed.set_footer(text="Fable RP Tracker • Location Connection")
         await ctx.send(embed=embed)
 
@@ -2553,8 +2490,7 @@ class Fable(DashboardIntegration, commands.Cog):
             color=0x7289DA,
         )
 
-        embed.add_field(name="Category",
-                        value=location["category"], inline=True)
+        embed.add_field(name="Category", value=location["category"], inline=True)
 
         # Recent visits
         if location["visits"]:
@@ -2566,9 +2502,7 @@ class Fable(DashboardIntegration, commands.Cog):
             visits_text = ""
             for visit in recent_visits:
                 timestamp = discord.utils.parse_time(visit["timestamp"])
-                visits_text += (
-                    f"• {visit['character']} ({timestamp.strftime('%Y-%m-%d')})\n"
-                )
+                visits_text += f"• {visit['character']} ({timestamp.strftime('%Y-%m-%d')})\n"
             embed.add_field(
                 name="Recent Visits",
                 value=visits_text or "No visits recorded",
@@ -2583,8 +2517,7 @@ class Fable(DashboardIntegration, commands.Cog):
                 if conn.get("description"):
                     connections += f" - {conn['description']}"
                 connections += "\n"
-            embed.add_field(name="Connected Locations",
-                            value=connections, inline=False)
+            embed.add_field(name="Connected Locations", value=connections, inline=False)
 
         # Events
         if location["events"]:
@@ -2595,11 +2528,8 @@ class Fable(DashboardIntegration, commands.Cog):
                 reverse=True,
             )[:3]:
                 timestamp = discord.utils.parse_time(event["timestamp"])
-                events_text += (
-                    f"• {event['title']} ({timestamp.strftime('%Y-%m-%d')})\n"
-                )
-            embed.add_field(name="Recent Events",
-                            value=events_text, inline=False)
+                events_text += f"• {event['title']} ({timestamp.strftime('%Y-%m-%d')})\n"
+            embed.add_field(name="Recent Events", value=events_text, inline=False)
 
         embed.set_footer(text="Fable RP Tracker • Location Info")
         await ctx.send(embed=embed)

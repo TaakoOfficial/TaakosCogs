@@ -8,7 +8,7 @@ import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from html.parser import HTMLParser
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 import aiohttp
 import discord
@@ -41,7 +41,7 @@ class StatusPageError(RuntimeError):
 class VisibleTextParser(HTMLParser):
     """Extract visible text nodes from the Rockstar status page HTML."""
 
-    SKIP_TAGS = {"script", "style", "noscript", "svg"}
+    SKIP_TAGS: ClassVar[set[str]] = {"script", "style", "noscript", "svg"}
 
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
@@ -72,12 +72,9 @@ class CfxStatus(DashboardIntegration, commands.Cog):
     MIN_POLL_INTERVAL_MINUTES = 1
     MAX_POLL_INTERVAL_MINUTES = 60
     REQUEST_TIMEOUT = aiohttp.ClientTimeout(total=10)
-    REQUEST_HEADERS = {
+    REQUEST_HEADERS: ClassVar[dict[str, str]] = {
         "Accept": "application/json,text/html,application/xhtml+xml",
-        "User-Agent": (
-            "Mozilla/5.0 (compatible; Red-DiscordBot CfxStatus; "
-            "+https://github.com/TaakoOfficial/TaakosCogs)"
-        ),
+        "User-Agent": ("Mozilla/5.0 (compatible; Red-DiscordBot CfxStatus; +https://github.com/TaakoOfficial/TaakosCogs)"),
     }
     CFX_COMPONENTS = (
         "Authentication",
@@ -86,7 +83,7 @@ class CfxStatus(DashboardIntegration, commands.Cog):
         "Community Servers",
         "Marketplace",
     )
-    STATUSPAGE_COMPONENT_MAP = {
+    STATUSPAGE_COMPONENT_MAP: ClassVar[dict[str, tuple[str, ...]]] = {
         "Authentication": ("CnL", "IDMS"),
         "FiveM": ("FiveM",),
         "RedM": ("RedM",),
@@ -158,16 +155,14 @@ class CfxStatus(DashboardIntegration, commands.Cog):
         except StatusPageError as status_error:
             error = str(status_error)
         except Exception:
-            log.exception(
-                "Unexpected error while polling Cfx.re service status")
+            log.exception("Unexpected error while polling Cfx.re service status")
             error = "I could not check the Cfx.re service status right now."
 
         for guild, settings in due_guilds:
             try:
                 await self._update_status_message(guild, settings, payload, error)
             except Exception:
-                log.exception(
-                    "Failed to update Cfx.re status for guild %s", guild.id)
+                log.exception("Failed to update Cfx.re status for guild %s", guild.id)
 
     @status_loop.before_loop
     async def before_status_loop(self) -> None:
@@ -221,9 +216,7 @@ class CfxStatus(DashboardIntegration, commands.Cog):
             return
 
         await ctx.send(
-            "Cfx.re status panel is posting in "
-            f"{channel.mention}: "
-            f"{self._message_url(ctx.guild.id, channel.id, message.id)}",
+            f"Cfx.re status panel is posting in {channel.mention}: {self._message_url(ctx.guild.id, channel.id, message.id)}",
         )
 
     @cfxstatus.command(name="channel")
@@ -268,8 +261,7 @@ class CfxStatus(DashboardIntegration, commands.Cog):
         await self.config.guild(ctx.guild).enabled.set(True)
         channel_id = await self.config.guild(ctx.guild).status_channel_id()
         await ctx.send(
-            "Cfx.re status panel posted: "
-            f"{self._message_url(ctx.guild.id, channel_id, message.id)}",
+            f"Cfx.re status panel posted: {self._message_url(ctx.guild.id, channel_id, message.id)}",
         )
 
     @cfxstatus.command(name="refresh")
@@ -289,8 +281,7 @@ class CfxStatus(DashboardIntegration, commands.Cog):
 
         channel_id = await self.config.guild(ctx.guild).status_channel_id()
         await ctx.send(
-            "Cfx.re status panel refreshed: "
-            f"{self._message_url(ctx.guild.id, channel_id, message.id)}",
+            f"Cfx.re status panel refreshed: {self._message_url(ctx.guild.id, channel_id, message.id)}",
         )
 
     @cfxstatus.command(name="enable")
@@ -315,9 +306,7 @@ class CfxStatus(DashboardIntegration, commands.Cog):
     async def cfxstatus_interval(self, ctx: commands.Context, minutes: int) -> None:
         """Set how often the status panel refreshes, in minutes."""
         assert ctx.guild is not None
-        if not (
-            self.MIN_POLL_INTERVAL_MINUTES <= minutes <= self.MAX_POLL_INTERVAL_MINUTES
-        ):
+        if not (self.MIN_POLL_INTERVAL_MINUTES <= minutes <= self.MAX_POLL_INTERVAL_MINUTES):
             await ctx.send(
                 "The polling interval must be between "
                 f"{self.MIN_POLL_INTERVAL_MINUTES} and "
@@ -345,8 +334,7 @@ class CfxStatus(DashboardIntegration, commands.Cog):
                 await ctx.send(str(error))
                 return
             except Exception:
-                log.exception(
-                    "Unexpected error while checking Cfx.re service status")
+                log.exception("Unexpected error while checking Cfx.re service status")
                 await ctx.send("I could not check the Cfx.re service status right now.")
                 return
 
@@ -369,8 +357,7 @@ class CfxStatus(DashboardIntegration, commands.Cog):
             log.warning("Rockstar service-status page failed: %s", error)
 
         detail = " ".join(errors) or "No status source returned data."
-        raise StatusPageError(
-            f"I could not check the Cfx.re service status. {detail}")
+        raise StatusPageError(f"I could not check the Cfx.re service status. {detail}")
 
     async def _fetch_statuspage_status(self) -> CfxStatusPayload:
         """Fetch Cfx.re status from the official Statuspage JSON API."""
@@ -383,8 +370,7 @@ class CfxStatus(DashboardIntegration, commands.Cog):
                     )
                 data = await response.json(content_type=None)
         except asyncio.TimeoutError as error:
-            raise StatusPageError(
-                "Cfx.re's Statuspage API timed out.") from error
+            raise StatusPageError("Cfx.re's Statuspage API timed out.") from error
         except aiohttp.ClientError as error:
             raise StatusPageError(
                 "I could not reach Cfx.re's Statuspage API.",
@@ -397,8 +383,7 @@ class CfxStatus(DashboardIntegration, commands.Cog):
         components = self._parse_statuspage_components(data)
         if not components:
             raise StatusPageError(
-                "I reached Cfx.re's Statuspage API, but could not find "
-                "the expected components.",
+                "I reached Cfx.re's Statuspage API, but could not find the expected components.",
             )
 
         page = data.get("page") if isinstance(data, dict) else {}
@@ -418,8 +403,7 @@ class CfxStatus(DashboardIntegration, commands.Cog):
             async with session.get(self.ROCKSTAR_STATUS_PAGE_URL) as response:
                 if response.status != 200:
                     raise StatusPageError(
-                        "Rockstar's service-status page returned "
-                        f"HTTP {response.status}.",
+                        f"Rockstar's service-status page returned HTTP {response.status}.",
                     )
                 html = await response.text()
         except asyncio.TimeoutError as error:
@@ -432,14 +416,12 @@ class CfxStatus(DashboardIntegration, commands.Cog):
             ) from error
 
         if not html.strip():
-            raise StatusPageError(
-                "Rockstar's service-status page returned no content.")
+            raise StatusPageError("Rockstar's service-status page returned no content.")
 
         payload = self.parse_status_page(html)
         if not payload.components:
             raise StatusPageError(
-                "I reached Rockstar's service-status page, but could not find "
-                "the Cfx.re status section.",
+                "I reached Rockstar's service-status page, but could not find the Cfx.re status section.",
             )
         return payload
 
@@ -474,10 +456,7 @@ class CfxStatus(DashboardIntegration, commands.Cog):
         overall_emoji = self._overall_status_emoji(payload.components)
         embed = discord.Embed(
             title=f"{overall_emoji} Cfx.re Platform Status",
-            description=(
-                f"**{status_text}**\n"
-                "Live platform health for FiveM, RedM, and Cfx.re services."
-            ),
+            description=(f"**{status_text}**\nLive platform health for FiveM, RedM, and Cfx.re services."),
             color=self._status_color(payload.components),
         )
         embed.timestamp = datetime.now(timezone.utc)
@@ -499,8 +478,7 @@ class CfxStatus(DashboardIntegration, commands.Cog):
         if poll_interval_minutes is not None:
             details.append(f"Refresh: every {poll_interval_minutes} minutes")
         details.append(f"Source: {payload.source_name}")
-        embed.add_field(name="Panel Info",
-                        value="\n".join(details), inline=False)
+        embed.add_field(name="Panel Info", value="\n".join(details), inline=False)
         embed.set_footer(text="Cfx.re status panel | Last checked")
         return embed
 
@@ -512,10 +490,7 @@ class CfxStatus(DashboardIntegration, commands.Cog):
         """Build the Discord embed shown when a scheduled poll fails."""
         embed = discord.Embed(
             title="⚪ Cfx.re Platform Status",
-            description=(
-                "**Unable to check Cfx.re status**\n"
-                "The panel will keep retrying on the next refresh."
-            ),
+            description=("**Unable to check Cfx.re status**\nThe panel will keep retrying on the next refresh."),
             color=self.UNKNOWN_COLOR,
         )
         embed.timestamp = datetime.now(timezone.utc)
@@ -555,8 +530,7 @@ class CfxStatus(DashboardIntegration, commands.Cog):
             value="Enabled" if settings.get("enabled") else "Disabled",
             inline=True,
         )
-        embed.add_field(name="Interval",
-                        value=f"{interval} minutes", inline=True)
+        embed.add_field(name="Interval", value=f"{interval} minutes", inline=True)
 
         if isinstance(channel, discord.TextChannel):
             channel_value = channel.mention
@@ -567,18 +541,14 @@ class CfxStatus(DashboardIntegration, commands.Cog):
         embed.add_field(name="Channel", value=channel_value, inline=False)
 
         if channel_id and message_id:
-            message_value = (
-                f"[Open panel]({self._message_url(guild.id, channel_id, message_id)})"
-            )
+            message_value = f"[Open panel]({self._message_url(guild.id, channel_id, message_id)})"
         else:
             message_value = "Not posted"
-        embed.add_field(name="Panel Message",
-                        value=message_value, inline=False)
+        embed.add_field(name="Panel Message", value=message_value, inline=False)
 
         last_poll_value = f"<t:{last_poll_at}:R>" if last_poll_at else "Never"
         embed.add_field(name="Last Poll", value=last_poll_value, inline=True)
-        embed.set_footer(
-            text="Use setup or channel to choose where the panel posts.")
+        embed.set_footer(text="Use setup or channel to choose where the panel posts.")
         return embed
 
     async def _update_status_message(
@@ -627,8 +597,7 @@ class CfxStatus(DashboardIntegration, commands.Cog):
                 message = None
             except discord.Forbidden as discord_error:
                 raise commands.CommandError(
-                    "I do not have permission to edit the configured Cfx.re "
-                    "status message.",
+                    "I do not have permission to edit the configured Cfx.re status message.",
                 ) from discord_error
             except discord.HTTPException as discord_error:
                 raise commands.CommandError(
@@ -660,15 +629,13 @@ class CfxStatus(DashboardIntegration, commands.Cog):
         channel_id = settings.get("status_channel_id")
         if not channel_id:
             raise commands.CommandError(
-                "No Cfx.re status channel is configured. Use "
-                "`[p]cfxstatus setup [channel]` first.",
+                "No Cfx.re status channel is configured. Use `[p]cfxstatus setup [channel]` first.",
             )
 
         channel = guild.get_channel(channel_id)
         if not isinstance(channel, discord.TextChannel):
             raise commands.CommandError(
-                "The configured Cfx.re status channel no longer exists or is "
-                "not a text channel.",
+                "The configured Cfx.re status channel no longer exists or is not a text channel.",
             )
         return channel
 
@@ -680,8 +647,7 @@ class CfxStatus(DashboardIntegration, commands.Cog):
         """Raise a command-facing error if the bot cannot maintain the panel."""
         me = guild.me
         if me is None:
-            raise commands.CommandError(
-                "I could not check my channel permissions.")
+            raise commands.CommandError("I could not check my channel permissions.")
 
         permissions = channel.permissions_for(me)
         missing = []
@@ -714,8 +680,7 @@ class CfxStatus(DashboardIntegration, commands.Cog):
     def _poll_interval(self, settings: dict) -> int:
         """Return a clamped polling interval for a settings payload."""
         interval = int(
-            settings.get(
-                "poll_interval_minutes") or self.DEFAULT_POLL_INTERVAL_MINUTES,
+            settings.get("poll_interval_minutes") or self.DEFAULT_POLL_INTERVAL_MINUTES,
         )
         return max(
             self.MIN_POLL_INTERVAL_MINUTES,
@@ -724,10 +689,7 @@ class CfxStatus(DashboardIntegration, commands.Cog):
 
     def _component_status_line(self, component: str, status: str) -> str:
         """Format a component row for the status-board embed field."""
-        return (
-            f"{self._status_emoji(status)} **{component}** - "
-            f"{self._status_label(status)}"
-        )
+        return f"{self._status_emoji(status)} **{component}** - {self._status_label(status)}"
 
     def _status_label(self, status: str) -> str:
         if self._is_partial_outage(status):
@@ -792,11 +754,7 @@ class CfxStatus(DashboardIntegration, commands.Cog):
         if not isinstance(raw_components, list):
             return {}
 
-        by_name = {
-            str(component.get("name")): component
-            for component in raw_components
-            if isinstance(component, dict)
-        }
+        by_name = {str(component.get("name")): component for component in raw_components if isinstance(component, dict)}
         components: dict[str, str] = {}
 
         for display_name, source_names in self.STATUSPAGE_COMPONENT_MAP.items():
@@ -954,10 +912,7 @@ class CfxStatus(DashboardIntegration, commands.Cog):
         lowered = status.lower()
         if "partial" in lowered:
             return False
-        return any(
-            keyword in lowered
-            for keyword in ("outage", "unavailable", "offline", "down")
-        )
+        return any(keyword in lowered for keyword in ("outage", "unavailable", "offline", "down"))
 
     @staticmethod
     def _is_partial_outage(status: str) -> bool:

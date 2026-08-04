@@ -1,0 +1,17 @@
+{
+    "$schema": "https://raw.githubusercontent.com/Cog-Creators/Red-DiscordBot/V3/develop/schema/red_cog.schema.json",
+    "name": "sponsorsync",
+    "author": ["Taako"],
+    "version": "1.0.0",
+    "description": "Provider-neutral sponsor and membership role synchronization with tier mappings, expirations, grace periods, renewals, CSV imports/exports, audit alerts, and safe reconciliation.",
+    "install_msg": "SponsorSync loaded. Map your first tier with `[p]sponsorsync tier add <name> <role>`.",
+    "short": "Synchronize sponsor membership tiers to Discord roles with grace periods and audits.",
+    "tags": ["sponsor", "subscription", "membership", "roles", "patreon", "kofi", "github", "dashboard"],
+    "requirements": [],
+    "min_bot_version": "3.5.0",
+    "min_python_version": [3, 9, 0],
+    "hidden": false,
+    "disabled": false,
+    "type": "COG",
+    "end_user_data_statement": "This cog stores subscriber Discord user IDs, tier names, provider labels, optional external reference strings, subscription start and expiration timestamps, status, grace period settings, and role synchronization audit metadata. CSV files are processed or generated on demand."
+}

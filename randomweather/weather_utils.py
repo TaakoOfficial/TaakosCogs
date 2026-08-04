@@ -208,8 +208,7 @@ def generate_weather(time_zone: str) -> dict[str, str]:
             current_time = datetime.datetime.now(datetime.timezone.utc)
 
     # Get seasonal temperature ranges and weighted conditions
-    min_temp, max_temp, weighted_conditions = get_seasonal_ranges(
-        current_time.month)
+    min_temp, max_temp, weighted_conditions = get_seasonal_ranges(current_time.month)
 
     # Generate base temperature within seasonal range
     temp_f = random.randint(min_temp, max_temp)

@@ -18,7 +18,6 @@ import discord
 from redbot.core import Config, bank, commands
 from redbot.core.utils.chat_formatting import humanize_list
 
-from .art import combat_art_path
 from .advanced_content import (
     BACKGROUNDS,
     BLESSINGS,
@@ -29,6 +28,7 @@ from .advanced_content import (
     TALENT_TREES,
     TITLES,
 )
+from .art import combat_art_path
 from .content import (
     ACHIEVEMENTS,
     AFFIXES,
@@ -576,7 +576,7 @@ class TalentSelect(discord.ui.Select):
             discord.SelectOption(
                 label=f"{talent['name']} {int(profile.get('talents', {}).get(talent['key'], 0))}/{talent['max']}",
                 value=talent["key"],
-                emoji="◆",
+                emoji="🔹",
                 description=talent["description"][:100],
             )
             for talent in talents
@@ -644,10 +644,7 @@ class MailView(OwnedView):
 
     def __init__(self, cog: DeepDelve, user_id: int, profile: dict[str, Any]) -> None:
         super().__init__(cog, user_id)
-        unread = any(
-            letter["key"] not in profile.get("mail_read", [])
-            for letter in profile.get("mailbox", [])
-        )
+        unread = any(letter["key"] not in profile.get("mail_read", []) for letter in profile.get("mailbox", []))
         self.mark_read.disabled = not unread
 
     @discord.ui.button(label="Mark All Read", emoji="📨", style=discord.ButtonStyle.primary, row=0)
@@ -734,20 +731,14 @@ class QuestActionSelect(discord.ui.Select):
                 )
         if len(options) < 25:
             for quest in available_quests(profile):
-                if (
-                    quest["available"]
-                    and not quest["active"]
-                    and not quest["completed"]
-                    and not quest.get("managed")
-                ):
+                if quest["available"] and not quest["active"] and not quest["completed"] and not quest.get("managed"):
                     options.append(
                         discord.SelectOption(
                             label=f"Accept: {quest['name']}"[:100],
                             value=f"accept|{quest['key']}",
                             emoji="📜",
                             description=(
-                                f"{quest['category'].title()} • target {quest['target']} • "
-                                f"up to {quest['energy']} energy"
+                                f"{quest['category'].title()} • target {quest['target']} • up to {quest['energy']} energy"
                             )[:100],
                         ),
                     )
@@ -813,8 +804,7 @@ class AtlasActionSelect(discord.ui.Select):
                     value=f"enter|{location['key']}",
                     emoji="🏛️",
                     description=(
-                        f"Floor {location['floor']} • {location['rooms']} rooms • "
-                        f"{location['energy_per_room']} energy/room"
+                        f"Floor {location['floor']} • {location['rooms']} rooms • {location['energy_per_room']} energy/room"
                     )[:100],
                 )
                 for location in atlas_locations(profile)
@@ -1073,10 +1063,7 @@ class CommissionSelect(discord.ui.Select):
                 label=f"{index}. {offer['name']}",
                 value=str(index),
                 emoji="📋",
-                description=(
-                    f"{offer['objective'].title()} {offer['target']} • "
-                    f"{offer['reward']['gold']} currency"
-                )[:100],
+                description=(f"{offer['objective'].title()} {offer['target']} • {offer['reward']['gold']} currency")[:100],
             )
             for index, offer in enumerate(offers, start=1)
         ]
@@ -1382,12 +1369,7 @@ class InventorySelect(discord.ui.Select):
         elif sort_key == "slot":
             inventory.sort(key=lambda item: (str(item.get("slot", "")), -item_power(item)))
         options = []
-        loadout_ids = {
-            item_id
-            for loadout in profile.get("loadouts", {}).values()
-            for item_id in loadout.values()
-            if item_id
-        }
+        loadout_ids = {item_id for loadout in profile.get("loadouts", {}).values() for item_id in loadout.values() if item_id}
         for index, item in enumerate(inventory[:25], start=1):
             rarity = RARITIES[int(item.get("rarity_index", 0))]
             markers = []
@@ -1501,10 +1483,7 @@ class InventoryView(OwnedView):
                 continue
             identified = selected.get("identified", True)
             favorite = str(selected["id"]) in self.profile.get("favorite_items", [])
-            protected_identity = any(
-                selected.get(key)
-                for key in ("origin", "legendary", "boss_relic", "set", "bound")
-            )
+            protected_identity = any(selected.get(key) for key in ("origin", "legendary", "boss_relic", "set", "bound"))
             upgrade_cap = int(selected.get("upgrade_cap", 10))
             at_cap = int(selected.get("upgrade", 0)) >= upgrade_cap
             if equipped:
@@ -2043,8 +2022,7 @@ class DeepDelve(DashboardIntegration, commands.Cog):
     def _is_public_slash_response(cls, qualified_name: str) -> bool:
         """Keep only intentionally social gameplay commands visible to the channel."""
         return any(
-            qualified_name == prefix or qualified_name.startswith(f"{prefix} ")
-            for prefix in cls.PUBLIC_SLASH_COMMAND_PREFIXES
+            qualified_name == prefix or qualified_name.startswith(f"{prefix} ") for prefix in cls.PUBLIC_SLASH_COMMAND_PREFIXES
         )
 
     async def cog_before_invoke(self, ctx: commands.Context) -> None:
@@ -2099,11 +2077,11 @@ class DeepDelve(DashboardIntegration, commands.Cog):
             for view in stale_views.values():
                 try:
                     remove_view(view)
-                except Exception:  # noqa: BLE001 - optional cross-version cleanup
+                except Exception:
                     LOGGER.debug("Could not remove one legacy DeepDelve view.", exc_info=True)
             if stale_views:
                 LOGGER.info("Removed %s legacy message-bound DeepDelve view(s).", len(stale_views))
-        except Exception:  # noqa: BLE001 - discord.py private internals vary
+        except Exception:
             # This cleanup uses discord.py's private view-store shape and must remain
             # optional when Red ships a different compatible library version.
             LOGGER.warning("Skipped legacy DeepDelve view cleanup for this runtime.", exc_info=True)
@@ -2838,16 +2816,9 @@ class DeepDelve(DashboardIntegration, commands.Cog):
                 (key, details)
                 for key, details in ITEM_SETS.items()
                 if profile["class_key"] in details["classes"]
-                and (
-                    not details.get("subclasses")
-                    or profile.get("subclass", "") in details["subclasses"]
-                )
+                and (not details.get("subclasses") or profile.get("subclass", "") in details["subclasses"])
             ]
-            subclass_sets = [
-                entry
-                for entry in eligible
-                if entry[1].get("subclasses")
-            ]
+            subclass_sets = [entry for entry in eligible if entry[1].get("subclasses")]
             candidates = subclass_sets or eligible
             if candidates:
                 forced_set, _details = random.choice(candidates)
@@ -2959,9 +2930,7 @@ class DeepDelve(DashboardIntegration, commands.Cog):
                 if owned.get("set") == set_key and owned.get("slot") == item.get("slot")
             ]
             if owned_matches and item_power(item) <= max(item_power(owned) for owned in owned_matches):
-                profile.setdefault("set_fragments", {})[set_key] = (
-                    int(profile.get("set_fragments", {}).get(set_key, 0)) + 1
-                )
+                profile.setdefault("set_fragments", {})[set_key] = int(profile.get("set_fragments", {}).get(set_key, 0)) + 1
                 profile["arcane_shards"] += 2
                 return (
                     f"🧩 Duplicate **{ITEM_SETS[set_key]['name']} {item['slot']}** converted into "
@@ -3113,10 +3082,7 @@ class DeepDelve(DashboardIntegration, commands.Cog):
             current_objective = f"**{definition['name']}** — {progress['progress']}/{progress['target']}"
         embed = discord.Embed(
             title=f"🕯️ DeepDelve 5.0 — {profile['character_name']}",
-            description=(
-                f"*{moral['appearance']}*\n\n"
-                f"**Current Objective**\n{current_objective}"
-            ),
+            description=(f"*{moral['appearance']}*\n\n**Current Objective**\n{current_objective}"),
             color=moral["color"],
         )
         embed.add_field(
@@ -3146,8 +3112,7 @@ class DeepDelve(DashboardIntegration, commands.Cog):
         embed.add_field(
             name="Factions",
             value="\n".join(
-                f"{FACTIONS[key]['emoji']} {FACTIONS[key]['name']}: **{legacy['faction_reputation'][key]}**"
-                for key in FACTIONS
+                f"{FACTIONS[key]['emoji']} {FACTIONS[key]['name']}: **{legacy['faction_reputation'][key]}**" for key in FACTIONS
             ),
             inline=False,
         )
@@ -3175,8 +3140,7 @@ class DeepDelve(DashboardIntegration, commands.Cog):
                 f"`{key}` • {progress['progress']}/{progress['target']}",
             )
         available = [
-            quest for quest in available_quests(profile)
-            if quest["available"] and not quest["active"] and not quest["completed"]
+            quest for quest in available_quests(profile) if quest["available"] and not quest["active"] and not quest["completed"]
         ]
         locked = [quest for quest in available_quests(profile) if not quest["available"] and not quest["completed"]]
         available_lines = [
@@ -3243,11 +3207,7 @@ class DeepDelve(DashboardIntegration, commands.Cog):
         )
         embed.add_field(
             name="Chronicle State",
-            value=(
-                f"📖 Scene **{state['scene']}/6**\n"
-                f"⚖️ Decisions **{state['decision']}/3**\n"
-                f"🧭 Energy **{profile['turns']}**"
-            ),
+            value=(f"📖 Scene **{state['scene']}/6**\n⚖️ Decisions **{state['decision']}/3**\n🧭 Energy **{profile['turns']}**"),
         )
         embed.add_field(
             name="Act Reward",
@@ -3273,13 +3233,7 @@ class DeepDelve(DashboardIntegration, commands.Cog):
         if run:
             definition = NAMED_DUNGEONS[run["key"]]
             pending = run.get("pending") or {}
-            state = (
-                f" • choice: {pending.get('name')}"
-                if pending
-                else " • battle active"
-                if run.get("awaiting_combat")
-                else ""
-            )
+            state = f" • choice: {pending.get('name')}" if pending else " • battle active" if run.get("awaiting_combat") else ""
             run_line = (
                 f"\n\n**Active:** {definition['name']} • room {run['room']}/{definition['rooms']} "
                 f"• checkpoint {run['checkpoint']}{state}"
@@ -3325,10 +3279,7 @@ class DeepDelve(DashboardIntegration, commands.Cog):
             color=0xB7950B,
         )
         embed.set_footer(
-            text=(
-                f"Lifetime restoration spending: {state['spent']} currency "
-                "• Upgrades are capped convenience and cosmetics."
-            ),
+            text=(f"Lifetime restoration spending: {state['spent']} currency • Upgrades are capped convenience and cosmetics."),
         )
         return embed
 
@@ -3698,9 +3649,7 @@ class DeepDelve(DashboardIntegration, commands.Cog):
             inline=False,
         )
         tenet_lines = [
-            f"◆ **{TENETS[key]['name']}** — {TENETS[key]['description']}"
-            for key in legacy["active_tenets"]
-            if key in TENETS
+            f"◆ **{TENETS[key]['name']}** — {TENETS[key]['description']}" for key in legacy["active_tenets"] if key in TENETS
         ]
         embed.add_field(
             name=f"◆ Resolve & Tenets — {legacy['resolve']} Resolve",
@@ -3790,37 +3739,42 @@ class DeepDelve(DashboardIntegration, commands.Cog):
         profession = profile.get("profession", {})
         profession_def = PROFESSIONS.get(profession.get("key", ""))
         companion = active_companion(profile)
-        return discord.Embed(
-            title="🎯 Lastlight Activities",
-            description=(
-                "Choose a core solo system below. Advanced actions that require names, IDs, "
-                "amounts, or other players remain available as commands."
-            ),
-            color=0x2471A3,
-        ).add_field(
-            name="Current Calling",
-            value=(
-                f"{profession_def['emoji']} **{profession_def['name']}**, level {profession.get('level', 1)}"
-                if profession_def
-                else "🛠️ No profession selected—your first calling is free."
-            ),
-            inline=False,
-        ).add_field(
-            name="Expedition Ally",
-            value=(
-                f"{companion[0]['emoji']} **{companion[0]['name']}**, bond {companion[1]['bond']}/100"
-                if companion
-                else "🐾 No active companion."
-            ),
-            inline=False,
-        ).add_field(
-            name="Living World",
-            value=(
-                f"📖 Saga acts completed: **{len(profile.get('living_campaign', {}).get('completed', []))}/6**\n"
-                f"🗄️ Seasonal chapters archived: **{len(profile.get('season_archive', []))}/12**\n"
-                f"⚒️ Weekly commissions completed: **{profile.get('commissions', {}).get('completed', 0)}**"
-            ),
-            inline=False,
+        return (
+            discord.Embed(
+                title="🎯 Lastlight Activities",
+                description=(
+                    "Choose a core solo system below. Advanced actions that require names, IDs, "
+                    "amounts, or other players remain available as commands."
+                ),
+                color=0x2471A3,
+            )
+            .add_field(
+                name="Current Calling",
+                value=(
+                    f"{profession_def['emoji']} **{profession_def['name']}**, level {profession.get('level', 1)}"
+                    if profession_def
+                    else "🛠️ No profession selected—your first calling is free."
+                ),
+                inline=False,
+            )
+            .add_field(
+                name="Expedition Ally",
+                value=(
+                    f"{companion[0]['emoji']} **{companion[0]['name']}**, bond {companion[1]['bond']}/100"
+                    if companion
+                    else "🐾 No active companion."
+                ),
+                inline=False,
+            )
+            .add_field(
+                name="Living World",
+                value=(
+                    f"📖 Saga acts completed: **{len(profile.get('living_campaign', {}).get('completed', []))}/6**\n"
+                    f"🗄️ Seasonal chapters archived: **{len(profile.get('season_archive', []))}/12**\n"
+                    f"⚒️ Weekly commissions completed: **{profile.get('commissions', {}).get('completed', 0)}**"
+                ),
+                inline=False,
+            )
         )
 
     @staticmethod
@@ -3868,9 +3822,7 @@ class DeepDelve(DashboardIntegration, commands.Cog):
             lines.append(f"{marker} **{status['index']}. {status['name']}** — {reason}")
         active = profile.get("season_story", {})
         active_line = (
-            f"\n\n**Active chapter:** `{active.get('active')}` • scene {active.get('scene', 0)}/3"
-            if active.get("active")
-            else ""
+            f"\n\n**Active chapter:** `{active.get('active')}` • scene {active.get('scene', 0)}/3" if active.get("active") else ""
         )
         return discord.Embed(
             title="🗄️ Permanent Season Archive",
@@ -4094,9 +4046,7 @@ class DeepDelve(DashboardIntegration, commands.Cog):
                         delta = int(selected.get(stat, 0)) - int(equipped.get(stat, 0))
                         if delta:
                             deltas.append(f"{delta:+} {label}")
-                    comparison = f"\n↔️ vs. **{equipped['name']}**: " + (
-                        " • ".join(deltas) if deltas else "equal base attributes"
-                    )
+                    comparison = f"\n↔️ vs. **{equipped['name']}**: " + (" • ".join(deltas) if deltas else "equal base attributes")
                     power_delta = item_power(selected) - item_power(equipped)
                     comparison += f"\n⚖️ Power: **{item_power(selected)}** ({power_delta:+} equipped)"
                     gained = item_effects(selected) - item_effects(equipped)
@@ -4119,8 +4069,7 @@ class DeepDelve(DashboardIntegration, commands.Cog):
                 changes = upgrade_stat_changes(selected)
                 stat_labels = {"attack": "ATK", "defense": "DEF", "hp": "HP", "luck": "LUCK"}
                 preview = " • ".join(
-                    f"{stat_labels[stat]} {current} → {upgraded}"
-                    for stat, (current, upgraded) in changes.items()
+                    f"{stat_labels[stat]} {current} → {upgraded}" for stat, (current, upgraded) in changes.items()
                 )
                 if current_upgrade >= upgrade_cap:
                     upgrade_line = f"⬆️ Upgrade: **Maximum +{upgrade_cap}**"
@@ -4133,16 +4082,10 @@ class DeepDelve(DashboardIntegration, commands.Cog):
                         upgrade_line += f"\n└ {preview}"
                 random_enchant_cost = enchant_cost(selected)
                 chosen_enchant_cost = enchant_cost(selected, chosen=True)
-                enchant_line = (
-                    f"🔯 Enchant: **{random_enchant_cost} shards random** or "
-                    f"**{chosen_enchant_cost} shards chosen**"
-                )
+                enchant_line = f"🔯 Enchant: **{random_enchant_cost} shards random** or **{chosen_enchant_cost} shards chosen**"
                 if selected.get("enchant"):
                     enchant_line += f"\n└ Replaces **{selected['enchant']}** after confirmation"
-                inspection = (
-                    f"{item_detail(selected)}\n"
-                    f"{upgrade_line}\n{enchant_line}{comparison}"
-                )
+                inspection = f"{item_detail(selected)}\n{upgrade_line}\n{enchant_line}{comparison}"
             embed.add_field(
                 name="Item Inspection",
                 value=inspection[:1024],
@@ -4164,8 +4107,7 @@ class DeepDelve(DashboardIntegration, commands.Cog):
         threshold_text = "Off" if threshold < 0 else f"{RARITIES[threshold]['name']} and below"
         loadouts = profile.get("loadouts", {})
         loadout_lines = [
-            f"• **{name}** — "
-            + ", ".join(f"{slot}: {item_id or 'empty'}" for slot, item_id in slots.items())
+            f"• **{name}** — " + ", ".join(f"{slot}: {item_id or 'empty'}" for slot, item_id in slots.items())
             for name, slots in loadouts.items()
         ]
         embed = discord.Embed(
@@ -5280,10 +5222,7 @@ class DeepDelve(DashboardIntegration, commands.Cog):
                 profile["potions"] -= 1
                 profile["hp"] += healing
                 lines.append(f"🧪 You recover **{healing} health**.")
-                if (
-                    legacy_effects.get("first_potion_mana")
-                    and not profile["combat_flags"].get("tenet_first_potion")
-                ):
+                if legacy_effects.get("first_potion_mana") and not profile["combat_flags"].get("tenet_first_potion"):
                     profile["combat_flags"]["tenet_first_potion"] = True
                     restored = min(
                         stats["max_mana"] - profile["mana"],
@@ -5394,17 +5333,12 @@ class DeepDelve(DashboardIntegration, commands.Cog):
                     stats,
                     ability_key,
                 )
-                if (
-                    profile["combat_flags"].get("tenet_last_action") == "defend"
-                    and legacy_effects.get("post_defend_damage_percent")
+                if profile["combat_flags"].get("tenet_last_action") == "defend" and legacy_effects.get(
+                    "post_defend_damage_percent"
                 ):
                     damage = round(damage * (1 + int(legacy_effects["post_defend_damage_percent"]) / 100))
                     skill_lines.append("🐺 **Predator's Patience** turns defense into force.")
-                if (
-                    enemy.get("boss")
-                    and enemy["hp"] <= enemy["max_hp"] * 0.3
-                    and legacy_effects.get("execute_percent")
-                ):
+                if enemy.get("boss") and enemy["hp"] <= enemy["max_hp"] * 0.3 and legacy_effects.get("execute_percent"):
                     damage = round(damage * (1 + int(legacy_effects["execute_percent"]) / 100))
                     skill_lines.append("🕯️ **Last Lantern** burns brighter at the brink.")
                 if profile.get("floor_mutator", {}).get("key") == "unstable":
@@ -5472,11 +5406,7 @@ class DeepDelve(DashboardIntegration, commands.Cog):
                 if previous_action == "defend" and legacy_effects.get("post_defend_damage_percent"):
                     damage = round(damage * (1 + int(legacy_effects["post_defend_damage_percent"]) / 100))
                     lines.append("🐺 **Predator's Patience** turns defense into force.")
-                if (
-                    enemy.get("boss")
-                    and enemy["hp"] <= enemy["max_hp"] * 0.3
-                    and legacy_effects.get("execute_percent")
-                ):
+                if enemy.get("boss") and enemy["hp"] <= enemy["max_hp"] * 0.3 and legacy_effects.get("execute_percent"):
                     damage = round(damage * (1 + int(legacy_effects["execute_percent"]) / 100))
                     lines.append("🕯️ **Last Lantern** burns brighter at the brink.")
                 if previous_action == "ability" and legacy_effects.get("alternating_guard"):
@@ -5583,8 +5513,10 @@ class DeepDelve(DashboardIntegration, commands.Cog):
                 total += max(1, round(damage * 0.72))
                 criticals += int(critical)
             return total, [
-                f"🗡️ **Twin Fang** strikes twice for **{total} total damage** "
-                f"with **{criticals} critical hit{'s' if criticals != 1 else ''}.",
+                (
+                    f"🗡️ **Twin Fang** strikes twice for **{total} total damage** "
+                    f"with **{criticals} critical hit{'s' if criticals != 1 else ''}."
+                ),
             ]
         base = random.randint(stats["attack"] + 3, stats["attack"] + 10)
         damage = max(1, round(base * 1.55) - int(enemy["defense"]) // 6)
@@ -5881,10 +5813,7 @@ class DeepDelve(DashboardIntegration, commands.Cog):
             if profile.get("conviction_fatigue", 0):
                 lines.append("⚖️ Defeating a boss clears all **Conviction Fatigue**.")
             profile["conviction_fatigue"] = 0
-        elif (
-            int(profile.get("conviction_fatigue", 0)) > 0
-            and not profile.get("combat_flags", {}).get("moral_power_used")
-        ):
+        elif int(profile.get("conviction_fatigue", 0)) > 0 and not profile.get("combat_flags", {}).get("moral_power_used"):
             profile["conviction_fatigue"] -= 1
             if profile["conviction_fatigue"] == 0:
                 lines.append("⚖️ Your Conviction power is ready again.")
@@ -6142,9 +6071,8 @@ class DeepDelve(DashboardIntegration, commands.Cog):
             profile["combat_flags"]["margin_saved"] = True
             profile["hp"] = 1
             return "📖 **Armor Between Lines** writes your death into the margin. You remain at **1 health**."
-        if (
-            "oath_of_return" in profile.get("legacy", {}).get("active_tenets", [])
-            and not profile.get("combat_flags", {}).get("tenet_death_save_used")
+        if "oath_of_return" in profile.get("legacy", {}).get("active_tenets", []) and not profile.get("combat_flags", {}).get(
+            "tenet_death_save_used"
         ):
             profile["combat_flags"]["tenet_death_save_used"] = True
             profile["combat_flags"]["tenet_death_save_penalty"] = True
@@ -6251,9 +6179,7 @@ class DeepDelve(DashboardIntegration, commands.Cog):
             if action == "rest":
                 cost = self._rest_price(profile)
                 fully_rested = (
-                    profile["hp"] >= stats["max_hp"]
-                    and not profile.get("status")
-                    and not profile.get("conviction_fatigue", 0)
+                    profile["hp"] >= stats["max_hp"] and not profile.get("status") and not profile.get("conviction_fatigue", 0)
                 )
                 if fully_rested:
                     narrative = "The innkeeper glances at you. “You look rested enough already.”"
@@ -6662,22 +6588,14 @@ class DeepDelve(DashboardIntegration, commands.Cog):
     def _bulk_dismantle_candidates(profile: dict[str, Any]) -> list[dict[str, Any]]:
         threshold = int(profile.get("auto_dismantle", -1))
         favorites = set(profile.get("favorite_items", []))
-        loadout_ids = {
-            item_id
-            for loadout in profile.get("loadouts", {}).values()
-            for item_id in loadout.values()
-            if item_id
-        }
+        loadout_ids = {item_id for loadout in profile.get("loadouts", {}).values() for item_id in loadout.values() if item_id}
         return [
             item
             for item in profile.get("inventory", [])
             if int(item.get("rarity_index", 0)) <= threshold
             and str(item["id"]) not in favorites
             and str(item["id"]) not in loadout_ids
-            and not any(
-                item.get(key)
-                for key in ("origin", "legendary", "boss_relic", "set", "bound", "enchant")
-            )
+            and not any(item.get(key) for key in ("origin", "legendary", "boss_relic", "set", "bound", "enchant"))
         ]
 
     async def _bulk_dismantle_interaction(
@@ -6720,11 +6638,7 @@ class DeepDelve(DashboardIntegration, commands.Cog):
                 )
                 return
             candidate_ids = {str(item["id"]) for item in candidates}
-            profile["inventory"] = [
-                item
-                for item in profile["inventory"]
-                if str(item["id"]) not in candidate_ids
-            ]
+            profile["inventory"] = [item for item in profile["inventory"] if str(item["id"]) not in candidate_ids]
             profile["gold"] += currency
             profile["arcane_shards"] += shards
             await self._save_profile(
@@ -6845,8 +6759,7 @@ class DeepDelve(DashboardIntegration, commands.Cog):
             await self._save_profile(interaction.guild.id, interaction.user.id, profile, starting_gold)
         embed = self._companion_embed(profile)
         embed.description = (
-            f"{COMPANIONS[key]['emoji']} **{COMPANIONS[key]['name']} joins your expedition.**\n\n"
-            f"{embed.description}"
+            f"{COMPANIONS[key]['emoji']} **{COMPANIONS[key]['name']} joins your expedition.**\n\n{embed.description}"
         )
         await interaction.edit_original_response(
             embed=embed,
@@ -7056,11 +6969,7 @@ class DeepDelve(DashboardIntegration, commands.Cog):
                     ephemeral=True,
                 )
                 return
-            item = (
-                profile["equipment"][equipped_slot]
-                if equipped_slot is not None
-                else profile["inventory"][index]
-            )
+            item = profile["equipment"][equipped_slot] if equipped_slot is not None else profile["inventory"][index]
             favorite = str(item["id"]) in profile.get("favorite_items", [])
             if action == "favorite":
                 favorites = profile.setdefault("favorite_items", [])
@@ -7089,10 +6998,7 @@ class DeepDelve(DashboardIntegration, commands.Cog):
                     reward = f"{self._money(profile, currency)} and {shards} arcane shards"
                 embed = discord.Embed(
                     title=f"⚠️ Confirm {action.title()}",
-                    description=(
-                        f"{item_detail(item)}\n\n"
-                        f"You will receive **{reward}**. This cannot be undone."
-                    ),
+                    description=(f"{item_detail(item)}\n\nYou will receive **{reward}**. This cannot be undone."),
                     color=DANGER_COLOR,
                 )
                 await interaction.edit_original_response(
@@ -7192,11 +7098,7 @@ class DeepDelve(DashboardIntegration, commands.Cog):
             elif action == "enchant":
                 random_cost = enchant_cost(item)
                 chosen_cost = enchant_cost(item, chosen=True)
-                replacement = (
-                    f"\n\n⚠️ Continuing will replace **{item['enchant']}**."
-                    if item.get("enchant")
-                    else ""
-                )
+                replacement = f"\n\n⚠️ Continuing will replace **{item['enchant']}**." if item.get("enchant") else ""
                 embed = discord.Embed(
                     title="🔯 Sigil Inscription",
                     description=(
@@ -7213,13 +7115,7 @@ class DeepDelve(DashboardIntegration, commands.Cog):
                 )
                 return
             else:
-                if (
-                    item.get("origin")
-                    or item.get("legendary")
-                    or item.get("boss_relic")
-                    or item.get("set")
-                    or item.get("bound")
-                ):
+                if item.get("origin") or item.get("legendary") or item.get("boss_relic") or item.get("set") or item.get("bound"):
                     await interaction.followup.send(
                         "Origin, legendary, set, boss, and bound relic identities cannot be rerolled.",
                         ephemeral=True,
@@ -7308,9 +7204,8 @@ class DeepDelve(DashboardIntegration, commands.Cog):
                 starting_gold,
             )
         embed = self._inventory_embed(profile, item_id)
-        embed.description = (
-            f"🔯 Inscribed **{name}** onto **{item['name']}** for **{shard_cost} arcane shards**.\n\n"
-            + (embed.description or "")
+        embed.description = f"🔯 Inscribed **{name}** onto **{item['name']}** for **{shard_cost} arcane shards**.\n\n" + (
+            embed.description or ""
         )
         view = InventoryView(self, interaction.user.id, profile)
         view.bind_selection(item_id)
@@ -8687,10 +8582,7 @@ class DeepDelve(DashboardIntegration, commands.Cog):
             if not details:
                 continue
             found = set(slots)
-            slot_marks = " ".join(
-                f"{'✅' if slot in found else '⬛'} {slot.title()}"
-                for slot in ("weapon", "armor", "charm")
-            )
+            slot_marks = " ".join(f"{'✅' if slot in found else '⬛'} {slot.title()}" for slot in ("weapon", "armor", "charm"))
             fragments = int(profile.get("set_fragments", {}).get(set_key, 0))
             progress.append(f"**{details['name']}** — {slot_marks} • 🧩 {fragments}")
         sections = [
@@ -8715,11 +8607,7 @@ class DeepDelve(DashboardIntegration, commands.Cog):
             return
         requested = set_key.lower().replace(" ", "_")
         set_key = next(
-            (
-                key
-                for key, definition in ITEM_SETS.items()
-                if requested in {key, definition["name"].lower().replace(" ", "_")}
-            ),
+            (key for key, definition in ITEM_SETS.items() if requested in {key, definition["name"].lower().replace(" ", "_")}),
             requested,
         )
         details = ITEM_SETS.get(set_key)
@@ -8949,8 +8837,7 @@ class DeepDelve(DashboardIntegration, commands.Cog):
             lines = [
                 f"• **{loadout_name}** — "
                 + ", ".join(
-                    f"{slot.title()}: {owned.get(item_id, 'missing') if item_id else 'empty'}"
-                    for slot, item_id in slots.items()
+                    f"{slot.title()}: {owned.get(item_id, 'missing') if item_id else 'empty'}" for slot, item_id in slots.items()
                 )
                 for loadout_name, slots in profile.get("loadouts", {}).items()
             ]
@@ -10887,8 +10774,7 @@ class DeepDelve(DashboardIntegration, commands.Cog):
                 starting_gold,
             )
         await ctx.send(
-            f"Granted **{amount} turns** to {member.mention}. "
-            f"They now have **{profile['turns']} turns**.",
+            f"Granted **{amount} turns** to {member.mention}. They now have **{profile['turns']} turns**.",
         )
 
     @deepdelve_set.command(name="difficulty")

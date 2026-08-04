@@ -25,8 +25,10 @@ class EventJournal:
         await asyncio.to_thread(self._initialize_sync)
 
     def _connect(self) -> sqlite3.Connection:
-        connection = sqlite3.connect(self.path)
+        connection = sqlite3.connect(self.path, timeout=5)
         connection.row_factory = sqlite3.Row
+        connection.execute("PRAGMA busy_timeout = 5000")
+        connection.execute("PRAGMA synchronous = NORMAL")
         return connection
 
     def _initialize_sync(self) -> None:
@@ -52,6 +54,10 @@ class EventJournal:
                     ON events(guild_id, occurred_at DESC);
                 CREATE INDEX IF NOT EXISTS idx_events_guild_type_time
                     ON events(guild_id, event_type, occurred_at DESC);
+                CREATE INDEX IF NOT EXISTS idx_events_actor
+                    ON events(actor_id) WHERE actor_id IS NOT NULL;
+                CREATE INDEX IF NOT EXISTS idx_events_target
+                    ON events(target_id) WHERE target_id IS NOT NULL;
                 DROP INDEX IF EXISTS idx_events_audit_entry;
                 CREATE UNIQUE INDEX IF NOT EXISTS idx_events_event_identity
                     ON events(
@@ -173,13 +179,19 @@ class EventJournal:
             return await asyncio.to_thread(self._delete_user_sync, user_id)
 
     def _delete_user_sync(self, user_id: int) -> int:
-        pattern = f'%"{user_id}"%'
         with self._connect() as connection:
             cursor = connection.execute(
                 """
                 DELETE FROM events
-                WHERE actor_id = ? OR target_id = ? OR payload_json LIKE ?
+                WHERE actor_id = ?
+                   OR target_id = ?
+                   OR EXISTS (
+                        SELECT 1
+                        FROM json_tree(events.payload_json)
+                        WHERE (json_tree.type = 'integer' AND json_tree.value = ?)
+                           OR (json_tree.type = 'text' AND json_tree.value = ?)
+                   )
                 """,
-                (user_id, user_id, pattern),
+                (user_id, user_id, user_id, str(user_id)),
             )
             return max(cursor.rowcount, 0)

@@ -1,0 +1,17 @@
+{
+    "$schema": "https://raw.githubusercontent.com/Cog-Creators/Red-DiscordBot/V3/develop/schema/red_cog.schema.json",
+    "name": "datasteward",
+    "author": ["Taako"],
+    "version": "1.0.0",
+    "description": "Privacy operations with dry-run-first per-channel retention policies, pinned-message protection, bounded enforcement, previews, audit summaries, and user data-access/deletion request workflows.",
+    "install_msg": "DataSteward loaded in dry-run mode. Configure a policy with `[p]datasteward policy set`, preview it, and read the README before enabling enforcement.",
+    "short": "Dry-run-first retention policies and privacy request workflows.",
+    "tags": ["privacy", "retention", "compliance", "deletion", "data", "moderation", "dashboard"],
+    "requirements": [],
+    "min_bot_version": "3.5.0",
+    "min_python_version": [3, 9, 0],
+    "hidden": false,
+    "disabled": false,
+    "type": "COG",
+    "end_user_data_statement": "This cog stores channel retention policy configuration, aggregate run results, privacy request IDs, requesting Discord user IDs, request types/details, reviewer IDs, notes, statuses, and timestamps. It scans and may delete Discord messages according to explicitly enabled policies but does not persistently store message content."
+}

@@ -139,13 +139,17 @@ def ending_recap(profile: dict[str, Any]) -> list[str]:
         if item and item.get("legendary")
     )
     lines = [
-        f"**Depth:** Floor {profile.get('deepest_floor', 1)} • "
-        f"{profile.get('bosses', 0)} bosses • {profile.get('deaths', 0)} deaths",
+        (
+            f"**Depth:** Floor {profile.get('deepest_floor', 1)} • "
+            f"{profile.get('bosses', 0)} bosses • {profile.get('deaths', 0)} deaths"
+        ),
         f"**Legacy:** {profile.get('ascensions', 0)} ascensions • {legendary_count} legendary relics",
         f"**Knowledge:** {len(profile.get('bestiary', {}))} creatures • {len(profile.get('lore', []))} lore fragments",
         f"**Ending:** {str(campaign.get('ending') or 'Still being written').title()}",
-        f"**Moral Legacy:** {morality_path(profile)['name']} "
-        f"({int(profile.get('morality', 0)):+d}) • {len(profile.get('moral_deeds', []))} remembered deeds",
+        (
+            f"**Moral Legacy:** {morality_path(profile)['name']} "
+            f"({int(profile.get('morality', 0)):+d}) • {len(profile.get('moral_deeds', []))} remembered deeds"
+        ),
     ]
     if closest:
         lines.append(

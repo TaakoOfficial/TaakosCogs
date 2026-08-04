@@ -83,8 +83,7 @@ class DashboardIntegration:
                     selected_application,
                 )
             except commands.CommandError as error:
-                notifications.append(
-                    {"message": str(error), "category": "error"})
+                notifications.append({"message": str(error), "category": "error"})
             except Exception as error:
                 log.exception("Applications dashboard action failed.")
                 notifications.append(
@@ -114,11 +113,7 @@ class DashboardIntegration:
         member = guild.get_member(user.id)
         is_owner = user.id in getattr(self.bot, "owner_ids", set())
         is_admin = member is not None and await self.bot.is_admin(member)
-        can_manage = (
-            is_owner
-            or is_admin
-            or (member is not None and member.guild_permissions.manage_guild)
-        )
+        can_manage = is_owner or is_admin or (member is not None and member.guild_permissions.manage_guild)
         return member, can_manage
 
     def _dashboard_form_data(self, kwargs: dict[str, typing.Any]) -> typing.Any:
@@ -131,11 +126,7 @@ class DashboardIntegration:
         form_data = self._dashboard_form_data(kwargs)
         selected = self._dash_value(form_data, "active_tab").lower()
         valid = set(action_tabs.values()) | {default}
-        return (
-            selected
-            if selected in valid
-            else action_tabs.get(self._dash_value(form_data, "action").lower(), default)
-        )
+        return selected if selected in valid else action_tabs.get(self._dash_value(form_data, "action").lower(), default)
 
     def _dashboard_tab_button(self, name: str, label: str, active: str) -> str:
         selected = name == active
@@ -216,10 +207,7 @@ class DashboardIntegration:
 """
 
     def _dashboard_selected_application(self, form_data: typing.Any) -> str:
-        return (
-            self._dash_value(form_data, "selected_application")
-            or self._dash_value(form_data, "application_key")
-        ).strip()
+        return (self._dash_value(form_data, "selected_application") or self._dash_value(form_data, "application_key")).strip()
 
     def _dash_value(
         self,
@@ -286,17 +274,13 @@ class DashboardIntegration:
         try:
             return int(value)
         except (TypeError, ValueError) as exc:
-            raise commands.BadArgument(
-                f"`{key}` must be a Discord ID.") from exc
+            raise commands.BadArgument(f"`{key}` must be a Discord ID.") from exc
 
     def _dash_csrf(self, kwargs: dict[str, typing.Any]) -> str:
         csrf_token = kwargs.get("csrf_token")
         if not isinstance(csrf_token, (tuple, list)) or len(csrf_token) != 2:
             return ""
-        return (
-            '<input type="hidden" name="csrf_token" value="'
-            f'{html.escape(str(csrf_token[1]), quote=True)}">'
-        )
+        return f'<input type="hidden" name="csrf_token" value="{html.escape(str(csrf_token[1]), quote=True)}">'
 
     async def _dashboard_handle_action(
         self,
@@ -310,8 +294,7 @@ class DashboardIntegration:
         messages: list[dict[str, str]] = []
 
         if action == "select_application":
-            selected_application = self._dashboard_selected_application(
-                form_data)
+            selected_application = self._dashboard_selected_application(form_data)
 
         elif action == "create_application":
             selected_application = await self._dashboard_create_application(
@@ -426,8 +409,7 @@ class DashboardIntegration:
             )
 
         elif action:
-            raise commands.BadArgument(
-                "Unknown Applications dashboard action.")
+            raise commands.BadArgument("Unknown Applications dashboard action.")
 
         return selected_application, messages
 
@@ -440,8 +422,7 @@ class DashboardIntegration:
         from .applications import app_key
 
         name = self._dash_value(form_data, "new_application_name").strip()
-        description = self._dash_value(
-            form_data, "new_application_description").strip()
+        description = self._dash_value(form_data, "new_application_description").strip()
         if not name:
             raise commands.BadArgument("Application name cannot be empty.")
         if len(name) > 60:
@@ -449,8 +430,7 @@ class DashboardIntegration:
                 "Application name must be 60 characters or fewer.",
             )
         if not description:
-            raise commands.BadArgument(
-                "Application description cannot be empty.")
+            raise commands.BadArgument("Application description cannot be empty.")
         if len(description) > 200:
             raise commands.BadArgument(
                 "Application description must be 200 characters or fewer.",
@@ -502,11 +482,9 @@ class DashboardIntegration:
             "application_name",
             app.get("name", key),
         ).strip()
-        description = self._dash_value(
-            form_data, "application_description").strip()
+        description = self._dash_value(form_data, "application_description").strip()
         if not name:
-            raise commands.BadArgument(
-                "Application display name cannot be empty.")
+            raise commands.BadArgument("Application display name cannot be empty.")
         if len(name) > 60:
             raise commands.BadArgument(
                 "Application display name must be 60 characters or fewer.",
@@ -522,17 +500,12 @@ class DashboardIntegration:
             "Choose a response channel.",
         )
         color_value = self._dashboard_parse_color(
-            self._dash_value(form_data, "color",
-                             self._color_hex(app.get("color"))),
+            self._dash_value(form_data, "color", self._color_hex(app.get("color"))),
         )
-        form_mode = self._dash_value(
-            form_data, "form_mode", "dm").strip().lower()
+        form_mode = self._dash_value(form_data, "form_mode", "dm").strip().lower()
         if form_mode not in {"dm", "modal"}:
             raise commands.BadArgument("Form mode must be `dm` or `modal`.")
-        button_style = (
-            self._dash_value(form_data, "button_style",
-                             "green").strip().lower()
-        )
+        button_style = self._dash_value(form_data, "button_style", "green").strip().lower()
         if button_style not in self.VALID_BUTTON_STYLES:
             raise commands.BadArgument(
                 "Button style must be green, red, gray, or blurple.",
@@ -565,22 +538,14 @@ class DashboardIntegration:
         )
         app["form_mode"] = form_mode
         app["panel_message"] = self._dash_value(form_data, "panel_message")
-        app["button_label"] = (
-            self._dash_value(form_data, "button_label",
-                             "Apply").strip() or "Apply"
-        )[:80]
+        app["button_label"] = (self._dash_value(form_data, "button_label", "Apply").strip() or "Apply")[:80]
         app["button_style"] = button_style
-        app["button_emoji"] = (
-            self._dash_value(form_data, "button_emoji").strip() or None
-        )
+        app["button_emoji"] = self._dash_value(form_data, "button_emoji").strip() or None
         app["thread_enabled"] = self._dash_bool(form_data, "thread_enabled")
         app["thread_name"] = (
-            self._dash_value(form_data, "thread_name",
-                             "{application} - {user}").strip()
-            or "{application} - {user}"
+            self._dash_value(form_data, "thread_name", "{application} - {user}").strip() or "{application} - {user}"
         )
-        app["notification_enabled"] = self._dash_bool(
-            form_data, "notification_enabled")
+        app["notification_enabled"] = self._dash_bool(form_data, "notification_enabled")
         app["notification_message"] = self._dash_value(
             form_data,
             "notification_message",
@@ -594,8 +559,7 @@ class DashboardIntegration:
             self._dash_values(form_data, "notification_role_ids"),
         )
         app["notification_role_target"] = notify_target
-        app["completion_message"] = self._dash_value(
-            form_data, "completion_message")
+        app["completion_message"] = self._dash_value(form_data, "completion_message")
         app["accept_message"] = self._dash_value(form_data, "accept_message")
         app["deny_message"] = self._dash_value(form_data, "deny_message")
         app["voting"] = {
@@ -640,8 +604,7 @@ class DashboardIntegration:
                 "Choose an application before adding a question.",
             )
         key, app = await self._get_app(guild.id, selected_application)
-        question_type = self._dash_value(
-            form_data, "add_question_type", "text").lower()
+        question_type = self._dash_value(form_data, "add_question_type", "text").lower()
         if question_type not in self.VALID_QUESTION_TYPES:
             raise commands.BadArgument(
                 "Question type must be text, boolean, choice, or attachment.",
@@ -679,11 +642,8 @@ class DashboardIntegration:
                 raise commands.BadArgument(
                     "Choice questions can have at most 25 choices.",
                 )
-            allow_other = any(choice.lower() ==
-                              "other" for choice in choice_values)
-            parsed_choices = [
-                choice for choice in choice_values if choice.lower() != "other"
-            ]
+            allow_other = any(choice.lower() == "other" for choice in choice_values)
+            parsed_choices = [choice for choice in choice_values if choice.lower() != "other"]
 
         questions.append(
             {
@@ -740,11 +700,9 @@ class DashboardIntegration:
             self._dash_optional_id(form_data, "panel_channel_id"),
             "Choose a text channel for the panel.",
         )
-        mode = self._dash_value(form_data, "panel_mode",
-                                "buttons").strip().lower()
+        mode = self._dash_value(form_data, "panel_mode", "buttons").strip().lower()
         if mode not in {"buttons", "select"}:
-            raise commands.BadArgument(
-                "Panel mode must be `buttons` or `select`.")
+            raise commands.BadArgument("Panel mode must be `buttons` or `select`.")
 
         apps = await self._get_apps(guild.id)
         selected_keys = self._dash_values(form_data, "panel_application_keys")
@@ -752,22 +710,16 @@ class DashboardIntegration:
         if selected_keys:
             for key in selected_keys:
                 if key not in apps:
-                    raise commands.BadArgument(
-                        f"No application named `{key}` exists.")
+                    raise commands.BadArgument(f"No application named `{key}` exists.")
                 selected_apps.append(apps[key])
         else:
-            selected_apps = [
-                app for app in apps.values() if app.get("open", True)]
+            selected_apps = [app for app in apps.values() if app.get("open", True)]
         if not selected_apps:
             raise commands.BadArgument("No matching applications were found.")
         if len(selected_apps) > 25:
-            raise commands.BadArgument(
-                "A panel can contain at most 25 applications.")
+            raise commands.BadArgument("A panel can contain at most 25 applications.")
 
-        title = (
-            self._dash_value(form_data, "panel_title", "Applications").strip()
-            or "Applications"
-        )
+        title = self._dash_value(form_data, "panel_title", "Applications").strip() or "Applications"
         description = self._dash_value(form_data, "panel_description").strip()
         if not description:
             if len(selected_apps) > 1:
@@ -848,29 +800,22 @@ class DashboardIntegration:
         response_id = self._dash_value(form_data, "response_id").strip()
         if not response_id:
             raise commands.BadArgument("Choose a response to review.")
-        decision = self._dash_value(
-            form_data, "response_decision").strip().lower()
+        decision = self._dash_value(form_data, "response_decision").strip().lower()
         if decision not in {"accepted", "denied"}:
-            raise commands.BadArgument(
-                "Response decision must be accepted or denied.")
+            raise commands.BadArgument("Response decision must be accepted or denied.")
         reason = self._dash_value(form_data, "response_reason").strip()
 
         key, app = await self._get_app(guild.id, selected_application)
         response = self._find_response(app, response_id)
         if response.get("status") != "pending":
-            raise commands.BadArgument(
-                "That response has already been reviewed.")
+            raise commands.BadArgument("That response has already been reviewed.")
 
         response["status"] = decision
         response["reviewed_by"] = user.id
         response["reviewed_at"] = self._dashboard_now()
         response["review_reason"] = reason
 
-        applicant = (
-            guild.get_member(response.get("user_id"))
-            if response.get("user_id")
-            else None
-        )
+        applicant = guild.get_member(response.get("user_id")) if response.get("user_id") else None
         if decision == "accepted":
             await self._apply_role_action(applicant, app, "accept_add")
             await self._apply_role_action(applicant, app, "accept_remove")
@@ -1004,13 +949,11 @@ class DashboardIntegration:
             ) from exc
         channel = guild.get_channel(clean_channel_id)
         if not isinstance(channel, discord.TextChannel):
-            raise commands.BadArgument(
-                "The channel ID must resolve to a text channel.")
+            raise commands.BadArgument("The channel ID must resolve to a text channel.")
         try:
             return await channel.fetch_message(clean_message_id)
         except discord.HTTPException as exc:
-            raise commands.CommandError(
-                "I could not fetch that message.") from exc
+            raise commands.CommandError("I could not fetch that message.") from exc
 
     async def _dashboard_source(
         self,
@@ -1023,24 +966,17 @@ class DashboardIntegration:
         polls = await self.config.guild(guild).polls()
         if selected_application not in apps:
             selected_application = next(
-                iter(sorted(apps, key=lambda key: apps[key].get(
-                    "name", key).lower())),
+                iter(sorted(apps, key=lambda key: apps[key].get("name", key).lower())),
                 "",
             )
         app = apps.get(selected_application)
         csrf = self._dash_csrf(kwargs)
 
-        total_responses = sum(
-            len(app_data.get("responses", [])) for app_data in apps.values()
-        )
+        total_responses = sum(len(app_data.get("responses", [])) for app_data in apps.values())
         pending_responses = sum(
-            1
-            for app_data in apps.values()
-            for response in app_data.get("responses", [])
-            if response.get("status") == "pending"
+            1 for app_data in apps.values() for response in app_data.get("responses", []) if response.get("status") == "pending"
         )
-        open_polls = sum(1 for poll in polls.values()
-                         if not poll.get("closed"))
+        open_polls = sum(1 for poll in polls.values() if not poll.get("closed"))
         active_tab = self._dashboard_active_tab(
             kwargs,
             {
@@ -1116,16 +1052,15 @@ class DashboardIntegration:
                 {self._dashboard_tab_button("polls", "Polls", active_tab)}
             </div>
             <section class="dash-panel{" active" if active_tab == "setup" else ""}"
-            data-tab-panel="setup">{self._dashboard_application_selector(apps, selected_application, guild,
-            csrf)}{self._dashboard_application_settings(guild, selected_application, app, csrf)}</section>
+            data-tab-panel="setup">{self._dashboard_application_selector(apps, selected_application, guild, csrf)}{
+            self._dashboard_application_settings(guild, selected_application, app, csrf)
+        }</section>
             <section class="dash-panel{" active" if active_tab == "questions" else ""}"
             data-tab-panel="questions">{self._dashboard_questions_section(selected_application, app, csrf)}</section>
             <section class="dash-panel{" active" if active_tab == "panels" else ""}"
-            data-tab-panel="panels">{self._dashboard_panels_section(guild, apps, panels, selected_application,
-            csrf)}</section>
+            data-tab-panel="panels">{self._dashboard_panels_section(guild, apps, panels, selected_application, csrf)}</section>
             <section class="dash-panel{" active" if active_tab == "responses" else ""}"
-            data-tab-panel="responses">{self._dashboard_responses_section(guild, selected_application, app,
-            csrf)}</section>
+            data-tab-panel="responses">{self._dashboard_responses_section(guild, selected_application, app, csrf)}</section>
             <section class="dash-panel{" active" if active_tab == "polls" else ""}"
             data-tab-panel="polls">{self._dashboard_polls_section(guild, polls, csrf)}</section>
             {self._dashboard_tabs_script()}
@@ -1167,8 +1102,7 @@ class DashboardIntegration:
                     <input type="hidden" name="action" value="create_application">
                     <div class="appdash-row">
                         {self._input("new_application_name", "New Application Name", "")}
-                        {self._channel_select(guild, "new_application_channel_id", "Response Channel", None,
-                        include_none=False)}
+                        {self._channel_select(guild, "new_application_channel_id", "Response Channel", None, include_none=False)}
                     </div>
                     {self._textarea("new_application_description", "Description", "", rows=3)}
                     <button class="appdash-btn" type="submit">Create Application</button>
@@ -1229,8 +1163,8 @@ class DashboardIntegration:
         form_mode_select = (
             '<div class="appdash-field"><label>Form Mode</label>'
             '<select name="form_mode">'
-            f'{self._option("dm", "DM Flow", form_mode)}'
-            f'{self._option("modal", "Discord Modal", form_mode)}'
+            f"{self._option('dm', 'DM Flow', form_mode)}"
+            f"{self._option('modal', 'Discord Modal', form_mode)}"
             "</select></div>"
         )
         thread_name_input = self._input(
@@ -1242,19 +1176,19 @@ class DashboardIntegration:
         button_style_select = (
             '<div class="appdash-field"><label>Panel Button Style</label>'
             '<select name="button_style">'
-            f'{self._option("green", "Green", button_style)}'
-            f'{self._option("red", "Red", button_style)}'
-            f'{self._option("gray", "Gray", button_style)}'
-            f'{self._option("blurple", "Blurple", button_style)}'
+            f"{self._option('green', 'Green', button_style)}"
+            f"{self._option('red', 'Red', button_style)}"
+            f"{self._option('gray', 'Gray', button_style)}"
+            f"{self._option('blurple', 'Blurple', button_style)}"
             "</select></div>"
         )
         role_target = self._notification_role_target(app)
         notification_target_select = (
             '<div class="appdash-field"><label>Notification Role Ping Target</label>'
             '<select name="notification_role_target">'
-            f'{self._option("channel", "Channel", role_target)}'
-            f'{self._option("thread", "Thread", role_target)}'
-            f'{self._option("both", "Both", role_target)}'
+            f"{self._option('channel', 'Channel', role_target)}"
+            f"{self._option('thread', 'Thread', role_target)}"
+            f"{self._option('both', 'Both', role_target)}"
             "</select></div>"
         )
         notification_message = self._textarea(
@@ -1364,9 +1298,7 @@ class DashboardIntegration:
                 f"<td>{self._h(choices)}</td>"
                 "</tr>",
             )
-        table = "".join(rows) or (
-            '<tr><td colspan="5" class="appdash-muted">No questions configured.</td></tr>'
-        )
+        table = "".join(rows) or ('<tr><td colspan="5" class="appdash-muted">No questions configured.</td></tr>')
         remove_options = "".join(
             f'<option value="{index}">{index}. {self._h(question.get("text") or "Question")}</option>'
             for index, question in enumerate(questions, start=1)
@@ -1391,7 +1323,9 @@ class DashboardIntegration:
         <div id="questions" class="appdash-card">
             <h3>Questions</h3>
             <table
-            class="appdash-table"><thead><tr><th>#</th><th>Type</th><th>Required</th><th>Question</th><th>Choices</th></tr></thead><tbody>{table}</tbody></table>
+            class="appdash-table"><thead><tr><th>#</th><th>Type</th><th>Required</th><th>Question</th><th>Choices</th></tr></thead><tbody>{
+            table
+        }</tbody></table>
             <div class="appdash-grid">
                 <form method="POST">
                     {csrf}
@@ -1400,9 +1334,9 @@ class DashboardIntegration:
                     {self._textarea("add_question_text", "New Question", "", rows=3)}
                     <div class="appdash-row">
                         <div class="appdash-field"><label>Type</label><select
-                        name="add_question_type">{self._option("text", "Text", "text")}{self._option("boolean",
-                        "Boolean", "text")}{self._option("choice", "Choice", "text")}{self._option("attachment",
-                        "Attachment", "text")}</select></div>
+                        name="add_question_type">{self._option("text", "Text", "text")}{
+            self._option("boolean", "Boolean", "text")
+        }{self._option("choice", "Choice", "text")}{self._option("attachment", "Attachment", "text")}</select></div>
                         <label class="appdash-check"><input type="checkbox" name="add_question_required" value="1"
                         checked> Required</label>
                     </div>
@@ -1424,10 +1358,7 @@ class DashboardIntegration:
     ) -> str:
         rows = []
         for message_id, panel in panels.items():
-            app_names = [
-                apps[key].get("name", key) if key in apps else key
-                for key in panel.get("applications", [])
-            ]
+            app_names = [apps[key].get("name", key) if key in apps else key for key in panel.get("applications", [])]
             channel_id = panel.get("channel_id")
             channel = guild.get_channel(channel_id) if channel_id else None
             rows.append(
@@ -1438,28 +1369,31 @@ class DashboardIntegration:
                 f"<td>{self._h(', '.join(app_names))}</td>"
                 "</tr>",
             )
-        table = "".join(rows) or (
-            '<tr><td colspan="4" class="appdash-muted">No panels tracked.</td></tr>'
-        )
+        table = "".join(rows) or ('<tr><td colspan="4" class="appdash-muted">No panels tracked.</td></tr>')
         return f"""
         <div id="panels" class="appdash-card">
             <h3>Panels</h3>
             <table
-            class="appdash-table"><thead><tr><th>Message</th><th>Channel</th><th>Mode</th><th>Applications</th></tr></thead><tbody>{table}</tbody></table>
+            class="appdash-table"><thead><tr><th>Message</th><th>Channel</th><th>Mode</th><th>Applications</th></tr></thead><tbody>{
+            table
+        }</tbody></table>
             <div class="appdash-grid">
                 <form method="POST">
                     {csrf}
                     <input type="hidden" name="action" value="post_panel">
                     <input type="hidden" name="selected_application" value="{self._h(selected_application)}">
                     <div class="appdash-row">
-                        {self._channel_select(guild, "panel_channel_id", "Post Panel Channel", None,
-                        include_none=False)}
-                        <div class="appdash-field"><label>Mode</label><select name="panel_mode">{self._option("buttons",
-                         "Buttons", "buttons")}{self._option("select", "Dropdown", "buttons")}</select></div>
+                        {self._channel_select(guild, "panel_channel_id", "Post Panel Channel", None, include_none=False)}
+                        <div class="appdash-field"><label>Mode</label><select name="panel_mode">{
+            self._option("buttons", "Buttons", "buttons")
+        }{self._option("select", "Dropdown", "buttons")}</select></div>
                         {self._input("panel_title", "Panel Title", "Applications")}
                     </div>
-                    {self._multi_application_select(apps, "panel_application_keys", "Panel Applications",
-                    [selected_application] if selected_application else [])}
+                    {
+            self._multi_application_select(
+                apps, "panel_application_keys", "Panel Applications", [selected_application] if selected_application else []
+            )
+        }
                     {self._textarea("panel_description", "Panel Description Override", "", rows=3)}
                     <button class="appdash-btn" type="submit">Post Panel</button>
                 </form>
@@ -1516,9 +1450,7 @@ class DashboardIntegration:
                 pending_options.append(
                     f'<option value="{self._h(response.get("id"))}">{self._h(label)}</option>',
                 )
-        table = "".join(rows) or (
-            '<tr><td colspan="5" class="appdash-muted">No responses stored.</td></tr>'
-        )
+        table = "".join(rows) or ('<tr><td colspan="5" class="appdash-muted">No responses stored.</td></tr>')
         decision_form = (
             f"""
             <form method="POST">
@@ -1529,8 +1461,9 @@ class DashboardIntegration:
                     <div class="appdash-field"><label>Pending Response</label><select
                     name="response_id">{"".join(pending_options)}</select></div>
                     <div class="appdash-field"><label>Decision</label><select
-                    name="response_decision">{self._option("accepted", "Accept", "accepted")}{self._option("denied",
-                    "Deny", "accepted")}</select></div>
+                    name="response_decision">{self._option("accepted", "Accept", "accepted")}{
+                self._option("denied", "Deny", "accepted")
+            }</select></div>
                 </div>
                 {self._textarea("response_reason", "Reason", "", rows=3)}
                 <button class="appdash-btn" type="submit">Set Response Status</button>
@@ -1574,9 +1507,7 @@ class DashboardIntegration:
                 close_options.append(
                     f'<option value="{self._h(poll_id)}">{self._h(poll.get("question") or poll_id)}</option>',
                 )
-        table = "".join(rows) or (
-            '<tr><td colspan="5" class="appdash-muted">No polls tracked.</td></tr>'
-        )
+        table = "".join(rows) or ('<tr><td colspan="5" class="appdash-muted">No polls tracked.</td></tr>')
         close_form = (
             f"""
             <form method="POST">
@@ -1728,8 +1659,7 @@ class DashboardIntegration:
         for channel in sorted(guild.text_channels, key=lambda item: item.name.lower()):
             selected_attr = "selected" if str(channel.id) in selected_ids else ""
             options.append(
-                f'<option value="{channel.id}" {selected_attr}>'
-                f"#{self._h(channel.name)}</option>",
+                f'<option value="{channel.id}" {selected_attr}>#{self._h(channel.name)}</option>',
             )
         return (
             f'<div class="appdash-field"><label>{self._h(label)}</label>'
@@ -1773,8 +1703,7 @@ class DashboardIntegration:
         ):
             selected_attr = "selected" if key in selected_keys else ""
             options.append(
-                f'<option value="{self._h(key)}" {selected_attr}>'
-                f'{self._h(app.get("name", key))}</option>',
+                f'<option value="{self._h(key)}" {selected_attr}>{self._h(app.get("name", key))}</option>',
             )
         return (
             f'<div class="appdash-field"><label>{self._h(label)}</label>'

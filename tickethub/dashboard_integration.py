@@ -75,8 +75,7 @@ class DashboardIntegration:
                     selected_profile,
                 )
             except commands.CommandError as error:
-                notifications.append(
-                    {"message": str(error), "category": "error"})
+                notifications.append({"message": str(error), "category": "error"})
             except Exception as error:
                 log.exception("TicketHub dashboard action failed.")
                 notifications.append(
@@ -106,11 +105,7 @@ class DashboardIntegration:
         member = guild.get_member(user.id)
         is_owner = user.id in getattr(self.bot, "owner_ids", set())
         is_admin = member is not None and await self.bot.is_admin(member)
-        can_manage = (
-            is_owner
-            or is_admin
-            or (member is not None and member.guild_permissions.manage_guild)
-        )
+        can_manage = is_owner or is_admin or (member is not None and member.guild_permissions.manage_guild)
         return member, can_manage
 
     def _dashboard_form_data(self, kwargs: dict[str, typing.Any]) -> typing.Any:
@@ -123,11 +118,7 @@ class DashboardIntegration:
         form_data = self._dashboard_form_data(kwargs)
         selected = self._dash_value(form_data, "active_tab").lower()
         valid = set(action_tabs.values()) | {default}
-        return (
-            selected
-            if selected in valid
-            else action_tabs.get(self._dash_value(form_data, "action").lower(), default)
-        )
+        return selected if selected in valid else action_tabs.get(self._dash_value(form_data, "action").lower(), default)
 
     def _dashboard_tab_button(self, name: str, label: str, active: str) -> str:
         selected = name == active
@@ -409,17 +400,13 @@ class DashboardIntegration:
         try:
             return int(value)
         except (TypeError, ValueError) as exc:
-            raise commands.BadArgument(
-                f"`{key}` must be a Discord ID.") from exc
+            raise commands.BadArgument(f"`{key}` must be a Discord ID.") from exc
 
     def _dash_csrf(self, kwargs: dict[str, typing.Any]) -> str:
         csrf_token = kwargs.get("csrf_token")
         if not isinstance(csrf_token, (tuple, list)) or len(csrf_token) != 2:
             return ""
-        return (
-            '<input type="hidden" name="csrf_token" value="'
-            f'{html.escape(str(csrf_token[1]), quote=True)}">'
-        )
+        return f'<input type="hidden" name="csrf_token" value="{html.escape(str(csrf_token[1]), quote=True)}">'
 
     async def _dashboard_handle_action(
         self,
@@ -581,8 +568,7 @@ class DashboardIntegration:
 
         elif action == "clear_multi_panel":
             await self._dashboard_clear_multi_panel(guild, form_data)
-            messages.append(
-                {"message": "Multi-panel cleared.", "category": "success"})
+            messages.append({"message": "Multi-panel cleared.", "category": "success"})
 
         elif action == "import_aaa3a_panels":
             records = await self._collect_aaa3a_panel_records(guild)
@@ -662,19 +648,14 @@ class DashboardIntegration:
         guild: discord.Guild,
         form_data: typing.Any,
     ) -> str:
-        profile_name = self._clean_name(
-            self._dash_value(form_data, "new_profile_name"))
+        profile_name = self._clean_name(self._dash_value(form_data, "new_profile_name"))
         profiles = await self._get_profiles(guild)
         if profile_name in profiles:
             raise commands.BadArgument(
                 f"A profile named `{profile_name}` already exists.",
             )
         clone_name = self._dash_value(form_data, "clone_profile")
-        profile = (
-            self._merge_profile(profiles.get(clone_name))
-            if clone_name in profiles
-            else self._default_profile()
-        )
+        profile = self._merge_profile(profiles.get(clone_name)) if clone_name in profiles else self._default_profile()
         profile["panel_channel_id"] = None
         profile["panel_message_id"] = None
         profile["next_profile_ticket_id"] = None
@@ -687,18 +668,13 @@ class DashboardIntegration:
         profile_name: str,
     ) -> None:
         if profile_name == "main":
-            raise commands.BadArgument(
-                "The default `main` profile cannot be deleted.")
+            raise commands.BadArgument("The default `main` profile cannot be deleted.")
         profiles = await self._get_profiles(guild)
         if profile_name not in profiles:
-            raise commands.BadArgument(
-                f"No profile named `{profile_name}` exists.")
+            raise commands.BadArgument(f"No profile named `{profile_name}` exists.")
 
         tickets = await self.config.guild(guild).tickets()
-        if any(
-            str(record.get("profile") or "main") == profile_name
-            for record in tickets.values()
-        ):
+        if any(str(record.get("profile") or "main") == profile_name for record in tickets.values()):
             raise commands.BadArgument(
                 "Delete or recover this profile's tickets before deleting it.",
             )
@@ -712,16 +688,13 @@ class DashboardIntegration:
                 )
             except (TypeError, ValueError):
                 record = None
-            if record and any(
-                option["profile"] == profile_name for option in record["options"]
-            ):
+            if record and any(option["profile"] == profile_name for option in record["options"]):
                 raise commands.BadArgument(
                     "Remove this profile from multi-panels before deleting it.",
                 )
 
         if profiles[profile_name].get("panel_message_id"):
-            raise commands.BadArgument(
-                "Clear this profile's panel before deleting it.")
+            raise commands.BadArgument("Clear this profile's panel before deleting it.")
 
         async with self.config.guild(guild).profiles() as stored_profiles:
             for raw_name in list(stored_profiles):
@@ -746,11 +719,7 @@ class DashboardIntegration:
         profile["panel_style"] = self._parse_panel_style(
             self._dash_value(form_data, "panel_style", "button"),
         )
-        profile["ticket_mode"] = (
-            "thread"
-            if self._dash_value(form_data, "ticket_mode") == "thread"
-            else "channel"
-        )
+        profile["ticket_mode"] = "thread" if self._dash_value(form_data, "ticket_mode") == "thread" else "channel"
         profile["panel_channel_id"] = self._dash_optional_id(
             form_data,
             "panel_channel_id",
@@ -771,14 +740,12 @@ class DashboardIntegration:
             form_data,
             "thread_parent_channel_id",
         )
-        profile["log_channel_id"] = self._dash_optional_id(
-            form_data, "log_channel_id")
+        profile["log_channel_id"] = self._dash_optional_id(form_data, "log_channel_id")
         profile["transcript_channel_id"] = self._dash_optional_id(
             form_data,
             "transcript_channel_id",
         )
-        profile["ticket_role_id"] = self._dash_optional_id(
-            form_data, "ticket_role_id")
+        profile["ticket_role_id"] = self._dash_optional_id(form_data, "ticket_role_id")
         profile["max_open_tickets_by_member"] = self._dash_int(
             form_data,
             "max_open_tickets_by_member",
@@ -793,17 +760,11 @@ class DashboardIntegration:
             optional=True,
         )
         profile["channel_name"] = self._validate_channel_name_template(
-            self._dash_value(form_data, "channel_name",
-                             "ticket-{id}-{owner_name}"),
+            self._dash_value(form_data, "channel_name", "ticket-{id}-{owner_name}"),
         )
-        profile["panel_title"] = (
-            self._clean_modal_text(self._dash_value(
-                form_data, "panel_title"), 256)
-            or "Need Help?"
-        )
+        profile["panel_title"] = self._clean_modal_text(self._dash_value(form_data, "panel_title"), 256) or "Need Help?"
         profile["panel_message"] = (
-            self._clean_modal_text(self._dash_value(
-                form_data, "panel_message"), 2048)
+            self._clean_modal_text(self._dash_value(form_data, "panel_message"), 2048)
             or "Open a ticket and staff will help you as soon as possible."
         )
         profile["welcome_message"] = self._clean_modal_text(
@@ -816,10 +777,8 @@ class DashboardIntegration:
         )
         profile["transcripts"] = self._dash_bool(form_data, "transcripts")
         profile["dm_transcript"] = self._dash_bool(form_data, "dm_transcript")
-        profile["owner_can_close"] = self._dash_bool(
-            form_data, "owner_can_close")
-        profile["owner_can_reopen"] = self._dash_bool(
-            form_data, "owner_can_reopen")
+        profile["owner_can_close"] = self._dash_bool(form_data, "owner_can_close")
+        profile["owner_can_reopen"] = self._dash_bool(form_data, "owner_can_reopen")
         profile["owner_can_add_members"] = self._dash_bool(
             form_data,
             "owner_can_add_members",
@@ -828,8 +787,7 @@ class DashboardIntegration:
             form_data,
             "owner_can_remove_members",
         )
-        profile["close_on_leave"] = self._dash_bool(
-            form_data, "close_on_leave")
+        profile["close_on_leave"] = self._dash_bool(form_data, "close_on_leave")
         profile["close_request_timeout_minutes"] = self._dash_int(
             form_data,
             "close_request_timeout_minutes",
@@ -838,10 +796,7 @@ class DashboardIntegration:
             maximum=self.MAX_CLOSE_REQUEST_TIMEOUT_MINUTES,
         )
 
-        auto_delete = (
-            self._dash_value(
-                form_data, "auto_delete_on_close_hours").strip().lower()
-        )
+        auto_delete = self._dash_value(form_data, "auto_delete_on_close_hours").strip().lower()
         if auto_delete in {"", "off", "none", "disabled", "disable"}:
             profile["auto_delete_on_close_hours"] = None
         else:
@@ -862,29 +817,20 @@ class DashboardIntegration:
             "blacklist_role_ids",
         ):
             profile[field] = sorted(
-                {int(role_id)
-                     for role_id in self._dash_values(form_data, field)},
+                {int(role_id) for role_id in self._dash_values(form_data, field)},
             )
 
         defaults = self._default_profile()["control_emojis"]
         configured = {}
         for action, default_emoji in defaults.items():
             value = self._dash_value(form_data, f"emoji_{action}").strip()
-            if (
-                not value
-                or value.lower() in {"default", "reset"}
-                or value == default_emoji
-            ):
+            if not value or value.lower() in {"default", "reset"} or value == default_emoji:
                 continue
             try:
                 parsed_emoji = discord.PartialEmoji.from_str(value)
             except (TypeError, ValueError) as exc:
-                raise commands.BadArgument(
-                    f"`{action}` emoji is not valid.") from exc
-            if (
-                parsed_emoji.id is not None
-                and self.bot.get_emoji(parsed_emoji.id) is None
-            ):
+                raise commands.BadArgument(f"`{action}` emoji is not valid.") from exc
+            if parsed_emoji.id is not None and self.bot.get_emoji(parsed_emoji.id) is None:
                 raise commands.BadArgument(
                     f"I cannot access the custom emoji for `{action}`.",
                 )
@@ -902,10 +848,7 @@ class DashboardIntegration:
                 if str(record.get("profile") or "main") == profile_name:
                     await self._update_ticket_message(guild, record, profile)
         for record in tickets.values():
-            if (
-                str(record.get("profile") or "main") == profile_name
-                and record.get("status") == "closed"
-            ):
+            if str(record.get("profile") or "main") == profile_name and record.get("status") == "closed":
                 self._schedule_ticket_auto_delete(guild.id, record, profile)
         return profile_name
 
@@ -927,8 +870,7 @@ class DashboardIntegration:
                 45,
             )
             if not label:
-                raise commands.BadArgument(
-                    "Enabled modal questions need a label.")
+                raise commands.BadArgument("Enabled modal questions need a label.")
             question_type = (
                 self._modal_type_name(
                     self._dash_value(form_data, f"modal_{index}_type"),
@@ -943,11 +885,7 @@ class DashboardIntegration:
                     "Choice questions need at least two choices.",
                 )
             style_name = self._dash_value(form_data, f"modal_{index}_style")
-            style = (
-                discord.TextStyle.short.value
-                if style_name == "short"
-                else discord.TextStyle.paragraph.value
-            )
+            style = discord.TextStyle.short.value if style_name == "short" else discord.TextStyle.paragraph.value
             min_length = self._dash_int(
                 form_data,
                 f"modal_{index}_min_length",
@@ -973,8 +911,7 @@ class DashboardIntegration:
                         4000,
                     ),
                     "placeholder": self._clean_modal_text(
-                        self._dash_value(
-                            form_data, f"modal_{index}_placeholder"),
+                        self._dash_value(form_data, f"modal_{index}_placeholder"),
                         100,
                     ),
                     "min_length": min_length,
@@ -997,8 +934,7 @@ class DashboardIntegration:
         profile = await self._ensure_profile(guild, profile_name)
         fields = list(profile.get("creating_modal") or [])
         if len(fields) >= 5:
-            raise commands.BadArgument(
-                "A Discord modal can only have 5 questions.")
+            raise commands.BadArgument("A Discord modal can only have 5 questions.")
 
         label = self._clean_modal_text(
             self._dash_value(form_data, "add_modal_label"),
@@ -1007,24 +943,15 @@ class DashboardIntegration:
         if not label:
             raise commands.BadArgument("New modal questions need a label.")
 
-        question_type = (
-            self._modal_type_name(self._dash_value(
-                form_data, "add_modal_type"))
-            or "text"
-        )
+        question_type = self._modal_type_name(self._dash_value(form_data, "add_modal_type")) or "text"
         choices = self._clean_modal_choices(
             self._dash_value(form_data, "add_modal_choices"),
         )
         if question_type == "choice" and len(choices) < 2:
-            raise commands.BadArgument(
-                "Choice questions need at least two choices.")
+            raise commands.BadArgument("Choice questions need at least two choices.")
 
         style_name = self._dash_value(form_data, "add_modal_style")
-        style = (
-            discord.TextStyle.short.value
-            if style_name == "short"
-            else discord.TextStyle.paragraph.value
-        )
+        style = discord.TextStyle.short.value if style_name == "short" else discord.TextStyle.paragraph.value
         fields.append(
             {
                 "label": label,
@@ -1059,8 +986,7 @@ class DashboardIntegration:
         profile = await self._ensure_profile(guild, profile_name)
         fields = list(profile.get("creating_modal") or [])
         if not fields:
-            raise commands.BadArgument(
-                f"`{profile_name}` has no modal questions.")
+            raise commands.BadArgument(f"`{profile_name}` has no modal questions.")
 
         index = self._dash_int(
             form_data,
@@ -1069,10 +995,7 @@ class DashboardIntegration:
             maximum=len(fields),
         )
         removed = fields.pop(index - 1)
-        removed_label = (
-            self._clean_modal_text(removed.get(
-                "label"), 45) or f"Question {index}"
-        )
+        removed_label = self._clean_modal_text(removed.get("label"), 45) or f"Question {index}"
         profile["creating_modal"] = self._sanitize_modal_fields(fields)
         await self._set_profile(guild, profile_name, profile)
         return profile_name, removed_label
@@ -1091,8 +1014,7 @@ class DashboardIntegration:
         if not isinstance(channel, discord.TextChannel):
             raise commands.BadArgument("Choose a text channel for the panel.")
         style = self._parse_panel_style(
-            self._dash_value(form_data, "post_panel_style",
-                             profile.get("panel_style")),
+            self._dash_value(form_data, "post_panel_style", profile.get("panel_style")),
         )
         message = await self._post_panel(guild, profile_name, profile, channel, style)
         await self.config.guild(guild).enabled.set(True)
@@ -1182,14 +1104,12 @@ class DashboardIntegration:
                 parts.append("")
             profile_name = self._clean_name(parts[0])
             if profile_name not in profiles:
-                raise commands.BadArgument(
-                    f"No profile named `{profile_name}` exists.")
+                raise commands.BadArgument(f"No profile named `{profile_name}` exists.")
             emoji = parts[1] or None
             label = parts[2][:80]
             description = parts[3][:100] or None
             if not label:
-                raise commands.BadArgument(
-                    "Every multi-panel option needs a label.")
+                raise commands.BadArgument("Every multi-panel option needs a label.")
             options.append(
                 {
                     "profile": profile_name,
@@ -1201,8 +1121,7 @@ class DashboardIntegration:
             if len(options) >= 25:
                 break
         if not options:
-            raise commands.BadArgument(
-                "Provide at least one multi-panel option.")
+            raise commands.BadArgument("Provide at least one multi-panel option.")
 
         record = {
             "channel_id": message.channel.id,
@@ -1256,11 +1175,7 @@ class DashboardIntegration:
         member: discord.Member,
         form_data: typing.Any,
     ) -> str:
-        ticket_field = (
-            "workspace_ticket_id"
-            if self._dash_value(form_data, "workspace_ticket_id").strip()
-            else "ticket_id"
-        )
+        ticket_field = "workspace_ticket_id" if self._dash_value(form_data, "workspace_ticket_id").strip() else "ticket_id"
         ticket_id = self._dash_int(form_data, ticket_field, minimum=1)
         action = self._dash_value(form_data, "ticket_action")
         record = await self._get_ticket_record_by_id(guild, ticket_id)
@@ -1292,12 +1207,10 @@ class DashboardIntegration:
                 requested_by=member,
             )
         elif action in {"add_member", "remove_member"}:
-            target_id = self._dash_int(
-                form_data, "ticket_member_id", minimum=1)
+            target_id = self._dash_int(form_data, "ticket_member_id", minimum=1)
             target = guild.get_member(target_id)
             if target is None:
-                raise commands.BadArgument(
-                    "That member is not in this server.")
+                raise commands.BadArgument("That member is not in this server.")
             if action == "add_member":
                 note = await self._add_ticket_member(guild, record, member, target)
                 return f"Added {target} to ticket #{ticket_id}.{note}"
@@ -1352,11 +1265,7 @@ class DashboardIntegration:
                 ) from exc
         reply_embed = discord.Embed(
             description=content,
-            color=(
-                member.color
-                if member.color.value
-                else discord.Color.blurple()
-            ),
+            color=(member.color if member.color.value else discord.Color.blurple()),
             timestamp=discord.utils.utcnow(),
         )
         reply_embed.set_author(
@@ -1397,8 +1306,7 @@ class DashboardIntegration:
         guild: discord.Guild,
         form_data: typing.Any,
     ) -> str:
-        owner_id = self._dash_int(
-            form_data, "create_ticket_owner_id", minimum=1)
+        owner_id = self._dash_int(form_data, "create_ticket_owner_id", minimum=1)
         owner = guild.get_member(owner_id)
         if owner is None:
             raise commands.BadArgument(
@@ -1407,10 +1315,7 @@ class DashboardIntegration:
         profile_name = self._clean_name(
             self._dash_value(form_data, "create_ticket_profile", "main"),
         )
-        reason = (
-            self._dash_value(form_data, "create_ticket_reason").strip()
-            or "Created from Dashboard."
-        )
+        reason = self._dash_value(form_data, "create_ticket_reason").strip() or "Created from Dashboard."
         record, channel = await self._create_ticket(
             guild,
             owner,
@@ -1428,8 +1333,7 @@ class DashboardIntegration:
         channel_id = self._dash_int(form_data, "recover_channel_id", minimum=1)
         channel = guild.get_channel(channel_id)
         if not isinstance(channel, (discord.TextChannel, discord.Thread)):
-            raise commands.BadArgument(
-                "Choose a ticket text channel or thread.")
+            raise commands.BadArgument("Choose a ticket text channel or thread.")
         return await self._recover_ticket_record(guild, channel, member)
 
     async def _dashboard_fetch_message(
@@ -1453,8 +1357,7 @@ class DashboardIntegration:
         try:
             return await channel.fetch_message(clean_message_id)
         except discord.HTTPException as exc:
-            raise commands.CommandError(
-                "I could not fetch that message.") from exc
+            raise commands.CommandError("I could not fetch that message.") from exc
 
     async def _dashboard_refresh_profile_panel(
         self,
@@ -1495,27 +1398,16 @@ class DashboardIntegration:
         multi_panels = await self.config.guild(guild).multi_panels()
         aaa3a_panels = await self.config.guild(guild).aaa3a_panels()
         if selected_profile not in profiles:
-            selected_profile = (
-                "main" if "main" in profiles else next(iter(profiles), "main")
-            )
+            selected_profile = "main" if "main" in profiles else next(iter(profiles), "main")
         profile = profiles[selected_profile]
         csrf = self._dash_csrf(kwargs)
 
-        open_count = sum(
-            1 for record in tickets.values() if record.get("status") == "open"
-        )
-        closed_count = sum(
-            1 for record in tickets.values() if record.get("status") == "closed"
-        )
-        claimed_count = sum(
-            1
-            for record in tickets.values()
-            if record.get("status") == "open" and record.get("claimed_by")
-        )
+        open_count = sum(1 for record in tickets.values() if record.get("status") == "open")
+        closed_count = sum(1 for record in tickets.values() if record.get("status") == "closed")
+        claimed_count = sum(1 for record in tickets.values() if record.get("status") == "open" and record.get("claimed_by"))
         form_data = self._dashboard_form_data(kwargs)
         selected_ticket_value = (
-            self._dash_value(form_data, "workspace_ticket_id").strip()
-            or self._dash_value(form_data, "ticket_id").strip()
+            self._dash_value(form_data, "workspace_ticket_id").strip() or self._dash_value(form_data, "ticket_id").strip()
         )
         selected_ticket_id = None
         if selected_ticket_value:
@@ -1662,19 +1554,19 @@ class DashboardIntegration:
                 {self._dashboard_tab_button("imports", "AAA3A Imports", active_tab)}
             </div>
             <section class="dash-panel{" active" if active_tab == "tickets" else ""}"
-            data-tab-panel="tickets">{self._dashboard_tickets_section(guild, profiles, tickets, selected_profile,
-            csrf)}</section>
+            data-tab-panel="tickets">{self._dashboard_tickets_section(guild, profiles, tickets, selected_profile, csrf)}</section>
             <section class="dash-panel{" active" if active_tab == "desk" else ""}"
             data-tab-panel="desk">{workspace}</section>
             <section class="dash-panel{" active" if active_tab == "setup" else ""}"
-            data-tab-panel="setup">{self._dashboard_global_section(enabled, next_ticket_id,
-            csrf)}{self._dashboard_profile_selector(profiles, selected_profile,
-            csrf)}{self._dashboard_profile_section(guild, selected_profile, profile, csrf)}</section>
+            data-tab-panel="setup">{self._dashboard_global_section(enabled, next_ticket_id, csrf)}{
+            self._dashboard_profile_selector(profiles, selected_profile, csrf)
+        }{self._dashboard_profile_section(guild, selected_profile, profile, csrf)}</section>
             <section class="dash-panel{" active" if active_tab == "modal" else ""}"
             data-tab-panel="modal">{self._dashboard_modal_section(selected_profile, profile, csrf)}</section>
             <section class="dash-panel{" active" if active_tab == "panels" else ""}"
-            data-tab-panel="panels">{self._dashboard_panels_section(guild, selected_profile, profile, multi_panels,
-            csrf)}</section>
+            data-tab-panel="panels">{
+            self._dashboard_panels_section(guild, selected_profile, profile, multi_panels, csrf)
+        }</section>
             <section class="dash-panel{" active" if active_tab == "imports" else ""}"
             data-tab-panel="imports">{self._dashboard_imports_section(aaa3a_panels, csrf)}</section>
             {self._dashboard_tabs_script()}
@@ -1806,40 +1698,67 @@ class DashboardIntegration:
                     </div>
                 </div>
                 <div class="th-row">
-                    <div class="th-field"><label>Panel Style</label><select name="panel_style">{self._option("button",
-                    "Button", profile.get("panel_style"))}{self._option("dropdown", "Dropdown",
-                    profile.get("panel_style"))}</select></div>
-                    <div class="th-field"><label>Ticket Mode</label><select name="ticket_mode">{self._option("channel",
-                    "Channel", profile.get("ticket_mode"))}{self._option("thread", "Thread",
-                    profile.get("ticket_mode"))}</select></div>
-                    {self._input("max_open_tickets_by_member", "Max Open Per Member",
-                    profile.get("max_open_tickets_by_member", 5), "number", min_value=0, max_value=50)}
-                    {self._input("close_request_timeout_minutes", "Close Timeout Minutes",
-                    self._close_request_timeout_minutes(profile), "number",
-                    min_value=self.MIN_CLOSE_REQUEST_TIMEOUT_MINUTES, max_value=self.MAX_CLOSE_REQUEST_TIMEOUT_MINUTES)}
-                    {self._input("auto_delete_on_close_hours", "Auto-Delete Hours", "" if
-                    profile.get("auto_delete_on_close_hours") is None else profile.get("auto_delete_on_close_hours"),
-                    "text")}
-                    {self._input("next_profile_ticket_id", "Next Profile Ticket ID", "" if
-                    profile.get("next_profile_ticket_id") is None else profile.get("next_profile_ticket_id"), "number",
-                    min_value=1)}
+                    <div class="th-field"><label>Panel Style</label><select name="panel_style">{
+            self._option("button", "Button", profile.get("panel_style"))
+        }{self._option("dropdown", "Dropdown", profile.get("panel_style"))}</select></div>
+                    <div class="th-field"><label>Ticket Mode</label><select name="ticket_mode">{
+            self._option("channel", "Channel", profile.get("ticket_mode"))
+        }{self._option("thread", "Thread", profile.get("ticket_mode"))}</select></div>
+                    {
+            self._input(
+                "max_open_tickets_by_member",
+                "Max Open Per Member",
+                profile.get("max_open_tickets_by_member", 5),
+                "number",
+                min_value=0,
+                max_value=50,
+            )
+        }
+                    {
+            self._input(
+                "close_request_timeout_minutes",
+                "Close Timeout Minutes",
+                self._close_request_timeout_minutes(profile),
+                "number",
+                min_value=self.MIN_CLOSE_REQUEST_TIMEOUT_MINUTES,
+                max_value=self.MAX_CLOSE_REQUEST_TIMEOUT_MINUTES,
+            )
+        }
+                    {
+            self._input(
+                "auto_delete_on_close_hours",
+                "Auto-Delete Hours",
+                "" if profile.get("auto_delete_on_close_hours") is None else profile.get("auto_delete_on_close_hours"),
+                "text",
+            )
+        }
+                    {
+            self._input(
+                "next_profile_ticket_id",
+                "Next Profile Ticket ID",
+                "" if profile.get("next_profile_ticket_id") is None else profile.get("next_profile_ticket_id"),
+                "number",
+                min_value=1,
+            )
+        }
                 </div>
                 <div class="th-row">
-                    {self._input("channel_name", "Channel Name Template", profile.get("channel_name") or
-                    "ticket-{id}-{owner_name}")}
+                    {
+            self._input("channel_name", "Channel Name Template", profile.get("channel_name") or "ticket-{id}-{owner_name}")
+        }
                     {self._input("panel_message_id", "Tracked Panel Message ID", profile.get("panel_message_id") or "")}
                 </div>
                 <div class="th-row">
                     {self._channel_select(guild, "panel_channel_id", "Panel Channel", profile.get("panel_channel_id"))}
-                    {self._category_select(guild, "ticket_category_id", "Open Category",
-                    profile.get("ticket_category_id"))}
-                    {self._category_select(guild, "closed_category_id", "Closed Category",
-                    profile.get("closed_category_id"))}
-                    {self._channel_select(guild, "thread_parent_channel_id", "Thread Parent",
-                    profile.get("thread_parent_channel_id"))}
+                    {self._category_select(guild, "ticket_category_id", "Open Category", profile.get("ticket_category_id"))}
+                    {self._category_select(guild, "closed_category_id", "Closed Category", profile.get("closed_category_id"))}
+                    {
+            self._channel_select(guild, "thread_parent_channel_id", "Thread Parent", profile.get("thread_parent_channel_id"))
+        }
                     {self._channel_select(guild, "log_channel_id", "Log Channel", profile.get("log_channel_id"))}
-                    {self._channel_select(guild, "transcript_channel_id", "Transcript Channel",
-                    profile.get("transcript_channel_id"))}
+                    {
+            self._channel_select(guild, "transcript_channel_id", "Transcript Channel", profile.get("transcript_channel_id"))
+        }
                     {self._role_select(guild, "ticket_role_id", "Ticket Role", profile.get("ticket_role_id"))}
                 </div>
                 <div class="th-row">
@@ -1868,11 +1787,7 @@ class DashboardIntegration:
         for index in range(5):
             field = fields[index] if index < len(fields) else {}
             field_type = field.get("type") or "text"
-            style = (
-                "short"
-                if int(field.get("style") or 2) == discord.TextStyle.short.value
-                else "paragraph"
-            )
+            style = "short" if int(field.get("style") or 2) == discord.TextStyle.short.value else "paragraph"
             rows.append(
                 f"""
                 <div class="th-card">
@@ -1880,22 +1795,39 @@ class DashboardIntegration:
                     {self._checked(index < len(fields))}> Question {index + 1}</label>
                     <div class="th-row">
                         {self._input(f"modal_{index}_label", "Label", field.get("label") or "")}
-                        <div class="th-field"><label>Type</label><select name="modal_{index}_type">{self._option("text",
-                         "Text", field_type)}{self._option("choice", "Choice", field_type)}{self._option("boolean",
-                        "Boolean", field_type)}</select></div>
+                        <div class="th-field"><label>Type</label><select name="modal_{index}_type">{
+                    self._option("text", "Text", field_type)
+                }{self._option("choice", "Choice", field_type)}{self._option("boolean", "Boolean", field_type)}</select></div>
                         <div class="th-field"><label>Text Style</label><select
-                        name="modal_{index}_style">{self._option("paragraph", "Paragraph", style)}{self._option("short",
-                         "Short", style)}</select></div>
+                        name="modal_{index}_style">{self._option("paragraph", "Paragraph", style)}{
+                    self._option("short", "Short", style)
+                }</select></div>
                         <label class="th-check"><input type="checkbox" name="modal_{index}_required" value="1"
                         {self._checked(field.get("required", True))}> Required</label>
                     </div>
                     <div class="th-row">
                         {self._input(f"modal_{index}_placeholder", "Placeholder", field.get("placeholder") or "")}
                         {self._input(f"modal_{index}_default", "Default", field.get("default") or "")}
-                        {self._input(f"modal_{index}_min_length", "Min Length", "" if field.get("min_length") is None
-                        else field.get("min_length"), "number", min_value=0, max_value=4000)}
-                        {self._input(f"modal_{index}_max_length", "Max Length", "" if field.get("max_length") is None
-                        else field.get("max_length"), "number", min_value=1, max_value=4000)}
+                        {
+                    self._input(
+                        f"modal_{index}_min_length",
+                        "Min Length",
+                        "" if field.get("min_length") is None else field.get("min_length"),
+                        "number",
+                        min_value=0,
+                        max_value=4000,
+                    )
+                }
+                        {
+                    self._input(
+                        f"modal_{index}_max_length",
+                        "Max Length",
+                        "" if field.get("max_length") is None else field.get("max_length"),
+                        "number",
+                        min_value=1,
+                        max_value=4000,
+                    )
+                }
                     </div>
                     {self._input(f"modal_{index}_choices", "Choices", ", ".join(field.get("choices") or []))}
                 </div>
@@ -1940,12 +1872,13 @@ class DashboardIntegration:
                     <input type="hidden" name="selected_profile" value="{self._h(profile_name)}">
                     <div class="th-row">
                         {self._input("add_modal_label", "New Question Label", "")}
-                        <div class="th-field"><label>Type</label><select name="add_modal_type">{self._option("text",
-                        "Text", "text")}{self._option("choice", "Choice", "text")}{self._option("boolean", "Boolean",
-                        "text")}</select></div>
+                        <div class="th-field"><label>Type</label><select name="add_modal_type">{
+            self._option("text", "Text", "text")
+        }{self._option("choice", "Choice", "text")}{self._option("boolean", "Boolean", "text")}</select></div>
                         <div class="th-field"><label>Text Style</label><select
-                        name="add_modal_style">{self._option("paragraph", "Paragraph",
-                        "paragraph")}{self._option("short", "Short", "paragraph")}</select></div>
+                        name="add_modal_style">{self._option("paragraph", "Paragraph", "paragraph")}{
+            self._option("short", "Short", "paragraph")
+        }</select></div>
                         <label class="th-check"><input type="checkbox" name="add_modal_required" value="1" checked>
                         Required</label>
                     </div>
@@ -1987,17 +1920,11 @@ class DashboardIntegration:
                 record = None
             if record is None:
                 continue
-            option_text = ", ".join(
-                f"{option['label']} ({option['profile']})"
-                for option in record["options"]
-            )
+            option_text = ", ".join(f"{option['label']} ({option['profile']})" for option in record["options"])
             multi_rows.append(
                 f"<tr><td>{self._h(record['message_id'])}</td><td>{self._h(record['channel_id'])}</td><td>{self._h(record['style'])}</td><td>{self._h(option_text)}</td></tr>",
             )
-        multi_table = (
-            "".join(multi_rows)
-            or '<tr><td colspan="4" class="th-muted">No multi-panels configured.</td></tr>'
-        )
+        multi_table = "".join(multi_rows) or '<tr><td colspan="4" class="th-muted">No multi-panels configured.</td></tr>'
         return f"""
         <div id="panels" class="th-card">
             <h3>Panels</h3>
@@ -2006,11 +1933,10 @@ class DashboardIntegration:
                     {csrf}
                     <input type="hidden" name="action" value="post_panel">
                     <input type="hidden" name="selected_profile" value="{self._h(profile_name)}">
-                    {self._channel_select(guild, "post_panel_channel_id", "Post Panel Channel",
-                    profile.get("panel_channel_id"))}
-                    <div class="th-field"><label>Style</label><select name="post_panel_style">{self._option("button",
-                    "Button", profile.get("panel_style"))}{self._option("dropdown", "Dropdown",
-                    profile.get("panel_style"))}</select></div>
+                    {self._channel_select(guild, "post_panel_channel_id", "Post Panel Channel", profile.get("panel_channel_id"))}
+                    <div class="th-field"><label>Style</label><select name="post_panel_style">{
+            self._option("button", "Button", profile.get("panel_style"))
+        }{self._option("dropdown", "Dropdown", profile.get("panel_style"))}</select></div>
                     <button class="th-btn" type="submit">Post Panel</button>
                 </form>
                 <form method="POST">
@@ -2019,9 +1945,9 @@ class DashboardIntegration:
                     <input type="hidden" name="selected_profile" value="{self._h(profile_name)}">
                     {self._input("attach_panel_channel_id", "Channel ID", profile.get("panel_channel_id") or "")}
                     {self._input("attach_panel_message_id", "Message ID", profile.get("panel_message_id") or "")}
-                    <div class="th-field"><label>Style</label><select name="attach_panel_style">{self._option("button",
-                    "Button", profile.get("panel_style"))}{self._option("dropdown", "Dropdown",
-                    profile.get("panel_style"))}</select></div>
+                    <div class="th-field"><label>Style</label><select name="attach_panel_style">{
+            self._option("button", "Button", profile.get("panel_style"))
+        }{self._option("dropdown", "Dropdown", profile.get("panel_style"))}</select></div>
                     <button class="th-btn" type="submit">Attach Panel</button>
                 </form>
                 <form method="POST">
@@ -2034,15 +1960,18 @@ class DashboardIntegration:
             </div>
             <h3>Multi-Panels</h3>
             <table
-            class="th-table"><thead><tr><th>Message</th><th>Channel</th><th>Style</th><th>Options</th></tr></thead><tbody>{multi_table}</tbody></table>
+            class="th-table"><thead><tr><th>Message</th><th>Channel</th><th>Style</th><th>Options</th></tr></thead><tbody>{
+            multi_table
+        }</tbody></table>
             <form method="POST">
                 {csrf}
                 <input type="hidden" name="action" value="save_multi_panel">
                 <div class="th-row">
                     {self._input("multi_panel_channel_id", "Multi-Panel Channel ID", "")}
                     {self._input("multi_panel_message_id", "Multi-Panel Message ID", "")}
-                    <div class="th-field"><label>Style</label><select name="multi_panel_style">{self._option("button",
-                    "Button", "button")}{self._option("dropdown", "Dropdown", "button")}</select></div>
+                    <div class="th-field"><label>Style</label><select name="multi_panel_style">{
+            self._option("button", "Button", "button")
+        }{self._option("dropdown", "Dropdown", "button")}</select></div>
                     {self._input("multi_panel_placeholder", "Dropdown Placeholder", "Choose a ticket type...")}
                 </div>
                 {self._textarea("multi_panel_options", "Options: profile | emoji | label | description", "", rows=6)}
@@ -2068,10 +1997,7 @@ class DashboardIntegration:
         try:
             messages = [message async for message in channel.history(limit=50)]
         except (discord.Forbidden, discord.HTTPException):
-            return (
-                '<div class="th-muted">I could not read this ticket channel\'s '
-                "message history.</div>"
-            )
+            return '<div class="th-muted">I could not read this ticket channel\'s message history.</div>'
         if not messages:
             return '<div class="th-muted">No messages have been sent in this ticket yet.</div>'
 
@@ -2093,11 +2019,7 @@ class DashboardIntegration:
                     content = f"[Embed] {content}"
             if not content and not message.attachments:
                 content = "[Message without text]"
-            body = (
-                f'<div class="th-message-body">{self._h(content).replace(chr(10), "<br>")}</div>'
-                if content
-                else ""
-            )
+            body = f'<div class="th-message-body">{self._h(content).replace(chr(10), "<br>")}</div>' if content else ""
             attachment_links = []
             for attachment in message.attachments:
                 attachment_url = html.escape(attachment.url, quote=True)
@@ -2114,14 +2036,9 @@ class DashboardIntegration:
                     )
                 else:
                     attachment_links.append(
-                        f'<a href="{attachment_url}" target="_blank" '
-                        f'rel="noopener noreferrer">{filename}</a>',
+                        f'<a href="{attachment_url}" target="_blank" rel="noopener noreferrer">{filename}</a>',
                     )
-            attachments = (
-                f'<div class="th-attachments">{"".join(attachment_links)}</div>'
-                if attachment_links
-                else ""
-            )
+            attachments = f'<div class="th-attachments">{"".join(attachment_links)}</div>' if attachment_links else ""
             rendered.append(
                 '<article class="th-message">'
                 '<div class="th-message-head">'
@@ -2169,16 +2086,10 @@ class DashboardIntegration:
         channel = await self._fetch_ticket_channel(guild, record)
         owner = guild.get_member(int(record.get("owner_id") or 0))
         claimed_by = guild.get_member(int(record.get("claimed_by") or 0))
-        participants = [
-            guild.get_member(int(member_id))
-            for member_id in (record.get("participants") or [])
-        ]
-        participant_text = ", ".join(
-            str(member) for member in participants if member is not None
-        ) or "None"
+        participants = [guild.get_member(int(member_id)) for member_id in (record.get("participants") or [])]
+        participant_text = ", ".join(str(member) for member in participants if member is not None) or "None"
         channel_link = (
-            f'<a href="{html.escape(channel.jump_url, quote=True)}" target="_blank" '
-            f'rel="noopener noreferrer">Open in Discord</a>'
+            f'<a href="{html.escape(channel.jump_url, quote=True)}" target="_blank" rel="noopener noreferrer">Open in Discord</a>'
             if channel is not None
             else "Channel unavailable"
         )
@@ -2201,26 +2112,17 @@ class DashboardIntegration:
             lifecycle_buttons.append("Reopen")
         lifecycle_buttons.extend(("Transcript", "Delete"))
         action_buttons = "".join(
-            '<button class="th-btn{danger}" type="submit" name="ticket_action" value="{action}"{confirm}>'
-            "{label}</button>".format(
+            '<button class="th-btn{danger}" type="submit" name="ticket_action" value="{action}"{confirm}>{label}</button>'.format(
                 danger=" danger" if label == "Delete" else " secondary",
                 action=label.lower(),
-                confirm=(
-                    ' onclick="return confirm(\'Permanently delete this ticket channel?\')"'
-                    if label == "Delete"
-                    else ""
-                ),
+                confirm=(" onclick=\"return confirm('Permanently delete this ticket channel?')\"" if label == "Delete" else ""),
                 label=label,
             )
             for label in lifecycle_buttons
         )
         reply_disabled = " disabled" if status != "open" or channel is None else ""
         owner_text = self._h(owner or record.get("owner_id") or "Unknown")
-        reopen_notice = (
-            '<span class="th-muted"> Reopen the ticket before replying.</span>'
-            if status != "open"
-            else ""
-        )
+        reopen_notice = '<span class="th-muted"> Reopen the ticket before replying.</span>' if status != "open" else ""
 
         return f"""
         <div id="ticket-desk" class="th-card">
@@ -2300,12 +2202,8 @@ class DashboardIntegration:
             reverse=True,
         )[:100]:
             channel_id = record.get("channel_id")
-            channel = guild.get_channel(
-                int(channel_id)) if channel_id else None
-            channel_text = (
-                channel.mention if channel else self._h(
-                    channel_id or "missing")
-            )
+            channel = guild.get_channel(int(channel_id)) if channel_id else None
+            channel_text = channel.mention if channel else self._h(channel_id or "missing")
             rows.append(
                 "<tr>"
                 f"<td>{self._h(record.get('id'))}</td>"
@@ -2317,10 +2215,7 @@ class DashboardIntegration:
                 f"<td>{channel_text}</td>"
                 "</tr>",
             )
-        table = (
-            "".join(rows)
-            or '<tr><td colspan="7" class="th-muted">No tickets tracked.</td></tr>'
-        )
+        table = "".join(rows) or '<tr><td colspan="7" class="th-muted">No tickets tracked.</td></tr>'
         profile_options = "".join(
             f'<option value="{self._h(name)}" {self._selected(name, selected_profile)}>{self._h(name)}</option>'
             for name in sorted(profiles)
@@ -2377,8 +2272,7 @@ class DashboardIntegration:
     ) -> str:
         rows = []
         for key, raw_record in aaa3a_panels.items():
-            record = self._sanitize_aaa3a_panel_record(
-                raw_record, message_key=str(key))
+            record = self._sanitize_aaa3a_panel_record(raw_record, message_key=str(key))
             if record is None:
                 continue
             option_count = len(record.get("buttons") or {}) + len(
@@ -2387,10 +2281,7 @@ class DashboardIntegration:
             rows.append(
                 f"<tr><td>{self._h(key)}</td><td>{self._h(record['channel_id'])}</td><td>{self._h(record['message_id'])}</td><td>{option_count}</td></tr>",
             )
-        table = (
-            "".join(rows)
-            or '<tr><td colspan="4" class="th-muted">No imported AAA3A panels tracked.</td></tr>'
-        )
+        table = "".join(rows) or '<tr><td colspan="4" class="th-muted">No imported AAA3A panels tracked.</td></tr>'
         return f"""
         <div id="imports" class="th-card">
             <h3>AAA3A Imports</h3>
@@ -2474,13 +2365,12 @@ class DashboardIntegration:
         ):
             selected_attr = "selected" if str(role.id) in selected_ids else ""
             options.append(
-                f'<option value="{role.id}" {selected_attr}>'
-                f"{self._h(role.name)}</option>",
+                f'<option value="{role.id}" {selected_attr}>{self._h(role.name)}</option>',
             )
         return (
             f'<div class="th-field"><label>{self._h(label)}</label>'
             f'<select name="{self._h(name)}" multiple size="8">'
-            f'{"".join(options)}</select></div>'
+            f"{''.join(options)}</select></div>"
         )
 
     def _input(

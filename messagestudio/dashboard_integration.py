@@ -149,11 +149,7 @@ class DashboardIntegration:
                             raise ComponentsV2Error("The webhook avatar must be an HTTP(S) URL.")
                         hooks = await channel.webhooks()
                         hook = next(
-                            (
-                                item
-                                for item in hooks
-                                if item.user == guild.me and item.name == "MessageStudio Dashboard"
-                            ),
+                            (item for item in hooks if item.user == guild.me and item.name == "MessageStudio Dashboard"),
                             None,
                         )
                         if hook is None:

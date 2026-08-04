@@ -13,7 +13,7 @@ import json
 import logging
 import sqlite3
 import time
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 import discord
 from redbot.core import Config, app_commands, commands, modlog
@@ -55,7 +55,7 @@ class YALC(DashboardIntegration, commands.Cog):
     - Dashboard integration for easy configuration
     """
 
-    SETUP_LOG_CHANNELS = [
+    SETUP_LOG_CHANNELS: ClassVar[list[tuple[str, str, str]]] = [
         (
             "application",
             "🤖 | application-logs",
@@ -95,7 +95,7 @@ class YALC(DashboardIntegration, commands.Cog):
         ),
     ]
 
-    DEFAULT_EVENT_CHANNEL_KEYS = {
+    DEFAULT_EVENT_CHANNEL_KEYS: ClassVar[dict[str, str]] = {
         "application_cmd": "application",
         "application_cmd_permissions_update": "application",
         "command_error": "application",
@@ -117,6 +117,8 @@ class YALC(DashboardIntegration, commands.Cog):
         "guild_scheduled_event_create": "event",
         "guild_scheduled_event_delete": "event",
         "guild_scheduled_event_update": "event",
+        "scheduled_event_user_add": "event",
+        "scheduled_event_user_remove": "event",
         "invite_create": "invite",
         "invite_delete": "invite",
         "message_bulk_delete": "message",
@@ -126,7 +128,10 @@ class YALC(DashboardIntegration, commands.Cog):
         "message_unpin": "message",
         "reaction_add": "message",
         "reaction_clear": "message",
+        "reaction_clear_emoji": "message",
         "reaction_remove": "message",
+        "poll_vote_add": "message",
+        "poll_vote_remove": "message",
         "role_create": "role",
         "role_delete": "role",
         "role_update": "role",
@@ -149,6 +154,8 @@ class YALC(DashboardIntegration, commands.Cog):
         "member_join": "user",
         "member_leave": "user",
         "member_update": "user",
+        "presence_update": "user",
+        "user_update": "user",
         "voice_state_update": "voice",
         "voice_update": "voice",
         "webhook_update": "webhook",
@@ -174,7 +181,15 @@ class YALC(DashboardIntegration, commands.Cog):
         self.recent_audit_entries = {}
         self._recent_role_event_logs = {}
         self._audit_correlator = AuditCorrelator()
-        self._raw_event_ids: dict[tuple[str, int], float] = {}
+        self._audit_fetch_locks: dict[tuple[int, str], asyncio.Lock] = {}
+        self._audit_fetch_stats = {
+            "cache_hits": 0,
+            "api_fetches": 0,
+            "misses": 0,
+            "entries_seen": 0,
+        }
+        self._delivery_stats = {"sent": 0, "fallback": 0, "failed": 0, "retries": 0}
+        self._raw_event_ids: dict[tuple[str, str], float] = {}
         self._proxy_message_ids: dict[int, float] = {}
         self._proxy_webhook_cache: dict[int, tuple[bool, float]] = {}
         self._embed_event_types: dict[int, str] = {}
@@ -208,6 +223,8 @@ class YALC(DashboardIntegration, commands.Cog):
             "member_timeout": ("⏰", "Member Timeouts"),
             "member_prune": ("🧹", "Member Prunes"),
             "bot_add": ("🤖", "Bot Additions"),
+            "presence_update": ("🟢", "Presence Updates"),
+            "user_update": ("🪪", "Global User Profile Updates"),
             # Channel events
             "channel_create": ("📝", "Channel Creation"),
             "channel_delete": ("🗑️", "Channel Deletion"),
@@ -237,6 +254,8 @@ class YALC(DashboardIntegration, commands.Cog):
             "guild_scheduled_event_create": ("📅", "Event Creation"),
             "guild_scheduled_event_update": ("🔄", "Event Updates"),
             "guild_scheduled_event_delete": ("🗑️", "Event Deletion"),
+            "scheduled_event_user_add": ("🙋", "Event Registrations"),
+            "scheduled_event_user_remove": ("↩️", "Event Registration Removals"),
             "stage_instance_create": ("🎤", "Stage Instance Creation"),
             "stage_instance_update": ("🔄", "Stage Instance Updates"),
             "stage_instance_delete": ("🗑️", "Stage Instance Deletion"),
@@ -255,6 +274,9 @@ class YALC(DashboardIntegration, commands.Cog):
             "reaction_add": ("👍", "Reaction Additions"),
             "reaction_remove": ("👎", "Reaction Removals"),
             "reaction_clear": ("🧹", "Reaction Clears"),
+            "reaction_clear_emoji": ("🧽", "Single-Emoji Reaction Clears"),
+            "poll_vote_add": ("🗳️", "Poll Vote Additions"),
+            "poll_vote_remove": ("↩️", "Poll Vote Removals"),
             # Integration events
             "integration_create": ("🔗", "Integration Creation"),
             "integration_update": ("🔄", "Integration Updates"),
@@ -344,6 +366,9 @@ class YALC(DashboardIntegration, commands.Cog):
         timeout_seconds=30,
         retries=3,
         channel_id: int | None = None,
+        added_role_ids: set[int] | frozenset[int] | None = None,
+        removed_role_ids: set[int] | frozenset[int] | None = None,
+        changed_keys: set[str] | frozenset[str] | None = None,
     ):
         """
         Helper function to get recent audit log entries with retry logic and improved reliability.
@@ -367,65 +392,98 @@ class YALC(DashboardIntegration, commands.Cog):
         if bot_member is None or not bot_member.guild_permissions.view_audit_log:
             return None
 
-        target_id = getattr(target, "id", None)
+        target_id = target if isinstance(target, (int, str)) else getattr(target, "id", None)
+        if target_id is None:
+            target_id = getattr(target, "code", None)
         cached = self._audit_correlator.match(
             guild.id,
             action,
             target_id=target_id,
             channel_id=channel_id,
             max_age_seconds=timeout_seconds,
+            added_role_ids=added_role_ids,
+            removed_role_ids=removed_role_ids,
+            changed_keys=changed_keys,
         )
         if cached:
+            self._audit_fetch_stats["cache_hits"] += 1
             return cached.entry
 
-        for attempt in range(retries):
-            try:
-                await asyncio.sleep(2 + (attempt * 0.5))  # Progressive delay
+        action_key = str(getattr(action, "name", action))
+        lock_key = (int(guild.id), action_key)
+        lock = self._audit_fetch_locks.setdefault(lock_key, asyncio.Lock())
+        async with lock:
+            # A concurrent event may have populated the correlator while this
+            # lookup waited for the per-action fetch lock.
+            cached = self._audit_correlator.match(
+                guild.id,
+                action,
+                target_id=target_id,
+                channel_id=channel_id,
+                max_age_seconds=timeout_seconds,
+                added_role_ids=added_role_ids,
+                removed_role_ids=removed_role_ids,
+                changed_keys=changed_keys,
+            )
+            if cached:
+                self._audit_fetch_stats["cache_hits"] += 1
+                return cached.entry
 
-                now = datetime.datetime.now(datetime.timezone.utc)
-                async for entry in guild.audit_logs(action=action, limit=15):
-                    age = (now - entry.created_at).total_seconds()
-                    if age > timeout_seconds * 2:
-                        break
-                    if age > timeout_seconds:
-                        continue
-                    self._audit_correlator.record(entry)
-                    entry_target_id = getattr(getattr(entry, "target", None), "id", None)
-                    if target_id is not None and entry_target_id != target_id:
-                        continue
-                    extra = getattr(entry, "extra", None)
-                    entry_channel_id = getattr(extra, "channel_id", None)
-                    if entry_channel_id is None:
-                        entry_channel_id = getattr(getattr(extra, "channel", None), "id", None)
-                    if channel_id is not None and target_id is None and entry_channel_id is None:
-                        continue
-                    if channel_id is not None and entry_channel_id is not None and int(entry_channel_id) != int(channel_id):
-                        continue
-                    return entry
+            retry_delays = (0.0, 0.8, 1.7)
+            for attempt in range(max(1, retries)):
+                try:
+                    if attempt:
+                        delay = retry_delays[min(attempt, len(retry_delays) - 1)]
+                        await asyncio.sleep(delay)
 
-                if attempt < retries - 1:
-                    continue
-                return None
+                    self._audit_fetch_stats["api_fetches"] += 1
+                    now = datetime.datetime.now(datetime.timezone.utc)
+                    async for entry in guild.audit_logs(action=action, limit=25):
+                        age = (now - entry.created_at).total_seconds()
+                        if age > timeout_seconds * 2:
+                            break
+                        if age > timeout_seconds:
+                            continue
+                        if self._audit_correlator.record(entry):
+                            self._audit_fetch_stats["entries_seen"] += 1
 
-            except discord.Forbidden:
-                # Permission failures cannot be repaired by retrying.
-                break
-            except discord.HTTPException as e:
-                if attempt < retries - 1:
-                    self.log.debug(
-                        f"Audit log fetch failed (attempt {attempt + 1}/{retries}): {e}",
+                    match = self._audit_correlator.match(
+                        guild.id,
+                        action,
+                        target_id=target_id,
+                        channel_id=channel_id,
+                        max_age_seconds=timeout_seconds,
+                        added_role_ids=added_role_ids,
+                        removed_role_ids=removed_role_ids,
+                        changed_keys=changed_keys,
                     )
-                    await asyncio.sleep(2**attempt)  # Exponential backoff
-                    continue
-                self.log.warning(
-                    f"Audit log fetch failed after {retries} attempts: {e}",
-                )
-            except asyncio.TimeoutError:
-                break
-            except RECOVERABLE_EXCEPTIONS as e:
-                self.log.error(f"Unexpected error in audit log fetch: {e}")
-                break
+                    if match:
+                        return match.entry
 
+                except discord.Forbidden:
+                    # Permission failures cannot be repaired by retrying.
+                    break
+                except discord.HTTPException as error:
+                    if attempt < retries - 1:
+                        self.log.debug(
+                            "Audit log fetch failed (attempt %s/%s): %s",
+                            attempt + 1,
+                            retries,
+                            error,
+                        )
+                        continue
+                    self.log.warning(
+                        "Audit log fetch failed after %s attempts: %s",
+                        retries,
+                        error,
+                    )
+                except asyncio.TimeoutError:
+                    break
+                except RECOVERABLE_EXCEPTIONS:
+                    self.log.exception("Unexpected error in audit log fetch")
+                    break
+
+        self._audit_fetch_stats["misses"] += 1
         return None
 
     async def _get_audit_log_entry(
@@ -435,6 +493,9 @@ class YALC(DashboardIntegration, commands.Cog):
         target=None,
         timeout_seconds=30,
         channel_id: int | None = None,
+        added_role_ids: set[int] | frozenset[int] | None = None,
+        removed_role_ids: set[int] | frozenset[int] | None = None,
+        changed_keys: set[str] | frozenset[str] | None = None,
     ):
         """Legacy method for backward compatibility - redirects to retry version."""
         return await self._get_audit_log_entry_with_retry(
@@ -443,7 +504,90 @@ class YALC(DashboardIntegration, commands.Cog):
             target,
             timeout_seconds,
             channel_id=channel_id,
+            added_role_ids=added_role_ids,
+            removed_role_ids=removed_role_ids,
+            changed_keys=changed_keys,
         )
+
+    async def _get_member_role_audit_entries(
+        self,
+        guild: discord.Guild,
+        member: discord.Member,
+        added_roles: list[discord.Role],
+        removed_roles: list[discord.Role],
+        *,
+        timeout_seconds: int = 15,
+    ) -> dict[tuple[str, int], discord.AuditLogEntry]:
+        """Attribute each role delta without issuing one API request per role."""
+        expectations = [
+            *(("added", role.id) for role in added_roles),
+            *(("removed", role.id) for role in removed_roles),
+        ]
+        if not expectations:
+            return {}
+
+        action = discord.AuditLogAction.member_role_update
+        results: dict[tuple[str, int], discord.AuditLogEntry] = {}
+
+        # The first strict lookup primes the shared correlator with up to 25
+        # recent entries. Every remaining role is then resolved in memory.
+        first_direction, first_role_id = expectations[0]
+        first_entry = await self._get_audit_log_entry(
+            guild,
+            action,
+            target=member,
+            timeout_seconds=timeout_seconds,
+            added_role_ids={first_role_id} if first_direction == "added" else None,
+            removed_role_ids={first_role_id} if first_direction == "removed" else None,
+        )
+        if first_entry is not None:
+            results[(first_direction, first_role_id)] = first_entry
+
+        for direction, role_id in expectations[1:]:
+            match = self._audit_correlator.match(
+                guild.id,
+                action,
+                target_id=member.id,
+                max_age_seconds=timeout_seconds,
+                added_role_ids={role_id} if direction == "added" else None,
+                removed_role_ids={role_id} if direction == "removed" else None,
+            )
+            if match is not None:
+                results[(direction, role_id)] = match.entry
+
+        # A single member gateway update can collapse several rapid Discord
+        # role changes while their audit rows arrive a fraction apart. If the
+        # first cache fill did not contain every delta, perform one more strict
+        # bounded lookup for the first missing role, then resolve all remaining
+        # roles from that refreshed cache. This caps network work at two lookup
+        # cycles instead of one cycle per changed role.
+        missing = [item for item in expectations if item not in results]
+        if missing:
+            direction, role_id = missing[0]
+            late_entry = await self._get_audit_log_entry(
+                guild,
+                action,
+                target=member,
+                timeout_seconds=timeout_seconds,
+                added_role_ids={role_id} if direction == "added" else None,
+                removed_role_ids={role_id} if direction == "removed" else None,
+            )
+            if late_entry is not None:
+                results[(direction, role_id)] = late_entry
+
+            for direction, role_id in missing[1:]:
+                match = self._audit_correlator.match(
+                    guild.id,
+                    action,
+                    target_id=member.id,
+                    max_age_seconds=timeout_seconds,
+                    added_role_ids={role_id} if direction == "added" else None,
+                    removed_role_ids={role_id} if direction == "removed" else None,
+                )
+                if match is not None:
+                    results[(direction, role_id)] = match.entry
+
+        return results
 
     async def _get_cached_settings(self, guild: discord.Guild) -> dict:
         """Get guild settings with caching for performance optimization."""
@@ -634,10 +778,7 @@ class YALC(DashboardIntegration, commands.Cog):
                     f"`{filename}` could not be copied ({e.__class__.__name__}).",
                 )
             except RECOVERABLE_EXCEPTIONS as e:
-                self.log.debug(
-                    f"Could not copy deleted image attachment {filename}: {e}",
-                    exc_info=True,
-                )
+                self.log.debug(f"Could not copy deleted image attachment {filename}: {e}")
                 copy_notes.append(f"`{filename}` could not be copied.")
 
         if copied_files:
@@ -699,7 +840,10 @@ class YALC(DashboardIntegration, commands.Cog):
     async def _log_role_audit_fallback(self, entry, event_type: str) -> None:
         """Log role create/delete from audit logs when the gateway role event is missed."""
         try:
-            await asyncio.sleep(2)
+            # Give the richer gateway listener a brief opportunity to log first.
+            # Audit-log create/delete events are already delayed by Discord, so a
+            # multi-second sleep here only makes the fallback visibly sluggish.
+            await asyncio.sleep(0.5)
             guild = getattr(entry, "guild", None)
             if not guild:
                 return
@@ -761,14 +905,21 @@ class YALC(DashboardIntegration, commands.Cog):
             event_time = datetime.datetime.now(datetime.timezone.utc)
             self.set_embed_footer(embed, event_time=event_time, label=footer_label)
 
-            sent_message = await self.safe_send(channel, embed=embed)
+            event = LogEvent(
+                guild_id=guild.id,
+                event_type=event_type,
+                summary=f"{event_type.replace('_', ' ')}: {role_name}",
+                actor_id=getattr(actor, "id", None),
+                target_id=role_id,
+                audit_entry_id=getattr(entry, "id", None),
+                confidence="confirmed" if actor is not None else "unavailable",
+                details={"role_name": role_name, "reason": reason, "source": "audit_fallback"},
+            )
+            sent_message = await self.safe_send(channel, embed=embed, yalc_event=event)
             if sent_message:
                 self._mark_role_event_logged(guild.id, event_type, role_key)
-        except RECOVERABLE_EXCEPTIONS as e:
-            self.log.error(
-                f"Failed to log {event_type} from audit log fallback: {e}",
-                exc_info=True,
-            )
+        except RECOVERABLE_EXCEPTIONS:
+            self.log.exception(f"Failed to log {event_type} from audit log fallback")
 
     async def should_log_event(
         self,
@@ -936,10 +1087,11 @@ class YALC(DashboardIntegration, commands.Cog):
             # If we've passed all ignore checks, we should log this event
             return True
 
-        except RECOVERABLE_EXCEPTIONS as e:
-            self.log.error(f"Error in should_log_event: {e}", exc_info=True)
-            # Default to True if an error occurred (better to log in case of doubt)
-            return True
+        except RECOVERABLE_EXCEPTIONS:
+            self.log.exception("Error evaluating YALC filters; suppressing the event")
+            # Ignore and privacy failures must fail closed. An administrator can
+            # diagnose the configuration error without leaking the event.
+            return False
 
     # Removed setup_dashboard; dashboard pages are now registered via inheritance and decorators in dashboard_integration.py
 
@@ -952,21 +1104,16 @@ class YALC(DashboardIntegration, commands.Cog):
         if await self.bot.cog_disabled_in_guild(self, guild):
             return None
         settings = await self._get_cached_settings(guild)
-        self.log.debug(
-            f"[get_log_channel] Guild: {guild.id}, Event: {event_type}, Settings: {settings}",
-        )
         channel_id = settings["event_channels"].get(event_type)
-        self.log.debug(f"[get_log_channel] Selected channel_id: {channel_id}")
         if not channel_id:
             return None
         channel = guild.get_channel(channel_id)
-        self.log.debug(f"[get_log_channel] Resolved channel: {channel}")
         return channel if isinstance(channel, discord.TextChannel) else None
 
     def _calculate_embed_size(
         self,
         embed: discord.Embed,
-        additional_fields: list[tuple] = None,
+        additional_fields: list[tuple] | None = None,
     ) -> int:
         """
         Calculate the total character count of an embed including all fields.
@@ -1194,6 +1341,8 @@ class YALC(DashboardIntegration, commands.Cog):
             "member_update": 0x3498DB,  # Blue
             "member_kick": 0xE74C3C,  # Red
             "member_timeout": 0xF39C12,  # Orange
+            "presence_update": 0x2ECC71,  # Green
+            "user_update": 0x3498DB,  # Blue
             # Channel events
             "channel_create": 0x2ECC71,  # Green
             "channel_delete": 0xE74C3C,  # Red
@@ -1219,6 +1368,8 @@ class YALC(DashboardIntegration, commands.Cog):
             "guild_scheduled_event_create": 0x2ECC71,  # Green
             "guild_scheduled_event_update": 0x3498DB,  # Blue
             "guild_scheduled_event_delete": 0xE74C3C,  # Red
+            "scheduled_event_user_add": 0x2ECC71,  # Green
+            "scheduled_event_user_remove": 0xE67E22,  # Dark orange
             "stage_instance_create": 0x2ECC71,  # Green
             "stage_instance_update": 0x3498DB,  # Blue
             "stage_instance_delete": 0xE74C3C,  # Red
@@ -1234,6 +1385,9 @@ class YALC(DashboardIntegration, commands.Cog):
             "reaction_add": 0x2ECC71,  # Green
             "reaction_remove": 0xE67E22,  # Dark orange
             "reaction_clear": 0xF39C12,  # Orange
+            "reaction_clear_emoji": 0xF39C12,  # Orange
+            "poll_vote_add": 0x2ECC71,  # Green
+            "poll_vote_remove": 0xE67E22,  # Dark orange
             # Integration, webhook, AutoMod, soundboard events
             "integration_create": 0x2ECC71,
             "integration_update": 0x3498DB,
@@ -1467,12 +1621,17 @@ class YALC(DashboardIntegration, commands.Cog):
             dashboard_cog = self.bot.get_cog("Dashboard")
             if dashboard_cog and hasattr(dashboard_cog, "rpc"):
                 dashboard_cog.rpc.third_parties_handler.remove_third_party(self)
-        except RECOVERABLE_EXCEPTIONS as e:
-            self.log.error(f"Error removing dashboard integration: {e}", exc_info=True)
+        except RECOVERABLE_EXCEPTIONS:
+            self.log.exception("Error removing dashboard integration")
 
         self._processing_shutdown = True
         if self._journal_cleanup_task is not None:
             self._journal_cleanup_task.cancel()
+        self._audit_fetch_locks.clear()
+        self._raw_event_ids.clear()
+        self._settings_cache.clear()
+        self._proxy_message_ids.clear()
+        self._proxy_webhook_cache.clear()
 
         # Clean up voice sessions and other resources
         try:
@@ -1480,11 +1639,8 @@ class YALC(DashboardIntegration, commands.Cog):
             for guild in self.bot.guilds:
                 async with self.config.guild(guild).voice_sessions() as sessions:
                     sessions.clear()
-        except RECOVERABLE_EXCEPTIONS as e:
-            self.log.error(
-                f"Error clearing voice sessions during unload: {e}",
-                exc_info=True,
-            )
+        except RECOVERABLE_EXCEPTIONS:
+            self.log.exception("Error clearing voice sessions during unload")
 
         # discord.py's base Cog unload hook is a synchronous no-op; all YALC
         # resources have been released above.
@@ -1505,8 +1661,8 @@ class YALC(DashboardIntegration, commands.Cog):
         try:
             await modlog.register_casetypes(case_types)
             self.log.info("Registered all YALC events as modlog case types.")
-        except RECOVERABLE_EXCEPTIONS as e:
-            self.log.error(f"Failed to register YALC case types: {e}")
+        except RECOVERABLE_EXCEPTIONS:
+            self.log.exception("Failed to register YALC case types")
 
         try:
             self._journal = EventJournal(cog_data_path(self) / "events.sqlite3")
@@ -1795,7 +1951,7 @@ class YALC(DashboardIntegration, commands.Cog):
             )
 
             # Add user thumbnail
-            settings = await self.config.guild(member.guild).all()
+            settings = await self._get_cached_settings(member.guild)
             if settings.get("include_thumbnails", True) and member.display_avatar:
                 embed.set_thumbnail(url=member.display_avatar.url)
 
@@ -1876,10 +2032,10 @@ class YALC(DashboardIntegration, commands.Cog):
                                     )
 
             except RECOVERABLE_EXCEPTIONS as e:
-                self.log.error(f"Error in voice session tracking: {e}", exc_info=True)
+                self.log.error(f"Error in voice session tracking: {e}")
 
-        except RECOVERABLE_EXCEPTIONS as e:
-            self.log.error(f"Failed to log voice_state_update: {e}", exc_info=True)
+        except RECOVERABLE_EXCEPTIONS:
+            self.log.exception("Failed to log voice_state_update")
 
     async def _log_message_pin(self, message: discord.Message) -> None:
         """Log message pin events with audit log integration."""
@@ -1930,14 +2086,14 @@ class YALC(DashboardIntegration, commands.Cog):
                     embed.add_field(name="Reason", value=entry.reason, inline=False)
 
             # Include user thumbnail
-            settings = await self.config.guild(message.guild).all()
+            settings = await self._get_cached_settings(message.guild)
             if settings.get("include_thumbnails", True) and message.author.display_avatar:
                 embed.set_thumbnail(url=message.author.display_avatar.url)
 
             await self.safe_send(channel, embed=embed)
 
-        except RECOVERABLE_EXCEPTIONS as e:
-            self.log.error(f"Failed to log message_pin: {e}")
+        except RECOVERABLE_EXCEPTIONS:
+            self.log.exception("Failed to log message_pin")
 
     async def _log_message_unpin(self, message: discord.Message) -> None:
         """Log message unpin events with audit log integration."""
@@ -1988,7 +2144,7 @@ class YALC(DashboardIntegration, commands.Cog):
                     embed.add_field(name="Reason", value=entry.reason, inline=False)
 
             # Include user thumbnail
-            settings = await self.config.guild(message.guild).all()
+            settings = await self._get_cached_settings(message.guild)
             if settings.get("include_thumbnails", True) and message.author.display_avatar:
                 embed.set_thumbnail(url=message.author.display_avatar.url)
 
@@ -2006,6 +2162,9 @@ class YALC(DashboardIntegration, commands.Cog):
         """Log reaction add events."""
         self.log.debug("Listener triggered: on_reaction_add")
         if not reaction.message.guild:
+            return
+        identity = (reaction.message.id, user.id, str(reaction.emoji))
+        if not self._claim_raw_event("reaction_add", identity):
             return
         try:
             should_log = await self.should_log_event(
@@ -2043,7 +2202,7 @@ class YALC(DashboardIntegration, commands.Cog):
             )
 
             # Include user thumbnail
-            settings = await self.config.guild(reaction.message.guild).all()
+            settings = await self._get_cached_settings(reaction.message.guild)
             if settings.get("include_thumbnails", True) and user.display_avatar:
                 embed.set_thumbnail(url=user.display_avatar.url)
 
@@ -2061,6 +2220,9 @@ class YALC(DashboardIntegration, commands.Cog):
         """Log reaction remove events."""
         self.log.debug("Listener triggered: on_reaction_remove")
         if not reaction.message.guild:
+            return
+        identity = (reaction.message.id, user.id, str(reaction.emoji))
+        if not self._claim_raw_event("reaction_remove", identity):
             return
         try:
             should_log = await self.should_log_event(
@@ -2101,7 +2263,7 @@ class YALC(DashboardIntegration, commands.Cog):
             )
 
             # Include user thumbnail
-            settings = await self.config.guild(reaction.message.guild).all()
+            settings = await self._get_cached_settings(reaction.message.guild)
             if settings.get("include_thumbnails", True) and user.display_avatar:
                 embed.set_thumbnail(url=user.display_avatar.url)
 
@@ -2119,6 +2281,8 @@ class YALC(DashboardIntegration, commands.Cog):
         """Log reaction clear events."""
         self.log.debug("Listener triggered: on_reaction_clear")
         if not message.guild:
+            return
+        if not self._claim_raw_event("reaction_clear", message.id):
             return
         try:
             should_log = await self.should_log_event(
@@ -2150,7 +2314,7 @@ class YALC(DashboardIntegration, commands.Cog):
             )
 
             # Include user thumbnail
-            settings = await self.config.guild(message.guild).all()
+            settings = await self._get_cached_settings(message.guild)
             if settings.get("include_thumbnails", True) and message.author.display_avatar:
                 embed.set_thumbnail(url=message.author.display_avatar.url)
 
@@ -2159,12 +2323,163 @@ class YALC(DashboardIntegration, commands.Cog):
         except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Failed to log reaction_clear: {e}")
 
+    async def _log_raw_reaction_event(self, payload, event_type: str) -> None:
+        """Log reaction activity even when Discord.py has no cached message."""
+        guild_id = getattr(payload, "guild_id", None)
+        channel_id = getattr(payload, "channel_id", None)
+        message_id = getattr(payload, "message_id", None)
+        if guild_id is None or channel_id is None or message_id is None:
+            return
+
+        user_id = getattr(payload, "user_id", None)
+        emoji = getattr(payload, "emoji", None)
+        identity = (message_id, user_id, str(emoji))
+        # Cached reaction listeners provide richer context. Give them one event
+        # loop turn to claim the identity before using the raw fallback.
+        await asyncio.sleep(0.05)
+        if not self._claim_raw_event(event_type, identity):
+            return
+
+        guild = self.bot.get_guild(guild_id)
+        if guild is None:
+            return
+        settings = await self._get_cached_settings(guild)
+        if not settings.get("raw_message_events", True):
+            return
+        if user_id is not None and str(user_id) in {str(item) for item in settings.get("ignored_users", [])}:
+            return
+        source_channel = guild.get_channel_or_thread(channel_id)
+        if source_channel is None:
+            return
+        member = guild.get_member(user_id) if user_id is not None else None
+        if not await self.should_log_event(
+            guild,
+            event_type,
+            channel=source_channel,
+            user=member,
+        ):
+            return
+        log_channel = await self.get_log_channel(guild, event_type)
+        if log_channel is None:
+            return
+
+        labels = {
+            "reaction_add": ("👍", "added", "to"),
+            "reaction_remove": ("👎", "removed", "from"),
+            "reaction_clear": ("🧹", "cleared all reactions", "from"),
+            "reaction_clear_emoji": ("🧽", "cleared one emoji's reactions", "from"),
+        }
+        icon, action, preposition = labels[event_type]
+        actor = member.mention if member is not None else f"<@{user_id}>" if user_id is not None else "An unknown actor"
+        emoji_text = f" {emoji}" if emoji is not None else ""
+        description = (
+            f"{icon} {actor} {action}{emoji_text} {preposition} an uncached message "
+            f"in {getattr(source_channel, 'mention', source_channel)}."
+        )
+        embed = self.create_embed(event_type, description)
+        embed.add_field(name="Message ID", value=f"`{message_id}`", inline=True)
+        embed.add_field(
+            name="Message Link",
+            value=f"[View message](https://discord.com/channels/{guild_id}/{channel_id}/{message_id})",
+            inline=False,
+        )
+        event = LogEvent(
+            guild_id=guild.id,
+            event_type=event_type,
+            summary=f"{event_type} on uncached message {message_id}",
+            actor_id=user_id,
+            target_id=message_id,
+            source_channel_id=channel_id,
+            confidence="confirmed" if user_id is not None else "unavailable",
+            details={"message_id": message_id, "emoji": str(emoji) if emoji is not None else None},
+        )
+        await self.safe_send(log_channel, embed=embed, yalc_event=event)
+
+    @commands.Cog.listener()
+    async def on_raw_reaction_add(self, payload) -> None:
+        await self._log_raw_reaction_event(payload, "reaction_add")
+
+    @commands.Cog.listener()
+    async def on_raw_reaction_remove(self, payload) -> None:
+        await self._log_raw_reaction_event(payload, "reaction_remove")
+
+    @commands.Cog.listener()
+    async def on_raw_reaction_clear(self, payload) -> None:
+        await self._log_raw_reaction_event(payload, "reaction_clear")
+
+    @commands.Cog.listener()
+    async def on_raw_reaction_clear_emoji(self, payload) -> None:
+        await self._log_raw_reaction_event(payload, "reaction_clear_emoji")
+
+    async def _log_raw_poll_vote(self, payload, event_type: str) -> None:
+        """Log poll votes from raw gateway events without requiring message cache."""
+        guild_id = getattr(payload, "guild_id", None)
+        channel_id = getattr(payload, "channel_id", None)
+        message_id = getattr(payload, "message_id", None)
+        user_id = getattr(payload, "user_id", None)
+        answer_id = getattr(payload, "answer_id", None)
+        if None in (guild_id, channel_id, message_id, user_id, answer_id):
+            return
+        identity = (message_id, user_id, answer_id)
+        if not self._claim_raw_event(event_type, identity):
+            return
+        guild = self.bot.get_guild(guild_id)
+        if guild is None:
+            return
+        settings = await self._get_cached_settings(guild)
+        if not settings.get("raw_message_events", True):
+            return
+        if str(user_id) in {str(item) for item in settings.get("ignored_users", [])}:
+            return
+        source_channel = guild.get_channel_or_thread(channel_id)
+        member = guild.get_member(user_id)
+        if source_channel is None or not await self.should_log_event(
+            guild,
+            event_type,
+            channel=source_channel,
+            user=member,
+        ):
+            return
+        log_channel = await self.get_log_channel(guild, event_type)
+        if log_channel is None:
+            return
+        verb = "added" if event_type == "poll_vote_add" else "removed"
+        embed = self.create_embed(
+            event_type,
+            f"🗳️ <@{user_id}> {verb} a vote for answer `{answer_id}`.",
+        )
+        embed.add_field(
+            name="Poll Message",
+            value=f"[View poll](https://discord.com/channels/{guild_id}/{channel_id}/{message_id})",
+            inline=False,
+        )
+        event = LogEvent(
+            guild_id=guild.id,
+            event_type=event_type,
+            summary=f"User {user_id} {verb} poll vote {answer_id}",
+            actor_id=user_id,
+            target_id=message_id,
+            source_channel_id=channel_id,
+            confidence="confirmed",
+            details={"message_id": message_id, "answer_id": answer_id},
+        )
+        await self.safe_send(log_channel, embed=embed, yalc_event=event)
+
+    @commands.Cog.listener()
+    async def on_raw_poll_vote_add(self, payload) -> None:
+        await self._log_raw_poll_vote(payload, "poll_vote_add")
+
+    @commands.Cog.listener()
+    async def on_raw_poll_vote_remove(self, payload) -> None:
+        await self._log_raw_poll_vote(payload, "poll_vote_remove")
+
     @commands.Cog.listener()
     async def on_integration_create(self, integration: discord.Integration) -> None:
         """Log integration creation events."""
         self.log.debug("Listener triggered: on_integration_create")
         if not integration.guild:
             return
+        self._mark_recent_event("integration_detail", integration.guild.id)
         try:
             should_log = await self.should_log_event(
                 integration.guild,
@@ -2183,6 +2498,7 @@ class YALC(DashboardIntegration, commands.Cog):
             entry = await self._get_audit_log_entry(
                 integration.guild,
                 discord.AuditLogAction.integration_create,
+                target=integration,
                 timeout_seconds=10,
             )
 
@@ -2217,6 +2533,7 @@ class YALC(DashboardIntegration, commands.Cog):
         self.log.debug("Listener triggered: on_integration_update")
         if not integration.guild:
             return
+        self._mark_recent_event("integration_detail", integration.guild.id)
         try:
             should_log = await self.should_log_event(
                 integration.guild,
@@ -2235,6 +2552,7 @@ class YALC(DashboardIntegration, commands.Cog):
             entry = await self._get_audit_log_entry(
                 integration.guild,
                 discord.AuditLogAction.integration_update,
+                target=integration,
                 timeout_seconds=10,
             )
 
@@ -2268,6 +2586,7 @@ class YALC(DashboardIntegration, commands.Cog):
         guild = self.bot.get_guild(getattr(payload, "guild_id", 0))
         if not guild:
             return
+        self._mark_recent_event("integration_detail", guild.id)
         try:
             should_log = await self.should_log_event(guild, "integration_delete")
             if not should_log:
@@ -2338,6 +2657,7 @@ class YALC(DashboardIntegration, commands.Cog):
                 channel.guild,
                 discord.AuditLogAction.webhook_update,
                 timeout_seconds=10,
+                channel_id=channel.id,
             )
 
             embed = self.create_embed(
@@ -2383,6 +2703,7 @@ class YALC(DashboardIntegration, commands.Cog):
             entry = await self._get_audit_log_entry(
                 rule.guild,
                 discord.AuditLogAction.automod_rule_create,
+                target=rule,
                 timeout_seconds=10,
             )
 
@@ -2525,6 +2846,7 @@ class YALC(DashboardIntegration, commands.Cog):
             entry = await self._get_audit_log_entry(
                 rule.guild,
                 discord.AuditLogAction.automod_rule_delete,
+                target=rule,
                 timeout_seconds=10,
             )
 
@@ -2633,7 +2955,7 @@ class YALC(DashboardIntegration, commands.Cog):
             )
 
             # Include user thumbnail
-            settings = await self.config.guild(execution.guild).all()
+            settings = await self._get_cached_settings(execution.guild)
             if execution.member and settings.get("include_thumbnails", True) and execution.member.display_avatar:
                 embed.set_thumbnail(url=execution.member.display_avatar.url)
 
@@ -2825,25 +3147,81 @@ class YALC(DashboardIntegration, commands.Cog):
     async def on_presence_update(self, before: discord.Member, after: discord.Member):
         """Log presence/status updates."""
         try:
+            if before.status == after.status or not await self.should_log_event(
+                after.guild,
+                "presence_update",
+                user=after,
+            ):
+                return
             channel = await self.get_log_channel(after.guild, "presence_update")
             if not channel:
                 return
             desc = f"🟢 {after.mention} presence changed: {before.status} → {after.status}"
-            # Presence updates are user-driven, so actor is the user themselves
-            embed = self.create_embed(
-                "presence_update",
-                desc + f" (by {after.mention} ({after}))",
+            embed = self.create_embed("presence_update", desc)
+            event = LogEvent(
+                guild_id=after.guild.id,
+                event_type="presence_update",
+                summary=f"Member {after.id} presence changed from {before.status} to {after.status}",
+                actor_id=after.id,
+                target_id=after.id,
+                confidence="confirmed",
+                details={"before": str(before.status), "after": str(after.status)},
             )
-            await self.safe_send(channel, embed=embed)
-        except RECOVERABLE_EXCEPTIONS as e:
-            self.log.error(f"Failed to log presence_update: {e}")
+            await self.safe_send(channel, embed=embed, yalc_event=event)
+        except RECOVERABLE_EXCEPTIONS as error:
+            self.log.error("Failed to log presence_update: %s", error)
+
+    @commands.Cog.listener()
+    async def on_user_update(self, before: discord.User, after: discord.User) -> None:
+        """Log global username, display-name, and avatar changes in mutual guilds."""
+        changes = []
+        if before.name != after.name:
+            changes.append(f"**Username:** `{before.name}` → `{after.name}`")
+        if getattr(before, "global_name", None) != getattr(after, "global_name", None):
+            changes.append(
+                f"**Display name:** `{getattr(before, 'global_name', None) or 'None'}` → "
+                f"`{getattr(after, 'global_name', None) or 'None'}`"
+            )
+        if before.avatar != after.avatar:
+            changes.append("**Avatar:** changed")
+        if not changes:
+            return
+
+        for guild in tuple(self.bot.guilds):
+            member = guild.get_member(after.id)
+            if member is None or not await self.should_log_event(guild, "user_update", user=member):
+                continue
+            channel = await self.get_log_channel(guild, "user_update")
+            if channel is None:
+                continue
+            embed = self.create_embed(
+                "user_update",
+                f"🪪 {member.mention}'s global Discord profile changed.",
+            )
+            embed.add_field(name="User", value=f"{member.mention} (`{after}`, ID: `{after.id}`)", inline=True)
+            embed.add_field(name="Changes", value="\n".join(changes)[:1024], inline=False)
+            if after.display_avatar:
+                embed.set_thumbnail(url=after.display_avatar.url)
+            event = LogEvent(
+                guild_id=guild.id,
+                event_type="user_update",
+                summary=f"User {after.id} global profile changed",
+                actor_id=after.id,
+                target_id=after.id,
+                confidence="confirmed",
+                details={"changes": changes},
+            )
+            await self.safe_send(channel, embed=embed, yalc_event=event)
 
     @commands.Cog.listener()
     async def on_guild_integrations_update(self, guild: discord.Guild):
-        """Log integration updates/removals - now using the new integration listeners for detailed logging."""
-        # This listener is kept for backward compatibility, but the detailed logging
-        # is now handled by the specific integration event listeners (integration_create/update/delete)
+        """Fallback for versions that do not dispatch detailed integration events."""
         try:
+            await asyncio.sleep(0.1)
+            if self._recent_event_seen("integration_detail", guild.id):
+                return
+            if not await self.should_log_event(guild, "integration_update"):
+                return
             channel = await self.get_log_channel(guild, "integration_update")
             if not channel:
                 return
@@ -2879,6 +3257,7 @@ class YALC(DashboardIntegration, commands.Cog):
                 entry = await self._get_audit_log_entry(
                     invite.guild,
                     discord.AuditLogAction.invite_create,
+                    target=invite,
                     timeout_seconds=10,
                 )
                 if entry and entry.user:
@@ -2900,6 +3279,7 @@ class YALC(DashboardIntegration, commands.Cog):
             entry = await self._get_audit_log_entry(
                 invite.guild,
                 discord.AuditLogAction.invite_delete,
+                target=invite,
                 timeout_seconds=10,
             )
             if entry and entry.user:
@@ -2935,6 +3315,7 @@ class YALC(DashboardIntegration, commands.Cog):
             entry = await self._get_audit_log_entry(
                 guild,
                 discord.AuditLogAction.app_command_permission_update,
+                target=command_id,
                 timeout_seconds=10,
             )
             if entry and entry.user:
@@ -2999,10 +3380,7 @@ class YALC(DashboardIntegration, commands.Cog):
                 await self._log_audit_only_event(entry, event_type)
 
         except RECOVERABLE_EXCEPTIONS as e:
-            self.log.error(
-                f"Failed to handle audit_log_entry_create: {e}",
-                exc_info=True,
-            )
+            self.log.error(f"Failed to handle audit_log_entry_create: {e}")
 
     async def _log_audit_only_event(self, entry, event_type: str) -> None:
         """Render actions for which Discord has no equally useful gateway object."""
@@ -3090,17 +3468,24 @@ class YALC(DashboardIntegration, commands.Cog):
     # Dashboard integration is handled by the DashboardIntegration class
     # The on_dashboard_cog_add method is inherited from DashboardIntegration
 
-    def _claim_raw_event(self, event_type: str, event_id: int) -> bool:
+    def _claim_raw_event(self, event_type: str, event_id: object) -> bool:
         """Deduplicate raw gateway events for a short period."""
         now = time.monotonic()
         for key, timestamp in tuple(self._raw_event_ids.items()):
             if now - timestamp > 120:
                 self._raw_event_ids.pop(key, None)
-        key = (event_type, int(event_id))
+        key = (event_type, repr(event_id))
         if key in self._raw_event_ids:
             return False
         self._raw_event_ids[key] = now
         return True
+
+    def _mark_recent_event(self, event_type: str, identity: object) -> None:
+        self._raw_event_ids[(event_type, repr(identity))] = time.monotonic()
+
+    def _recent_event_seen(self, event_type: str, identity: object, *, within: float = 10.0) -> bool:
+        timestamp = self._raw_event_ids.get((event_type, repr(identity)))
+        return timestamp is not None and time.monotonic() - timestamp <= within
 
     def _remember_proxy_message(self, message_id: int) -> None:
         """Remember a proxy message long enough to filter uncached raw events."""
@@ -3322,7 +3707,7 @@ class YALC(DashboardIntegration, commands.Cog):
         # Check early if we should process this message
         try:
             # Fetch settings first to avoid redundant DB calls
-            settings = await self.config.guild(message.guild).all()
+            settings = await self._get_cached_settings(message.guild)
 
             # 1. Check if the event type is enabled at all
             if not settings["events"].get("message_delete", False):
@@ -3416,11 +3801,8 @@ class YALC(DashboardIntegration, commands.Cog):
                 self.log.warning("No log channel set for message_delete.")
                 return
 
-        except RECOVERABLE_EXCEPTIONS as e:
-            self.log.error(
-                f"Error in pre-processing message_delete event: {e}",
-                exc_info=True,
-            )
+        except RECOVERABLE_EXCEPTIONS:
+            self.log.exception("Error in pre-processing message_delete event")
             return
 
         # Process and log the event
@@ -3818,8 +4200,8 @@ class YALC(DashboardIntegration, commands.Cog):
             finally:
                 self._close_send_files(deleted_image_files)
 
-        except RECOVERABLE_EXCEPTIONS as e:
-            self.log.error(f"Failed to log message_delete: {e}", exc_info=True)
+        except RECOVERABLE_EXCEPTIONS:
+            self.log.exception("Failed to log message_delete")
 
     @commands.Cog.listener()
     async def on_message_edit(
@@ -3838,7 +4220,7 @@ class YALC(DashboardIntegration, commands.Cog):
         # Early processing checks
         try:
             # Get settings once to avoid redundant database calls
-            settings = await self.config.guild(before.guild).all()
+            settings = await self._get_cached_settings(before.guild)
 
             if before.pinned != after.pinned:
                 if after.pinned:
@@ -3906,11 +4288,8 @@ class YALC(DashboardIntegration, commands.Cog):
                 self.log.warning("No log channel set for message_edit.")
                 return
 
-        except RECOVERABLE_EXCEPTIONS as e:
-            self.log.error(
-                f"Error in pre-processing message_edit event: {e}",
-                exc_info=True,
-            )
+        except RECOVERABLE_EXCEPTIONS:
+            self.log.exception("Error in pre-processing message_edit event")
             return
 
         # Process and log the event
@@ -4172,8 +4551,8 @@ class YALC(DashboardIntegration, commands.Cog):
             )
             await self.safe_send(channel, embed=embed, yalc_event=event)
 
-        except RECOVERABLE_EXCEPTIONS as e:
-            self.log.error(f"Failed to log message_edit: {e}", exc_info=True)
+        except RECOVERABLE_EXCEPTIONS:
+            self.log.exception("Failed to log message_edit")
 
     @commands.Cog.listener()
     async def on_bulk_message_delete(self, messages: list[discord.Message]) -> None:
@@ -4204,7 +4583,7 @@ class YALC(DashboardIntegration, commands.Cog):
 
         # Check if we should log this event
         try:
-            settings = await self.config.guild(guild).all()
+            settings = await self._get_cached_settings(guild)
 
             # Skip if event is disabled
             if not settings["events"].get("message_bulk_delete", False):
@@ -4395,7 +4774,7 @@ class YALC(DashboardIntegration, commands.Cog):
                 # Set thumbnail to the user with most messages
                 if sorted_authors and settings.get("include_thumbnails", True):
                     top_author = sorted_authors[0][1]
-                    if "avatar" in top_author and top_author["avatar"]:
+                    if top_author.get("avatar"):
                         embed.set_thumbnail(url=top_author["avatar"].url)
 
             # Add content preview (first few and last few messages)
@@ -4446,8 +4825,8 @@ class YALC(DashboardIntegration, commands.Cog):
             # Send the log entry
             await self.safe_send(log_channel, embed=embed)
 
-        except RECOVERABLE_EXCEPTIONS as e:
-            self.log.error(f"Error logging bulk message delete: {e}", exc_info=True)
+        except RECOVERABLE_EXCEPTIONS:
+            self.log.exception("Error logging bulk message delete")
 
     @commands.Cog.listener()
     async def on_member_join(self, member: discord.Member) -> None:
@@ -4457,9 +4836,9 @@ class YALC(DashboardIntegration, commands.Cog):
             self.log.debug("No guild on member.")
             return
         try:
-            should_log = await self.should_log_event(member.guild, "member_join")
-        except RECOVERABLE_EXCEPTIONS as e:
-            self.log.error(f"Error in should_log_event: {e}")
+            should_log = await self.should_log_event(member.guild, "member_join", user=member)
+        except RECOVERABLE_EXCEPTIONS:
+            self.log.exception("Error in should_log_event")
             return
         if not should_log:
             self.log.debug("should_log_event returned False for member_join.")
@@ -4479,7 +4858,14 @@ class YALC(DashboardIntegration, commands.Cog):
                 f"👋 {member.mention} has joined the server.\n\u200b",
                 user=f"{member} ({member.id})",
             )
-            await self.safe_send(channel, embed=embed)
+            event = LogEvent(
+                guild_id=member.guild.id,
+                event_type="member_join",
+                summary=f"{member} joined the server",
+                target_id=member.id,
+                confidence="confirmed",
+            )
+            await self.safe_send(channel, embed=embed, yalc_event=event)
         except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Failed to log member_join: {e}")
 
@@ -4494,9 +4880,6 @@ class YALC(DashboardIntegration, commands.Cog):
             return
 
         guild = member.guild
-
-        # Wait a moment for audit logs to be available
-        await asyncio.sleep(5)
 
         # Check if this was a ban (if so, we already logged it in on_member_ban)
         if guild.id in self._ban_cache and member.id in self._ban_cache[guild.id]:
@@ -4519,6 +4902,14 @@ class YALC(DashboardIntegration, commands.Cog):
                 )
             except RECOVERABLE_EXCEPTIONS as e:
                 self.log.debug(f"Could not fetch audit log for kick: {e}")
+
+        # A ban gateway event can arrive while the bounded kick lookup is in
+        # progress. Recheck before classifying the removal as an ordinary leave.
+        if kick_entry is None and guild.id in self._ban_cache and member.id in self._ban_cache[guild.id]:
+            self._ban_cache[guild.id].remove(member.id)
+            if not self._ban_cache[guild.id]:
+                del self._ban_cache[guild.id]
+            return
 
         if kick_entry:
             # This was a kick
@@ -4617,7 +5008,7 @@ class YALC(DashboardIntegration, commands.Cog):
     async def _log_member_kick(self, member: discord.Member, kick_entry):
         """Log a member kick event."""
         self.log.debug("Logging member kick")
-        if not await self.should_log_event(member.guild, "member_kick"):
+        if not await self.should_log_event(member.guild, "member_kick", user=member):
             return
 
         channel = await self.get_log_channel(member.guild, "member_kick")
@@ -4683,20 +5074,30 @@ class YALC(DashboardIntegration, commands.Cog):
         )
 
         # Add user thumbnail if available
-        settings = await self.config.guild(member.guild).all()
+        settings = await self._get_cached_settings(member.guild)
         if settings.get("include_thumbnails", True) and member.display_avatar:
             embed.set_thumbnail(url=member.display_avatar.url)
 
         # Set footer
         self.set_embed_footer(embed, label="YALC Logger • Member Kick")
 
-        await self.safe_send(channel, embed=embed)
+        event = LogEvent(
+            guild_id=member.guild.id,
+            event_type="member_kick",
+            summary=f"{member} was kicked",
+            actor_id=getattr(getattr(kick_entry, "user", None), "id", None),
+            target_id=member.id,
+            audit_entry_id=getattr(kick_entry, "id", None),
+            confidence="confirmed" if kick_entry is not None else "unavailable",
+            details={"reason": getattr(kick_entry, "reason", None)},
+        )
+        await self.safe_send(channel, embed=embed, yalc_event=event)
 
     async def _log_member_leave(self, member: discord.Member):
         """Log a regular member leave event."""
         self.log.debug("Logging member leave")
         try:
-            should_log = await self.should_log_event(member.guild, "member_leave")
+            should_log = await self.should_log_event(member.guild, "member_leave", user=member)
         except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Error in should_log_event: {e}")
             return
@@ -4756,14 +5157,21 @@ class YALC(DashboardIntegration, commands.Cog):
             )
 
             # Add user thumbnail if available
-            settings = await self.config.guild(member.guild).all()
+            settings = await self._get_cached_settings(member.guild)
             if settings.get("include_thumbnails", True) and member.display_avatar:
                 embed.set_thumbnail(url=member.display_avatar.url)
 
             # Set footer
             self.set_embed_footer(embed, label="YALC Logger • Member Leave")
 
-            await self.safe_send(channel, embed=embed)
+            event = LogEvent(
+                guild_id=member.guild.id,
+                event_type="member_leave",
+                summary=f"{member} left the server",
+                target_id=member.id,
+                confidence="confirmed",
+            )
+            await self.safe_send(channel, embed=embed, yalc_event=event)
         except RECOVERABLE_EXCEPTIONS as e:
             self.log.error(f"Failed to log member_leave: {e}")
 
@@ -4773,227 +5181,167 @@ class YALC(DashboardIntegration, commands.Cog):
         before: discord.Member,
         after: discord.Member,
     ) -> None:
-        """Log member update events with audit log integration to show who made changes."""
-        self.log.debug("Listener triggered: on_member_update")
-        if not before.guild:
-            self.log.debug("No guild on member.")
-            return
-        event_type = (
-            "member_timeout"
-            if getattr(before, "communication_disabled_until", None) != getattr(after, "communication_disabled_until", None)
-            else "member_update"
-        )
-        try:
-            should_log = await self.should_log_event(
-                before.guild,
-                event_type,
-                user=after,
+        """Log independent profile, role, and timeout changes without guessing actors."""
+        guild = before.guild
+        added_roles = [role for role in after.roles if role not in before.roles]
+        removed_roles = [role for role in before.roles if role not in after.roles]
+        before_timeout = getattr(before, "communication_disabled_until", None)
+        after_timeout = getattr(after, "communication_disabled_until", None)
+
+        profile_changes: list[str] = []
+        profile_audit_keys: set[str] = set()
+        if before.nick != after.nick:
+            profile_changes.append(f"📝 Nickname: `{before.nick or 'None'}` → `{after.nick or 'None'}`")
+            profile_audit_keys.add("nick")
+        if getattr(before, "pending", None) != getattr(after, "pending", None):
+            profile_changes.append(f"🚪 Membership screening: `{before.pending}` → `{after.pending}`")
+        if getattr(before, "premium_since", None) != getattr(after, "premium_since", None):
+            profile_changes.append(
+                "💎 Server boost: "
+                f"`{getattr(before, 'premium_since', None) or 'None'}` → "
+                f"`{getattr(after, 'premium_since', None) or 'None'}`"
             )
-        except RECOVERABLE_EXCEPTIONS as e:
-            self.log.error(f"Error in should_log_event: {e}")
-            return
-        if not should_log:
-            self.log.debug(f"should_log_event returned False for {event_type}.")
-            return
-        try:
-            channel = await self.get_log_channel(before.guild, event_type)
-        except RECOVERABLE_EXCEPTIONS as e:
-            self.log.error(f"Error in get_log_channel: {e}")
-            return
-        self.log.debug(f"About to send to channel: {channel}")
-        if not channel:
-            self.log.warning(f"No log channel set for {event_type}.")
-            return
-        try:
-            changes = []
-            moderator_info = None
+        if getattr(before, "guild_avatar", None) != getattr(after, "guild_avatar", None):
+            profile_changes.append("🖼️ Server profile avatar changed")
+        if getattr(before, "guild_banner", None) != getattr(after, "guild_banner", None):
+            profile_changes.append("🏳️ Server profile banner changed")
+        if getattr(before, "flags", None) != getattr(after, "flags", None):
+            profile_changes.append(f"🚩 Member flags: `{before.flags}` → `{after.flags}`")
 
-            # Check for role changes
-            added_roles = [r for r in after.roles if r not in before.roles]
-            removed_roles = [r for r in before.roles if r not in after.roles]
+        role_entries: dict[tuple[str, int], discord.AuditLogEntry] = {}
+        if added_roles or removed_roles:
+            role_entries = await self._get_member_role_audit_entries(
+                guild,
+                after,
+                added_roles,
+                removed_roles,
+            )
 
-            # Try to get audit log information for role changes
-            if added_roles or removed_roles:
-                try:
-                    # Look for member role update in audit logs
-                    audit_entry = await self._get_audit_log_entry(
-                        before.guild,
-                        discord.AuditLogAction.member_role_update,
-                        target=after,
-                        timeout_seconds=10,
-                    )
+        member_changes = list(profile_changes)
+        for direction, roles in (("added", added_roles), ("removed", removed_roles)):
+            symbol = "➕" if direction == "added" else "➖"
+            verb = "Added" if direction == "added" else "Removed"
+            for role in roles:
+                entry = role_entries.get((direction, role.id))
+                actor = getattr(entry, "user", None)
+                attribution = f" — by {actor.mention} · confirmed" if actor is not None else ""
+                member_changes.append(f"{symbol} {verb} {role.mention}{attribution}")
 
-                    if audit_entry and audit_entry.user != after:
-                        moderator_info = {
-                            "moderator": audit_entry.user,
-                            "reason": getattr(audit_entry, "reason", None),
-                        }
-                except RECOVERABLE_EXCEPTIONS as e:
-                    self.log.debug(
-                        f"Could not fetch audit log for member role update: {e}",
-                    )
-
-                # Add role changes to the changes list
-                for role in added_roles:
-                    changes.append(f"➕ Added {role.mention}")
-                for role in removed_roles:
-                    changes.append(f"➖ Removed {role.mention}")
-
-            # Check for timeout/communication restriction changes
-            before_timeout = getattr(before, "communication_disabled_until", None)
-            after_timeout = getattr(after, "communication_disabled_until", None)
-
-            if before_timeout != after_timeout:
-                try:
-                    # Look for member timeout in audit logs
-                    timeout_action = discord.AuditLogAction.member_update
-                    audit_entry = await self._get_audit_log_entry(
-                        before.guild,
-                        timeout_action,
-                        target=after,
-                        timeout_seconds=10,
-                    )
-
-                    if audit_entry and audit_entry.user != after and not moderator_info:
-                        moderator_info = {
-                            "moderator": audit_entry.user,
-                            "reason": getattr(audit_entry, "reason", None),
-                        }
-                except RECOVERABLE_EXCEPTIONS as e:
-                    self.log.debug(
-                        f"Could not fetch audit log for member timeout update: {e}",
-                    )
-
-                # Format timeout change message
-                if after_timeout:
-                    if before_timeout:
-                        # Timeout duration changed
-                        after_timeout - datetime.datetime.now(datetime.timezone.utc)
-                        changes.append(
-                            f"⏰ Timeout updated: expires {discord.utils.format_dt(after_timeout, 'R')}",
-                        )
-                    else:
-                        # New timeout applied
-                        after_timeout - datetime.datetime.now(datetime.timezone.utc)
-                        changes.append(
-                            f"⏰ Timeout applied: expires {discord.utils.format_dt(after_timeout, 'R')}",
-                        )
-                else:
-                    # Timeout removed
-                    changes.append("✅ Timeout removed")
-
-            # Check for nickname changes
-            if before.nick != after.nick:
-                try:
-                    # Look for member update in audit logs (covers nickname changes)
-                    audit_entry = await self._get_audit_log_entry(
-                        before.guild,
+        if member_changes and await self.should_log_event(guild, "member_update", user=after):
+            channel = await self.get_log_channel(guild, "member_update")
+            if channel is not None:
+                profile_entry = None
+                if profile_audit_keys:
+                    profile_entry = await self._get_audit_log_entry(
+                        guild,
                         discord.AuditLogAction.member_update,
                         target=after,
-                        timeout_seconds=10,
+                        timeout_seconds=15,
+                        changed_keys=profile_audit_keys,
                     )
 
-                    if audit_entry and audit_entry.user != after and not moderator_info:
-                        moderator_info = {
-                            "moderator": audit_entry.user,
-                            "reason": getattr(audit_entry, "reason", None),
-                        }
-                except RECOVERABLE_EXCEPTIONS as e:
-                    self.log.debug(
-                        f"Could not fetch audit log for member nickname update: {e}",
+                entries = {
+                    getattr(entry, "id", id(entry)): entry
+                    for entry in (*role_entries.values(), profile_entry)
+                    if entry is not None
+                }
+                actors = {actor.id: actor for entry in entries.values() if (actor := getattr(entry, "user", None)) is not None}
+                reasons = {str(reason) for entry in entries.values() if (reason := getattr(entry, "reason", None))}
+                embed = self.create_embed(
+                    "member_update",
+                    f"👤 {after.mention}'s server profile or access changed.\n\u200b",
+                )
+                embed.add_field(name="Member", value=f"{after.mention} (`{after}`, ID: `{after.id}`)", inline=True)
+                if actors:
+                    embed.add_field(
+                        name="Confirmed Actors",
+                        value="\n".join(f"{actor.mention} (`{actor.id}`)" for actor in actors.values())[:1024],
+                        inline=True,
                     )
-
-                changes.append(
-                    f"📝 Nickname changed: '{before.nick or before.display_name}' → '{after.nick or after.display_name}'",
+                else:
+                    embed.add_field(
+                        name="Attribution",
+                        value="Unavailable or self/system generated; no moderator was guessed.",
+                        inline=True,
+                    )
+                embed.add_field(name="Changes", value="\n".join(member_changes)[:1024], inline=False)
+                if reasons:
+                    embed.add_field(name="Audit Reasons", value="\n".join(sorted(reasons))[:1024], inline=False)
+                settings = await self._get_cached_settings(guild)
+                if settings.get("include_thumbnails", True) and after.display_avatar:
+                    embed.set_thumbnail(url=after.display_avatar.url)
+                self.set_embed_footer(embed, label="YALC Logger • Member Update")
+                sole_entry = next(iter(entries.values())) if len(entries) == 1 else None
+                sole_actor = next(iter(actors.values())) if len(actors) == 1 else None
+                role_matches_complete = len(role_entries) == len(added_roles) + len(removed_roles)
+                profile_match_complete = not profile_audit_keys or profile_entry is not None
+                actors_complete = bool(entries) and all(getattr(entry, "user", None) is not None for entry in entries.values())
+                event = LogEvent(
+                    guild_id=guild.id,
+                    event_type="member_update",
+                    summary=f"Member {after.id} profile or roles changed",
+                    actor_id=getattr(sole_actor, "id", None),
+                    target_id=after.id,
+                    audit_entry_id=getattr(sole_entry, "id", None),
+                    confidence=(
+                        "confirmed" if role_matches_complete and profile_match_complete and actors_complete else "unavailable"
+                    ),
+                    details={
+                        "added_role_ids": [role.id for role in added_roles],
+                        "removed_role_ids": [role.id for role in removed_roles],
+                        "changes": member_changes,
+                        "audit_entry_ids": [getattr(entry, "id", None) for entry in entries.values()],
+                    },
                 )
+                await self.safe_send(channel, embed=embed, yalc_event=event)
 
-            # Skip if no changes detected
-            if not changes:
-                return
-
-            # Create the embed with enhanced information
-            if moderator_info:
-                description = (
-                    f"👤 {after.mention} ({after.display_name})'s profile was updated by {moderator_info['moderator'].mention}"
+        if before_timeout != after_timeout and await self.should_log_event(guild, "member_timeout", user=after):
+            channel = await self.get_log_channel(guild, "member_timeout")
+            if channel is not None:
+                timeout_entry = await self._get_audit_log_entry(
+                    guild,
+                    discord.AuditLogAction.member_update,
+                    target=after,
+                    timeout_seconds=15,
+                    changed_keys={"timeout"},
                 )
-            else:
-                description = f"👤 {after.mention} ({after.display_name})'s profile was updated"
-
-            embed = self.create_embed(
-                event_type,
-                description + "\n\u200b",
-            )
-
-            # Add user information
-            embed.add_field(
-                name="Member",
-                value=f"{after.mention} (`{after}`, ID: `{after.id}`)",
-                inline=True,
-            )
-
-            # Add moderator information if available
-            if moderator_info:
+                actor = getattr(timeout_entry, "user", None)
+                reason = getattr(timeout_entry, "reason", None)
+                if after_timeout is None:
+                    change = "✅ Timeout removed"
+                elif before_timeout is None:
+                    change = f"⏰ Timeout applied until {discord.utils.format_dt(after_timeout, 'F')}"
+                else:
+                    change = f"⏰ Timeout changed to {discord.utils.format_dt(after_timeout, 'F')}"
+                embed = self.create_embed("member_timeout", f"{change} for {after.mention}.\n\u200b")
+                embed.add_field(name="Member", value=f"{after.mention} (`{after.id}`)", inline=True)
                 embed.add_field(
                     name="Updated By",
                     value=(
-                        f"{moderator_info['moderator'].mention} "
-                        f"(`{moderator_info['moderator']}`, "
-                        f"ID: `{moderator_info['moderator'].id}`)"
+                        f"{actor.mention} (`{actor.id}`) · confirmed"
+                        if actor is not None
+                        else "Unavailable; no moderator was guessed."
                     ),
                     inline=True,
                 )
-
-                # Add reason if provided
-                if moderator_info["reason"]:
-                    embed.add_field(
-                        name="Reason",
-                        value=moderator_info["reason"],
-                        inline=False,
-                    )
-
-                # Indicate if it was self-updated vs moderated
-                if moderator_info["moderator"] == after:
-                    embed.add_field(
-                        name="Update Type",
-                        value="Self-updated",
-                        inline=True,
-                    )
-                else:
-                    embed.add_field(
-                        name="Update Type",
-                        value="Moderated update",
-                        inline=True,
-                    )
-            else:
-                # If no audit log info available, indicate unknown
-                embed.add_field(
-                    name="Updated By",
-                    value="Unknown (audit log unavailable or self-updated)",
-                    inline=True,
+                if reason:
+                    embed.add_field(name="Reason", value=str(reason)[:1024], inline=False)
+                self.set_embed_footer(embed, label="YALC Logger • Member Timeout")
+                event = LogEvent(
+                    guild_id=guild.id,
+                    event_type="member_timeout",
+                    summary=f"Member {after.id} timeout changed",
+                    actor_id=getattr(actor, "id", None),
+                    target_id=after.id,
+                    audit_entry_id=getattr(timeout_entry, "id", None),
+                    confidence="confirmed" if timeout_entry else "unavailable",
+                    details={
+                        "before": before_timeout,
+                        "after": after_timeout,
+                        "reason": reason,
+                    },
                 )
-
-            # Add the changes
-            embed.add_field(
-                name="Changes",
-                value="\n".join(changes),
-                inline=False,
-            )
-
-            # Add user thumbnail for better visual identification
-            settings = await self.config.guild(before.guild).all()
-            if settings.get("include_thumbnails", True) and after.display_avatar:
-                embed.set_thumbnail(url=after.display_avatar.url)
-
-            # Set footer
-            event_time = datetime.datetime.now(datetime.timezone.utc)
-            footer_label = "YALC Logger • Member Timeout" if event_type == "member_timeout" else "YALC Logger • Member Update"
-            self.set_embed_footer(embed, event_time=event_time, label=footer_label)
-
-            # Send the log message
-            await self.safe_send(channel, embed=embed)
-
-        except RECOVERABLE_EXCEPTIONS as e:
-            self.log.error(f"Failed to log member_update: {e}")
+                await self.safe_send(channel, embed=embed, yalc_event=event)
 
     @commands.Cog.listener()
     async def on_guild_channel_create(self, channel: discord.abc.GuildChannel) -> None:
@@ -5135,7 +5483,7 @@ class YALC(DashboardIntegration, commands.Cog):
                     )
 
             # Add creator thumbnail for better visual identification
-            settings = await self.config.guild(channel.guild).all()
+            settings = await self._get_cached_settings(channel.guild)
             if creator_info and settings.get("include_thumbnails", True) and hasattr(creator_info["creator"], "display_avatar"):
                 embed.set_thumbnail(url=creator_info["creator"].display_avatar.url)
 
@@ -5291,7 +5639,7 @@ class YALC(DashboardIntegration, commands.Cog):
                     )
 
             # Add deleter thumbnail for better visual identification
-            settings = await self.config.guild(channel.guild).all()
+            settings = await self._get_cached_settings(channel.guild)
             if deleter_info and settings.get("include_thumbnails", True) and hasattr(deleter_info["deleter"], "display_avatar"):
                 embed.set_thumbnail(url=deleter_info["deleter"].display_avatar.url)
 
@@ -5926,7 +6274,7 @@ class YALC(DashboardIntegration, commands.Cog):
                 )
 
             # Add creator thumbnail for better visual identification
-            settings = await self.config.guild(role.guild).all()
+            settings = await self._get_cached_settings(role.guild)
             if creator_info and settings.get("include_thumbnails", True) and hasattr(creator_info["creator"], "display_avatar"):
                 embed.set_thumbnail(url=creator_info["creator"].display_avatar.url)
 
@@ -5942,7 +6290,7 @@ class YALC(DashboardIntegration, commands.Cog):
             if sent_message:
                 self._mark_role_event_logged(role.guild.id, "role_create", role.id)
         except RECOVERABLE_EXCEPTIONS as e:
-            self.log.error(f"Failed to log role_create: {e}", exc_info=True)
+            self.log.error(f"Failed to log role_create: {e}")
 
     @commands.Cog.listener()
     async def on_guild_role_delete(self, role: discord.Role) -> None:
@@ -5953,8 +6301,8 @@ class YALC(DashboardIntegration, commands.Cog):
             return
         try:
             should_log = await self.should_log_event(role.guild, "role_delete")
-        except RECOVERABLE_EXCEPTIONS as e:
-            self.log.error(f"Error in should_log_event: {e}")
+        except RECOVERABLE_EXCEPTIONS:
+            self.log.exception("Error in should_log_event")
             return
         if not should_log:
             self.log.debug("should_log_event returned False for role_delete.")
@@ -6104,7 +6452,7 @@ class YALC(DashboardIntegration, commands.Cog):
                 )
 
             # Add deleter thumbnail for better visual identification
-            settings = await self.config.guild(role.guild).all()
+            settings = await self._get_cached_settings(role.guild)
             if deleter_info and settings.get("include_thumbnails", True) and hasattr(deleter_info["deleter"], "display_avatar"):
                 embed.set_thumbnail(url=deleter_info["deleter"].display_avatar.url)
 
@@ -6120,7 +6468,7 @@ class YALC(DashboardIntegration, commands.Cog):
             if sent_message:
                 self._mark_role_event_logged(role.guild.id, "role_delete", role.id)
         except RECOVERABLE_EXCEPTIONS as e:
-            self.log.error(f"Failed to log role_delete: {e}", exc_info=True)
+            self.log.error(f"Failed to log role_delete: {e}")
 
     @commands.Cog.listener()
     async def on_guild_role_update(
@@ -6141,8 +6489,8 @@ class YALC(DashboardIntegration, commands.Cog):
             return
         try:
             should_log = await self.should_log_event(before.guild, "role_update")
-        except RECOVERABLE_EXCEPTIONS as e:
-            self.log.error(f"Error in should_log_event: {e}")
+        except RECOVERABLE_EXCEPTIONS:
+            self.log.exception("Error in should_log_event")
             return
         if not should_log:
             self.log.debug("should_log_event returned False for role_update.")
@@ -6318,7 +6666,7 @@ class YALC(DashboardIntegration, commands.Cog):
                 )
 
             # Add user thumbnail for better visual identification
-            settings = await self.config.guild(before.guild).all()
+            settings = await self._get_cached_settings(before.guild)
             if user_who_changed and settings.get("include_thumbnails", True) and hasattr(user_who_changed, "display_avatar"):
                 embed.set_thumbnail(url=user_who_changed.display_avatar.url)
 
@@ -6332,7 +6680,7 @@ class YALC(DashboardIntegration, commands.Cog):
 
             await self.safe_send(channel, embed=embed)
         except RECOVERABLE_EXCEPTIONS as e:
-            self.log.error(f"Failed to log role_update: {e}", exc_info=True)
+            self.log.error(f"Failed to log role_update: {e}")
 
     @commands.Cog.listener()
     async def on_guild_update(
@@ -6343,8 +6691,8 @@ class YALC(DashboardIntegration, commands.Cog):
         self.log.debug("Listener triggered: on_guild_update")
         try:
             should_log = await self.should_log_event(before, "guild_update")
-        except RECOVERABLE_EXCEPTIONS as e:
-            self.log.error(f"Error in should_log_event: {e}")
+        except RECOVERABLE_EXCEPTIONS:
+            self.log.exception("Error in should_log_event")
             return
         if not should_log:
             self.log.debug("should_log_event returned False for guild_update.")
@@ -6565,7 +6913,7 @@ class YALC(DashboardIntegration, commands.Cog):
 
             await self.safe_send(channel, embed=embed)
         except RECOVERABLE_EXCEPTIONS as e:
-            self.log.error(f"Failed to log sticker_update: {e}", exc_info=True)
+            self.log.error(f"Failed to log sticker_update: {e}")
 
     async def _command_logging_allowed(
         self,
@@ -6575,7 +6923,7 @@ class YALC(DashboardIntegration, commands.Cog):
     ) -> bool:
         """Apply the guild's command logging privacy policy."""
         if settings is None:
-            settings = await self.config.guild(guild).all()
+            settings = await self._get_cached_settings(guild)
         mode = settings.get("command_log_mode", "all")
         if mode == "none":
             return False
@@ -6597,7 +6945,7 @@ class YALC(DashboardIntegration, commands.Cog):
             return
 
         try:
-            settings = await self.config.guild(ctx.guild).all()
+            settings = await self._get_cached_settings(ctx.guild)
             if not await self._command_logging_allowed(ctx.guild, ctx.author, settings):
                 return
             if not await self.should_log_event(
@@ -6646,8 +6994,8 @@ class YALC(DashboardIntegration, commands.Cog):
 
             self.set_embed_footer(embed, label="YALC Logger • Command Use")
             await self.safe_send(channel, embed=embed)
-        except RECOVERABLE_EXCEPTIONS as e:
-            self.log.error(f"Failed to log command_use: {e}", exc_info=True)
+        except RECOVERABLE_EXCEPTIONS:
+            self.log.exception("Failed to log command_use")
 
     @commands.Cog.listener()
     async def on_app_command_completion(
@@ -6660,7 +7008,7 @@ class YALC(DashboardIntegration, commands.Cog):
             return
 
         try:
-            settings = await self.config.guild(interaction.guild).all()
+            settings = await self._get_cached_settings(interaction.guild)
             if not await self._command_logging_allowed(interaction.guild, interaction.user, settings):
                 return
             event_channel = interaction.channel if isinstance(interaction.channel, discord.abc.GuildChannel) else None
@@ -6716,8 +7064,8 @@ class YALC(DashboardIntegration, commands.Cog):
 
             self.set_embed_footer(embed, label="YALC Logger • Application Command")
             await self.safe_send(channel, embed=embed)
-        except RECOVERABLE_EXCEPTIONS as e:
-            self.log.error(f"Failed to log application_cmd: {e}", exc_info=True)
+        except RECOVERABLE_EXCEPTIONS:
+            self.log.exception("Failed to log application_cmd")
 
     @commands.Cog.listener()
     async def on_app_command_error(
@@ -6730,7 +7078,7 @@ class YALC(DashboardIntegration, commands.Cog):
             return
 
         try:
-            settings = await self.config.guild(interaction.guild).all()
+            settings = await self._get_cached_settings(interaction.guild)
             if not await self._command_logging_allowed(interaction.guild, interaction.user, settings):
                 return
             event_channel = interaction.channel if isinstance(interaction.channel, discord.abc.GuildChannel) else None
@@ -6787,11 +7135,8 @@ class YALC(DashboardIntegration, commands.Cog):
                 label="YALC Logger • Application Command Error",
             )
             await self.safe_send(channel, embed=embed)
-        except RECOVERABLE_EXCEPTIONS as e:
-            self.log.error(
-                f"Failed to log application command error: {e}",
-                exc_info=True,
-            )
+        except RECOVERABLE_EXCEPTIONS:
+            self.log.exception("Failed to log application command error")
 
     @commands.Cog.listener()
     async def on_command_error(
@@ -6815,7 +7160,7 @@ class YALC(DashboardIntegration, commands.Cog):
 
         try:
             # Get settings
-            settings = await self.config.guild(ctx.guild).all()
+            settings = await self._get_cached_settings(ctx.guild)
 
             if not await self._command_logging_allowed(ctx.guild, ctx.author, settings):
                 return
@@ -6914,8 +7259,8 @@ class YALC(DashboardIntegration, commands.Cog):
             # Send the log
             await self.safe_send(log_channel, embed=embed)
 
-        except RECOVERABLE_EXCEPTIONS as e:
-            self.log.error(f"Error logging command_error: {e}", exc_info=True)
+        except RECOVERABLE_EXCEPTIONS:
+            self.log.exception("Error logging command_error")
 
     @commands.Cog.listener()
     async def on_scheduled_event_create(self, event: discord.ScheduledEvent) -> None:
@@ -6936,7 +7281,7 @@ class YALC(DashboardIntegration, commands.Cog):
 
         try:
             # Get settings
-            settings = await self.config.guild(guild).all()
+            settings = await self._get_cached_settings(guild)
 
             # Skip if event is disabled
             if not settings["events"].get("guild_scheduled_event_create", False):
@@ -7040,11 +7385,8 @@ class YALC(DashboardIntegration, commands.Cog):
             # Send the log
             await self.safe_send(log_channel, embed=embed)
 
-        except RECOVERABLE_EXCEPTIONS as e:
-            self.log.error(
-                f"Error logging guild_scheduled_event_create: {e}",
-                exc_info=True,
-            )
+        except RECOVERABLE_EXCEPTIONS:
+            self.log.exception("Error logging guild_scheduled_event_create")
 
     @commands.Cog.listener()
     async def on_scheduled_event_update(
@@ -7071,7 +7413,7 @@ class YALC(DashboardIntegration, commands.Cog):
 
         try:
             # Get settings
-            settings = await self.config.guild(guild).all()
+            settings = await self._get_cached_settings(guild)
 
             # Skip if event is disabled
             if not settings["events"].get("guild_scheduled_event_update", False):
@@ -7167,11 +7509,8 @@ class YALC(DashboardIntegration, commands.Cog):
             # Send the log
             await self.safe_send(log_channel, embed=embed)
 
-        except RECOVERABLE_EXCEPTIONS as e:
-            self.log.error(
-                f"Error logging guild_scheduled_event_update: {e}",
-                exc_info=True,
-            )
+        except RECOVERABLE_EXCEPTIONS:
+            self.log.exception("Error logging guild_scheduled_event_update")
 
     @commands.Cog.listener()
     async def on_scheduled_event_delete(self, event: discord.ScheduledEvent) -> None:
@@ -7192,7 +7531,7 @@ class YALC(DashboardIntegration, commands.Cog):
 
         try:
             # Get settings
-            settings = await self.config.guild(guild).all()
+            settings = await self._get_cached_settings(guild)
 
             # Skip if event is disabled
             if not settings["events"].get("guild_scheduled_event_delete", False):
@@ -7282,11 +7621,52 @@ class YALC(DashboardIntegration, commands.Cog):
             # Send the log
             await self.safe_send(log_channel, embed=embed)
 
-        except RECOVERABLE_EXCEPTIONS as e:
-            self.log.error(
-                f"Error logging guild_scheduled_event_delete: {e}",
-                exc_info=True,
-            )
+        except RECOVERABLE_EXCEPTIONS:
+            self.log.exception("Error logging guild_scheduled_event_delete")
+
+    async def _log_scheduled_event_user(self, event: discord.ScheduledEvent, user: discord.User, event_type: str) -> None:
+        """Log users joining or leaving a Discord scheduled event."""
+        guild = event.guild
+        member = guild.get_member(user.id)
+        source_channel = getattr(event, "channel", None)
+        if not await self.should_log_event(
+            guild,
+            event_type,
+            channel=source_channel,
+            user=member or user,
+        ):
+            return
+        log_channel = await self.get_log_channel(guild, event_type)
+        if log_channel is None:
+            return
+        joined = event_type == "scheduled_event_user_add"
+        verb = "registered for" if joined else "withdrew from"
+        embed = self.create_embed(
+            event_type,
+            f"{'🙋' if joined else '↩️'} {user.mention} {verb} **{event.name}**.",
+        )
+        embed.add_field(name="Event ID", value=f"`{event.id}`", inline=True)
+        if getattr(event, "url", None):
+            embed.add_field(name="Event Link", value=f"[View event]({event.url})", inline=False)
+        log_event = LogEvent(
+            guild_id=guild.id,
+            event_type=event_type,
+            summary=f"User {user.id} {verb} scheduled event {event.id}",
+            actor_id=user.id,
+            target_id=event.id,
+            source_channel_id=getattr(source_channel, "id", None),
+            confidence="confirmed",
+            details={"event_name": event.name},
+        )
+        await self.safe_send(log_channel, embed=embed, yalc_event=log_event)
+
+    @commands.Cog.listener()
+    async def on_scheduled_event_user_add(self, event: discord.ScheduledEvent, user: discord.User) -> None:
+        await self._log_scheduled_event_user(event, user, "scheduled_event_user_add")
+
+    @commands.Cog.listener()
+    async def on_scheduled_event_user_remove(self, event: discord.ScheduledEvent, user: discord.User) -> None:
+        await self._log_scheduled_event_user(event, user, "scheduled_event_user_remove")
 
     @commands.Cog.listener()
     async def on_stage_instance_create(self, stage_instance) -> None:
@@ -7345,8 +7725,8 @@ class YALC(DashboardIntegration, commands.Cog):
 
             self.set_embed_footer(embed, label="YALC Logger • Stage Created")
             await self.safe_send(channel, embed=embed)
-        except RECOVERABLE_EXCEPTIONS as e:
-            self.log.error(f"Failed to log stage_instance_create: {e}", exc_info=True)
+        except RECOVERABLE_EXCEPTIONS:
+            self.log.exception("Failed to log stage_instance_create")
 
     @commands.Cog.listener()
     async def on_stage_instance_update(self, before, after) -> None:
@@ -7418,8 +7798,8 @@ class YALC(DashboardIntegration, commands.Cog):
 
             self.set_embed_footer(embed, label="YALC Logger • Stage Updated")
             await self.safe_send(channel, embed=embed)
-        except RECOVERABLE_EXCEPTIONS as e:
-            self.log.error(f"Failed to log stage_instance_update: {e}", exc_info=True)
+        except RECOVERABLE_EXCEPTIONS:
+            self.log.exception("Failed to log stage_instance_update")
 
     @commands.Cog.listener()
     async def on_stage_instance_delete(self, stage_instance) -> None:
@@ -7477,8 +7857,8 @@ class YALC(DashboardIntegration, commands.Cog):
 
             self.set_embed_footer(embed, label="YALC Logger • Stage Deleted")
             await self.safe_send(channel, embed=embed)
-        except RECOVERABLE_EXCEPTIONS as e:
-            self.log.error(f"Failed to log stage_instance_delete: {e}", exc_info=True)
+        except RECOVERABLE_EXCEPTIONS:
+            self.log.exception("Failed to log stage_instance_delete")
 
     @commands.Cog.listener()
     async def on_soundboard_sound_create(self, sound) -> None:
@@ -7529,8 +7909,8 @@ class YALC(DashboardIntegration, commands.Cog):
 
             self.set_embed_footer(embed, label="YALC Logger • Soundboard Sound Created")
             await self.safe_send(channel, embed=embed)
-        except RECOVERABLE_EXCEPTIONS as e:
-            self.log.error(f"Failed to log soundboard_sound_create: {e}", exc_info=True)
+        except RECOVERABLE_EXCEPTIONS:
+            self.log.exception("Failed to log soundboard_sound_create")
 
     @commands.Cog.listener()
     async def on_soundboard_sound_update(self, before, after) -> None:
@@ -7591,8 +7971,8 @@ class YALC(DashboardIntegration, commands.Cog):
 
             self.set_embed_footer(embed, label="YALC Logger • Soundboard Sound Updated")
             await self.safe_send(channel, embed=embed)
-        except RECOVERABLE_EXCEPTIONS as e:
-            self.log.error(f"Failed to log soundboard_sound_update: {e}", exc_info=True)
+        except RECOVERABLE_EXCEPTIONS:
+            self.log.exception("Failed to log soundboard_sound_update")
 
     @commands.Cog.listener()
     async def on_soundboard_sound_delete(self, sound) -> None:
@@ -7640,8 +8020,8 @@ class YALC(DashboardIntegration, commands.Cog):
 
             self.set_embed_footer(embed, label="YALC Logger • Soundboard Sound Deleted")
             await self.safe_send(channel, embed=embed)
-        except RECOVERABLE_EXCEPTIONS as e:
-            self.log.error(f"Failed to log soundboard_sound_delete: {e}", exc_info=True)
+        except RECOVERABLE_EXCEPTIONS:
+            self.log.exception("Failed to log soundboard_sound_delete")
 
     @commands.hybrid_group(name="yalc", aliases=["logger"], invoke_without_command=True)
     @commands.guild_only()
@@ -7782,6 +8162,8 @@ class YALC(DashboardIntegration, commands.Cog):
             ]
             journal_stats = await self._journal.stats(ctx.guild.id) if self._journal is not None else {"count": 0}
             audit_stats = self._audit_correlator.stats()
+            audit_fetch = self._audit_fetch_stats
+            delivery = self._delivery_stats
             enabled_count = sum(bool(value) for value in settings.get("events", {}).values())
             audit_totals = f"{audit_stats['matches']} / {audit_stats['misses']} / {audit_stats['duplicates']}"
             journal_count = int(journal_stats.get("count") or 0)
@@ -7812,7 +8194,9 @@ class YALC(DashboardIntegration, commands.Cog):
                 f"• Guild Moderation intent: {'✅ Enabled' if moderation_intent else '❌ Disabled'}\n"
                 f"• Message Content intent: {'✅ Enabled' if message_content_intent else '⚠️ Disabled'}\n"
                 f"• Cached audit entries: **{audit_stats['cached_entries']}**\n"
-                f"• Matches / misses / duplicates: **{audit_totals}**",
+                f"• Matches / misses / duplicates: **{audit_totals}**\n"
+                f"• Strict role / field matches: **{audit_stats['role_matches']} / {audit_stats['field_matches']}**\n"
+                f"• Cache hits / API fetches: **{audit_fetch['cache_hits']} / {audit_fetch['api_fetches']}**",
                 inline=False,
             )
 
@@ -7823,7 +8207,9 @@ class YALC(DashboardIntegration, commands.Cog):
                 f"• Invalid routes: **{len(invalid_routes)}**\n"
                 f"• Explicit fallback: **{fallback_status}**\n"
                 f"• Journal: **{journal_status}** · **{journal_count:,}** records\n"
-                f"• Journal message content: **{'Stored' if settings.get('journal_include_message_content') else 'Not stored'}**",
+                "• Journal message content: **"
+                f"{'Stored' if settings.get('journal_include_message_content') else 'Not stored'}**\n"
+                f"• Delivered / fallback / failed: **{delivery['sent']} / {delivery['fallback']} / {delivery['failed']}**",
                 inline=False,
             )
 
@@ -8004,7 +8390,7 @@ class YALC(DashboardIntegration, commands.Cog):
                 timestamp=datetime.datetime.now(datetime.timezone.utc),
             )
             await ctx.send(embed=error_embed)
-            self.log.error(f"Error in YALC test command: {e}", exc_info=True)
+            self.log.exception("Error in YALC test command")
 
     @yalc_group.command(name="enable")
     @commands.admin_or_permissions(manage_guild=True)
@@ -8029,8 +8415,8 @@ class YALC(DashboardIntegration, commands.Cog):
 
             # Group events by category
             categories = {
-                "Message Events": [k for k in self.event_descriptions if k.startswith("message_")],
-                "Member Events": [k for k in self.event_descriptions if k.startswith("member_")],
+                "Message Events": [k for k in self.event_descriptions if k.startswith(("message_", "reaction_", "poll_"))],
+                "Member Events": [k for k in self.event_descriptions if k.startswith(("member_", "presence_", "user_"))],
                 "Channel Events": [k for k in self.event_descriptions if k.startswith(("channel_", "thread_", "forum_"))],
                 "Role Events": [k for k in self.event_descriptions if k.startswith("role_")],
                 "Guild Events": [k for k in self.event_descriptions if k.startswith(("guild_", "emoji_", "sticker_", "invite_"))],
@@ -8056,7 +8442,11 @@ class YALC(DashboardIntegration, commands.Cog):
                         k.startswith(p)
                         for p in [
                             "message_",
+                            "reaction_",
+                            "poll_",
                             "member_",
+                            "presence_",
+                            "user_",
                             "channel_",
                             "thread_",
                             "forum_",
@@ -8929,7 +9319,7 @@ class YALC(DashboardIntegration, commands.Cog):
 
                     # Get event info
                     event_type = rule["event_type"]
-                    emoji, description = self.event_descriptions.get(
+                    emoji, _description = self.event_descriptions.get(
                         event_type,
                         ("📝", event_type),
                     )
@@ -9010,11 +9400,15 @@ class YALC(DashboardIntegration, commands.Cog):
 
         # Define event categories
         categories = {
-            "message": [k for k in self.event_descriptions if k.startswith("message_")],
-            "member": [k for k in self.event_descriptions if k.startswith("member_") or k == "bot_add"],
+            "message": [k for k in self.event_descriptions if k.startswith(("message_", "reaction_", "poll_"))],
+            "member": [k for k in self.event_descriptions if k.startswith(("member_", "presence_", "user_")) or k == "bot_add"],
             "channel": [k for k in self.event_descriptions if k.startswith(("channel_", "overwrite_", "thread_", "forum_"))],
             "role": [k for k in self.event_descriptions if k.startswith("role_")],
-            "guild": [k for k in self.event_descriptions if k.startswith(("guild_", "emoji_", "sticker_", "invite_"))],
+            "guild": [
+                k
+                for k in self.event_descriptions
+                if k.startswith(("guild_", "scheduled_event_", "emoji_", "sticker_", "invite_"))
+            ],
             "voice": [k for k in self.event_descriptions if k.startswith("voice_")],
             "moderation": [
                 event_type
@@ -9085,11 +9479,15 @@ class YALC(DashboardIntegration, commands.Cog):
 
         # Define event categories
         categories = {
-            "message": [k for k in self.event_descriptions if k.startswith("message_")],
-            "member": [k for k in self.event_descriptions if k.startswith("member_") or k == "bot_add"],
+            "message": [k for k in self.event_descriptions if k.startswith(("message_", "reaction_", "poll_"))],
+            "member": [k for k in self.event_descriptions if k.startswith(("member_", "presence_", "user_")) or k == "bot_add"],
             "channel": [k for k in self.event_descriptions if k.startswith(("channel_", "overwrite_", "thread_", "forum_"))],
             "role": [k for k in self.event_descriptions if k.startswith("role_")],
-            "guild": [k for k in self.event_descriptions if k.startswith(("guild_", "emoji_", "sticker_", "invite_"))],
+            "guild": [
+                k
+                for k in self.event_descriptions
+                if k.startswith(("guild_", "scheduled_event_", "emoji_", "sticker_", "invite_"))
+            ],
             "voice": [k for k in self.event_descriptions if k.startswith("voice_")],
             "moderation": [
                 event_type
@@ -9649,7 +10047,7 @@ class YALC(DashboardIntegration, commands.Cog):
                 async with self.config.guild(
                     ctx.guild,
                 ).event_channels() as channels_setting:
-                    for channel_name_key, config_data in detected_config.items():
+                    for config_data in detected_config.values():
                         channel = config_data["channel"]
                         events_list = config_data["events"]
 
@@ -10663,6 +11061,7 @@ class YALC(DashboardIntegration, commands.Cog):
             try:
                 self._reset_send_files(kwargs)
                 sent = await channel.send(**kwargs)
+                self._delivery_stats["sent"] += 1
                 await self._record_delivered_event(event, channel.id)
                 return sent
 
@@ -10687,14 +11086,17 @@ class YALC(DashboardIntegration, commands.Cog):
                                 )
                             self._reset_send_files(kwargs)
                             sent = await fallback_channel.send(**kwargs)
+                            self._delivery_stats["sent"] += 1
+                            self._delivery_stats["fallback"] += 1
                             await self._record_delivered_event(event, fallback_channel.id)
                             return sent
-                        except RECOVERABLE_EXCEPTIONS as fallback_e:
-                            self.log.error(f"Fallback send also failed: {fallback_e}")
+                        except RECOVERABLE_EXCEPTIONS:
+                            self.log.exception("Fallback send also failed")
                 break  # Don't retry permission errors
 
             except discord.HTTPException as e:
                 if e.status == 429:  # Rate limited
+                    self._delivery_stats["retries"] += 1
                     retry_after = getattr(e, "retry_after", base_delay * (2**attempt))
                     self.log.warning(
                         f"Rate limited when sending to channel {channel.id}, retrying after {retry_after}s",
@@ -10708,6 +11110,7 @@ class YALC(DashboardIntegration, commands.Cog):
                     break
                 else:
                     if attempt < max_retries - 1:
+                        self._delivery_stats["retries"] += 1
                         delay = base_delay * (2**attempt)
                         self.log.warning(
                             f"HTTP error when sending to channel {channel.id}: {e}, retrying in {delay}s",
@@ -10720,17 +11123,16 @@ class YALC(DashboardIntegration, commands.Cog):
 
             except RECOVERABLE_EXCEPTIONS as e:
                 if attempt < max_retries - 1:
+                    self._delivery_stats["retries"] += 1
                     delay = base_delay * (2**attempt)
                     self.log.warning(
                         f"Unexpected error when sending to channel {channel.id}: {e}, retrying in {delay}s",
                     )
                     await asyncio.sleep(delay)
                 else:
-                    self.log.error(
-                        f"Unexpected error when sending to channel {channel.id} after {max_retries} attempts: {e}",
-                        exc_info=True,
-                    )
+                    self.log.error(f"Unexpected error when sending to channel {channel.id} after {max_retries} attempts: {e}")
 
+        self._delivery_stats["failed"] += 1
         return None
 
     async def _get_fallback_log_channel(
@@ -10858,7 +11260,7 @@ class YALC(DashboardIntegration, commands.Cog):
                 elif hasattr(target, "name"):
                     target_names.append(f"`{target.name}`")
                 else:
-                    target_names.append(f"`{str(target)}`")
+                    target_names.append(f"`{target!s}`")
 
             embed.add_field(
                 name=f"Sample Targets ({sample_size}/{len(targets)})",

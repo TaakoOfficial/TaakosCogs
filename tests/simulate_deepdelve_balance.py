@@ -268,16 +268,9 @@ def fight(profile: dict, enemy: dict) -> tuple[bool, int, float, int]:
             cast_key = ability["key"]
             profile["mana"] -= ability["mana"]
             damage, _lines = cog._ability_damage(profile, enemy, stats, cast_key)
-            if (
-                profile["combat_flags"].get("tenet_last_action") == "defend"
-                and legacy_effects.get("post_defend_damage_percent")
-            ):
+            if profile["combat_flags"].get("tenet_last_action") == "defend" and legacy_effects.get("post_defend_damage_percent"):
                 damage = round(damage * (1 + int(legacy_effects["post_defend_damage_percent"]) / 100))
-            if (
-                enemy.get("boss")
-                and enemy["hp"] <= enemy["max_hp"] * 0.3
-                and legacy_effects.get("execute_percent")
-            ):
+            if enemy.get("boss") and enemy["hp"] <= enemy["max_hp"] * 0.3 and legacy_effects.get("execute_percent"):
                 damage = round(damage * (1 + int(legacy_effects["execute_percent"]) / 100))
             enemy["hp"] -= damage
             profile["combat_flags"]["tenet_last_action"] = "ability"
@@ -289,11 +282,7 @@ def fight(profile: dict, enemy: dict) -> tuple[bool, int, float, int]:
                 damage = round(damage * (1 + int(legacy_effects["clean_attack_percent"]) / 100))
             if previous == "defend" and legacy_effects.get("post_defend_damage_percent"):
                 damage = round(damage * (1 + int(legacy_effects["post_defend_damage_percent"]) / 100))
-            if (
-                enemy.get("boss")
-                and enemy["hp"] <= enemy["max_hp"] * 0.3
-                and legacy_effects.get("execute_percent")
-            ):
+            if enemy.get("boss") and enemy["hp"] <= enemy["max_hp"] * 0.3 and legacy_effects.get("execute_percent"):
                 damage = round(damage * (1 + int(legacy_effects["execute_percent"]) / 100))
             if previous == "ability" and legacy_effects.get("alternating_guard"):
                 profile["combat_flags"]["guard"] = max(
@@ -408,11 +397,7 @@ def run(samples: int = 3, *, full_matrix: bool = False) -> None:
 
 def release_gate(samples: int = 500) -> list[str]:
     """Run the high-sample aggregate gate with common seeds across moral paths."""
-    buckets = {
-        (kind, path): []
-        for kind in TURN_BANDS
-        for path in MORAL_PATHS
-    }
+    buckets = {(kind, path): [] for kind in TURN_BANDS for path in MORAL_PATHS}
     for floor_index, floor in enumerate(LEVELS):
         for class_index, class_key in enumerate(GAME_CLASSES):
             subclasses = ("",) if floor < 10 else tuple(SUBCLASSES[class_key])

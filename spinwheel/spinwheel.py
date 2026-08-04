@@ -167,10 +167,7 @@ class SpinWheel(DashboardIntegration, commands.Cog):
 
     async def _migrate_config_identifier(self) -> None:
         """Copy legacy guild data once, retaining the old namespace for rollback."""
-        if (
-            await self.config.identifier_migration_version()
-            >= self.IDENTIFIER_MIGRATION_VERSION
-        ):
+        if await self.config.identifier_migration_version() >= self.IDENTIFIER_MIGRATION_VERSION:
             return
 
         legacy_guilds = await self._legacy_config.all_guilds()

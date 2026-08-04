@@ -7,7 +7,7 @@ import contextlib
 import csv
 import io
 import random
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 import discord
 from redbot.core import Config, commands
@@ -51,7 +51,7 @@ class Toolz(DashboardIntegration, commands.Cog):
         ("view_audit_log", "View Audit Log"),
     )
 
-    VALID_ROLE_SORTS = {"members", "position", "name", "color"}
+    VALID_ROLE_SORTS: ClassVar[set[str]] = {"members", "position", "name", "color"}
 
     def __init__(self, bot):
         self.bot = bot
@@ -186,11 +186,7 @@ class Toolz(DashboardIntegration, commands.Cog):
         return f"<@&{role.id}>"
 
     def _role_copy_content(self, role: discord.Role) -> str:
-        return (
-            "Copy values:\n"
-            f"Role ID: `{role.id}`\n"
-            f"Mention String: `{self._role_mention_string(role)}`"
-        )
+        return f"Copy values:\nRole ID: `{role.id}`\nMention String: `{self._role_mention_string(role)}`"
 
     @staticmethod
     def _assignable_by_bot(role: discord.Role) -> bool:
@@ -232,11 +228,7 @@ class Toolz(DashboardIntegration, commands.Cog):
 
     def _important_permissions_text(self, role: discord.Role) -> str:
         permissions = role.permissions
-        enabled = [
-            label
-            for attr, label in self.IMPORTANT_PERMISSIONS
-            if getattr(permissions, attr, False)
-        ]
+        enabled = [label for attr, label in self.IMPORTANT_PERMISSIONS if getattr(permissions, attr, False)]
         if permissions.administrator:
             return "Administrator"
         if not enabled:
@@ -267,10 +259,8 @@ class Toolz(DashboardIntegration, commands.Cog):
         if not members:
             return "No cached members have this role."
 
-        members = sorted(
-            members, key=lambda member: member.display_name.casefold())
-        lines = [
-            f"{member.display_name} (`{member.id}`)" for member in members[:limit]]
+        members = sorted(members, key=lambda member: member.display_name.casefold())
+        lines = [f"{member.display_name} (`{member.id}`)" for member in members[:limit]]
 
         remaining = len(members) - len(lines)
         if remaining > 0:
@@ -357,8 +347,7 @@ class Toolz(DashboardIntegration, commands.Cog):
         member: discord.Member,
         role: discord.Role,
     ) -> str:
-        message = template.format_map(
-            self._role_message_placeholders(member, role))
+        message = template.format_map(self._role_message_placeholders(member, role))
         if len(message) > 2000:
             return f"{message[:1997]}..."
         return message
@@ -370,17 +359,13 @@ class Toolz(DashboardIntegration, commands.Cog):
         entry: dict,
     ) -> str:
         role = guild.get_role(int(role_id))
-        role_text = self._role_reference(
-            role) if role else f"Deleted role `{role_id}`"
+        role_text = self._role_reference(role) if role else f"Deleted role `{role_id}`"
         channel = guild.get_channel(entry.get("channel_id") or 0)
         channel_text = channel.mention if channel else "No channel set"
         messages = entry.get("messages", [])
         enabled = self._yes_no(entry.get("enabled", True))
         mode = self._role_message_mode(entry)
-        return (
-            f"{role_text} - {self._count(len(messages))} messages - "
-            f"{channel_text} - mode: {mode} - enabled: {enabled}"
-        )
+        return f"{role_text} - {self._count(len(messages))} messages - {channel_text} - mode: {mode} - enabled: {enabled}"
 
     async def _send_configured_role_messages(
         self,
@@ -437,9 +422,7 @@ class Toolz(DashboardIntegration, commands.Cog):
         if role is not None:
             entry = role_messages.get(self._role_message_key(role))
             if not entry:
-                embed.description = (
-                    f"No role messages are configured for {self._role_reference(role)}."
-                )
+                embed.description = f"No role messages are configured for {self._role_reference(role)}."
                 await self._send_embed(ctx, embed)
                 return
 
@@ -465,16 +448,12 @@ class Toolz(DashboardIntegration, commands.Cog):
             )
 
             if messages:
-                lines = [
-                    f"`{index}.` {message}"
-                    for index, message in enumerate(messages, start=1)
-                ]
+                lines = [f"`{index}.` {message}" for index, message in enumerate(messages, start=1)]
                 for index, chunk in enumerate(self._line_chunks(lines), start=1):
                     field_name = "Messages" if index == 1 else "Messages continued"
                     embed.add_field(name=field_name, value=chunk, inline=False)
             else:
-                embed.add_field(name="Messages",
-                                value="No messages set.", inline=False)
+                embed.add_field(name="Messages", value="No messages set.", inline=False)
 
             await self._send_embed(ctx, embed)
             return
@@ -484,34 +463,22 @@ class Toolz(DashboardIntegration, commands.Cog):
             await self._send_embed(ctx, embed)
             return
 
-        lines = [
-            self._role_message_entry_summary(ctx.guild, role_id, entry)
-            for role_id, entry in role_messages.items()
-        ]
+        lines = [self._role_message_entry_summary(ctx.guild, role_id, entry) for role_id, entry in role_messages.items()]
         for index, chunk in enumerate(self._line_chunks(lines), start=1):
-            field_name = (
-                "Configured Roles" if index == 1 else "Configured Roles continued"
-            )
+            field_name = "Configured Roles" if index == 1 else "Configured Roles continued"
             embed.add_field(name=field_name, value=chunk, inline=False)
 
         await self._send_embed(ctx, embed)
 
     def _has_important_permissions(self, role: discord.Role) -> bool:
-        return any(
-            getattr(role.permissions, attr, False)
-            for attr, _label in self.IMPORTANT_PERMISSIONS
-        )
+        return any(getattr(role.permissions, attr, False) for attr, _label in self.IMPORTANT_PERMISSIONS)
 
     def _member_important_permissions_text(self, member: discord.Member) -> str:
         permissions = member.guild_permissions
         if permissions.administrator:
             return "Administrator"
 
-        enabled = [
-            label
-            for attr, label in self.IMPORTANT_PERMISSIONS
-            if getattr(permissions, attr, False)
-        ]
+        enabled = [label for attr, label in self.IMPORTANT_PERMISSIONS if getattr(permissions, attr, False)]
         if not enabled:
             return "No elevated permissions detected"
         return ", ".join(enabled[:8])
@@ -521,9 +488,7 @@ class Toolz(DashboardIntegration, commands.Cog):
         if not roles:
             return "No roles."
 
-        lines = [
-            f"{self._role_reference(role)} (`{role.id}`)" for role in roles[:limit]
-        ]
+        lines = [f"{self._role_reference(role)} (`{role.id}`)" for role in roles[:limit]]
         remaining = len(roles) - len(lines)
         if remaining > 0:
             lines.append(f"...and {self._count(remaining)} more")
@@ -532,18 +497,10 @@ class Toolz(DashboardIntegration, commands.Cog):
 
     def _permission_source_text(self, member: discord.Member, attr: str) -> str:
         roles = self._member_roles(member)
-        sources = [
-            self._role_reference(role)
-            for role in roles
-            if getattr(role.permissions, attr, False)
-        ]
+        sources = [self._role_reference(role) for role in roles if getattr(role.permissions, attr, False)]
 
         if attr != "administrator" and not sources:
-            sources = [
-                f"{self._role_reference(role)} (Administrator)"
-                for role in roles
-                if role.permissions.administrator
-            ]
+            sources = [f"{self._role_reference(role)} (Administrator)" for role in roles if role.permissions.administrator]
 
         if not sources and getattr(member.guild.default_role.permissions, attr, False):
             sources.append("@everyone")
@@ -564,10 +521,7 @@ class Toolz(DashboardIntegration, commands.Cog):
         members: Sequence[discord.Member],
         limit: int,
     ) -> list[str]:
-        lines = [
-            f"`{index:>2}.` {member.mention} - `{member.id}`"
-            for index, member in enumerate(members[:limit], start=1)
-        ]
+        lines = [f"`{index:>2}.` {member.mention} - `{member.id}`" for index, member in enumerate(members[:limit], start=1)]
 
         remaining = len(members) - len(lines)
         if remaining > 0:
@@ -604,11 +558,7 @@ class Toolz(DashboardIntegration, commands.Cog):
         if await self.bot.cog_disabled_in_guild(self, after.guild):
             return
         before_role_ids = {role.id for role in before.roles}
-        added_roles = [
-            role
-            for role in after.roles
-            if role.id not in before_role_ids and not role.is_default()
-        ]
+        added_roles = [role for role in after.roles if role.id not in before_role_ids and not role.is_default()]
         if not added_roles:
             return
 
@@ -632,8 +582,7 @@ class Toolz(DashboardIntegration, commands.Cog):
         """Show detailed information about a role."""
         cache_ready = await self._get_cache_status(ctx)
 
-        embed = self._base_role_embed(
-            role, f"Role Info: {self._safe_role_name(role)}")
+        embed = self._base_role_embed(role, f"Role Info: {self._safe_role_name(role)}")
         embed.add_field(
             name="Members",
             value=self._member_count_text(role),
@@ -647,8 +596,7 @@ class Toolz(DashboardIntegration, commands.Cog):
             value=self._format_timestamp(role.created_at),
             inline=True,
         )
-        embed.add_field(name="Hierarchy",
-                        value=self._hierarchy_text(role), inline=True)
+        embed.add_field(name="Hierarchy", value=self._hierarchy_text(role), inline=True)
         embed.add_field(
             name="Display",
             value=self._display_flags_text(role),
@@ -679,19 +627,13 @@ class Toolz(DashboardIntegration, commands.Cog):
         member = member or ctx.author
         roles = self._member_roles(member)
 
-        embed = self._base_member_embed(
-            member, f"User Info: {member.display_name}")
-        embed.add_field(name="User ID", value=self._copy_block(
-            member.id), inline=True)
+        embed = self._base_member_embed(member, f"User Info: {member.display_name}")
+        embed.add_field(name="User ID", value=self._copy_block(member.id), inline=True)
         embed.add_field(name="Username", value=f"`{member}`", inline=True)
 
         account_created = self._format_timestamp(member.created_at)
-        joined_server = (
-            self._format_timestamp(
-                member.joined_at) if member.joined_at else "Unknown"
-        )
-        embed.add_field(name="Account Created",
-                        value=account_created, inline=True)
+        joined_server = self._format_timestamp(member.joined_at) if member.joined_at else "Unknown"
+        embed.add_field(name="Account Created", value=account_created, inline=True)
         embed.add_field(name="Joined Server", value=joined_server, inline=True)
 
         role_count = len(roles)
@@ -708,10 +650,7 @@ class Toolz(DashboardIntegration, commands.Cog):
         )
         embed.add_field(
             name="Profile",
-            value=(
-                f"Bot: {self._yes_no(member.bot)}\n"
-                f"Timed out: {self._yes_no(self._member_is_timed_out(member))}"
-            ),
+            value=(f"Bot: {self._yes_no(member.bot)}\nTimed out: {self._yes_no(self._member_is_timed_out(member))}"),
             inline=True,
         )
         embed.add_field(
@@ -741,17 +680,14 @@ class Toolz(DashboardIntegration, commands.Cog):
         limit = max(1, min(limit, 50))
         roles = self._member_roles(member)
 
-        embed = self._base_member_embed(
-            member, f"Roles: {member.display_name}")
+        embed = self._base_member_embed(member, f"Roles: {member.display_name}")
         embed.description = (
-            f"{member.mention} has {self._count(len(roles))} roles. "
-            f"Showing up to {self._count(min(limit, len(roles)))}."
+            f"{member.mention} has {self._count(len(roles))} roles. Showing up to {self._count(min(limit, len(roles)))}."
         )
 
         if roles:
             lines = [
-                f"`{index:>2}.` {self._role_reference(role)} - `{role.id}`"
-                for index, role in enumerate(roles[:limit], start=1)
+                f"`{index:>2}.` {self._role_reference(role)} - `{role.id}`" for index, role in enumerate(roles[:limit], start=1)
             ]
             remaining = len(roles) - len(lines)
             if remaining > 0:
@@ -763,8 +699,7 @@ class Toolz(DashboardIntegration, commands.Cog):
         else:
             embed.add_field(name="Roles", value="No roles.", inline=False)
 
-        embed.add_field(name="User ID", value=self._copy_block(
-            member.id), inline=False)
+        embed.add_field(name="User ID", value=self._copy_block(member.id), inline=False)
         embed.set_footer(text=self._user_footer())
 
         await self._send_embed(ctx, embed)
@@ -793,12 +728,9 @@ class Toolz(DashboardIntegration, commands.Cog):
             color=color,
         )
         embed.add_field(name="Member", value=member.mention, inline=True)
-        embed.add_field(
-            name="Role", value=self._role_reference(role), inline=True)
-        embed.add_field(name="User ID", value=self._copy_block(
-            member.id), inline=True)
-        embed.add_field(
-            name="Role ID", value=self._inline_code(role.id), inline=True)
+        embed.add_field(name="Role", value=self._role_reference(role), inline=True)
+        embed.add_field(name="User ID", value=self._copy_block(member.id), inline=True)
+        embed.add_field(name="Role ID", value=self._inline_code(role.id), inline=True)
 
         await self._send_embed(ctx, embed)
 
@@ -891,11 +823,7 @@ class Toolz(DashboardIntegration, commands.Cog):
             messages.append(message)
             has_channel = bool(entry.get("channel_id"))
 
-        channel_note = (
-            ""
-            if has_channel
-            else " Set a channel with `rolemessage channel` before it can post."
-        )
+        channel_note = "" if has_channel else " Set a channel with `rolemessage channel` before it can post."
         await ctx.send(
             f"Added message {len(messages)} for {self._role_reference(role)}.{channel_note}",
             allowed_mentions=discord.AllowedMentions.none(),
@@ -973,9 +901,7 @@ class Toolz(DashboardIntegration, commands.Cog):
                 self._role_message_key(role),
                 self._default_role_message_settings(),
             )
-            entry["enabled"] = (
-                not entry.get("enabled", True) if enabled is None else enabled
-            )
+            entry["enabled"] = not entry.get("enabled", True) if enabled is None else enabled
             enabled_text = self._yes_no(entry["enabled"])
 
         await ctx.send(
@@ -1158,23 +1084,13 @@ class Toolz(DashboardIntegration, commands.Cog):
 
         roles = list(ctx.guild.roles)
         if mode == "elevated":
-            matched_roles = [
-                role for role in roles if self._has_important_permissions(role)
-            ]
+            matched_roles = [role for role in roles if self._has_important_permissions(role)]
         elif mode == "empty":
-            matched_roles = [
-                role
-                for role in roles
-                if not role.is_default() and self._role_member_count(role) == 0
-            ]
+            matched_roles = [role for role in roles if not role.is_default() and self._role_member_count(role) == 0]
         elif mode == "managed":
-            matched_roles = [
-                role for role in roles if not role.is_default() and role.managed
-            ]
+            matched_roles = [role for role in roles if not role.is_default() and role.managed]
         else:
-            matched_roles = [
-                role for role in roles if not role.is_default() and role.mentionable
-            ]
+            matched_roles = [role for role in roles if not role.is_default() and role.mentionable]
 
         matched_roles = sorted(
             matched_roles,
@@ -1237,12 +1153,8 @@ class Toolz(DashboardIntegration, commands.Cog):
         cache_ready = await self._get_cache_status(ctx)
         limit = max(1, min(limit, 25))
 
-        role_one_members = {
-            member.id: member for member in self._role_members(role_one)
-        }
-        role_two_members = {
-            member.id: member for member in self._role_members(role_two)
-        }
+        role_one_members = {member.id: member for member in self._role_members(role_one)}
+        role_two_members = {member.id: member for member in self._role_members(role_two)}
         role_one_ids = set(role_one_members)
         role_two_ids = set(role_two_members)
 
@@ -1294,8 +1206,7 @@ class Toolz(DashboardIntegration, commands.Cog):
             (f"Only {self._safe_role_name(role_two)}", only_two_members),
         )
         for section_name, members in sections:
-            lines = self._member_summary_lines(
-                members, limit) if members else ["None"]
+            lines = self._member_summary_lines(members, limit) if members else ["None"]
             for index, chunk in enumerate(self._line_chunks(lines), start=1):
                 field_name = section_name if index == 1 else f"{section_name} continued"
                 embed.add_field(name=field_name, value=chunk, inline=False)
@@ -1322,26 +1233,19 @@ class Toolz(DashboardIntegration, commands.Cog):
         lines = []
         for attr, label in self.IMPORTANT_PERMISSIONS:
             if getattr(permissions, attr, False):
-                lines.append(
-                    f"{label}: {self._permission_source_text(member, attr)}")
+                lines.append(f"{label}: {self._permission_source_text(member, attr)}")
 
-        embed = self._base_member_embed(
-            member, f"Permissions: {member.display_name}")
-        embed.add_field(name="User ID", value=self._copy_block(
-            member.id), inline=True)
+        embed = self._base_member_embed(member, f"Permissions: {member.display_name}")
+        embed.add_field(name="User ID", value=self._copy_block(member.id), inline=True)
         embed.add_field(
             name="Top Role",
-            value=self._role_reference(member.top_role)
-            if self._member_roles(member)
-            else "None",
+            value=self._role_reference(member.top_role) if self._member_roles(member) else "None",
             inline=True,
         )
 
         if lines:
             for index, chunk in enumerate(self._line_chunks(lines), start=1):
-                field_name = (
-                    "Important Permissions" if index == 1 else "Permissions continued"
-                )
+                field_name = "Important Permissions" if index == 1 else "Permissions continued"
                 embed.add_field(name=field_name, value=chunk, inline=False)
         else:
             embed.add_field(
@@ -1372,17 +1276,14 @@ class Toolz(DashboardIntegration, commands.Cog):
         limit = max(1, min(limit, 50))
 
         members = [
-            member
-            for member in ctx.guild.members
-            if len(self._member_roles(member)) == 0 and (include_bots or not member.bot)
+            member for member in ctx.guild.members if len(self._member_roles(member)) == 0 and (include_bots or not member.bot)
         ]
         members = sorted(members, key=self._joined_sort_key)
 
         embed = discord.Embed(
             title="Members With No Roles",
             description=(
-                f"Found {self._count(len(members))} members with no roles. "
-                f"Bots included: {self._yes_no(include_bots)}."
+                f"Found {self._count(len(members))} members with no roles. Bots included: {self._yes_no(include_bots)}."
             ),
             color=discord.Color.orange(),
         )
@@ -1433,16 +1334,9 @@ class Toolz(DashboardIntegration, commands.Cog):
         if members:
             lines = []
             for index, member in enumerate(members[:limit], start=1):
-                elevated = (
-                    self._member_important_permissions_text(member)
-                    != "No elevated permissions detected"
-                )
+                elevated = self._member_important_permissions_text(member) != "No elevated permissions detected"
                 status = "elevated" if elevated else "standard"
-                top_role = (
-                    self._role_reference(member.top_role)
-                    if self._member_roles(member)
-                    else "None"
-                )
+                top_role = self._role_reference(member.top_role) if self._member_roles(member) else "None"
                 lines.append(
                     f"`{index:>2}.` {member.mention} - {top_role} - {status} - `{member.id}`",
                 )
@@ -1455,8 +1349,7 @@ class Toolz(DashboardIntegration, commands.Cog):
                 field_name = "Bots" if index == 1 else "Bots continued"
                 embed.add_field(name=field_name, value=chunk, inline=False)
         else:
-            embed.add_field(
-                name="Bots", value="No bot accounts found.", inline=False)
+            embed.add_field(name="Bots", value="No bot accounts found.", inline=False)
 
         embed.set_footer(text=self._cache_footer(cache_ready))
         await self._send_embed(ctx, embed)
@@ -1479,10 +1372,7 @@ class Toolz(DashboardIntegration, commands.Cog):
         limit = max(1, min(limit, 50))
 
         roles = [
-            role
-            for role in ctx.guild.roles
-            if not role.is_default()
-            and (include_empty or self._role_member_count(role) > 0)
+            role for role in ctx.guild.roles if not role.is_default() and (include_empty or self._role_member_count(role) > 0)
         ]
         roles = sorted(roles, key=lambda role: role.position, reverse=True)
 
@@ -1537,11 +1427,7 @@ class Toolz(DashboardIntegration, commands.Cog):
         cache_ready = await self._get_cache_status(ctx)
         lowered = query.casefold()
 
-        matches = [
-            role
-            for role in ctx.guild.roles
-            if lowered in role.name.casefold() or query in str(role.id)
-        ]
+        matches = [role for role in ctx.guild.roles if lowered in role.name.casefold() or query in str(role.id)]
         matches = sorted(matches, key=lambda role: role.position, reverse=True)
 
         embed = discord.Embed(
@@ -1564,15 +1450,10 @@ class Toolz(DashboardIntegration, commands.Cog):
             )
 
         if len(matches) > 20:
-            lines.append(
-                f"...and {self._count(len(matches) - 20)} more matches")
+            lines.append(f"...and {self._count(len(matches) - 20)} more matches")
 
         for index, chunk in enumerate(self._line_chunks(lines), start=1):
-            field_name = (
-                f"Matches ({self._count(len(matches))})"
-                if index == 1
-                else "Matches continued"
-            )
+            field_name = f"Matches ({self._count(len(matches))})" if index == 1 else "Matches continued"
             embed.add_field(name=field_name, value=chunk, inline=False)
 
         embed.set_footer(text=self._cache_footer(cache_ready))
@@ -1600,9 +1481,7 @@ class Toolz(DashboardIntegration, commands.Cog):
         limit = max(1, min(limit, 50))
         cache_ready = await self._get_cache_status(ctx)
 
-        roles: Sequence[discord.Role] = [
-            role for role in ctx.guild.roles if not role.is_default()
-        ]
+        roles: Sequence[discord.Role] = [role for role in ctx.guild.roles if not role.is_default()]
 
         if sort == "members":
             roles = sorted(roles, key=self._role_member_count, reverse=True)
@@ -1611,8 +1490,7 @@ class Toolz(DashboardIntegration, commands.Cog):
         elif sort == "name":
             roles = sorted(roles, key=lambda role: role.name.casefold())
         elif sort == "color":
-            roles = sorted(
-                roles, key=lambda role: role.color.value, reverse=True)
+            roles = sorted(roles, key=lambda role: role.color.value, reverse=True)
 
         shown_roles = roles[:limit]
         lines = []
@@ -1624,10 +1502,7 @@ class Toolz(DashboardIntegration, commands.Cog):
 
         embed = discord.Embed(
             title="Server Roles",
-            description=(
-                f"Sorted by `{sort}`. Showing {self._count(len(shown_roles))} "
-                f"of {self._count(len(roles))} roles."
-            ),
+            description=(f"Sorted by `{sort}`. Showing {self._count(len(shown_roles))} of {self._count(len(roles))} roles."),
             color=discord.Color.blurple(),
         )
         if lines:
@@ -1666,11 +1541,8 @@ class Toolz(DashboardIntegration, commands.Cog):
             key=lambda member: member.display_name.casefold(),
         )
 
-        embed = self._base_role_embed(
-            role, f"Members: {self._safe_role_name(role)}")
-        embed.description = (
-            f"{self._role_reference(role)} has {self._member_count_text(role)} members."
-        )
+        embed = self._base_role_embed(role, f"Members: {self._safe_role_name(role)}")
+        embed.description = f"{self._role_reference(role)} has {self._member_count_text(role)} members."
 
         if not members:
             embed.add_field(
@@ -1680,23 +1552,17 @@ class Toolz(DashboardIntegration, commands.Cog):
             )
         else:
             lines = [
-                f"`{index:>3}.` {member.display_name} (`{member.id}`)"
-                for index, member in enumerate(members[:limit], start=1)
+                f"`{index:>3}.` {member.display_name} (`{member.id}`)" for index, member in enumerate(members[:limit], start=1)
             ]
             remaining = len(members) - len(lines)
             if remaining > 0:
                 lines.append(f"...and {self._count(remaining)} more")
 
             for index, chunk in enumerate(self._line_chunks(lines), start=1):
-                field_name = (
-                    f"Showing {self._count(min(limit, len(members)))} members"
-                    if index == 1
-                    else "Members continued"
-                )
+                field_name = f"Showing {self._count(min(limit, len(members)))} members" if index == 1 else "Members continued"
                 embed.add_field(name=field_name, value=chunk, inline=False)
 
-        embed.add_field(name="Role ID", value=self._inline_code(
-            role.id), inline=False)
+        embed.add_field(name="Role ID", value=self._inline_code(role.id), inline=False)
         embed.set_footer(text=self._cache_footer(cache_ready))
 
         await self._send_embed(ctx, embed)
@@ -1721,8 +1587,7 @@ class Toolz(DashboardIntegration, commands.Cog):
         writer = csv.writer(buffer)
         writer.writerow(("user_id", "username", "display_name", "is_bot"))
         for member in members:
-            writer.writerow(
-                (member.id, str(member), member.display_name, member.bot))
+            writer.writerow((member.id, str(member), member.display_name, member.bot))
 
         data = io.BytesIO(buffer.getvalue().encode("utf-8"))
         filename = self._export_filename(role)
@@ -1732,12 +1597,8 @@ class Toolz(DashboardIntegration, commands.Cog):
             role,
             f"Role Export: {self._safe_role_name(role)}",
         )
-        embed.description = (
-            f"Exported {self._count(len(members))} cached members for "
-            f"{self._role_reference(role)}."
-        )
-        embed.add_field(
-            name="Role ID", value=self._inline_code(role.id), inline=True)
+        embed.description = f"Exported {self._count(len(members))} cached members for {self._role_reference(role)}."
+        embed.add_field(name="Role ID", value=self._inline_code(role.id), inline=True)
         embed.add_field(name="File", value=f"`{filename}`", inline=True)
         embed.set_footer(text=self._cache_footer(cache_ready))
 
@@ -1746,9 +1607,7 @@ class Toolz(DashboardIntegration, commands.Cog):
     @staticmethod
     def _export_filename(role: discord.Role) -> str:
         safe_name = "".join(
-            char if char.isascii() and (
-                char.isalnum() or char in {"-", "_"}) else "_"
-            for char in role.name
+            char if char.isascii() and (char.isalnum() or char in {"-", "_"}) else "_" for char in role.name
         ).strip("_")
         safe_name = safe_name[:50] or "role"
         return f"{safe_name}_{role.id}_members.csv"

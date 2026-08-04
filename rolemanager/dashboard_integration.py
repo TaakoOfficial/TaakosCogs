@@ -741,10 +741,8 @@ class DashboardIntegration:
     @staticmethod
     def _dashboard_color(value: str) -> discord.Color:
         value = value.strip().lower()
-        if value.startswith("#"):
-            value = value[1:]
-        if value.startswith("0x"):
-            value = value[2:]
+        value = value.removeprefix("#")
+        value = value.removeprefix("0x")
         if not value:
             return discord.Color.default()
         if not all(character in "0123456789abcdef" for character in value) or len(value) > 6:

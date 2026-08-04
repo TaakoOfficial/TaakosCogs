@@ -90,11 +90,7 @@ def _living_enemy(dungeon: dict[str, Any], room: int, *, kind: str) -> dict[str,
         identity = LIVING_BOSSES[dungeon["boss"]]
         enemy["boss"] = True
     else:
-        identities = [
-            details
-            for details in LIVING_ENEMIES.values()
-            if details["region"] == dungeon["region"]
-        ]
+        identities = [details for details in LIVING_ENEMIES.values() if details["region"] == dungeon["region"]]
         identity = identities[room % len(identities)]
     # Named-dungeon identities share the portrait of their underlying combat
     # archetype so every encounter remains illustrated without duplicating the
@@ -155,8 +151,7 @@ def advance_dungeon(profile: dict[str, Any]) -> tuple[bool, str]:
             "options": list(event["options"]),
         }
         return True, (
-            f"⚖️ **Room {room}/{dungeon['rooms']} — {event['name']}**\n{event['text']}\n"
-            "Choose a conviction from the Atlas menu."
+            f"⚖️ **Room {room}/{dungeon['rooms']} — {event['name']}**\n{event['text']}\nChoose a conviction from the Atlas menu."
         )
     if room == 3:
         run["checkpoint"] = run["room"]

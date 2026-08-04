@@ -1,8 +1,8 @@
 # Taako's Cogs
 
-A growing collection of cogs for [Red-DiscordBot](https://github.com/Cog-Creators/Red-DiscordBot), focused on practical server tools, roleplay immersion, community feedback, reputation, support tickets, events, invite tracking, and admin workflows.
+A growing collection of cogs for [Red-DiscordBot](https://github.com/Cog-Creators/Red-DiscordBot), focused on practical server operations, support workflows, community health, privacy, event attendance, roleplay immersion, and admin tooling.
 
-This repo includes everything from role/user audits, invite tracking, suggestions, reputation, tickets, and logging to RP world tracking, Cfx.re service checks, weather simulation, giveaways, welcome automation, emoji migration, party games, and WHMCS support tooling.
+This repo includes everything from forum resolution, staff scheduling, incident response, link monitoring, access reviews, retention policy, sponsor roles, digests, community analytics, and event check-ins to tickets, role automation, RP world tracking, games, and WHMCS support tooling.
 
 ## Quick Install
 
@@ -36,10 +36,20 @@ Every configurable cog includes its own purpose-built Red-Web-Dashboard page wit
 
 | Cog                                    | Best For                 | Highlights                                                                                                                                  |
 | -------------------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| [forumflow](./forumflow)               | Help forums              | Persistent claim/state controls, accepted answers, workflow tags, stale queues, resolution metrics, and CSV exports.                       |
+| [staffops](./staffops)                 | Staff coordination       | Clocked shifts, availability, leave requests, on-call rotations, handoffs, coverage visibility, and hour reports.                          |
+| [opsroom](./opsroom)                   | Incident response        | Dedicated incident channels, severity/status, commanders, timelines, stakeholder updates, actions, and postmortems.                        |
+| [linksentinel](./linksentinel)         | Resource monitoring      | Scheduled HTTP checks, redirect and recovery alerts, TLS expiry, channel discovery, and CSV results.                                       |
+| [communitydigest](./communitydigest)   | Community recaps         | Provider-free scheduled text/forum digests with activity counts, discussion highlights, and popular links.                                |
+| [sponsorsync](./sponsorsync)           | Membership roles         | Provider-neutral tier mappings, expirations, grace periods, CSV bridges, and audited role reconciliation.                                  |
+| [communitypulse](./communitypulse)     | Community health         | Content-free onboarding funnels, activation, retention cohorts, churn, inactivity queues, and role adoption.                              |
+| [accessreview](./accessreview)         | Access certification     | Sensitive-role snapshots, reviewer attestations, separately confirmed enforcement, evidence logs, and exports.                            |
+| [datasteward](./datasteward)           | Privacy operations       | Dry-run-first channel retention, bounded confirmed enforcement, pinned protection, audits, and privacy requests.                           |
+| [eventcheckin](./eventcheckin)         | Event attendance         | Persistent RSVP/check-in controls, capacity, FIFO waitlists, reminders, no-shows, rewards, and attendance exports.                         |
 | [messagestudio](./messagestudio)         | Rich message building   | EmbedUtils-compatible commands, embeds and Components V2, stored messages, webhooks, JSON/YAML, and a standalone visual dashboard builder. |
 | [toolz](./toolz)                       | Role and user utilities  | Role/user info, role audits, role comparison, CSV exports, bot/no-role audits, role-triggered messages with `{user}` placeholders.          |
 | [rolemanager](./rolemanager)           | Role automation          | Audited role policies, advanced targeting/jobs, panels, resilient autoroles, sticky/temp roles, and verified migrations with rollback. |
-| [yalc](./yalc)                         | Server logging           | Strict audit attribution, raw message coverage, complete event routing, fail-closed delivery, advanced filters, and an optional journal.   |
+| [yalc](./yalc)                         | Server logging           | Exact role-delta/field audit attribution, 71 routed events, uncached reactions and polls, fail-closed delivery, diagnostics, and an optional journal. |
 | [applications](./applications)         | Staff applications       | Configurable forms, application panels, DM questionnaires, review buttons, role actions, CSV exports, polls, and dashboard setup.            |
 | [welcome](./welcome)                   | Join messages            | Configurable welcome messages, placeholders, JSON embeds, cached welcome images, avatar overlays, and dashboard setup.                       |
 | [captcha](./captcha)                   | Member verification      | Persistent verification buttons, per-click random modal codes, existing-message attachment, configurable success roles, and dashboard setup. |
@@ -72,10 +82,19 @@ Every configurable cog includes its own purpose-built Red-Web-Dashboard page wit
 Install these if you want better moderation visibility, invite attribution, feedback workflows, community reputation, support tickets, and role operations:
 
 ```text
-[p]cog install taakoscogs toolz rolemanager yalc applications welcome captcha invitetracker suggestionbox repboard reviewhub tickethub tempvoice giveaway spinwheel
+[p]cog install taakoscogs forumflow staffops opsroom linksentinel communitydigest communitypulse accessreview datasteward eventcheckin toolz rolemanager yalc applications welcome captcha invitetracker suggestionbox repboard reviewhub tickethub tempvoice giveaway spinwheel
 ```
 
 - `toolz` gives staff role/user lookup, audit, export, and role-triggered message tools.
+- `forumflow` manages help-forum claiming, accepted answers, state tags, stale queues, and resolution metrics.
+- `staffops` coordinates shifts, availability, leave, on-call coverage, and handoffs.
+- `opsroom` runs operational incidents with dedicated channels, timelines, status updates, and postmortems.
+- `linksentinel` monitors important resource links, redirects, failures, recoveries, and TLS expiry.
+- `communitydigest` publishes scheduled provider-free recaps of selected text and forum channels.
+- `communitypulse` measures onboarding, activation, retention, churn, and role adoption without storing message content.
+- `accessreview` runs auditable periodic certification of sensitive role access.
+- `datasteward` provides dry-run-first retention policies and privacy request workflows.
+- `eventcheckin` adds RSVP, waitlist, check-in, no-show, and reward-role workflows to events.
 - `rolemanager` handles audited self/policy roles, advanced targeting and jobs, reaction/button/select panels, resilient autoroles, sticky/temporary roles, lifecycle reports, and verified imports with rollback.
 - `YALC` gives detailed server logging.
 - `applications` handles staff applications, review workflows, and approval roles.
@@ -135,13 +154,17 @@ Install these when building or moving a server:
 
 ### Hosting and Support Teams
 
-Install this if your Discord supports a WHMCS-powered hosting or billing operation:
+Install these if your Discord supports a hosting, membership, or operational support service:
 
 ```text
-[p]cog install taakoscogs whmcs
+[p]cog install taakoscogs whmcs opsroom linksentinel sponsorsync staffops
 ```
 
-`whmcs` connects Discord staff workflows to clients, invoices, support tickets, and optional per-ticket Discord channels.
+- `whmcs` connects Discord staff workflows to clients, invoices, support tickets, and optional per-ticket Discord channels.
+- `opsroom` coordinates outages and generates durable postmortems.
+- `linksentinel` monitors documentation, control panels, and service links.
+- `sponsorsync` reconciles provider-neutral membership exports to Discord roles.
+- `staffops` keeps shifts, on-call coverage, and handoffs visible.
 
 ## Featured Cog: toolz
 
@@ -185,6 +208,7 @@ Some cogs have Python package requirements that Red's downloader installs automa
 | emojiporter   | `aiohttp`        |
 | fivemstatus   | `aiohttp`        |
 | cfxstatus     | `aiohttp`        |
+| linksentinel | `aiohttp>=3.8.0` |
 | whmcs         | `aiohttp>=3.8.0` |
 | spinwheel     | `Pillow>=10.0.0` |
 
@@ -194,6 +218,7 @@ Some features also need Discord privileged intents:
 - Role-triggered messages in `toolz` need Server Members intent.
 - External role-change rules in `rolemanager` require Server Members intent; autoroles, sticky roles, and bulk member targeting also use it.
 - Member logging and member update features in logging cogs may also need Server Members intent.
+- Complete join/leave and role-adoption reporting in `communitypulse` needs Server Members intent. It never stores message content.
 - Role assignment features in `applications` need Manage Roles and a bot role above the target roles.
 - Captcha role assignment needs Manage Roles and a bot role above the verification role.
 - Temporary voice creation in `tempvoice` needs Manage Channels and Move Members.
@@ -210,6 +235,9 @@ Each cog includes its own data statement in `info.json`. In short:
 - `captcha` stores panel message/channel IDs, role IDs, and button labels; verification challenges are transient in memory.
 - `yalc` stores logging settings, routes, filters, ignore-rule user IDs, and limited voice history. Its optional retained event journal stores event metadata and only stores message content when explicitly enabled.
 - `applications`, `welcome`, `invitetracker`, `suggestionbox`, `repboard`, `reviewhub`, `tickethub`, `tempvoice`, `giveaway`, `spinwheel`, `fivemstatus`, `fable`, `deepdelve`, `paranoia`, `rpcalander`, and `whmcs` store the settings or records needed for their features.
+- `forumflow`, `staffops`, `opsroom`, `sponsorsync`, `communitypulse`, `accessreview`, `datasteward`, and `eventcheckin` store the workflow records and Discord IDs described in their individual `info.json` files and support Red data-deletion requests.
+- `linksentinel` stores URLs and network check results but no Discord end-user data. `communitydigest` stores scheduling metadata and aggregates but does not retain message content or author IDs.
+- `datasteward` starts disabled and protects pinned messages. Enforcement requires explicit command confirmations; its dashboard can only choose disabled or dry-run mode.
 - `deepdelve` stores persistent characters, builds, inventory, campaign decisions, puzzles, companions, professions, town contributions, world-event discoveries, social records, progression, encounters, stories, endgame and seasonal data, and Discord user IDs. In bank mode it reads and changes Red bank balances for game transactions.
 - `spinwheel` stores server-created wheel names, entry labels, colors, winner-removal preferences, last winners, and aggregate spin counts; it does not store Discord user IDs.
 - `invitetracker` stores invite cache metadata, inviter stats, tracked member join-source records, Discord user IDs, invite codes, timestamps, fake-join flags, and unknown join counts.
@@ -227,6 +255,16 @@ No cog is intended to share stored data with external services unless the featur
 
 Start with each cog's README:
 
+- [forumflow README](./forumflow/README.md)
+- [staffops README](./staffops/README.md)
+- [opsroom README](./opsroom/README.md)
+- [linksentinel README](./linksentinel/README.md)
+- [communitydigest README](./communitydigest/README.md)
+- [sponsorsync README](./sponsorsync/README.md)
+- [communitypulse README](./communitypulse/README.md)
+- [accessreview README](./accessreview/README.md)
+- [datasteward README](./datasteward/README.md)
+- [eventcheckin README](./eventcheckin/README.md)
 - [toolz README](./toolz/README.md)
 - [messagestudio README](./messagestudio/README.md)
 - [rolemanager README](./rolemanager/README.md)
@@ -263,20 +301,22 @@ For command help inside Discord, use:
 
 ## Contributing
 
-Before opening a pull request, run [Ruff](https://docs.astral.sh/ruff/) to lint and format your changes:
+Development and CI use Python 3.11 with the dependencies pinned in `uv.lock`. Install [uv](https://docs.astral.sh/uv/), then create the exact environment and run the same checks as CI:
 
 ```bash
-ruff check --fix .
-ruff format .
+uv sync --locked --all-groups
+uv run --locked ruff check .
+uv run --locked ruff format --check .
+uv run --locked python -m pytest -q -p no:cacheprovider
 ```
 
-If you have [pre-commit](https://pre-commit.com/) installed, you can also just run:
+To enable the local commit hooks:
 
 ```bash
-pre-commit install
+uv run --locked pre-commit install
 ```
 
-once, and it will run these checks automatically on every commit.
+GitHub runs the lint and test workflow for pushes and pull requests. The **Live Cog Load** workflow is intentionally manual and main-branch-only because it connects a real Discord bot, installs every cog through Red's Downloader, and loads and unloads each cog. It uses the `DISCORD_BOT_TOKEN` repository secret; a dedicated CI bot token is strongly recommended so the test session cannot interrupt a production bot using the same token.
 
 ## License
 

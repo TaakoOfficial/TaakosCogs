@@ -397,8 +397,7 @@ def use_moral_power(profile: dict[str, Any], enemy: dict[str, Any], stats: dict[
         )
         enemy["hp"] -= damage
         message = (
-            f"☀️ **Lantern Grace** deals **{damage} damage**, restores **{healing} health**, "
-            "cleanses you, and raises a ward."
+            f"☀️ **Lantern Grace** deals **{damage} damage**, restores **{healing} health**, cleanses you, and raises a ward."
         )
     elif power["key"] == "claim":
         ambition = max(0, int(profile["convictions"].get("ambition", 0)))

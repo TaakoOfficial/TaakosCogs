@@ -18,9 +18,7 @@ def get_seconds_until_target(
     target_minute: int,
 ) -> int:
     """Calculate seconds until the next occurrence of a target time."""
-    current_seconds = (
-        current_time.hour * 3600 + current_time.minute * 60 + current_time.second
-    )
+    current_seconds = current_time.hour * 3600 + current_time.minute * 60 + current_time.second
     target_seconds = target_hour * 3600 + target_minute * 60
 
     if target_seconds <= current_seconds:
@@ -37,15 +35,11 @@ def should_post_now(
     Check if we should post at the current time.
     Allows for a 1-minute window to avoid missing the exact time.
     """
-    return (
-        current_time.hour == target_hour
-        and current_time.minute == target_minute
-        and current_time.second < 60
-    )
+    return current_time.hour == target_hour and current_time.minute == target_minute and current_time.second < 60
 
 
 def calculate_next_refresh_time(
-    last_refresh: int | float,
+    last_refresh: float,
     refresh_interval: int | None,
     refresh_time: str | None,
     time_zone: str,
@@ -67,11 +61,7 @@ def calculate_next_refresh_time(
 
     if refresh_interval:
         # For intervals, use now as the base if no last refresh
-        base_time = (
-            datetime.fromtimestamp(last_refresh).astimezone(tz)
-            if last_refresh
-            else now
-        )
+        base_time = datetime.fromtimestamp(last_refresh).astimezone(tz) if last_refresh else now
 
         next_post_time = base_time + timedelta(seconds=refresh_interval)
         # If next post would be in the past, add intervals until it's in the future

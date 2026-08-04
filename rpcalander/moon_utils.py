@@ -99,15 +99,7 @@ def calculate_moon_phase(date: datetime) -> int:
         year -= 1
 
     # Calculate Julian date
-    jd = (
-        day
-        + ((153 * (month - 3) + 2) // 5)
-        + (365 * year)
-        + (year // 4)
-        - (year // 100)
-        + (year // 400)
-        + 1721119
-    )
+    jd = day + ((153 * (month - 3) + 2) // 5) + (365 * year) + (year // 4) - (year // 100) + (year // 400) + 1721119
 
     # Calculate days since new moon on Jan 1, 2000
     days_since = jd - 2451550.1
@@ -153,9 +145,7 @@ def should_trigger_blood_moon(date: datetime, blood_moon_enabled: bool) -> bool:
 
     # Blood moons should be rare (about 3-4 per year, so ~25% chance of any full moon being a blood moon)
     # This equates to roughly a 1/28 chance on any given day
-    random_seed = (
-        date.year * 10000 + date.month * 100 + date.day
-    )  # Deterministic seed based on date
+    random_seed = date.year * 10000 + date.month * 100 + date.day  # Deterministic seed based on date
     random.seed(random_seed)
     return random.random() < 0.25  # ~25% chance for a full moon to be a blood moon
 
@@ -263,10 +253,7 @@ def get_blood_moon_settings_embed(guild_settings: dict) -> discord.Embed:
     if blood_moon_enabled:
         title = "🔴 Blood Moon Mode: ENABLED"
         color = discord.Color(0xA30000)  # Dark red for blood moon
-        description = (
-            "Blood Moon mode is currently active. During full moons, there is a "
-            "chance the moon will turn blood red."
-        )
+        description = "Blood Moon mode is currently active. During full moons, there is a chance the moon will turn blood red."
     else:
         title = "🌕 Blood Moon Mode: DISABLED"
         color = embed_color
@@ -281,8 +268,7 @@ def get_blood_moon_settings_embed(guild_settings: dict) -> discord.Embed:
     embed.add_field(
         name="About Blood Moons",
         value=(
-            "Blood Moons are rare occurrences that have approximately a 25% "
-            "chance of appearing during a full moon when enabled."
+            "Blood Moons are rare occurrences that have approximately a 25% chance of appearing during a full moon when enabled."
         ),
         inline=False,
     )

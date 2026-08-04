@@ -14,9 +14,10 @@ Yet Another Logging Cog: configurable server logging for Red-DiscordBot.
 
 ## Highlights
 
-- Logs message, member, moderation, channel, overwrite, thread/forum, role, guild, voice, stage, sticker, soundboard, AutoMod, webhook, invite, command, integration, emoji, and other server events.
-- Correlates Discord audit entries by action, target, channel, and time so unrelated moderators are never shown as a fallback.
-- Covers cached and uncached message edits/deletes, bulk deletes, bot additions, member prunes, permission-overwrite changes, and webhook lifecycle actions.
+- Covers 71 event types across messages, reactions, polls, members, presence, moderation, channels, overwrites, threads/forums, roles, guilds, voice, stages, stickers, soundboard, AutoMod, webhooks, invites, commands, integrations, emoji, and scheduled events.
+- Correlates Discord audit entries by action, exact target, channel, changed field, time, and role add/remove delta so unrelated moderators are never shown as a fallback.
+- Covers cached and uncached message edits/deletes and reactions, bulk deletes, poll votes, bot additions, member prunes, permission-overwrite changes, webhook lifecycle actions, global user-profile changes, and scheduled-event attendance.
+- Coalesces concurrent audit lookups, reads immediately before bounded retries, and resolves multi-role deltas from one shared cache fill.
 - Routes every event independently, with per-event enable switches and colors.
 - Filters users, roles, channels, categories, bots, webhooks, applications, prefixes, and proxy systems, plus precise event/user/channel ignore rules.
 - Fails closed when a destination is unavailable unless an administrator explicitly selects a safe fallback channel.
@@ -62,7 +63,9 @@ The dashboard controls core behavior and privacy, explicit fallback delivery, co
 
 ## Audit Attribution and Coverage
 
-Give the bot `View Audit Log` to attribute moderation and administrative actions. YALC first consumes Discord's live audit-entry gateway event, deduplicates entries by audit ID, then performs a short bounded lookup when a gateway event needs attribution. A match must have the expected action and, where Discord supplies them, the exact target and channel. If YALC cannot establish that match, it reports attribution as unavailable instead of guessing.
+Give the bot `View Audit Log` to attribute moderation and administrative actions. YALC first consumes Discord's live audit-entry gateway event, deduplicates entries by audit ID, then performs a short bounded lookup when a gateway event needs attribution. A match must have the expected action and, where Discord supplies them, the exact target, channel, changed field, and role delta. Rapid role additions/removals for the same member are compared role-by-role and direction-by-direction. If YALC cannot establish that match, it reports attribution as unavailable instead of guessing.
+
+YALC's diagnostics report cache hits, API fetches, strict role/field matches, misses, delivery retries, fallback sends, and failed deliveries. Presence logging requires the Presence intent. Poll-vote and uncached reaction logs follow the same raw-event privacy switch and ignore rules as uncached message logs.
 
 Enable the Guild Moderation intent for the live audit-entry stream, bans, and related moderation events. Enable Message Content if deleted or edited text should be available while Discord still has the message cached. Uncached gateway events contain IDs and any partial data Discord supplied, but cannot recover content Discord did not send.
 
@@ -85,6 +88,7 @@ The local journal is disabled by default. When enabled, it records delivered-eve
 - Manage Server permission, Red admin, or equivalent for configuration commands.
 - Guild Moderation intent is required for the live audit stream and moderation coverage.
 - Server Members intent is recommended for member update logging.
+- Presence intent is required for presence-change logging.
 - Message Content intent is required when message text should be logged.
 
 ## Data and Privacy

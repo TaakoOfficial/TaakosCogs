@@ -36,7 +36,7 @@ def validate_public_http_url(url: str) -> str:
         parsed = urlparse(str(url).strip())
         hostname = parsed.hostname
         # Accessing ``port`` also validates malformed and out-of-range values.
-        parsed.port
+        _port = parsed.port
     except (UnicodeError, ValueError) as exc:
         raise URLSafetyError("The provided URL is invalid.") from exc
     if parsed.scheme.lower() not in {"http", "https"}:

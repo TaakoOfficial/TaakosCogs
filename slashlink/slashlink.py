@@ -114,8 +114,7 @@ class SlashLink(DashboardIntegration, commands.Cog):
             return False
 
         self._proxies[cog_name] = ProxyRecord(cog_name, command_name)
-        log.info("Registered Red-managed proxy /%s for %s.",
-                 command_name, cog_name)
+        log.info("Registered Red-managed proxy /%s for %s.", command_name, cog_name)
         return True
 
     def _remove_proxy(self, cog_name: str) -> bool:
@@ -124,8 +123,7 @@ class SlashLink(DashboardIntegration, commands.Cog):
             return False
         existing = self.bot.tree._global_commands.get(record.command_name)
         if existing is None:
-            existing = self.bot.tree._disabled_global_commands.get(
-                record.command_name)
+            existing = self.bot.tree._disabled_global_commands.get(record.command_name)
         if existing is None or existing.extras.get("slashlink_cog") != cog_name:
             log.warning(
                 "Did not remove /%s for %s because the tree entry is no longer its proxy.",
@@ -237,10 +235,7 @@ class SlashLink(DashboardIntegration, commands.Cog):
                 except commands.CommandError:
                     continue
 
-            return [
-                app_commands.Choice(name=name, value=name)
-                for name in self._rank_matches(visible, current)[:25]
-            ]
+            return [app_commands.Choice(name=name, value=name) for name in self._rank_matches(visible, current)[:25]]
 
         return command_autocomplete
 
@@ -296,8 +291,7 @@ class SlashLink(DashboardIntegration, commands.Cog):
 
         ctx = await commands.Context.from_interaction(interaction)
         ctx.message.content = content
-        ctx.message.attachments = [
-            attachment] if attachment is not None else []
+        ctx.message.attachments = [attachment] if attachment is not None else []
         ctx.prefix = prefix
         ctx.view = StringView(content)
         ctx.view.skip_string(prefix)

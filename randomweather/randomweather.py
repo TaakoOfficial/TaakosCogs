@@ -122,8 +122,7 @@ class WeatherGroup(app_commands.Group):
                         ephemeral=True,
                     )
                 else:
-                    next_time = calculate_next_refresh_time(
-                        0, None, value, time_zone)
+                    next_time = calculate_next_refresh_time(0, None, value, time_zone)
                     await interaction.followup.send(
                         f"Weather will refresh daily at {value} ({discord.utils.format_dt(next_time)})",
                         ephemeral=True,
@@ -300,20 +299,10 @@ class WeatherGroup(app_commands.Group):
             return
         await interaction.response.defer(ephemeral=True)
         guild_settings = await self.cog.config.guild(interaction.guild).all()
-        embed_color = discord.Color(
-            guild_settings.get("embed_color", 0xFF0000))
-        embed = discord.Embed(
-            title="RandomWeather Settings", color=embed_color)
-        channel = (
-            self.cog.bot.get_channel(guild_settings.get("channel_id"))
-            if guild_settings.get("channel_id")
-            else None
-        )
-        role = (
-            interaction.guild.get_role(guild_settings.get("role_id"))
-            if guild_settings.get("role_id")
-            else None
-        )
+        embed_color = discord.Color(guild_settings.get("embed_color", 0xFF0000))
+        embed = discord.Embed(title="RandomWeather Settings", color=embed_color)
+        channel = self.cog.bot.get_channel(guild_settings.get("channel_id")) if guild_settings.get("channel_id") else None
+        role = interaction.guild.get_role(guild_settings.get("role_id")) if guild_settings.get("role_id") else None
         embed.add_field(
             name="📢 Channel:",
             value=channel.mention if channel else "❌ Not set",
@@ -352,11 +341,9 @@ class WeatherGroup(app_commands.Group):
             else:
                 hours = minutes // 60
                 timing = f"Every {hours}h"
-            embed.add_field(name="⏰ Update Interval:",
-                            value=timing, inline=True)
+            embed.add_field(name="⏰ Update Interval:", value=timing, inline=True)
         else:
-            embed.add_field(name="⏰ Updates:",
-                            value="Not configured", inline=True)
+            embed.add_field(name="⏰ Updates:", value="Not configured", inline=True)
         last_refresh = guild_settings.get("last_refresh", 0)
         next_post_time = calculate_next_refresh_time(
             last_refresh,
@@ -372,14 +359,12 @@ class WeatherGroup(app_commands.Group):
             )
         embed.add_field(
             name="🏷️ Role Tagging:",
-            value="✅ Enabled" if guild_settings.get(
-                "tag_role") else "❌ Disabled",
+            value="✅ Enabled" if guild_settings.get("tag_role") else "❌ Disabled",
             inline=True,
         )
         embed.add_field(
             name="📜 Footer:",
-            value="✅ Enabled" if guild_settings.get(
-                "show_footer") else "❌ Disabled",
+            value="✅ Enabled" if guild_settings.get("show_footer") else "❌ Disabled",
             inline=True,
         )
         await interaction.followup.send(embed=embed, ephemeral=True)
@@ -503,10 +488,7 @@ class WeatherCog(DashboardIntegration, commands.Cog):
 
     async def _migrate_config_identifier(self) -> None:
         """Copy legacy guild data once, retaining the old namespace for rollback."""
-        if (
-            await self.config.identifier_migration_version()
-            >= self.IDENTIFIER_MIGRATION_VERSION
-        ):
+        if await self.config.identifier_migration_version() >= self.IDENTIFIER_MIGRATION_VERSION:
             return
 
         legacy_guilds = await self._legacy_config.all_guilds()
@@ -550,8 +532,7 @@ class WeatherCog(DashboardIntegration, commands.Cog):
                     if not channel_id:
                         continue
 
-                    time_zone = cast(
-                        "str", guild_settings.get("time_zone", "UTC"))
+                    time_zone = cast("str", guild_settings.get("time_zone", "UTC"))
                     tz = pytz.timezone(time_zone)
                     now = datetime.now().astimezone(tz)
 
@@ -568,8 +549,7 @@ class WeatherCog(DashboardIntegration, commands.Cog):
                             continue
 
                     # Calculate next refresh based on interval or scheduled time
-                    last_refresh = cast(
-                        "int", guild_settings.get("last_refresh", 0))
+                    last_refresh = cast("int", guild_settings.get("last_refresh", 0))
                     refresh_interval = cast(
                         "int | None",
                         guild_settings.get("refresh_interval"),
@@ -627,8 +607,7 @@ class WeatherCog(DashboardIntegration, commands.Cog):
             write_last_posted()
 
         except RECOVERABLE_EXCEPTIONS as e:
-            log.error(
-                f"Error posting weather update for guild {guild_id}: {e}")
+            log.error(f"Error posting weather update for guild {guild_id}: {e}")
 
     async def _post_extreme_weather_update(
         self,
@@ -720,8 +699,7 @@ class WeatherCog(DashboardIntegration, commands.Cog):
                         f"Weather will refresh daily at {value}. Posted initial update since it's that time now.",
                     )
                 else:
-                    next_time = calculate_next_refresh_time(
-                        0, None, value, time_zone)
+                    next_time = calculate_next_refresh_time(0, None, value, time_zone)
                     await ctx.send(
                         f"Weather will refresh daily at {value} ({discord.utils.format_dt(next_time)})",
                     )
@@ -798,7 +776,7 @@ class WeatherCog(DashboardIntegration, commands.Cog):
             await ctx.send("Invalid color.")
             return
         await self.config.guild(ctx.guild).embed_color.set(color.value)
-        await ctx.send(f"Embed color set to: {str(color)}")
+        await ctx.send(f"Embed color set to: {color!s}")
 
     @rweather.command(name="footer")
     @commands.guild_only()
@@ -815,20 +793,10 @@ class WeatherCog(DashboardIntegration, commands.Cog):
     async def info(self, ctx: commands.Context) -> None:
         """View the current settings for weather updates."""
         guild_settings = await self.config.guild(ctx.guild).all()
-        embed_color = discord.Color(
-            guild_settings.get("embed_color", 0xFF0000))
-        embed = discord.Embed(
-            title="RandomWeather Settings", color=embed_color)
-        channel = (
-            self.bot.get_channel(guild_settings.get("channel_id"))
-            if guild_settings.get("channel_id")
-            else None
-        )
-        role = (
-            ctx.guild.get_role(guild_settings.get("role_id"))
-            if guild_settings.get("role_id")
-            else None
-        )
+        embed_color = discord.Color(guild_settings.get("embed_color", 0xFF0000))
+        embed = discord.Embed(title="RandomWeather Settings", color=embed_color)
+        channel = self.bot.get_channel(guild_settings.get("channel_id")) if guild_settings.get("channel_id") else None
+        role = ctx.guild.get_role(guild_settings.get("role_id")) if guild_settings.get("role_id") else None
         embed.add_field(
             name="📢 Channel:",
             value=channel.mention if channel else "❌ Not set",
@@ -867,11 +835,9 @@ class WeatherCog(DashboardIntegration, commands.Cog):
             else:
                 hours = minutes // 60
                 timing = f"Every {hours}h"
-            embed.add_field(name="⏰ Update Interval:",
-                            value=timing, inline=True)
+            embed.add_field(name="⏰ Update Interval:", value=timing, inline=True)
         else:
-            embed.add_field(name="⏰ Updates:",
-                            value="Not configured", inline=True)
+            embed.add_field(name="⏰ Updates:", value="Not configured", inline=True)
         last_refresh = guild_settings.get("last_refresh", 0)
         next_post_time = calculate_next_refresh_time(
             last_refresh,
@@ -887,14 +853,12 @@ class WeatherCog(DashboardIntegration, commands.Cog):
             )
         embed.add_field(
             name="🏷️ Role Tagging:",
-            value="✅ Enabled" if guild_settings.get(
-                "tag_role") else "❌ Disabled",
+            value="✅ Enabled" if guild_settings.get("tag_role") else "❌ Disabled",
             inline=True,
         )
         embed.add_field(
             name="📜 Footer:",
-            value="✅ Enabled" if guild_settings.get(
-                "show_footer") else "❌ Disabled",
+            value="✅ Enabled" if guild_settings.get("show_footer") else "❌ Disabled",
             inline=True,
         )
         await ctx.send(embed=embed)

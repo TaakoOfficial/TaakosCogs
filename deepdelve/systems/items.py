@@ -119,11 +119,7 @@ def item_effects(item: dict[str, Any] | None) -> set[str]:
     """Return every independent power carried by one item."""
     if not item:
         return set()
-    return {
-        effect
-        for effect in (item.get("unique_effect", ""), item.get("enchant_effect", ""))
-        if effect
-    }
+    return {effect for effect in (item.get("unique_effect", ""), item.get("enchant_effect", "")) if effect}
 
 
 def equipment_effects(equipment: dict[str, Any]) -> set[str]:

@@ -42,8 +42,7 @@ class ReviewSubmitModal(discord.ui.Modal):
         mode_override: str | None = None,
         title: str = "Rate your experience",
     ) -> None:
-        super().__init__(title=title[:45]
-              or "Rate your experience", timeout=300.0)
+        super().__init__(title=title[:45] or "Rate your experience", timeout=300.0)
         self.cog = cog
         self.guild_id = guild_id
         self.reviewer_id = reviewer_id
@@ -196,10 +195,8 @@ class ReviewPublicView(discord.ui.View):
 
         if include_submit:
             button = discord.ui.Button(
-                label=str(settings.get("review_button_label")
-                          or "Submit Review")[:80],
-                emoji=str(settings.get("submit_review_emoji")
-                          or "\N{MEMO}")[:100],
+                label=str(settings.get("review_button_label") or "Submit Review")[:80],
+                emoji=str(settings.get("submit_review_emoji") or "\N{MEMO}")[:100],
                 style=discord.ButtonStyle.primary,
                 custom_id=self.SUBMIT_ID,
             )
@@ -209,9 +206,7 @@ class ReviewPublicView(discord.ui.View):
         if include_report:
             button = discord.ui.Button(
                 label="Report",
-                emoji=str(settings.get("report_button_emoji") or "\N{WARNING SIGN}")[
-                    :100
-                ],
+                emoji=str(settings.get("report_button_emoji") or "\N{WARNING SIGN}")[:100],
                 style=discord.ButtonStyle.danger,
                 custom_id=self.REPORT_ID,
             )
@@ -221,9 +216,7 @@ class ReviewPublicView(discord.ui.View):
         if include_useful:
             button = discord.ui.Button(
                 label="Useful",
-                emoji=str(settings.get("useful_button_emoji") or "\N{THUMBS UP SIGN}")[
-                    :100
-                ],
+                emoji=str(settings.get("useful_button_emoji") or "\N{THUMBS UP SIGN}")[:100],
                 style=discord.ButtonStyle.secondary,
                 custom_id=self.USEFUL_ID,
             )
@@ -250,8 +243,7 @@ class ReviewRequestView(discord.ui.View):
         self.cog = cog
         settings = settings or {}
         button = discord.ui.Button(
-            label=str(settings.get("review_button_label")
-                      or "Submit Review")[:80],
+            label=str(settings.get("review_button_label") or "Submit Review")[:80],
             emoji=str(settings.get("submit_review_emoji") or "\N{MEMO}")[:100],
             style=discord.ButtonStyle.primary,
             custom_id=self.SUBMIT_ID,
@@ -305,8 +297,7 @@ class ReviewTargetPickerView(discord.ui.View):
             )
             return
         title = str(
-            self.settings.get(
-                "rate_experience_title") or "Rate your experience",
+            self.settings.get("rate_experience_title") or "Rate your experience",
         )
         await interaction.response.send_modal(
             ReviewSubmitModal(
@@ -454,8 +445,7 @@ class ReviewHubConfigGroup(app_commands.Group):
             changed.append(f"report channel -> {reportchannel.mention}")
         if autothread is not None:
             await guild_conf.auto_thread.set(autothread)
-            changed.append(
-                f"auto threads -> {self.cog._enabled_text(autothread)}")
+            changed.append(f"auto threads -> {self.cog._enabled_text(autothread)}")
         if threadtitle is not None:
             await guild_conf.thread_title.set(threadtitle[:100])
             changed.append("thread title")
@@ -473,8 +463,7 @@ class ReviewHubConfigGroup(app_commands.Group):
             changed.append("rate experience title")
         if reviewcommand is not None:
             await guild_conf.review_command_enabled.set(reviewcommand)
-            changed.append(
-                f"review command -> {self.cog._enabled_text(reviewcommand)}")
+            changed.append(f"review command -> {self.cog._enabled_text(reviewcommand)}")
         if reviewcommandname is not None:
             await guild_conf.review_command_name.set(reviewcommandname)
             changed.append(f"display command name -> {reviewcommandname}")
@@ -485,12 +474,10 @@ class ReviewHubConfigGroup(app_commands.Group):
             )
         if vouchmode is not None:
             await guild_conf.vouch_mode.set(vouchmode)
-            changed.append(
-                f"vouch mode -> {self.cog._enabled_text(vouchmode)}")
+            changed.append(f"vouch mode -> {self.cog._enabled_text(vouchmode)}")
         if reviewtargets is not None:
             await guild_conf.review_targets_enabled.set(reviewtargets)
-            changed.append(
-                f"review targets -> {self.cog._enabled_text(reviewtargets)}")
+            changed.append(f"review targets -> {self.cog._enabled_text(reviewtargets)}")
 
         if not changed:
             await interaction.response.send_message(
@@ -640,8 +627,7 @@ class ReviewHubConfigGroup(app_commands.Group):
             changed.append("review command role cleared")
         elif reviewcommandrole is not None:
             await guild_conf.review_command_role_id.set(reviewcommandrole.id)
-            changed.append(
-                f"review command role -> {reviewcommandrole.mention}")
+            changed.append(f"review command role -> {reviewcommandrole.mention}")
 
         if not changed:
             await interaction.response.send_message(
@@ -766,21 +752,15 @@ class ReviewHub(DashboardIntegration, commands.Cog):
                     if str(record.get("deleted_by")) == user_key:
                         record["deleted_by"] = None
                     record["useful_user_ids"] = [
-                        voter_id
-                        for voter_id in record.get("useful_user_ids", [])
-                        if str(voter_id) != user_key
+                        voter_id for voter_id in record.get("useful_user_ids", []) if str(voter_id) != user_key
                     ]
                     record["reports"] = [
-                        report
-                        for report in record.get("reports", [])
-                        if str(report.get("reporter_id")) != user_key
+                        report for report in record.get("reports", []) if str(report.get("reporter_id")) != user_key
                     ]
                     if touched:
                         record["content"] = "[deleted by data request]"
                         record["active"] = False
-                        record["deleted_at"] = (
-                            record.get("deleted_at") or self._now_ts()
-                        )
+                        record["deleted_at"] = record.get("deleted_at") or self._now_ts()
                         record["delete_reason"] = "Deleted by data request."
 
             async with guild_conf.requests() as requests:
@@ -855,12 +835,10 @@ class ReviewHub(DashboardIntegration, commands.Cog):
     def _parse_color(cls, value: str) -> int:
         cleaned = value.strip().lower().replace("#", "").replace("0x", "")
         if not re.fullmatch(r"[0-9a-f]{1,6}", cleaned):
-            raise commands.BadArgument(
-                "Color must be a hex value like `#5865F2`.")
+            raise commands.BadArgument("Color must be a hex value like `#5865F2`.")
         color = int(cleaned, 16)
         if not 0 <= color <= 0xFFFFFF:
-            raise commands.BadArgument(
-                "Color must be between `#000000` and `#FFFFFF`.")
+            raise commands.BadArgument("Color must be between `#000000` and `#FFFFFF`.")
         return color
 
     @staticmethod
@@ -922,10 +900,8 @@ class ReviewHub(DashboardIntegration, commands.Cog):
         records: dict[str, ReviewRecord],
     ) -> str:
         cleaned = str(review_id).strip().upper()
-        if cleaned.startswith("#"):
-            cleaned = cleaned[1:]
-        if cleaned.startswith("RH-"):
-            cleaned = cleaned[3:]
+        cleaned = cleaned.removeprefix("#")
+        cleaned = cleaned.removeprefix("RH-")
         if cleaned.isdigit():
             key = str(int(cleaned))
             if key in records:
@@ -934,8 +910,7 @@ class ReviewHub(DashboardIntegration, commands.Cog):
         for key, record in records.items():
             if str(record.get("display_id", "")).lower() == lowered:
                 return key
-        raise commands.BadArgument(
-            f"No review with ID `{review_id}` was found.")
+        raise commands.BadArgument(f"No review with ID `{review_id}` was found.")
 
     @staticmethod
     def _empty_stats() -> StatsRecord:
@@ -1051,8 +1026,7 @@ class ReviewHub(DashboardIntegration, commands.Cog):
         display_id = ""
         if isinstance(record, dict):
             display_id = str(
-                record.get("display_id")
-                or ReviewHub._display_review_id(record.get("id")),
+                record.get("display_id") or ReviewHub._display_review_id(record.get("id")),
             )
         return (
             str(template or "")
@@ -1087,8 +1061,7 @@ class ReviewHub(DashboardIntegration, commands.Cog):
     ) -> discord.Embed:
         active = bool(record.get("active", True))
         display_id = str(
-            record.get("display_id") or self._display_review_id(
-                record.get("id")),
+            record.get("display_id") or self._display_review_id(record.get("id")),
         )
         rating = int(record.get("rating") or 0)
         useful_count = len(record.get("useful_user_ids", []))
@@ -1153,8 +1126,7 @@ class ReviewHub(DashboardIntegration, commands.Cog):
                 embed.add_field(name="Target", value=target_text, inline=True)
 
         if useful_count:
-            embed.add_field(name="Useful", value=self._count(
-                useful_count), inline=True)
+            embed.add_field(name="Useful", value=self._count(useful_count), inline=True)
         if not active:
             embed.add_field(
                 name="Deleted By",
@@ -1185,8 +1157,7 @@ class ReviewHub(DashboardIntegration, commands.Cog):
         title = str(settings.get("review_request_title") or "Review Request")
         description = self._placeholders(
             str(
-                settings.get("rateme_message")
-                or "{reviewer}, {requester} requested a review from you.",
+                settings.get("rateme_message") or "{reviewer}, {requester} requested a review from you.",
             ),
             guild=guild,
             reviewer=reviewer,
@@ -1210,13 +1181,11 @@ class ReviewHub(DashboardIntegration, commands.Cog):
         review_channel = await self._get_review_channel(guild, settings)
         report_channel = await self._get_report_channel(guild, settings)
         rateme_role = self._role_from_id(guild, settings.get("rateme_role_id"))
-        review_role = self._role_from_id(
-            guild, settings.get("review_command_role_id"))
+        review_role = self._role_from_id(guild, settings.get("review_command_role_id"))
 
         embed = discord.Embed(
             title="ReviewHub Settings",
-            color=int(settings.get("review_embed_color")
-                      or self.DEFAULT_COLOR),
+            color=int(settings.get("review_embed_color") or self.DEFAULT_COLOR),
             timestamp=self._now(),
         )
         embed.add_field(
@@ -1288,8 +1257,7 @@ class ReviewHub(DashboardIntegration, commands.Cog):
         permissions = message.channel.permissions_for(me)
         if not getattr(permissions, "create_public_threads", False):
             return
-        title_template = str(settings.get("thread_title")
-                             or "Review {id} discussion")
+        title_template = str(settings.get("thread_title") or "Review {id} discussion")
         title = self._placeholders(
             title_template,
             guild=guild,
@@ -1300,8 +1268,7 @@ class ReviewHub(DashboardIntegration, commands.Cog):
         try:
             await message.create_thread(name=title, auto_archive_duration=1440)
         except discord.HTTPException:
-            log.exception(
-                "Failed to create ReviewHub thread in guild %s", guild.id)
+            log.exception("Failed to create ReviewHub thread in guild %s", guild.id)
 
     async def _store_review_message(
         self,
@@ -1336,10 +1303,7 @@ class ReviewHub(DashboardIntegration, commands.Cog):
         review_channel = await self._get_review_channel(guild, settings)
         if review_channel is not None:
             channels.append(review_channel)
-        if (
-            isinstance(source_channel, discord.TextChannel)
-            and source_channel not in channels
-        ):
+        if isinstance(source_channel, discord.TextChannel) and source_channel not in channels:
             channels.append(source_channel)
 
         embed = self._review_embed(guild, record, settings)
@@ -1400,8 +1364,7 @@ class ReviewHub(DashboardIntegration, commands.Cog):
             guild_conf = self.config.guild(guild)
             settings = await guild_conf.all()
             if not settings.get("review_command_enabled"):
-                raise commands.CommandError(
-                    "Review submissions are disabled here.")
+                raise commands.CommandError("Review submissions are disabled here.")
             if not self._has_role(
                 reviewer,
                 settings.get("review_command_role_id"),
@@ -1409,18 +1372,12 @@ class ReviewHub(DashboardIntegration, commands.Cog):
                 raise commands.CommandError(
                     "You do not have the configured review command role.",
                 )
-            mode = mode_override or (
-                "vouch" if settings.get("vouch_mode") else "review"
-            )
+            mode = mode_override or ("vouch" if settings.get("vouch_mode") else "review")
             if mode == "vouch" and target is None:
-                raise commands.CommandError(
-                    "Choose the member you want to vouch for.")
-            targeted_review = (
-                target is not None and mode != "vouch" and request_message_id is None
-            )
+                raise commands.CommandError("Choose the member you want to vouch for.")
+            targeted_review = target is not None and mode != "vouch" and request_message_id is None
             if targeted_review and not settings.get("review_targets_enabled"):
-                raise commands.CommandError(
-                    "Targeted reviews are disabled here.")
+                raise commands.CommandError("Targeted reviews are disabled here.")
             if target is not None:
                 if target.bot:
                     raise commands.CommandError(
@@ -1439,8 +1396,7 @@ class ReviewHub(DashboardIntegration, commands.Cog):
                 settings["daily_key"] = daily_key
             if daily_limit > 0 and daily_count >= daily_limit:
                 raise commands.CommandError(
-                    f"This server has reached the daily limit of {daily_limit} "
-                    "reviews. The limit resets at midnight UTC+2.",
+                    f"This server has reached the daily limit of {daily_limit} reviews. The limit resets at midnight UTC+2.",
                 )
 
             review_id = int(settings.get("next_review_id") or 1)
@@ -1469,16 +1425,13 @@ class ReviewHub(DashboardIntegration, commands.Cog):
             }
             records[self._review_key(review_id)] = record
             reviewer_stats = self._ensure_stats(stats, reviewer.id)
-            reviewer_stats["submitted"] = int(
-                reviewer_stats.get("submitted") or 0) + 1
+            reviewer_stats["submitted"] = int(reviewer_stats.get("submitted") or 0) + 1
             if target is not None:
                 target_stats = self._ensure_stats(stats, target.id)
-                target_stats["received"] = int(
-                    target_stats.get("received") or 0) + 1
+                target_stats["received"] = int(target_stats.get("received") or 0) + 1
             if request_message_id and str(request_message_id) in requests:
                 requests[str(request_message_id)]["active"] = False
-                requests[str(request_message_id)
-                             ]["submitted_review_id"] = review_id
+                requests[str(request_message_id)]["submitted_review_id"] = review_id
 
             await guild_conf.reviews.set(records)
             await guild_conf.stats.set(stats)
@@ -1518,8 +1471,7 @@ class ReviewHub(DashboardIntegration, commands.Cog):
             key = self._resolve_review_key(review_id, records)
             record = records[key]
             if not record.get("active", True):
-                raise commands.BadArgument(
-                    f"Review `{review_id}` is already deleted.")
+                raise commands.BadArgument(f"Review `{review_id}` is already deleted.")
             record["active"] = False
             record["deleted_at"] = self._now_ts()
             record["deleted_by"] = moderator.id
@@ -1547,8 +1499,7 @@ class ReviewHub(DashboardIntegration, commands.Cog):
             return
         try:
             message = await channel.fetch_message(int(message_id))
-            view = self._review_view(settings) if record.get(
-                "active", True) else None
+            view = self._review_view(settings) if record.get("active", True) else None
             await message.edit(
                 embed=self._review_embed(guild, record, settings),
                 view=view,
@@ -1563,8 +1514,7 @@ class ReviewHub(DashboardIntegration, commands.Cog):
         message: discord.Message | None,
     ) -> None:
         display_id = str(
-            record.get("display_id") or self._display_review_id(
-                record.get("id")),
+            record.get("display_id") or self._display_review_id(record.get("id")),
         )
         if message is None:
             await interaction.followup.send(
@@ -1603,8 +1553,7 @@ class ReviewHub(DashboardIntegration, commands.Cog):
                 ephemeral=True,
             )
             return
-        title = str(settings.get("rate_experience_title")
-                    or "Rate your experience")
+        title = str(settings.get("rate_experience_title") or "Rate your experience")
         await interaction.response.send_modal(
             ReviewSubmitModal(
                 self,
@@ -1628,8 +1577,7 @@ class ReviewHub(DashboardIntegration, commands.Cog):
             )
             return
         settings = await self.config.guild(interaction.guild).all()
-        request = (settings.get("requests") or {}).get(
-            str(interaction.message.id))
+        request = (settings.get("requests") or {}).get(str(interaction.message.id))
         if not request or not request.get("active", True):
             await interaction.response.send_message(
                 "This review request is no longer active.",
@@ -1651,8 +1599,7 @@ class ReviewHub(DashboardIntegration, commands.Cog):
                 ephemeral=True,
             )
             return
-        title = str(settings.get("rate_experience_title")
-                    or "Rate your experience")
+        title = str(settings.get("rate_experience_title") or "Rate your experience")
         await interaction.response.send_modal(
             ReviewSubmitModal(
                 self,
@@ -1677,11 +1624,7 @@ class ReviewHub(DashboardIntegration, commands.Cog):
         return None, None, settings
 
     async def handle_report_button(self, interaction: discord.Interaction) -> None:
-        if (
-            not interaction.guild
-            or not interaction.message
-            or not isinstance(interaction.user, discord.Member)
-        ):
+        if not interaction.guild or not interaction.message or not isinstance(interaction.user, discord.Member):
             await interaction.response.send_message(
                 "This button only works on review messages.",
                 ephemeral=True,
@@ -1698,10 +1641,7 @@ class ReviewHub(DashboardIntegration, commands.Cog):
             )
             return
         reports = record.setdefault("reports", [])
-        if any(
-            str(report.get("reporter_id")) == str(interaction.user.id)
-            for report in reports
-        ):
+        if any(str(report.get("reporter_id")) == str(interaction.user.id) for report in reports):
             await interaction.response.send_message(
                 "You already reported this review.",
                 ephemeral=True,
@@ -1716,11 +1656,7 @@ class ReviewHub(DashboardIntegration, commands.Cog):
             records[key] = record
 
         report_channel = await self._get_report_channel(interaction.guild, settings)
-        if (
-            report_channel is not None
-            and interaction.guild.me
-            and self._can_send_embed(report_channel, interaction.guild.me)
-        ):
+        if report_channel is not None and interaction.guild.me and self._can_send_embed(report_channel, interaction.guild.me):
             embed = discord.Embed(
                 title="Review Reported",
                 color=self.DELETED_COLOR,
@@ -1755,11 +1691,7 @@ class ReviewHub(DashboardIntegration, commands.Cog):
         await interaction.response.send_message("Report recorded.", ephemeral=True)
 
     async def handle_useful_button(self, interaction: discord.Interaction) -> None:
-        if (
-            not interaction.guild
-            or not interaction.message
-            or not isinstance(interaction.user, discord.Member)
-        ):
+        if not interaction.guild or not interaction.message or not isinstance(interaction.user, discord.Member):
             await interaction.response.send_message(
                 "This button only works on review messages.",
                 ephemeral=True,
@@ -1783,11 +1715,9 @@ class ReviewHub(DashboardIntegration, commands.Cog):
             return
 
         user_id = interaction.user.id
-        useful_user_ids = [int(value)
-                               for value in record.get("useful_user_ids", [])]
+        useful_user_ids = [int(value) for value in record.get("useful_user_ids", [])]
         if user_id in useful_user_ids:
-            useful_user_ids = [
-                value for value in useful_user_ids if value != user_id]
+            useful_user_ids = [value for value in useful_user_ids if value != user_id]
             response = "Removed your useful vote."
         else:
             useful_user_ids.append(user_id)
@@ -1825,20 +1755,14 @@ class ReviewHub(DashboardIntegration, commands.Cog):
 
         if ctx.interaction and (rating is None or message is None):
             settings = await self.config.guild(ctx.guild).all()
-            effective_mode = mode_override or (
-                "vouch" if settings.get("vouch_mode") else "review"
-            )
+            effective_mode = mode_override or ("vouch" if settings.get("vouch_mode") else "review")
             if effective_mode == "vouch" and target is None:
                 await ctx.send(
                     "Choose a member when submitting a vouch.",
                     ephemeral=True,
                 )
                 return
-            if (
-                target is not None
-                and effective_mode != "vouch"
-                and not settings.get("review_targets_enabled")
-            ):
+            if target is not None and effective_mode != "vouch" and not settings.get("review_targets_enabled"):
                 await ctx.send("Targeted reviews are disabled here.", ephemeral=True)
                 return
             await ctx.interaction.response.send_modal(
@@ -1849,8 +1773,7 @@ class ReviewHub(DashboardIntegration, commands.Cog):
                     target_id=target.id if target else None,
                     mode_override=mode_override,
                     title=str(
-                        settings.get(
-                            "rate_experience_title") or "Rate your experience",
+                        settings.get("rate_experience_title") or "Rate your experience",
                     ),
                 ),
             )
@@ -1878,8 +1801,7 @@ class ReviewHub(DashboardIntegration, commands.Cog):
             return
 
         display_id = str(
-            record.get("display_id") or self._display_review_id(
-                record.get("id")),
+            record.get("display_id") or self._display_review_id(record.get("id")),
         )
         if sent_message is None:
             await ctx.send(
@@ -1995,21 +1917,9 @@ class ReviewHub(DashboardIntegration, commands.Cog):
         stats = self._rebuild_stats(records)
         if member is not None:
             member_stats = self._ensure_stats(stats, member.id)
-            received_records = [
-                record
-                for record in active
-                if str(record.get("target_id")) == str(member.id)
-            ]
-            submitted_records = [
-                record
-                for record in active
-                if str(record.get("reviewer_id")) == str(member.id)
-            ]
-            ratings = [
-                int(record.get("rating") or 0)
-                for record in received_records
-                if record.get("rating")
-            ]
+            received_records = [record for record in active if str(record.get("target_id")) == str(member.id)]
+            submitted_records = [record for record in active if str(record.get("reviewer_id")) == str(member.id)]
+            ratings = [int(record.get("rating") or 0) for record in received_records if record.get("rating")]
             average = sum(ratings) / len(ratings) if ratings else 0
             embed = discord.Embed(
                 title=f"{member.display_name}'s ReviewHub Stats",
@@ -2060,16 +1970,10 @@ class ReviewHub(DashboardIntegration, commands.Cog):
             await ctx.send(embed=embed, ephemeral=bool(ctx.interaction))
             return
 
-        ratings = [
-            int(record.get("rating") or 0) for record in active if record.get("rating")
-        ]
+        ratings = [int(record.get("rating") or 0) for record in active if record.get("rating")]
         average = sum(ratings) / len(ratings) if ratings else 0
-        unique_reviewers = {
-            record.get("reviewer_id") for record in active if record.get("reviewer_id")
-        }
-        unique_targets = {
-            record.get("target_id") for record in active if record.get("target_id")
-        }
+        unique_reviewers = {record.get("reviewer_id") for record in active if record.get("reviewer_id")}
+        unique_targets = {record.get("target_id") for record in active if record.get("target_id")}
         embed = discord.Embed(
             title=f"{title_scope} ReviewHub Stats",
             color=self.DEFAULT_COLOR,

@@ -28,7 +28,8 @@ SANCTUM_ROOMS: dict[str, dict[str, Any]] = {
 def ensure_sanctum(profile: dict[str, Any]) -> dict[str, Any]:
     """Normalize persistent Sanctum state."""
     state = profile.setdefault(
-        "sanctum", {"rooms": dict.fromkeys(SANCTUM_ROOMS, 0), "spent": 0, "cosmetics": [], "active_cosmetic": ""},
+        "sanctum",
+        {"rooms": dict.fromkeys(SANCTUM_ROOMS, 0), "spent": 0, "cosmetics": [], "active_cosmetic": ""},
     )
     state.setdefault("rooms", {})
     for key in SANCTUM_ROOMS:
