@@ -252,3 +252,4 @@ def test_live_bot_secret_is_gated_to_trusted_repository_code() -> None:
     assert "github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main'" in workflow
     assert "secrets.DISCORD_BOT_TOKEN" in workflow
     assert "COG_PATHS: ${{ needs.changes.outputs.cogs }}" in workflow
+    assert "ref: ${{ github.head_ref || github.ref }}" in workflow
