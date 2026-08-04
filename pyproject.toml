@@ -22,6 +22,11 @@ dev = [
     "pytest>=8.0,<10",
     "ruff==0.16.1",
 ]
+docs = [
+    "mkdocs-gen-files>=0.6,<1",
+    "mkdocs-literate-nav>=0.6,<1",
+    "mkdocs-material>=9.7,<10",
+]
 
 [tool.uv]
 package = false

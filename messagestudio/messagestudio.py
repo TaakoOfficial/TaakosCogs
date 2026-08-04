@@ -813,14 +813,22 @@ class MessageStudio(DashboardIntegration, commands.Cog):
         except UnicodeDecodeError as error:
             raise commands.UserInputError("The attachment must be UTF-8.") from error
 
+    @staticmethod
+    def _normalize_text_host_url(url: str) -> str:
+        """Add raw paths only for exact, trusted paste-host domain names."""
+        parsed = urlparse(url)
+        hostname = (parsed.hostname or "").lower().rstrip(".")
+        if hostname in {"pastebin.com", "www.pastebin.com"} and not parsed.path.startswith("/raw/"):
+            parsed = parsed._replace(path=f"/raw/{parsed.path.lstrip('/')}")
+        elif hostname == "gist.github.com" and not parsed.path.rstrip("/").endswith("/raw"):
+            parsed = parsed._replace(path=f"{parsed.path.rstrip('/')}/raw")
+        return parsed.geturl()
+
     async def _fetch_text(self, url):
         parsed = urlparse(url)
         if parsed.scheme not in {"http", "https"}:
             raise commands.BadArgument("Only HTTP(S) links are supported.")
-        if "pastebin.com" in parsed.netloc and "/raw/" not in parsed.path:
-            url = url.replace("pastebin.com/", "pastebin.com/raw/")
-        if "gist.github.com" in parsed.netloc and not parsed.path.endswith("/raw"):
-            url = url.rstrip("/") + "/raw"
+        url = self._normalize_text_host_url(url)
         assert self.session is not None
         try:
             data, _content_type, _final_url = await fetch_public_bytes(

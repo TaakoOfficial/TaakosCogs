@@ -79,7 +79,7 @@ The purpose-built dashboard is available when Red-Web-Dashboard is loaded. Membe
 ## Requirements and Permissions
 
 - Red-DiscordBot 3.5.0 or newer.
-- Python 3.9 or newer.
+- Python 3.10 or newer.
 - `Pillow>=10.0.0`; Red's Downloader installs it automatically from the cog metadata.
 - `Send Messages`, `Embed Links`, and `Attach Files` in channels where wheels are used.
 - Manage Server for saved-wheel and server-setting commands.

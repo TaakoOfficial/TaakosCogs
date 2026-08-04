@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import logging
 from typing import Any
 from urllib.parse import urljoin
@@ -59,8 +58,6 @@ class WHMCSAPIClient:
         self.identifier: str | None = None
         self.secret: str | None = None
         self.access_key: str | None = None
-        self.username: str | None = None
-        self.password: str | None = None
 
         # Rate limiting
         self.rate_limit = 60  # requests per minute
@@ -102,23 +99,6 @@ class WHMCSAPIClient:
         """
         self.identifier = identifier
         self.secret = secret
-        self.access_key = access_key
-
-    def set_admin_credentials(
-        self,
-        username: str,
-        password: str,
-        access_key: str | None = None,
-    ):
-        """Set admin credentials for authentication.
-
-        Args:
-            username: Admin username
-            password: Admin password (will be MD5 hashed)
-            access_key: Optional access key to bypass IP restrictions
-        """
-        self.username = username
-        self.password = hashlib.md5(password.encode()).hexdigest()
         self.access_key = access_key
 
     async def _check_rate_limit(self):
@@ -163,9 +143,6 @@ class WHMCSAPIClient:
         if self.identifier and self.secret:
             data["identifier"] = self.identifier
             data["secret"] = self.secret
-        elif self.username and self.password:
-            data["username"] = self.username
-            data["password"] = self.password
         else:
             raise WHMCSAuthenticationError("No authentication credentials provided")
 

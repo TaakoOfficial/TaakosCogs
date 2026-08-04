@@ -9,11 +9,11 @@
     .edge-rival { stroke: #F04747; }
     .edge-family { stroke: #7289DA; }
   </style>
-  
+
   <!-- Nodes -->
   <circle class="node" cx="400" cy="300" r="40"/>
   <text class="node-text" x="400" y="300" text-anchor="middle">Aria</text>
-  
+
   <!-- Example connections -->
   <path class="edge edge-ally" d="M 400,300 L 500,200"/>
   <path class="edge edge-rival" d="M 400,300 L 300,400"/>

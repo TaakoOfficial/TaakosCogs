@@ -9,6 +9,7 @@ repos:
     rev: v6.0.0
     hooks:
     -   id: check-yaml
+        exclude: ^mkdocs\.yml$
     -   id: check-added-large-files
     -   id: check-merge-conflict
     -   id: end-of-file-fixer
@@ -18,11 +19,6 @@ repos:
     -   id: check-json
     -   id: detect-private-key
     -   id: check-toml
-    -   id: pretty-format-json
-        args:
-          - "--autofix"
-          - "--indent=4"
-          - "--no-sort-keys"
     -   id: requirements-txt-fixer
     -   id: trailing-whitespace
         args: [--markdown-linebreak-ext=md]

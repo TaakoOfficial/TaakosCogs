@@ -2,6 +2,8 @@
 
 A growing collection of cogs for [Red-DiscordBot](https://github.com/Cog-Creators/Red-DiscordBot), focused on practical server operations, support workflows, community health, privacy, event attendance, roleplay immersion, and admin tooling.
 
+**Documentation:** [taakoofficial.github.io/TaakosCogs/latest](https://taakoofficial.github.io/TaakosCogs/latest/)
+
 This repo includes everything from forum resolution, staff scheduling, incident response, link monitoring, access reviews, retention policy, sponsor roles, digests, community analytics, and event check-ins to tickets, role automation, RP world tracking, games, and WHMCS support tooling.
 
 ## Quick Install
@@ -305,9 +307,9 @@ Development and CI use Python 3.11 with the dependencies pinned in `uv.lock`. In
 
 ```bash
 uv sync --locked --all-groups
-uv run --locked ruff check .
-uv run --locked ruff format --check .
+uv run --locked pre-commit run --all-files
 uv run --locked python -m pytest -q -p no:cacheprovider
+uv run --locked mkdocs build --strict
 ```
 
 To enable the local commit hooks:
@@ -316,9 +318,11 @@ To enable the local commit hooks:
 uv run --locked pre-commit install
 ```
 
-GitHub runs the lint and test workflow for pushes and pull requests. **Live Cog Load** automatically installs, loads, and unloads only the cogs changed by a push to `main` or by a pull request from a branch in this repository. Fork and Dependabot pull requests never receive `DISCORD_BOT_TOKEN` and therefore skip the live job; they still receive the full tokenless CI suite. Changes to the lockfile or live-test tooling conservatively exercise all cogs, as does a manual run on `main`. A dedicated CI bot token is strongly recommended so test sessions cannot interrupt a production bot using the same token.
+GitHub runs pre-commit, lint, tests, strict documentation, Python 3.10/3.11 imports, dependency review, CodeQL, and cog release-policy checks for pull requests. **Live Cog Load** automatically installs, loads, and unloads only the cogs changed by a push to `main` or by a pull request from a branch in this repository. Fork and Dependabot pull requests never receive `DISCORD_BOT_TOKEN` and therefore skip the live job; they still receive the full tokenless CI suite. Changes to the lockfile or live-test tooling conservatively exercise all cogs, as does a manual run on `main`. A dedicated CI bot token is strongly recommended so test sessions cannot interrupt a production bot using the same token.
 
 Dependabot checks the locked Python environment, GitHub Actions, and pre-commit hooks every Monday morning. Its pull requests run the same tokenless CI as other automated contributions; after a dependency update is reviewed and merged, the `main` push runs Live Cog Load against all cogs affected by the shared lockfile.
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for the review and versioning policy. Report vulnerabilities privately through the process in [SECURITY.md](./SECURITY.md).
 
 ## License
 

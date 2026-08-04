@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.9.2 - 2026-08-04
+
+- Restricted Pastebin and GitHub Gist raw-URL rewriting to exact trusted hostnames so attacker-controlled lookalike domains are never rewritten as trusted paste hosts.
+
 ## 1.9.1 - 2026-07-16
 
 - Added SSRF-resistant remote JSON fetching with public-address DNS filtering, redirect validation, and streaming size limits.

@@ -50,7 +50,7 @@ This cog includes standalone Red-Web-Dashboard integration. Server managers can 
 ## Requirements
 
 - Red-DiscordBot 3.5.0 or newer.
-- Python 3.9 or newer.
+- Python 3.10 or newer.
 - `aiohttp`; Red's Downloader installs it automatically from the cog metadata.
 - Bot permissions to `View Channel`, `Send Messages`, and `Embed Links` in the chosen status channel.
 - The bot host must be able to reach `https://status.cfx.re/`.

@@ -36,7 +36,7 @@ The historical `[p]create-channel`, `[p]rename-channel`, `/create-channel`, and 
 ## Requirements
 
 - Red-DiscordBot 3.5.0 or newer.
-- Python 3.9 or newer.
+- Python 3.10 or newer.
 - The command user needs `Manage Channels`.
 - The bot needs `Manage Channels`.
 

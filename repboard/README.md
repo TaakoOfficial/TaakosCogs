@@ -88,7 +88,7 @@ For a guided setup:
 ## Requirements
 
 - Red-DiscordBot 3.5.0 or newer.
-- Python 3.9 or newer.
+- Python 3.10 or newer.
 - Bot permissions to `Send Messages` and `Embed Links`.
 - Bot permission to `Attach Files` for CSV exports.
 - Manage Server or Red admin permissions for configuration.

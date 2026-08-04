@@ -81,6 +81,7 @@ def test_repository_and_cog_metadata_are_complete() -> None:
         assert VERSION_RE.fullmatch(data["min_bot_version"]), path
         assert len(data["min_python_version"]) == 3, path
         assert all(isinstance(part, int) for part in data["min_python_version"]), path
+        assert data["min_python_version"] >= [3, 10, 0], path
         assert isinstance(data["requirements"], list), path
         assert all(isinstance(requirement, str) and requirement for requirement in data["requirements"]), path
         assert data["end_user_data_statement"].strip(), path
@@ -115,6 +116,61 @@ def test_dependabot_covers_every_locked_update_source() -> None:
     assert ecosystems == {"uv", "github-actions", "pre-commit"}
     assert all(update["directory"] == "/" for update in config["updates"])
     assert all(update["schedule"]["interval"] == "weekly" for update in config["updates"])
+
+
+def test_documentation_site_is_versioned_and_deployed_from_main() -> None:
+    # BaseLoader intentionally leaves Material's !!python/name emoji hooks as strings.
+    config = yaml.load(
+        (ROOT / "mkdocs.yml").read_text(encoding="utf-8"),
+        Loader=yaml.BaseLoader,
+    )
+    assert config["site_url"] == "https://taakoofficial.github.io/TaakosCogs/latest/"
+    assert config["site_dir"] == "site/latest"
+    workflow = (ROOT / ".github" / "workflows" / "docs.yml").read_text(encoding="utf-8")
+    assert "github.ref == 'refs/heads/main'" in workflow
+    assert "actions/deploy-pages@" in workflow
+    assert "pages: write" in workflow
+    assert "id-token: write" in workflow
+
+
+def test_pull_request_automation_covers_repository_policy() -> None:
+    ci = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    guardrails = (ROOT / ".github" / "workflows" / "pr-guardrails.yml").read_text(encoding="utf-8")
+    compatibility = (ROOT / ".github" / "workflows" / "compatibility.yml").read_text(encoding="utf-8")
+    assert "name: Pre-commit" in ci
+    assert "pre-commit run --all-files --show-diff-on-failure" in ci
+    assert "pull_request:" in guardrails
+    assert "pull_request_target" not in guardrails
+    assert "name: Dependency Review" in guardrails
+    assert "name: Cog Release Policy" in guardrails
+    for version in ('"3.10"', '"3.11"'):
+        assert version in compatibility
+    assert '"3.9"' not in compatibility
+
+
+def test_labeler_is_privileged_but_never_executes_pull_request_code() -> None:
+    workflow = (ROOT / ".github" / "workflows" / "labeler.yml").read_text(encoding="utf-8")
+    assert "pull_request_target:" in workflow
+    assert "pull-requests: write" in workflow
+    assert "actions/checkout@" not in workflow
+    assert "run:" not in workflow
+
+    config = yaml.safe_load((ROOT / ".github" / "labeler.yml").read_text(encoding="utf-8"))
+    labels = set(config) - {"changed-files-labels-limit", "max-files-changed"}
+    expected_cog_labels = {f"cog: {path.parent.name}" for path in _cog_info_files()}
+    assert expected_cog_labels <= labels
+    assert {"CI", "dependencies", "documentation", "new-cog", "tests"} <= labels
+
+
+def test_repository_has_structured_contribution_templates() -> None:
+    assert (ROOT / ".github" / "pull_request_template.md").is_file()
+    assert (ROOT / "CONTRIBUTING.md").is_file()
+    assert (ROOT / "SECURITY.md").is_file()
+    issue_forms = ROOT / ".github" / "ISSUE_TEMPLATE"
+    for name in ("bug.yml", "feature.yml", "config.yml"):
+        form = yaml.safe_load((issue_forms / name).read_text(encoding="utf-8"))
+        assert form
+    assert not list(issue_forms.glob("*.md"))
 
 
 def test_fable_declares_its_import_time_google_dependencies() -> None:
@@ -180,7 +236,9 @@ def test_workflow_actions_are_commit_pinned() -> None:
     workflows = sorted((ROOT / ".github" / "workflows").glob("*.yml"))
     assert workflows
     for path in workflows:
-        revisions = ACTION_RE.findall(path.read_text(encoding="utf-8"))
+        workflow = path.read_text(encoding="utf-8")
+        assert yaml.safe_load(workflow), path
+        revisions = ACTION_RE.findall(workflow)
         assert revisions, path
         assert all(re.fullmatch(r"[0-9a-f]{40}", revision) for revision in revisions), path
 
@@ -194,3 +252,4 @@ def test_live_bot_secret_is_gated_to_trusted_repository_code() -> None:
     assert "github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main'" in workflow
     assert "secrets.DISCORD_BOT_TOKEN" in workflow
     assert "COG_PATHS: ${{ needs.changes.outputs.cogs }}" in workflow
+    assert "ref: ${{ github.head_ref || github.ref }}" in workflow

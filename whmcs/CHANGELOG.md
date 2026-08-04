@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.1.1] - 2026-08-04
+
+- Removed the obsolete admin username/password fallback and its legacy MD5 password transformation. WHMCS API identifier/secret credentials are now the only supported authentication method, matching the cog's setup commands and dashboard.
+
 ## [1.1.0] - 2026-07-16
 
 - Added standalone Red-Web-Dashboard integration for viewing visible commands and current server configuration.
