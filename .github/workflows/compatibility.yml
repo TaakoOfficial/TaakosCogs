@@ -48,4 +48,5 @@ jobs:
             --requirement "$RUNNER_TEMP/cog-requirements.txt"
 
       - name: Import every supported cog
-        run: "$RUNNER_TEMP/cog-compat/bin/python" .github/scripts/import_supported_cogs.py
+        run: |
+          "$RUNNER_TEMP/cog-compat/bin/python" .github/scripts/import_supported_cogs.py

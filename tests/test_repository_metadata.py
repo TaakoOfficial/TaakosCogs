@@ -236,7 +236,9 @@ def test_workflow_actions_are_commit_pinned() -> None:
     workflows = sorted((ROOT / ".github" / "workflows").glob("*.yml"))
     assert workflows
     for path in workflows:
-        revisions = ACTION_RE.findall(path.read_text(encoding="utf-8"))
+        workflow = path.read_text(encoding="utf-8")
+        assert yaml.safe_load(workflow), path
+        revisions = ACTION_RE.findall(workflow)
         assert revisions, path
         assert all(re.fullmatch(r"[0-9a-f]{40}", revision) for revision in revisions), path
 
