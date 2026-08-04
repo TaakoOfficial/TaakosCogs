@@ -2,6 +2,8 @@
 
 A growing collection of cogs for [Red-DiscordBot](https://github.com/Cog-Creators/Red-DiscordBot), focused on practical server operations, support workflows, community health, privacy, event attendance, roleplay immersion, and admin tooling.
 
+**Documentation:** [taakoofficial.github.io/TaakosCogs/latest](https://taakoofficial.github.io/TaakosCogs/latest/)
+
 This repo includes everything from forum resolution, staff scheduling, incident response, link monitoring, access reviews, retention policy, sponsor roles, digests, community analytics, and event check-ins to tickets, role automation, RP world tracking, games, and WHMCS support tooling.
 
 ## Quick Install

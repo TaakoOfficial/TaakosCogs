@@ -117,6 +117,21 @@ def test_dependabot_covers_every_locked_update_source() -> None:
     assert all(update["schedule"]["interval"] == "weekly" for update in config["updates"])
 
 
+def test_documentation_site_is_versioned_and_deployed_from_main() -> None:
+    # BaseLoader intentionally leaves Material's !!python/name emoji hooks as strings.
+    config = yaml.load(
+        (ROOT / "mkdocs.yml").read_text(encoding="utf-8"),
+        Loader=yaml.BaseLoader,
+    )
+    assert config["site_url"] == "https://taakoofficial.github.io/TaakosCogs/latest/"
+    assert config["site_dir"] == "site/latest"
+    workflow = (ROOT / ".github" / "workflows" / "docs.yml").read_text(encoding="utf-8")
+    assert "github.ref == 'refs/heads/main'" in workflow
+    assert "actions/deploy-pages@" in workflow
+    assert "pages: write" in workflow
+    assert "id-token: write" in workflow
+
+
 def test_fable_declares_its_import_time_google_dependencies() -> None:
     data = json.loads((ROOT / "fable" / "info.json").read_text(encoding="utf-8"))
     requirements = {_requirement_name(requirement) for requirement in data["requirements"]}

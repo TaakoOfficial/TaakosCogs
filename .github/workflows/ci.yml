@@ -46,3 +46,6 @@ jobs:
 
       - name: Test
         run: uv run --locked python -m pytest -q -p no:cacheprovider
+
+      - name: Build documentation
+        run: uv run --locked mkdocs build --strict --site-dir "$RUNNER_TEMP/docs/latest"
