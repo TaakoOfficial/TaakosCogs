@@ -20,9 +20,11 @@ plugins:
 
 theme:
   name: material
+  favicon: assets/brand/taakos-cogs-mark.svg
+  font: false
   icon:
-    logo: material/robot-happy-outline
     repo: fontawesome/brands/github
+  logo: assets/brand/taakos-cogs-mark.svg
   palette:
     - media: "(prefers-color-scheme: light)"
       scheme: default
@@ -46,6 +48,8 @@ theme:
     - navigation.instant
     - navigation.instant.progress
     - navigation.sections
+    - navigation.tabs
+    - navigation.tabs.sticky
     - navigation.top
     - navigation.tracking
     - search.highlight
