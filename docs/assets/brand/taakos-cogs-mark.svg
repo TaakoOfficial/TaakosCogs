@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title desc">
+  <title id="title">Taako's Cogs</title>
+  <desc id="desc">A gold spark inside a violet cog.</desc>
+  <path fill="#8b5cf6" d="M29 2h6l2 8a24 24 0 0 1 5 2l7-4 5 5-4 7a24 24 0 0 1 2 5l8 2v7l-8 2a24 24 0 0 1-2 5l4 7-5 5-7-4a24 24 0 0 1-5 2l-2 9h-6l-2-9a24 24 0 0 1-5-2l-7 4-5-5 4-7a24 24 0 0 1-2-5l-8-2v-7l8-2a24 24 0 0 1 2-5l-4-7 5-5 7 4a24 24 0 0 1 5-2l2-8Z"/>
+  <circle cx="32" cy="31" r="16" fill="#21142f"/>
+  <path fill="#f6c85f" d="m32 15 3.3 10.7L46 29l-10.7 3.3L32 43l-3.3-10.7L18 29l10.7-3.3L32 15Z"/>
+  <circle cx="32" cy="29" r="3.5" fill="#fff8df"/>
+</svg>
