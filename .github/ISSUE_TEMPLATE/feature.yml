@@ -1,0 +1,46 @@
+name: Feature request
+description: Propose an improvement to an existing cog or the repository.
+title: "[Feature]: "
+labels: [enhancement]
+body:
+  - type: input
+    id: cog
+    attributes:
+      label: Cog or area
+      description: Name the affected cog, or enter "new cog" or "repository".
+      placeholder: yalc
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What limitation or user need should this solve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Describe commands, permissions, configuration, logging, and expected output where relevant.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Describe existing cogs, workarounds, or simpler approaches you considered.
+  - type: textarea
+    id: privacy
+    attributes:
+      label: Privacy and data impact
+      description: Note any new stored user data, external services, credentials, or privileged Discord intents.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Submission checks
+      options:
+        - label: I searched existing issues and cog documentation for this feature.
+          required: true
+        - label: This request does not include credentials or private user data.
+          required: true

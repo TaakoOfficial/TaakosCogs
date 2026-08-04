@@ -26,6 +26,6 @@ The bot needs Read Message History for discovery and Send Messages/Embed Links f
 ## Requirements
 
 - Red-DiscordBot 3.5.0 or newer.
-- Python 3.9 or newer.
+- Python 3.10 or newer.
 - `aiohttp>=3.8.0`; Red's Downloader installs it automatically from the cog metadata.
 - The bot host must be able to make outbound HTTP(S) requests to monitored URLs.

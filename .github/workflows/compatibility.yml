@@ -1,0 +1,51 @@
+name: Python Compatibility
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: compatibility-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  imports:
+    name: Import supported cogs (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11"]
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Install uv and target Python
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9
+        with:
+          version: "0.12.1"
+          python-version: ${{ matrix.python-version }}
+          enable-cache: true
+
+      - name: Create isolated compatibility environment
+        shell: bash
+        env:
+          PYTHON_VERSION: ${{ matrix.python-version }}
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/import_supported_cogs.py --requirements > "$RUNNER_TEMP/cog-requirements.txt"
+          uv venv --no-project --python "$PYTHON_VERSION" "$RUNNER_TEMP/cog-compat"
+          uv pip install \
+            --python "$RUNNER_TEMP/cog-compat/bin/python" \
+            --requirement "$RUNNER_TEMP/cog-requirements.txt"
+
+      - name: Import every supported cog
+        run: "$RUNNER_TEMP/cog-compat/bin/python" .github/scripts/import_supported_cogs.py

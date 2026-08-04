@@ -1,0 +1,184 @@
+changed-files-labels-limit: 12
+max-files-changed: 500
+
+documentation:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "**/*.md"
+          - "docs/**"
+          - "mkdocs.yml"
+
+dependencies:
+  - changed-files:
+      - any-glob-to-any-file:
+          - ".github/dependabot.yml"
+          - ".pre-commit-config.yaml"
+          - "pyproject.toml"
+          - "uv.lock"
+
+tests:
+  - changed-files:
+      - any-glob-to-any-file: "tests/**"
+
+CI:
+  - changed-files:
+      - any-glob-to-any-file:
+          - ".github/scripts/**"
+          - ".github/workflows/**"
+
+new-cog:
+  - head-branch:
+      - "^feat(ure)?[/_-].*cog"
+      - "^cog[/_-]"
+
+"cog: accessreview":
+  - changed-files:
+      - any-glob-to-any-file: "accessreview/**"
+
+"cog: applications":
+  - changed-files:
+      - any-glob-to-any-file: "applications/**"
+
+"cog: captcha":
+  - changed-files:
+      - any-glob-to-any-file: "captcha/**"
+
+"cog: cfxstatus":
+  - changed-files:
+      - any-glob-to-any-file: "cfxstatus/**"
+
+"cog: communitydigest":
+  - changed-files:
+      - any-glob-to-any-file: "communitydigest/**"
+
+"cog: communitypulse":
+  - changed-files:
+      - any-glob-to-any-file: "communitypulse/**"
+
+"cog: datasteward":
+  - changed-files:
+      - any-glob-to-any-file: "datasteward/**"
+
+"cog: deepdelve":
+  - changed-files:
+      - any-glob-to-any-file: "deepdelve/**"
+
+"cog: emojiporter":
+  - changed-files:
+      - any-glob-to-any-file: "emojiporter/**"
+
+"cog: eventcheckin":
+  - changed-files:
+      - any-glob-to-any-file: "eventcheckin/**"
+
+"cog: fable":
+  - changed-files:
+      - any-glob-to-any-file: "fable/**"
+
+"cog: fivemstatus":
+  - changed-files:
+      - any-glob-to-any-file: "fivemstatus/**"
+
+"cog: flipper":
+  - changed-files:
+      - any-glob-to-any-file: "flipper/**"
+
+"cog: forumflow":
+  - changed-files:
+      - any-glob-to-any-file: "forumflow/**"
+
+"cog: giveaway":
+  - changed-files:
+      - any-glob-to-any-file: "giveaway/**"
+
+"cog: invitetracker":
+  - changed-files:
+      - any-glob-to-any-file: "invitetracker/**"
+
+"cog: linksentinel":
+  - changed-files:
+      - any-glob-to-any-file: "linksentinel/**"
+
+"cog: messagestudio":
+  - changed-files:
+      - any-glob-to-any-file: "messagestudio/**"
+
+"cog: opsroom":
+  - changed-files:
+      - any-glob-to-any-file: "opsroom/**"
+
+"cog: paranoia":
+  - changed-files:
+      - any-glob-to-any-file: "paranoia/**"
+
+"cog: randomweather":
+  - changed-files:
+      - any-glob-to-any-file: "randomweather/**"
+
+"cog: repboard":
+  - changed-files:
+      - any-glob-to-any-file: "repboard/**"
+
+"cog: reviewhub":
+  - changed-files:
+      - any-glob-to-any-file: "reviewhub/**"
+
+"cog: rolekit":
+  - changed-files:
+      - any-glob-to-any-file: "rolekit/**"
+
+"cog: rolemanager":
+  - changed-files:
+      - any-glob-to-any-file: "rolemanager/**"
+
+"cog: rpcalander":
+  - changed-files:
+      - any-glob-to-any-file: "rpcalander/**"
+
+"cog: slashlink":
+  - changed-files:
+      - any-glob-to-any-file: "slashlink/**"
+
+"cog: spinwheel":
+  - changed-files:
+      - any-glob-to-any-file: "spinwheel/**"
+
+"cog: sponsorsync":
+  - changed-files:
+      - any-glob-to-any-file: "sponsorsync/**"
+
+"cog: staffops":
+  - changed-files:
+      - any-glob-to-any-file: "staffops/**"
+
+"cog: suggestionbox":
+  - changed-files:
+      - any-glob-to-any-file: "suggestionbox/**"
+
+"cog: tempvoice":
+  - changed-files:
+      - any-glob-to-any-file: "tempvoice/**"
+
+"cog: tickethub":
+  - changed-files:
+      - any-glob-to-any-file: "tickethub/**"
+
+"cog: toolz":
+  - changed-files:
+      - any-glob-to-any-file: "toolz/**"
+
+"cog: uppercase":
+  - changed-files:
+      - any-glob-to-any-file: "uppercase/**"
+
+"cog: welcome":
+  - changed-files:
+      - any-glob-to-any-file: "welcome/**"
+
+"cog: whmcs":
+  - changed-files:
+      - any-glob-to-any-file: "whmcs/**"
+
+"cog: yalc":
+  - changed-files:
+      - any-glob-to-any-file: "yalc/**"

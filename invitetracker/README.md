@@ -68,7 +68,7 @@ If the bot cannot read server invites, or an invite disappears before Discord re
 ## Requirements
 
 - Red-DiscordBot 3.5.0 or newer.
-- Python 3.9 or newer.
+- Python 3.10 or newer.
 - Bot permission to `Manage Server` so Discord allows reading server invites.
 - Bot permissions to `Send Messages` and `Embed Links` in the configured log channel.
 - Server Members intent is required for join and leave tracking.

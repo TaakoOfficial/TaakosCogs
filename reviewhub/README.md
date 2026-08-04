@@ -105,7 +105,7 @@ The self-hosted default daily limit is 5 reviews per server, resetting at midnig
 ## Requirements
 
 - Red-DiscordBot 3.5.0 or newer.
-- Python 3.9 or newer.
+- Python 3.10 or newer.
 - Bot permissions to `Send Messages` and `Embed Links` in review/request channels.
 - Bot permission to `Create Public Threads` if auto-threading is enabled.
 - Bot permission to `Attach Files` for CSV exports.

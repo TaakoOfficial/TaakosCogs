@@ -351,7 +351,7 @@ Thread-ticket setup:
 ## Requirements
 
 - Red-DiscordBot 3.5.0 or newer.
-- Python 3.9 or newer.
+- Python 3.10 or newer.
 - `chat-exporter>=3.1.0` for DiscordChatExporterPy-based HTML transcripts; Red's Downloader installs it automatically from the cog metadata.
 - Bot permission to `Manage Channels` for ticket channel creation and permission updates.
 - Bot permission to `Manage Roles` when a profile ticket role is configured.

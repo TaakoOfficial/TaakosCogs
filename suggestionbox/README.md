@@ -113,7 +113,7 @@ Dashboard users with Manage Server, Red admin, or bot owner access can:
 ## Requirements
 
 - Red-DiscordBot 3.5.0 or newer.
-- Python 3.9 or newer.
+- Python 3.10 or newer.
 - Bot permissions to `Send Messages`, `Embed Links`, and `Read Message History` in the suggestion channel.
 - Bot permission to `Create Public Threads` in the suggestion channel when per-suggestion threads are enabled.
 - Bot permission to `Attach Files` for CSV exports.

@@ -366,7 +366,7 @@ class WHMCS(DashboardIntegration, commands.Cog):
             Configured API client or None if not configured
         """
         config = await self.config.guild(guild).api_config()
-        if not config.get("url") or not (config.get("identifier") or config.get("username")):
+        if not config.get("url") or not config.get("identifier") or not config.get("secret"):
             return None
         client = WHMCSAPIClient(config["url"])
         if config.get("identifier") and config.get("secret"):
