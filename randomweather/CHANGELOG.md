@@ -1,5 +1,9 @@
 # 🌦️ RandomWeather Changelog
 
+## [v2.4.1] - 2026-08-04
+
+- Removed the legacy runtime `pip` installer; Downloader now owns the declared `pytz` dependency.
+
 ## [v2.4.0] - 2026-07-16
 
 - Added standalone Red-Web-Dashboard integration for viewing visible commands and current server configuration.

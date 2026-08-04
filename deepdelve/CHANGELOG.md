@@ -2,6 +2,10 @@
 
 All notable changes to `deepdelve` are documented here.
 
+## 5.0.3
+
+- Stop the persistent world-boss view through discord.py's supported view lifecycle during cog unload.
+
 ## 5.0.2
 
 - Replaced the talent selector's non-emoji diamond glyph with a Discord-valid

@@ -1,14 +1,12 @@
 from __future__ import annotations
 
 import asyncio
-import importlib.util
 import json
-import subprocess
-import sys
 from contextlib import suppress
 from pathlib import Path
 
 import discord
+import graphviz
 from redbot.core import Config, commands
 
 from .dashboard_integration import DashboardIntegration
@@ -28,23 +26,6 @@ RECOVERABLE_EXCEPTIONS = (
     TypeError,
     AttributeError,
 )
-
-
-async def ensure_google_apis():
-    """
-    Ensure google-api-python-client and google-auth are installed.
-    """
-    required = [
-        ("googleapiclient", "google-api-python-client"),
-        ("google.oauth2", "google-auth"),
-    ]
-    for module, package in required:
-        if importlib.util.find_spec(module) is None:
-            await asyncio.to_thread(
-                subprocess.run,
-                [sys.executable, "-m", "pip", "install", package],
-                check=False,
-            )
 
 
 class Fable(DashboardIntegration, commands.Cog):
@@ -84,9 +65,6 @@ class Fable(DashboardIntegration, commands.Cog):
             "mail_expiry_days": 30,
         }
         self.config.register_guild(**default_guild)
-
-    async def cog_load(self):
-        await ensure_google_apis()
 
     @commands.hybrid_group(
         name="fable",
@@ -1475,23 +1453,6 @@ class Fable(DashboardIntegration, commands.Cog):
         character: Optional[str]
             Focus on a specific character's relationships
         """
-        try:
-            import graphviz
-        except ImportError:
-            await ctx.send("📦 Installing required package (graphviz)...")
-            try:
-                import subprocess
-
-                await asyncio.to_thread(
-                    subprocess.run,
-                    [sys.executable, "-m", "pip", "install", "graphviz"],
-                    check=False,
-                )
-                import graphviz
-            except (ImportError, OSError, RuntimeError, subprocess.SubprocessError) as e:
-                await ctx.send(f"❌ Failed to install required package: {e}")
-                return
-
         from .visualization_utils import create_relationship_graph
 
         guild = ctx.guild
@@ -1531,23 +1492,6 @@ class Fable(DashboardIntegration, commands.Cog):
     @commands.cooldown(1, 30, commands.BucketType.guild)
     async def visualize_locations(self, ctx: commands.Context):
         """Generate a visual map of connected locations."""
-        try:
-            import graphviz
-        except ImportError:
-            await ctx.send("📦 Installing required package (graphviz)...")
-            try:
-                import subprocess
-
-                await asyncio.to_thread(
-                    subprocess.run,
-                    [sys.executable, "-m", "pip", "install", "graphviz"],
-                    check=False,
-                )
-                import graphviz
-            except (ImportError, OSError, RuntimeError, subprocess.SubprocessError) as e:
-                await ctx.send(f"❌ Failed to install required package: {e}")
-                return
-
         from .visualization_utils import create_location_map
 
         guild = ctx.guild

@@ -1,5 +1,10 @@
 # Changelog
 
+## [2.1.1] - 2026-08-04
+
+- Declared the Google API and graph-visualization clients as Downloader-managed requirements so clean installations load successfully.
+- Removed runtime package installation from cog import and load paths.
+
 ## [2.1.0] - 2026-07-16
 
 - Added standalone Red-Web-Dashboard integration for viewing visible commands and current server configuration.

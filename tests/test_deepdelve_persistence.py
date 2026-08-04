@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 from datetime import datetime, timezone
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 from discord.ui.view import ViewStore
 
@@ -640,6 +640,22 @@ def test_cog_load_purges_legacy_message_bound_player_views() -> None:
     )
     DeepDelve._purge_live_player_views(SimpleNamespace(bot=bot))
     assert removed == [player_view]
+
+
+def test_cog_unload_stops_the_persistent_world_boss_view() -> None:
+    world_boss_view = SimpleNamespace(stop=Mock())
+    bot = SimpleNamespace(remove_dynamic_items=Mock())
+    cog = object.__new__(DeepDelve)
+    cog.bot = bot
+    cog._locks = {1: asyncio.Lock()}
+    cog._guild_locks = {1: asyncio.Lock()}
+    cog._world_boss_view = world_boss_view
+
+    cog.cog_unload()
+
+    world_boss_view.stop.assert_called_once_with()
+    assert cog._world_boss_view is None
+    bot.remove_dynamic_items.assert_called_once_with(DeepDelveDynamicButton, DeepDelveDynamicSelect)
 
 
 def test_raw_config_merge_accepts_items_under_none_equipment_defaults() -> None:

@@ -96,6 +96,23 @@ def test_locked_environment_covers_every_cog_requirement() -> None:
     assert cog_requirements <= root_requirements
 
 
+def test_fable_declares_its_import_time_google_dependencies() -> None:
+    data = json.loads((ROOT / "fable" / "info.json").read_text(encoding="utf-8"))
+    requirements = {_requirement_name(requirement) for requirement in data["requirements"]}
+    assert {"google-api-python-client", "google-auth", "graphviz"} <= requirements
+
+
+def test_cogs_do_not_install_dependencies_at_runtime() -> None:
+    runtime_install_markers = ('"-m", "pip", "install"', "'-m', 'pip', 'install'")
+    offenders = [
+        path.relative_to(ROOT)
+        for info_path in _cog_info_files()
+        for path in info_path.parent.glob("*.py")
+        if any(marker in path.read_text(encoding="utf-8") for marker in runtime_install_markers)
+    ]
+    assert not offenders
+
+
 def test_root_command_names_do_not_overlap_between_cogs() -> None:
     command_decorators = {
         "commands.command",

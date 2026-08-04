@@ -2050,7 +2050,7 @@ class DeepDelve(DashboardIntegration, commands.Cog):
         self._guild_locks.clear()
         self._purge_live_player_views()
         if self._world_boss_view:
-            self.bot.remove_view(self._world_boss_view)
+            self._world_boss_view.stop()
             self._world_boss_view = None
         self.bot.remove_dynamic_items(DeepDelveDynamicButton, DeepDelveDynamicSelect)
 
