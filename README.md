@@ -316,7 +316,7 @@ To enable the local commit hooks:
 uv run --locked pre-commit install
 ```
 
-GitHub runs the lint and test workflow for pushes and pull requests. The **Live Cog Load** workflow is intentionally manual and main-branch-only because it connects a real Discord bot, installs every cog through Red's Downloader, and loads and unloads each cog. It uses the `DISCORD_BOT_TOKEN` repository secret; a dedicated CI bot token is strongly recommended so the test session cannot interrupt a production bot using the same token.
+GitHub runs the lint and test workflow for pushes and pull requests. **Live Cog Load** automatically installs, loads, and unloads only the cogs changed by a push to `main` or by a pull request from a branch in this repository. Fork and Dependabot pull requests never receive `DISCORD_BOT_TOKEN` and therefore skip the live job; they still receive the full tokenless CI suite. Changes to the lockfile or live-test tooling conservatively exercise all cogs, as does a manual run on `main`. A dedicated CI bot token is strongly recommended so test sessions cannot interrupt a production bot using the same token.
 
 ## License
 

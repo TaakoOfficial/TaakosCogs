@@ -164,9 +164,12 @@ def test_workflow_actions_are_commit_pinned() -> None:
         assert all(re.fullmatch(r"[0-9a-f]{40}", revision) for revision in revisions), path
 
 
-def test_live_bot_secret_is_manual_and_main_branch_only() -> None:
+def test_live_bot_secret_is_gated_to_trusted_repository_code() -> None:
     workflow = (ROOT / ".github" / "workflows" / "live-cog-load.yml").read_text(encoding="utf-8")
-    assert "pull_request" not in workflow
-    assert "github.event_name == 'workflow_dispatch'" in workflow
-    assert "github.ref == 'refs/heads/main'" in workflow
+    assert "pull_request:" in workflow
+    assert "pull_request_target" not in workflow
+    assert "github.event.pull_request.head.repo.full_name == github.repository" in workflow
+    assert "github.actor != 'dependabot[bot]'" in workflow
+    assert "github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main'" in workflow
     assert "secrets.DISCORD_BOT_TOKEN" in workflow
+    assert "COG_PATHS: ${{ needs.changes.outputs.cogs }}" in workflow

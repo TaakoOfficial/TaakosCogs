@@ -1,6 +1,9 @@
 name: Live Cog Load
 
 on:
+  push:
+    branches: [main]
+  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -8,12 +11,57 @@ permissions:
 
 concurrency:
   group: live-cog-load
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
+  changes:
+    name: Select changed cogs
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      cogs: ${{ steps.select.outputs.cogs }}
+      count: ${{ steps.select.outputs.count }}
+    steps:
+      - name: Check out repository history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Select affected cogs
+        id: select
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PUSH_BASE: ${{ github.event.before }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          CURRENT_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            python3 .github/scripts/changed_cogs.py --all --github-output "$GITHUB_OUTPUT"
+          elif [[ "$EVENT_NAME" == "pull_request" ]]; then
+            python3 .github/scripts/changed_cogs.py \
+              --base "$PR_BASE" \
+              --head "$PR_HEAD" \
+              --github-output "$GITHUB_OUTPUT"
+          else
+            python3 .github/scripts/changed_cogs.py \
+              --base "$PUSH_BASE" \
+              --head "$CURRENT_SHA" \
+              --github-output "$GITHUB_OUTPUT"
+          fi
+
   downloader:
-    name: Install, load, and unload every cog
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    name: Install, load, and unload changed cogs
+    needs: changes
+    if: >-
+      needs.changes.outputs.count != '0' &&
+      (github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main') &&
+      (github.event_name != 'pull_request' ||
+        (github.event.pull_request.head.repo.full_name == github.repository &&
+         github.actor != 'dependabot[bot]'))
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
@@ -47,6 +95,7 @@ jobs:
         shell: bash
         env:
           DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+          COG_PATHS: ${{ needs.changes.outputs.cogs }}
           RPC_PORT: "6133"
           RED_INSTANCE_NAME: temporary_red
           REPO_NAME: taakoscogs_ci
@@ -57,6 +106,8 @@ jobs:
             echo "DISCORD_BOT_TOKEN is not configured."
             exit 1
           fi
+
+          echo "Testing changed cogs: $COG_PATHS"
 
           bot_log="$RUNNER_TEMP/redbot.log"
           uv run --locked python -m redbot \
