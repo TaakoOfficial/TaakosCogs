@@ -126,7 +126,7 @@ Configuration changes update the in-memory command tree and schedule one debounc
 
 Red Config stores schema version 2 globally, hubs/settings/sync state per guild, and optional last-command records per member. Migrations preserve unknown hub data, add new permission bitfields and unavailable behavior, and never delete assignments solely because discovery failed. Repeat persistence is disabled by default; in-memory history is bounded and only serializable, non-sensitive arguments may be persisted.
 
-For internals and extension boundaries, see [ARCHITECTURE.md](ARCHITECTURE.md).
+For internals and extension boundaries, see [ARCHITECTURE.md](./ARCHITECTURE.md).
 
 ## Testing
 
