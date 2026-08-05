@@ -16,19 +16,46 @@ From Red's Downloader:
 
 The bot needs `applications.commands`, Send Messages, Embed Links, and Use Application Commands in the target guild. Administrators need Manage Server for normal management; registry refresh and explicit network sync are owner-only.
 
-## Quick setup
+## Your first hub: Toolz lookups
+
+Start small. Categories, custom titles, permission rules, and confirmation settings can wait until the first hub works.
+
+This example uses the real `roleinfo` and `memberinfo` commands from the repository's [Toolz cog](../toolz/README.md). Load Toolz and CommandHub, then run four management commands:
 
 ```text
-[p]commandhub create games
-[p]commandhub category create games Trivia
-[p]commandhub add games "trivia start"
-[p]commandhub add games "trivia leaderboard"
-[p]commandhub category move games Trivia "trivia start"
-[p]commandhub category move games Trivia "trivia leaderboard"
+[p]commandhub create utility
+[p]commandhub add utility "roleinfo"
+[p]commandhub add utility "memberinfo"
 [p]commandhub sync
 ```
 
-Users can then run `/games`. Hub responses are ephemeral by default. Use `[p]commandhub set games ephemeral false` for a shared public browser; public browsers accept component interactions from other users, while ephemeral sessions remain bound to the opener.
+That's enough to create `/utility`.
+
+When a member runs it, CommandHub opens a private menu containing the two Toolz commands. Choosing `roleinfo` opens a text field for the role; the member can enter a role mention, its Discord ID, or its exact name. Choosing `memberinfo` opens an optional member field, which can be left blank to inspect yourself. Toolz's original server, channel, bot-permission, and command checks still decide whether the command runs.
+
+Want a nicer name and description? These settings are optional:
+
+```text
+[p]commandhub set utility title Server Utilities
+[p]commandhub set utility description Look up members and inspect server roles.
+```
+
+### Add categories after the hub works
+
+Suppose the utility hub grows and you want a separate section for staff role checks. Toolz also provides `roleaudit` and `rolecompare`:
+
+```text
+[p]commandhub category create utility "Role Checks"
+[p]commandhub add utility "roleaudit"
+[p]commandhub add utility "rolecompare"
+[p]commandhub category move utility "Role Checks" "roleaudit"
+[p]commandhub category move utility "Role Checks" "rolecompare"
+[p]commandhub commands utility
+```
+
+Open `/utility` again and the new category appears. You don't need another Discord command-tree sync when adding, removing, or recategorizing commands because the hub reads those assignments when it opens. Run `[p]commandhub sync` after creating, renaming, enabling, disabling, or changing the description of a hub.
+
+Hub responses are private by default. Use `[p]commandhub set utility ephemeral false` if you want one shared public browser; private sessions only accept clicks from the member who opened them.
 
 ## Administrator commands
 
