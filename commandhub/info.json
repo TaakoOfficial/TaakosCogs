@@ -1,0 +1,17 @@
+{
+    "$schema": "https://raw.githubusercontent.com/Cog-Creators/Red-DiscordBot/V3/develop/schema/red_cog.schema.json",
+    "name": "commandhub",
+    "author": ["Taako"],
+    "version": "1.0.0",
+    "description": "Configurable guild slash-command hubs for browsing and safely routing loaded Red commands.",
+    "install_msg": "CommandHub loaded. Start with `[p]commandhub create games`, assign commands, then run `[p]commandhub sync`.",
+    "short": "Group commands into interactive slash-command hubs.",
+    "tags": ["commands", "slash", "utility", "dashboard", "administration"],
+    "requirements": [],
+    "min_bot_version": "3.5.0",
+    "min_python_version": [3, 11, 0],
+    "hidden": false,
+    "disabled": false,
+    "type": "COG",
+    "end_user_data_statement": "This cog stores per-guild hub configuration and, when repeat persistence is enabled, the most recent CommandHub invocation for each member."
+}

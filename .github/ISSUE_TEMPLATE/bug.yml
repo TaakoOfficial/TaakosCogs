@@ -13,6 +13,7 @@ body:
         - applications
         - captcha
         - cfxstatus
+        - commandhub
         - communitydigest
         - communitypulse
         - datasteward

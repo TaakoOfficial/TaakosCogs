@@ -55,6 +55,10 @@ new-cog:
   - changed-files:
       - any-glob-to-any-file: "communitypulse/**"
 
+"cog: commandhub":
+  - changed-files:
+      - any-glob-to-any-file: "commandhub/**"
+
 "cog: datasteward":
   - changed-files:
       - any-glob-to-any-file: "datasteward/**"
