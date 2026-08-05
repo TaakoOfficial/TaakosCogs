@@ -97,10 +97,14 @@ await cog.update_assignment_service(guild_id, hub, "trivia start", {"confirmatio
 await cog.reorder_commands_service(guild_id, hub, "Trivia", ["prefix:trivia start"])
 await cog.reorder_categories_service(guild_id, hub, ["Trivia", "General"])
 await cog.update_permissions_service(
-    guild_id, hub,
-    allowed_roles=[role_id], blocked_roles=[],
-    allowed_channels=[], blocked_channels=[],
-    required_user_permissions=0, required_bot_permissions=0,
+    guild_id,
+    hub,
+    allowed_roles=[role_id],
+    blocked_roles=[],
+    allowed_channels=[],
+    blocked_channels=[],
+    required_user_permissions=0,
+    required_bot_permissions=0,
 )
 await cog.sync_guild(guild_id)
 state = await cog.sync_status_service(guild_id)

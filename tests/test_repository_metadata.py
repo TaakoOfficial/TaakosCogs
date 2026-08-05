@@ -157,7 +157,7 @@ def test_labeler_is_privileged_but_never_executes_pull_request_code() -> None:
 
     config = yaml.safe_load((ROOT / ".github" / "labeler.yml").read_text(encoding="utf-8"))
     labels = set(config) - {"changed-files-labels-limit", "max-files-changed"}
-    expected_cog_labels = {f"cog: {path.parent.name}" for path in _cog_info_files()}
+    expected_cog_labels = {f"cog: {path.parent.name.casefold()}" for path in _cog_info_files()}
     assert expected_cog_labels <= labels
     assert {"CI", "dependencies", "documentation", "new-cog", "tests"} <= labels
 

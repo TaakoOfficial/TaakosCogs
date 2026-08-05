@@ -183,6 +183,6 @@ new-cog:
   - changed-files:
       - any-glob-to-any-file: "whmcs/**"
 
-"cog: YALC":
+"cog: yalc":
   - changed-files:
-      - any-glob-to-any-file: "YALC/**"
+      - any-glob-to-any-file: "yalc/**"

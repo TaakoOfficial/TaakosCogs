@@ -216,7 +216,7 @@ class InvocationEngine:
             await error_handler(interaction, exc)
             await self.bot.tree.on_error(interaction, exc)
             return False
-        except Exception as exc:  # noqa: BLE001 - callback failures must enter Discord's application-command handlers.
+        except Exception as exc:
             interaction.command_failed = True
             error_id = secrets.token_hex(3)
             wrapped = app_commands.CommandInvokeError(target, exc)
