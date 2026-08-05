@@ -8,13 +8,13 @@ hide:
   <div class="taako-hero__copy">
     <p class="taako-eyebrow">Red-DiscordBot extensions · built for real servers</p>
     <h1 id="hero-title">Give your bot a <span>larger spellbook.</span></h1>
-    <p class="taako-hero__lede">Thirty-eight focused cogs for moderation, community, support, privacy, roleplay, and the wonderfully specific problems your Discord server invents next.</p>
+    <p class="taako-hero__lede">Thirty-nine focused cogs for moderation, community, support, privacy, roleplay, and the wonderfully specific problems your Discord server invents next.</p>
     <div class="taako-actions">
       <a class="taako-button taako-button--primary" href="getting-started/">Start installing <span aria-hidden="true">→</span></a>
       <a class="taako-button taako-button--quiet" href="cogs/accessreview/">Explore all cogs</a>
     </div>
     <dl class="taako-stats" aria-label="Repository highlights">
-      <div><dt>38</dt><dd>maintained cogs</dd></div>
+      <div><dt>39</dt><dd>maintained cogs</dd></div>
       <div><dt>3.10+</dt><dd>Python support</dd></div>
       <div><dt>Live</dt><dd>load verified</dd></div>
     </dl>
@@ -57,7 +57,7 @@ hide:
       <span class="taako-cog-card__icon" aria-hidden="true">◎</span>
       <strong>Moderation &amp; operations</strong>
       <span>Accurate audit trails, role workflows, access reviews, and the tools staff reach for under pressure.</span>
-      <small>YALC · RoleManager · Toolz · OpsRoom · AccessReview</small>
+      <small>YALC · RoleManager · Toolz · OpsRoom · AccessReview · CommandHub</small>
     </a>
     <a class="taako-cog-card taako-cog-card--support" href="cogs/tickethub/">
       <span class="taako-cog-card__number">02 / RESPOND</span>

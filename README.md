@@ -61,6 +61,7 @@ Every configurable cog includes its own purpose-built Red-Web-Dashboard page wit
 | [reviewhub](./reviewhub)               | Reviews and vouches      | reviewhub-style reviews, vouches, review requests, stats, leaderboards, reports, useful votes, templates, and CSV exports.                  |
 | [tickethub](./tickethub)               | Support tickets          | Ticket panels, private channels, claim/close controls, AAA3A Tickets profile imports, HTML transcripts, and owner transcript DMs.           |
 | [slashlink](./slashlink)               | Prefix/slash compatibility | Red-managed application-command gateways for loaded prefix-only cogs, with permission-aware autocomplete and normal `[p]slash` controls. |
+| [commandhub](./commandhub)             | Command organization     | Guild slash-command hubs with categories, pagination, search, modal arguments, confirmation gates, and safe prefix/native routing.         |
 | [tempvoice](./tempvoice)               | Voice channel automation | Join-to-create temporary voice channels, embedded owner controls, rename/lock/limit/transfer buttons, claiming, cleanup, and dashboard setup. |
 | [giveaway](./giveaway)                 | Community events         | Timed giveaways, reaction entry, rerolls, cancellation, attached giveaways, prefix/slash commands, and dashboard controls.                  |
 | [spinwheel](./spinwheel)               | Decisions and party games | Animated secure-random wheels, saved presets, themed/custom colors, optional winner removal, slash commands, and a visual dashboard.       |
@@ -84,7 +85,7 @@ Every configurable cog includes its own purpose-built Red-Web-Dashboard page wit
 Install these if you want better moderation visibility, invite attribution, feedback workflows, community reputation, support tickets, and role operations:
 
 ```text
-[p]cog install taakoscogs forumflow staffops opsroom linksentinel communitydigest communitypulse accessreview datasteward eventcheckin toolz rolemanager yalc applications welcome captcha invitetracker suggestionbox repboard reviewhub tickethub tempvoice giveaway spinwheel
+[p]cog install taakoscogs forumflow staffops opsroom linksentinel communitydigest communitypulse accessreview datasteward eventcheckin toolz rolemanager yalc applications welcome captcha invitetracker suggestionbox repboard reviewhub tickethub commandhub tempvoice giveaway spinwheel
 ```
 
 - `toolz` gives staff role/user lookup, audit, export, and role-triggered message tools.
@@ -107,6 +108,7 @@ Install these if you want better moderation visibility, invite attribution, feed
 - `repboard` gives members a lightweight kudos and reputation leaderboard system.
 - `reviewhub` collects structured reviews and vouches with request buttons, reports, useful votes, stats, and leaderboards.
 - `tickethub` handles support tickets with panels, private channels, staff controls, imports, and transcripts.
+- `commandhub` groups loaded commands behind configurable guild slash commands with a searchable browser and normal permission checks.
 - `tempvoice` gives members self-managed temporary voice channels with embedded controls.
 - `giveaway` supports events and community rewards.
 - `spinwheel` turns choices, drawings, and party-game prompts into colorful animated wheels.
@@ -236,7 +238,7 @@ Each cog includes its own data statement in `info.json`. In short:
 - `rolemanager` stores role configuration, role-policy and role-change-rule settings, role costs, reaction/button/select message/channel IDs, emoji keys, temporary-role expiry timestamps, and Discord user IDs for sticky and temporary role assignment.
 - `captcha` stores panel message/channel IDs, role IDs, and button labels; verification challenges are transient in memory.
 - `yalc` stores logging settings, routes, filters, ignore-rule user IDs, and limited voice history. Its optional retained event journal stores event metadata and only stores message content when explicitly enabled.
-- `applications`, `welcome`, `invitetracker`, `suggestionbox`, `repboard`, `reviewhub`, `tickethub`, `tempvoice`, `giveaway`, `spinwheel`, `fivemstatus`, `fable`, `deepdelve`, `paranoia`, `rpcalander`, and `whmcs` store the settings or records needed for their features.
+- `applications`, `welcome`, `invitetracker`, `suggestionbox`, `repboard`, `reviewhub`, `tickethub`, `commandhub`, `tempvoice`, `giveaway`, `spinwheel`, `fivemstatus`, `fable`, `deepdelve`, `paranoia`, `rpcalander`, and `whmcs` store the settings or records needed for their features.
 - `forumflow`, `staffops`, `opsroom`, `sponsorsync`, `communitypulse`, `accessreview`, `datasteward`, and `eventcheckin` store the workflow records and Discord IDs described in their individual `info.json` files and support Red data-deletion requests.
 - `linksentinel` stores URLs and network check results but no Discord end-user data. `communitydigest` stores scheduling metadata and aggregates but does not retain message content or author IDs.
 - `datasteward` starts disabled and protects pinned messages. Enforcement requires explicit command confirmations; its dashboard can only choose disabled or dry-run mode.
@@ -247,6 +249,7 @@ Each cog includes its own data statement in `info.json`. In short:
 - `repboard` stores reputation settings, giver/receiver/moderator IDs, reasons, message/channel IDs, timestamps, active/removed state, cooldown metadata, daily limit metadata, and aggregate reputation statistics.
 - `reviewhub` stores review settings, request records, review/vouch records, reviewer/reviewed/reporter/useful-voter/moderator IDs, review text, ratings, message/channel IDs, timestamps, and deletion metadata.
 - `tickethub` stores ticket profiles, panel IDs, channel/category/role IDs, ticket records, owner/staff/participant IDs, reasons, timestamps, and lifecycle events. Transcripts are generated on demand from channel history.
+- `commandhub` stores guild hub configuration and can optionally store each member's last routed command when repeat persistence is enabled.
 - `tempvoice` stores temporary voice settings, active temporary channel IDs, owner IDs, permitted user IDs, control panel message/channel IDs, creation timestamps, lock state, and user limits.
 - `cfxstatus` stores Cfx.re status panel settings, including enabled state, channel IDs, message IDs, polling interval, and last poll timestamp.
 - `rpcalander` also uses a local `post_tracker.json` file to prevent duplicate daily posts.
@@ -280,6 +283,7 @@ Start with each cog's README:
 - [reviewhub README](./reviewhub/README.md)
 - [tickethub README](./tickethub/README.md)
 - [slashlink README](./slashlink/README.md)
+- [commandhub README](./commandhub/README.md)
 - [giveaway README](./giveaway/README.md)
 - [spinwheel README](./spinwheel/README.md)
 - [uppercase README](./uppercase/README.md)
