@@ -16,6 +16,26 @@ From Red's Downloader:
 
 The bot needs `applications.commands`, Send Messages, Embed Links, and Use Application Commands in the target guild. Administrators need Manage Server for normal management; registry refresh and explicit network sync are owner-only.
 
+## Let CommandHub make the first draft
+
+If you already know which loaded cogs belong together, `bootstrap` is the quickest starting point. This example makes one `/utility` hub and gives Toolz and RoleKit their own categories:
+
+```text
+[p]commandhub bootstrap utility Toolz RoleKit
+```
+
+CommandHub refreshes its command registry and sends a preview showing every supported command it found. It reports unsupported commands separately. Nothing is saved until the administrator who requested the preview clicks **Apply plan**. Applying the plan adds missing assignments to an existing `/utility` hub or creates it and schedules a guild command sync.
+
+If you are not sure how to divide the loaded cogs, ask for a full suggestion:
+
+```text
+[p]commandhub suggest
+```
+
+The suggestion reads each loaded cog's runtime name and description, plus its local `info.json` name, description, and tags when that file is available. It combines that with command names, descriptions, and required permissions to draft `/admin`, `/community`, `/fun`, `/music`, `/utility`, and `/other` hubs. Permission-gated commands lean toward `/admin`; uncertain matches go to `/other` for review.
+
+The rules are local and repeatable—there is no network classifier or AI call. Treat the result as a first draft: check `/other`, move anything that landed in the wrong place, and review confirmation settings before members use the hubs. Existing assignments in the target hub are not duplicated, common destructive command names start with confirmation enabled, and commands CommandHub cannot represent are skipped. If a suggested slash name is already taken, CommandHub previews a `-hub` name when one is available.
+
 ## Your first hub: Toolz lookups
 
 Start small. Categories, custom titles, permission rules, and confirmation settings can wait until the first hub works.
@@ -59,6 +79,8 @@ Hub responses are private by default. Use `[p]commandhub set utility ephemeral f
 
 ## Administrator commands
 
+- `[p]commandhub bootstrap <hub> <cog names...>` previews one hub with a category for each selected loaded cog.
+- `[p]commandhub suggest` previews a multi-hub layout derived from all loaded cog and command metadata.
 - `[p]commandhub create <name>` validates and creates a hub.
 - `[p]commandhub delete <name>` removes it.
 - `[p]commandhub rename <old> <new>` renames its guild slash command.

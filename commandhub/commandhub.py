@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import shlex
 from collections import OrderedDict
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
@@ -18,9 +19,16 @@ from .integrations import SlashLinkAdapter
 from .invocation import InvocationEngine
 from .models import CommandAssignment, CommandSource, Hub, HubCategory, HubCommand, RepeatRecord
 from .registry import CommandRegistry
+from .suggestions import (
+    SuggestionPlan,
+    build_bootstrap_plan,
+    build_suggestion_plan,
+    read_loaded_cog_metadata,
+)
 from .utils import Debouncer, ValidationError, is_potentially_destructive, validate_category_name, validate_hub_name
 from .views import HubView
 from .views.confirmation_view import ConfirmationView
+from .views.plan_confirmation import PlanConfirmationView
 
 if TYPE_CHECKING:
     from redbot.core.bot import Red
@@ -153,6 +161,150 @@ class CommandHub(DashboardIntegration, commands.Cog):
 
     async def discoverable_commands_service(self) -> list[HubCommand]:
         return list(self.registry.commands.values())
+
+    async def build_bootstrap_plan_service(
+        self,
+        guild_id: int,
+        hub_name: str,
+        cog_names: list[str],
+    ) -> SuggestionPlan:
+        if not cog_names:
+            raise ValidationError("Provide at least one loaded cog name.")
+        await self.registry.refresh()
+        try:
+            plan = build_bootstrap_plan(list(self.registry.commands.values()), hub_name, cog_names)
+        except ValueError as exc:
+            raise ValidationError(str(exc)) from exc
+        return await self._resolve_plan_name_conflicts(guild_id, plan)
+
+    async def build_suggestion_plan_service(self, guild_id: int) -> SuggestionPlan:
+        await self.registry.refresh()
+        metadata = await read_loaded_cog_metadata(list(self.bot.cogs.values()))
+        plan = build_suggestion_plan(list(self.registry.commands.values()), metadata)
+        return await self._resolve_plan_name_conflicts(guild_id, plan)
+
+    async def _resolve_plan_name_conflicts(self, guild_id: int, plan: SuggestionPlan) -> SuggestionPlan:
+        renamed: dict[str, Any] = {}
+        for original_name, planned in plan.hubs.items():
+            name = original_name
+            existing = await self.store.get_hub(guild_id, name)
+            if existing is None and self._tree_name_conflict(guild_id, name):
+                fallback = f"{name}-hub"
+                if (
+                    len(fallback) > 32
+                    or await self.store.get_hub(guild_id, fallback) is not None
+                    or self._tree_name_conflict(guild_id, fallback)
+                ):
+                    raise ValidationError(
+                        f"Could not suggest `/{name}` because that name and `/{fallback}` are already registered.",
+                    )
+                name = fallback
+                planned.name = fallback
+            renamed[name] = planned
+        plan.hubs = renamed
+        return plan
+
+    async def apply_suggestion_plan_service(self, guild_id: int, plan: SuggestionPlan) -> dict[str, int]:
+        if not plan.hubs or plan.command_count == 0:
+            raise ValidationError("The plan contains no supported commands.")
+        for name in plan.hubs:
+            validate_hub_name(name)
+            if await self.store.get_hub(guild_id, name) is None and self._tree_name_conflict(guild_id, name):
+                raise ValidationError(f"`/{name}` now conflicts with another application command. Generate a new preview.")
+        for planned in plan.hubs.values():
+            for category_name in planned.categories:
+                validate_category_name(category_name)
+
+        commands_added = 0
+        duplicates = 0
+        hubs_changed = 0
+        new_hub_created = False
+        for name, planned in plan.hubs.items():
+            hub = await self.store.get_hub(guild_id, name)
+            created = hub is None
+            if hub is None:
+                hub = Hub.create(name)
+                hub.title = planned.title
+                hub.description = planned.description[:100]
+                hub.categories = {}
+            changed = False
+            for category_name, planned_commands in planned.categories.items():
+                category = next(
+                    (item for item in hub.categories.values() if item.name.casefold() == category_name.casefold()),
+                    None,
+                )
+                if category is None:
+                    category = HubCategory(category_name, position=len(hub.categories))
+                    hub.categories[category_name] = category
+                    changed = True
+                for planned_command in planned_commands:
+                    command = self.registry.get(
+                        planned_command.command.source,
+                        planned_command.command.qualified_name,
+                    )
+                    if command is None or command.unsupported_reason or not command.enabled:
+                        continue
+                    if hub.find_assignment(command.qualified_name, command.source):
+                        duplicates += 1
+                        continue
+                    category.commands.append(
+                        CommandAssignment(
+                            command.qualified_name,
+                            command.source,
+                            position=len(category.commands),
+                            confirmation_required=planned_command.confirmation_required,
+                        ),
+                    )
+                    commands_added += 1
+                    changed = True
+            if changed:
+                await self.store.save_hub(guild_id, hub)
+                hubs_changed += 1
+                new_hub_created = new_hub_created or created
+        if new_hub_created:
+            await self._reconcile_tree(guild_id)
+            await self.schedule_sync(guild_id)
+        return {"commands_added": commands_added, "duplicates": duplicates, "hubs_changed": hubs_changed}
+
+    async def can_manage_interaction(self, interaction: discord.Interaction) -> bool:
+        if interaction.guild is None or not isinstance(interaction.user, discord.Member):
+            return False
+        return bool(
+            await self.bot.is_owner(interaction.user)
+            or interaction.user.guild_permissions.manage_guild
+            or await self.bot.is_admin(interaction.user)
+        )
+
+    @staticmethod
+    def suggestion_plan_embed(plan: SuggestionPlan) -> discord.Embed:
+        title = "Cog bootstrap preview" if plan.kind == "bootstrap" else "Suggested CommandHub layout"
+        embed = discord.Embed(
+            title=title,
+            description=(
+                f"{plan.command_count} supported command(s) across {len(plan.hubs)} hub(s). "
+                "Nothing has been saved yet. Review the layout, then use the buttons below."
+            ),
+            colour=discord.Colour.blurple(),
+        )
+        for hub in plan.hubs.values():
+            lines = []
+            for category, commands_ in hub.categories.items():
+                names = ", ".join(item.command.qualified_name for item in commands_[:4])
+                if len(commands_) > 4:
+                    names += f", +{len(commands_) - 4} more"
+                lines.append(f"**{category}** ({len(commands_)}): {names}")
+            value = "\n".join(lines)
+            embed.add_field(
+                name=f"/{hub.name} · {hub.command_count} commands",
+                value=value[:700] or "No commands",
+                inline=False,
+            )
+        if plan.skipped:
+            sample = "\n".join(f"• {reason}" for reason in plan.skipped[:5])
+            if len(plan.skipped) > 5:
+                sample += f"\n• +{len(plan.skipped) - 5} more"
+            embed.add_field(name=f"Skipped ({len(plan.skipped)})", value=sample[:600], inline=False)
+        return embed
 
     async def assign_command_service(
         self, guild_id: int, hub_name: str, reference: str, category: str = "General"
@@ -500,6 +652,41 @@ class CommandHub(DashboardIntegration, commands.Cog):
             await ctx.send(str(exc))
             return
         await ctx.send(f"Created `/{hub.name}`. A debounced guild sync is pending.")
+
+    @commandhub_group.command(name="bootstrap")
+    async def commandhub_bootstrap(self, ctx: commands.GuildContext, hub_name: str, *, cogs: str) -> None:
+        """Preview one hub organized into categories by loaded cog."""
+        try:
+            cog_names = [part for token in shlex.split(cogs) for part in token.split(",") if part]
+            plan = await self.build_bootstrap_plan_service(ctx.guild.id, hub_name, cog_names)
+        except (ValueError, ValidationError) as exc:
+            await ctx.send(str(exc))
+            return
+        if plan.command_count == 0:
+            await ctx.send("Those cogs have no supported commands to add. Run `[p]commandhub unsupported` for details.")
+            return
+        view = PlanConfirmationView(self, ctx.guild.id, ctx.author.id, plan)
+        view.message = await ctx.send(
+            embed=self.suggestion_plan_embed(plan),
+            view=view,
+        )
+
+    @commandhub_group.command(name="suggest")
+    async def commandhub_suggest(self, ctx: commands.GuildContext) -> None:
+        """Preview hubs suggested from loaded cog and command metadata."""
+        try:
+            plan = await self.build_suggestion_plan_service(ctx.guild.id)
+        except ValidationError as exc:
+            await ctx.send(str(exc))
+            return
+        if plan.command_count == 0:
+            await ctx.send("No supported loaded commands are available to organize.")
+            return
+        view = PlanConfirmationView(self, ctx.guild.id, ctx.author.id, plan)
+        view.message = await ctx.send(
+            embed=self.suggestion_plan_embed(plan),
+            view=view,
+        )
 
     @commandhub_group.command(name="delete")
     async def commandhub_delete(self, ctx: commands.GuildContext, name: str) -> None:

@@ -22,6 +22,13 @@ from commandhub.models import (
     RepeatRecord,
 )
 from commandhub.registry import CommandRegistry, normalize_application, normalize_prefix
+from commandhub.suggestions import (
+    CogMetadata,
+    build_bootstrap_plan,
+    build_suggestion_plan,
+    classify_command,
+    read_loaded_cog_metadata,
+)
 from commandhub.utils import (
     Debouncer,
     ValidationError,
@@ -66,8 +73,27 @@ def test_config_migration_preserves_commands_and_adds_v2_fields() -> None:
     assert "sync_debounce_seconds" in migrated["settings"]
 
 
-def _hub_command(name: str, description: str = "", *, category: str | None = None) -> HubCommand:
-    return HubCommand(CommandSource.PREFIX, name, name, description, "Example", category)
+def _hub_command(
+    name: str,
+    description: str = "",
+    *,
+    category: str | None = None,
+    cog: str = "Example",
+    permissions: int = 0,
+    enabled: bool = True,
+    unsupported: str | None = None,
+) -> HubCommand:
+    return HubCommand(
+        CommandSource.PREFIX,
+        name,
+        name,
+        description,
+        cog,
+        category,
+        required_user_permissions=permissions,
+        enabled=enabled,
+        unsupported_reason=unsupported,
+    )
 
 
 def test_search_ranking_exact_prefix_then_description() -> None:
@@ -81,6 +107,97 @@ def test_search_ranking_exact_prefix_then_description() -> None:
         "balance history",
         "show balance",
     ]
+
+
+def test_bootstrap_plan_groups_selected_cogs_and_reports_only_their_skips() -> None:
+    commands_ = [
+        _hub_command("roleinfo", cog="Toolz"),
+        _hub_command("roleaudit", cog="Toolz", unsupported="custom converter"),
+        _hub_command("role delete", cog="RoleKit"),
+        _hub_command("weather", cog="Weather", unsupported="attachment input"),
+    ]
+    plan = build_bootstrap_plan(commands_, "utility", ["toolz", "RoleKit"])
+    assert list(plan.hubs["utility"].categories) == ["RoleKit", "Toolz"]
+    assert plan.command_count == 2
+    assert plan.skipped == ["roleaudit: custom converter"]
+    assert plan.hubs["utility"].categories["RoleKit"][0].confirmation_required is True
+
+
+def test_suggestion_plan_uses_permissions_keywords_and_safe_fallback() -> None:
+    commands_ = [
+        _hub_command("roleaudit", cog="Toolz", permissions=1),
+        _hub_command("roleinfo", cog="Toolz"),
+        _hub_command("wheel spin", cog="SpinWheel"),
+        _hub_command("ticket open", cog="TicketHub"),
+        _hub_command("hello", cog="Greeter"),
+        _hub_command("suggest", cog="CommandHub"),
+        _hub_command("broken", cog="Example", unsupported="unsupported transform"),
+    ]
+    plan = build_suggestion_plan(commands_)
+    assert set(plan.hubs) == {"admin", "community", "fun", "other", "utility"}
+    assert classify_command(commands_[0]) == "admin"
+    assert classify_command(commands_[1]) == "utility"
+    assert plan.command_count == 5
+    assert plan.skipped == ["broken: unsupported transform"]
+
+
+def test_loaded_cog_metadata_keeps_runtime_name_alias() -> None:
+    class ExampleCog:
+        qualified_name = "RuntimeCog"
+        description = "Runtime description"
+
+    metadata = asyncio.run(read_loaded_cog_metadata([ExampleCog()]))
+    assert metadata["runtimecog"].description == "Runtime description"
+
+
+def test_cog_metadata_can_drive_a_suggestion() -> None:
+    command = _hub_command("hello", cog="Radio")
+    assert classify_command(command, CogMetadata("Radio", tags=("music",))) == "music"
+
+
+def test_apply_plan_creates_categories_and_skips_existing_assignments() -> None:
+    command = _hub_command("role delete", cog="RoleKit")
+    plan = build_bootstrap_plan([command], "utility", ["RoleKit"])
+
+    class Store:
+        def __init__(self) -> None:
+            self.hubs: dict[str, Hub] = {}
+
+        async def get_hub(self, guild_id: int, name: str) -> Hub | None:
+            return self.hubs.get(name.casefold())
+
+        async def save_hub(self, guild_id: int, hub: Hub) -> None:
+            self.hubs[hub.name.casefold()] = hub
+
+    async def scenario() -> None:
+        cog = object.__new__(CommandHub)
+        cog.store = Store()
+        cog.registry = SimpleNamespace(
+            get=lambda source, qualified_name: (
+                command if (source, qualified_name) == (command.source, command.qualified_name) else None
+            ),
+        )
+        cog._tree_name_conflict = lambda guild_id, name: False
+        sync_calls = 0
+
+        async def record_sync(guild_id: int) -> None:
+            nonlocal sync_calls
+            sync_calls += 1
+
+        cog._reconcile_tree = record_sync
+        cog.schedule_sync = record_sync
+
+        result = await cog.apply_suggestion_plan_service(1, plan)
+        hub = cog.store.hubs["utility"]
+        assert list(hub.categories) == ["RoleKit"]
+        assert hub.categories["RoleKit"].commands[0].confirmation_required is True
+        assert result == {"commands_added": 1, "duplicates": 0, "hubs_changed": 1}
+        assert sync_calls == 2
+
+        repeated = await cog.apply_suggestion_plan_service(1, plan)
+        assert repeated == {"commands_added": 0, "duplicates": 1, "hubs_changed": 0}
+
+    asyncio.run(scenario())
 
 
 def test_pagination_clamps_and_obeys_component_limit() -> None:
