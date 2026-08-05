@@ -9,8 +9,8 @@ The cog targets Red-DiscordBot 3.5, Python 3.11+, and modern Discord components.
 From Red's Downloader:
 
 ```text
-[p]repo add TaakosCogs https://github.com/TaakoOfficial/TaakosCogs
-[p]cog install TaakosCogs commandhub
+[p]repo add taakoscogs https://github.com/TaakoOfficial/TaakosCogs
+[p]cog install taakoscogs commandhub
 [p]load commandhub
 ```
 
