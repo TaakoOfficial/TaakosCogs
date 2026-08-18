@@ -4,7 +4,7 @@
     "author": [
         "Taako"
     ],
-    "version": "0.4.0",
+    "version": "0.5.0",
     "description": "A complete role automation suite with self roles, policies, advanced targeting, audited background jobs, reaction/component panels, resilient autoroles, temporary roles, verified migrations with rollback, slash commands, and a full dashboard.",
     "install_msg": "rolemanager loaded. Use `[p]rolemanager` or `[p]rm` for setup, `[p]rm selfrole <role>` for member self roles, `[p]rm rule` for automatic role-change rules, and the Red-Web-Dashboard page for visual configuration and operations.",
     "short": "Audited role automation, advanced targeting, panels, resilient autoroles, migrations, lifecycle tools, and dashboard operations.",

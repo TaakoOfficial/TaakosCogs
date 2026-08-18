@@ -122,6 +122,7 @@ class RoleManager(DashboardIntegration, commands.Cog):
         self.config.register_role(
             self_assignable=False,
             self_removable=False,
+            self_listed=True,
             sticky=False,
             temp_duration=None,
             required=[],
@@ -1767,28 +1768,72 @@ class RoleManager(DashboardIntegration, commands.Cog):
             allowed_mentions=discord.AllowedMentions.none(),
         )
 
-    @selfrole_settings.command(name="list")
+    @selfrole_settings.command(name="visible", aliases=["listed", "show"])
     @commands.admin_or_permissions(manage_roles=True)
-    async def selfrole_list(self, ctx: commands.Context) -> None:
-        """List configured self roles."""
+    async def selfrole_visible(
+        self,
+        ctx: commands.Context,
+        role: discord.Role,
+        visible: bool = True,
+    ) -> None:
+        """Choose whether a self role appears in the member role list."""
+        await self.config.role(role).self_listed.set(visible)
+        state = "shown in" if visible else "hidden from"
+        await ctx.send(
+            f"{role.mention} is now {state} the member self-role list.",
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
+
+    async def _self_role_status_pages(
+        self,
+        guild: discord.Guild,
+        member: discord.Member,
+    ) -> list[str]:
+        """Build member-facing pages of configured self roles and ownership state."""
         lines: list[str] = []
-        for role in sorted(
-            ctx.guild.roles,
-            key=lambda item: item.position,
-            reverse=True,
-        ):
+        for role in sorted(guild.roles, key=lambda item: item.position, reverse=True):
             if role.is_default():
                 continue
-            assignable = await self.config.role(role).self_assignable()
-            removable = await self.config.role(role).self_removable()
-            if assignable or removable:
-                lines.append(
-                    f"{role.mention} - assignable: {assignable}, removable: {removable}",
-                )
+            config = await self.config.role(role).all()
+            assignable = bool(config.get("self_assignable"))
+            removable = bool(config.get("self_removable"))
+            if not (assignable or removable) or not config.get("self_listed", True):
+                continue
+            assigned = role in member.roles
+            status = "✅ assigned" if assigned else "❌ not assigned"
+            if assigned and not removable:
+                status += " (not self-removable)"
+            elif not assigned and not assignable:
+                status += " (not self-assignable)"
+            lines.append(f"{status} — {role.mention}")
         if not lines:
-            await ctx.send("No self roles are configured.")
+            return []
+        return list(pagify("\n".join(lines), page_length=1900))
+
+    @selfrole_settings.command(name="list")
+    async def selfrole_list(self, ctx: commands.Context) -> None:
+        """List visible self roles and show which ones you have."""
+        member = ctx.author
+        if not isinstance(member, discord.Member):
             return
-        for page in pagify("\n".join(lines), page_length=1900):
+        pages = await self._self_role_status_pages(ctx.guild, member)
+        if not pages:
+            await ctx.send("No self roles are currently listed.")
+            return
+        for page in pages:
+            await ctx.send(page, allowed_mentions=discord.AllowedMentions.none())
+
+    @rolemanager.command(name="roles", aliases=["myroles"])
+    async def member_role_list(self, ctx: commands.Context) -> None:
+        """Show which of the server's listed self roles you have."""
+        member = ctx.author
+        if not isinstance(member, discord.Member):
+            return
+        pages = await self._self_role_status_pages(ctx.guild, member)
+        if not pages:
+            await ctx.send("No self roles are currently listed.")
+            return
+        for page in pages:
             await ctx.send(page, allowed_mentions=discord.AllowedMentions.none())
 
     @rolemanager.command(name="selfassignable", aliases=["selfadd", "selfassign"])
@@ -2248,6 +2293,7 @@ class RoleManager(DashboardIntegration, commands.Cog):
             f"**{role.name}** (`{role.id}`)\n"
             f"Self assignable: `{bool(config.get('self_assignable'))}` | "
             f"Self removable: `{bool(config.get('self_removable'))}` | "
+            f"Self listed: `{bool(config.get('self_listed', True))}` | "
             f"Sticky: `{bool(config.get('sticky'))}` | "
             f"Cost: `{int(config.get('cost') or 0):,}` | "
             f"Temp: `{duration_text}`\n"
@@ -2976,6 +3022,7 @@ class RoleManager(DashboardIntegration, commands.Cog):
             value=(
                 f"Self assignable: {bool(data.get('self_assignable'))}\n"
                 f"Self removable: {bool(data.get('self_removable'))}\n"
+                f"Self listed: {bool(data.get('self_listed', True))}\n"
                 f"Sticky: {bool(data.get('sticky'))}\n"
                 f"Temporary: {int(data.get('temp_duration') or 0)} seconds"
             ),
@@ -5570,6 +5617,35 @@ class RoleManager(DashboardIntegration, commands.Cog):
         await interaction.followup.send(message, ephemeral=True)
 
     @app_commands.command(
+        name="rolemanagerroles",
+        description="See which of this server's listed self roles you have.",
+    )
+    @app_commands.guild_only()
+    async def app_selfrole_list(self, interaction: discord.Interaction) -> None:
+        """Show the requesting member's visible self roles privately."""
+        if interaction.guild is None or not isinstance(interaction.user, discord.Member):
+            await interaction.response.send_message("This can only be used in a server.", ephemeral=True)
+            return
+        if await self.bot.cog_disabled_in_guild(self, interaction.guild):
+            await interaction.response.send_message("RoleManager is disabled here.", ephemeral=True)
+            return
+        pages = await self._self_role_status_pages(interaction.guild, interaction.user)
+        if not pages:
+            await interaction.response.send_message("No self roles are currently listed.", ephemeral=True)
+            return
+        await interaction.response.send_message(
+            pages[0],
+            ephemeral=True,
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
+        for page in pages[1:]:
+            await interaction.followup.send(
+                page,
+                ephemeral=True,
+                allowed_mentions=discord.AllowedMentions.none(),
+            )
+
+    @app_commands.command(
         name="rolemanager-selfrole",
         description="Legacy alias for /rolemanagerselfrole.",
     )
@@ -5610,7 +5686,9 @@ class RoleManager(DashboardIntegration, commands.Cog):
         embed.description = (
             f"ID: `{role.id}`\nMembers: `{len(role.members)}`\nPosition: `{role.position}`\n"
             f"Self assignable: `{bool(data.get('self_assignable'))}`\n"
-            f"Self removable: `{bool(data.get('self_removable'))}`\nSticky: `{bool(data.get('sticky'))}`"
+            f"Self removable: `{bool(data.get('self_removable'))}`\n"
+            f"Self listed: `{bool(data.get('self_listed', True))}`\n"
+            f"Sticky: `{bool(data.get('sticky'))}`"
         )
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
