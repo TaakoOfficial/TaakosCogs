@@ -2,6 +2,7 @@
 
 ## 0.5.0 - 2026-07-16
 
+- Added member-facing self-role lists with assigned/not-assigned indicators, per-role visibility controls, and a private `/rolemanagerroles` command.
 - Added alphanumeric `/rolemanagerselfrole` and `/rolemanagerroleinfo` slash commands while retaining the historical hyphenated names as compatibility aliases.
 
 ## 0.4.0
