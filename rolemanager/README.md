@@ -37,7 +37,10 @@ Combined role management tools for Red-DiscordBot.
 | `[p]rolemanager selfrole <role>` | Toggle a configured self role for yourself. |
 | `[p]rolemanager selfrole allow <role> [removable]` | Make a role self-assignable. |
 | `[p]rolemanager selfrole deny <role>` | Remove a role from self-role availability. |
-| `[p]rolemanager selfrole list` | List configured self roles. |
+| `[p]rolemanager selfrole visible <role> [true/false]` | Show or hide a self role in the member-facing list. |
+| `[p]rolemanager selfrole list` | Show listed self roles with ✅/❌ assignment status. |
+| `[p]rolemanager roles` | Short member-facing form of the self-role status list (`myroles` also works). |
+| `/rolemanagerroles` | Privately show your listed self roles with ✅/❌ assignment status. |
 | `[p]rolemanager required add <role> <required_roles...>` | Require prerequisite roles before a role can be assigned. |
 | `[p]rolemanager required any <role> <true/false>` | Require any prerequisite role instead of all prerequisite roles. |
 | `[p]rolemanager include add <role> <roles...>` | Add roles automatically when the main role is assigned. |
