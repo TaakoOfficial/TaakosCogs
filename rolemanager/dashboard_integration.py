@@ -984,6 +984,9 @@ class DashboardIntegration:
         await self.config.role(role).self_removable.set(
             self._dash_bool(form_data, "self_removable"),
         )
+        await self.config.role(role).self_listed.set(
+            self._dash_bool(form_data, "self_listed"),
+        )
         await self.config.role(role).sticky.set(self._dash_bool(form_data, "sticky"))
         if temp_duration is None:
             await self.config.role(role).temp_duration.clear()
@@ -2614,6 +2617,7 @@ class DashboardIntegration:
             config = await self.config.role(selected_role).all()
             self_assignable = await self.config.role(selected_role).self_assignable()
             self_removable = await self.config.role(selected_role).self_removable()
+            self_listed = await self.config.role(selected_role).self_listed()
             sticky = await self.config.role(selected_role).sticky()
             temp_duration = await self.config.role(selected_role).temp_duration()
             duration_text = self._dashboard_duration_value(temp_duration)
@@ -2631,6 +2635,7 @@ class DashboardIntegration:
                 {self._checkbox("role_mentionable", "Allow everyone to mention role", selected_role.mentionable)}
                 {self._checkbox("self_assignable", "Members can add this role with selfrole", self_assignable)}
                 {self._checkbox("self_removable", "Members can remove this role with selfrole", self_removable)}
+                {self._checkbox("self_listed", "Show this role in the member self-role list", self_listed)}
                 {self._checkbox("sticky", "Restore this role when members rejoin", sticky)}
                 {
                 self._checkbox("require_any", "Require any prerequisite instead of all prerequisites", config.get("require_any"))

@@ -11,16 +11,16 @@ dependencies = [
     "chat-exporter>=3.1.0",
     "graphviz>=0.20.0",
     "google-api-python-client>=2.0.0",
-    "google-auth>=2.0.0",
-    "pip>=26.2,<27",
+    "google-auth>=2.56.3",
+    "pip>=26.2.1,<27",
     "pytz",
 ]
 
 [dependency-groups]
 dev = [
-    "pre-commit>=4.0,<5",
+    "pre-commit>=4.6.2,<5",
     "pytest>=8.0,<10",
-    "ruff==0.16.1",
+    "ruff==0.16.3",
 ]
 docs = [
     "mkdocs-gen-files>=0.6,<1",
