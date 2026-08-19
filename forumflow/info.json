@@ -2,7 +2,7 @@
     "$schema": "https://raw.githubusercontent.com/Cog-Creators/Red-DiscordBot/V3/develop/schema/red_cog.schema.json",
     "name": "forumflow",
     "author": ["Taako"],
-    "version": "1.0.0",
+    "version": "1.2.0",
     "description": "Discord forum help workflows with intake tracking, persistent staff controls, assignments, accepted answers, lifecycle tags, stale queues, metrics, and CSV exports.",
     "install_msg": "ForumFlow loaded. Use `[p]forumflow addforum` inside a forum post or provide a forum channel, then run `[p]forumflow settings`.",
     "short": "Solved help-forum workflows, assignments, tags, stale queues, and metrics.",

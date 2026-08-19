@@ -2,6 +2,10 @@
 
 OpsRoom provides a Discord-native incident-response workflow for hosting teams, game communities, and internal operations.
 
+When DecisionLedger is loaded, unresolved incident actions can be imported manually or after incident resolution. Configure the handoff from DecisionLedger; OpsRoom has no hard dependency on it.
+
+SecretSentinel can optionally open a rate-limited credential-response incident through OpsRoom. The incident contains detector types and Discord location IDs, never the matched credential value.
+
 ## Setup
 
 ```text

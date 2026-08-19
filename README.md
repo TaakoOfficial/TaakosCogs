@@ -48,7 +48,12 @@ Every configurable cog includes its own purpose-built Red-Web-Dashboard page wit
 | [accessreview](./accessreview)         | Access certification     | Sensitive-role snapshots, reviewer attestations, separately confirmed enforcement, evidence logs, and exports.                            |
 | [datasteward](./datasteward)           | Privacy operations       | Dry-run-first channel retention, bounded confirmed enforcement, pinned protection, audits, and privacy requests.                           |
 | [eventcheckin](./eventcheckin)         | Event attendance         | Persistent RSVP/check-in controls, capacity, FIFO waitlists, reminders, no-shows, rewards, and attendance exports.                         |
-| [messagestudio](./messagestudio)         | Rich message building   | EmbedUtils-compatible commands, embeds and Components V2, stored messages, webhooks, JSON/YAML, and a standalone visual dashboard builder. |
+| [secretsentinel](./secretsentinel)     | Credential safety        | Privacy-safe token and key detection, deletion/report modes, attachment scanning, exclusions, and staff alerts without secret excerpts.    |
+| [serverdoctor](./serverdoctor)         | Server diagnostics       | Read-only permission, hierarchy, limit, channel-access, empty-role, and duplicate-role health reports with exports.                         |
+| [decisionledger](./decisionledger)     | Staff governance         | Proposals, separated approvals, owners, due dates, evidence, outcomes, lifecycle history, and CSV exports.                                 |
+| [knowledgegarden](./knowledgegarden)   | Support knowledge        | Message capture, reviewed publishing, local search, tags, source links, revisions, retirement, and JSON exports.                            |
+| [operationscenter](./operationscenter) | Operations control       | Unified optional-cog status, guided setup, bounded integration audits, failure notifications, and durable retries.                          |
+| [messagestudio](./messagestudio)       | Rich message building   | EmbedUtils-compatible commands, embeds and Components V2, stored messages, webhooks, JSON/YAML, and a standalone visual dashboard builder. |
 | [toolz](./toolz)                       | Role and user utilities  | Role/user info, role audits, role comparison, CSV exports, bot/no-role audits, role-triggered messages with `{user}` placeholders.          |
 | [rolemanager](./rolemanager)           | Role automation          | Audited role policies, advanced targeting/jobs, panels, resilient autoroles, sticky/temp roles, and verified migrations with rollback. |
 | [yalc](./yalc)                         | Server logging           | Exact role-delta/field audit attribution, 71 routed events, uncached reactions and polls, fail-closed delivery, diagnostics, and an optional journal. |
@@ -85,7 +90,7 @@ Every configurable cog includes its own purpose-built Red-Web-Dashboard page wit
 Install these if you want better moderation visibility, invite attribution, feedback workflows, community reputation, support tickets, and role operations:
 
 ```text
-[p]cog install taakoscogs forumflow staffops opsroom linksentinel communitydigest communitypulse accessreview datasteward eventcheckin toolz rolemanager yalc applications welcome captcha invitetracker suggestionbox repboard reviewhub tickethub commandhub tempvoice giveaway spinwheel
+[p]cog install taakoscogs forumflow staffops opsroom linksentinel communitydigest communitypulse accessreview datasteward eventcheckin secretsentinel serverdoctor decisionledger knowledgegarden operationscenter toolz rolemanager yalc applications welcome captcha invitetracker suggestionbox repboard reviewhub tickethub commandhub tempvoice giveaway spinwheel
 ```
 
 - `toolz` gives staff role/user lookup, audit, export, and role-triggered message tools.
@@ -98,6 +103,11 @@ Install these if you want better moderation visibility, invite attribution, feed
 - `accessreview` runs auditable periodic certification of sensitive role access.
 - `datasteward` provides dry-run-first retention policies and privacy request workflows.
 - `eventcheckin` adds RSVP, waitlist, check-in, no-show, and reward-role workflows to events.
+- `secretsentinel` catches likely exposed credentials without retaining or repeating the secret value.
+- `serverdoctor` produces read-only server health and permission reports.
+- `decisionledger` preserves decisions, approvals, owners, evidence, and outcomes.
+- `knowledgegarden` turns solved discussions into reviewed, provider-free searchable answers.
+- `operationscenter` gives the operations cogs one optional status, setup, audit, notification, and retry surface.
 - `rolemanager` handles audited self/policy roles, advanced targeting and jobs, reaction/button/select panels, resilient autoroles, sticky/temporary roles, lifecycle reports, and verified imports with rollback.
 - `YALC` gives detailed server logging.
 - `applications` handles staff applications, review workflows, and approval roles.

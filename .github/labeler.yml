@@ -75,6 +75,26 @@ new-cog:
   - changed-files:
       - any-glob-to-any-file: "eventcheckin/**"
 
+"cog: secretsentinel":
+  - changed-files:
+      - any-glob-to-any-file: "secretsentinel/**"
+
+"cog: serverdoctor":
+  - changed-files:
+      - any-glob-to-any-file: "serverdoctor/**"
+
+"cog: decisionledger":
+  - changed-files:
+      - any-glob-to-any-file: "decisionledger/**"
+
+"cog: knowledgegarden":
+  - changed-files:
+      - any-glob-to-any-file: "knowledgegarden/**"
+
+"cog: operationscenter":
+  - changed-files:
+      - any-glob-to-any-file: "operationscenter/**"
+
 "cog: fable":
   - changed-files:
       - any-glob-to-any-file: "fable/**"

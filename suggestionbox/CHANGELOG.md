@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.4.0
+
+- Added stored and displayed DecisionLedger backlinks for optional decision imports.
+
+## 1.3.1
+
+- Added an isolated suggestion lookup and optional approval event for DecisionLedger. SuggestionBox still works without it.
+
 ## 1.3.0 - 2026-07-16
 
 - Reorganized the dashboard into responsive Suggestions, Settings, Actions, and Maintenance tabs that remain selected after form submissions.

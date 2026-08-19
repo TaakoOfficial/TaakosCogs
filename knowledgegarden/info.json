@@ -1,0 +1,17 @@
+{
+    "$schema": "https://raw.githubusercontent.com/Cog-Creators/Red-DiscordBot/V3/develop/schema/red_cog.schema.json",
+    "name": "knowledgegarden",
+    "author": ["Taako"],
+    "version": "1.2.0",
+    "description": "Capture solved Discord discussions into reviewed knowledge entries with separate publishing, local provider-free search, tags, source links, bounded revision history, retirement, duplicate suggestions, and JSON export.",
+    "install_msg": "Create a draft with `[p]knowledgegarden draft <title> <answer>` or reply to a solved message and use `[p]knowledgegarden capture <title>`.",
+    "short": "Turn solved discussions into reviewed, searchable community answers.",
+    "tags": ["knowledge", "faq", "forums", "search", "support", "dashboard"],
+    "requirements": [],
+    "min_bot_version": "3.5.0",
+    "min_python_version": [3, 10, 0],
+    "hidden": false,
+    "disabled": false,
+    "type": "COG",
+    "end_user_data_statement": "This cog stores knowledge titles and answer text, tags, aliases, source URLs and identifiers, revision bodies, review configuration, bounded unanswered search phrases and counts, feedback ratings with Discord user IDs, timestamps, schema version, and Discord user IDs for creators, publishers, owners, reviewers, and revision actors. User deletion requests anonymize matching IDs and remove matching feedback while retaining organizational knowledge. JSON exports are generated on demand."
+}

@@ -2,7 +2,7 @@
   "$schema": "https://raw.githubusercontent.com/Cog-Creators/Red-DiscordBot/V3/develop/schema/red_cog.schema.json",
   "name": "suggestionbox",
   "author": ["Taako"],
-  "version": "1.2.1",
+    "version": "1.4.0",
   "description": "A Red DiscordBot cog for community suggestions with persistent arrow voting buttons, optional discussion threads, staff review states, comments, review logs, CSV exports, and Red-Web-Dashboard integration.",
   "install_msg": "suggestionbox loaded. Use `[p]suggestionbox setup [#suggestions] [#review-log]` to start collecting suggestions, or Red-Web-Dashboard to manage it visually.",
   "short": "Community suggestions with voting, threads, review states, comments, exports, and dashboard support.",
