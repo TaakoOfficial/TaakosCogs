@@ -1,0 +1,17 @@
+{
+    "$schema": "https://raw.githubusercontent.com/Cog-Creators/Red-DiscordBot/V3/develop/schema/red_cog.schema.json",
+    "name": "serverdoctor",
+    "author": ["Taako"],
+    "version": "1.2.0",
+    "description": "Read-only Discord server diagnostics for dangerous default permissions, bot capability gaps, role hierarchy, approaching platform limits, inaccessible channels, empty roles, duplicate role names, and optional TaakosCogs configuration checks.",
+    "install_msg": "Run `[p]serverdoctor scan` to create a read-only health report.",
+    "short": "Read-only server configuration and bot permission diagnostics.",
+    "tags": ["diagnostics", "permissions", "roles", "health", "admin", "dashboard"],
+    "requirements": [],
+    "min_bot_version": "3.5.0",
+    "min_python_version": [3, 10, 0],
+    "hidden": false,
+    "disabled": false,
+    "type": "COG",
+    "end_user_data_statement": "This cog stores ignored and previous finding codes, scheduling configuration, a report channel ID, scan timestamps, schema version, and aggregate severity counts. It does not store member IDs, message content, role membership, channel history, or full scan reports."
+}

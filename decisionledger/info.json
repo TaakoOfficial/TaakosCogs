@@ -1,0 +1,17 @@
+{
+    "$schema": "https://raw.githubusercontent.com/Cog-Creators/Red-DiscordBot/V3/develop/schema/red_cog.schema.json",
+    "name": "decisionledger",
+    "author": ["Taako"],
+    "version": "1.2.0",
+    "description": "An auditable register for proposals, approvals, rejections, implementation ownership, due dates, evidence links, outcomes, lifecycle history, and CSV exports.",
+    "install_msg": "Create the first proposal with `[p]decision propose <title> [rationale]`.",
+    "short": "Track what was decided, why, who owns it, and what happened.",
+    "tags": ["decisions", "governance", "staff", "audit", "workflow", "dashboard"],
+    "requirements": [],
+    "min_bot_version": "3.5.0",
+    "min_python_version": [3, 10, 0],
+    "hidden": false,
+    "disabled": false,
+    "type": "COG",
+    "end_user_data_statement": "This cog stores decision and template text, status, evidence URLs and labels, optional source types, source identifiers and URLs, linked EventCheckin IDs, due and review dates, reminder configuration, schema version, Discord user IDs for proposers, approvers, owners, evidence authors and history actors, and timestamps. User deletion requests anonymize matching IDs while retaining organizational records. CSV exports are generated on demand."
+}

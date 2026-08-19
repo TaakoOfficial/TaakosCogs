@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
 import io
 import re
 import time
 from contextlib import suppress
+from copy import deepcopy
 from typing import TYPE_CHECKING, Any, ClassVar
 
 import discord
@@ -43,6 +45,12 @@ class OpsRoom(DashboardIntegration, commands.Cog):
             next_incident_id=1,
             incidents={},
         )
+        self._locks: dict[int, asyncio.Lock] = {}
+
+    def _lock(self, guild_id: int) -> asyncio.Lock:
+        if not hasattr(self, "_locks"):
+            self._locks = {}
+        return self._locks.setdefault(guild_id, asyncio.Lock())
 
     @staticmethod
     def _now() -> int:
@@ -65,6 +73,91 @@ class OpsRoom(DashboardIntegration, commands.Cog):
         if not record:
             raise commands.BadArgument("Run this command in an OpsRoom incident channel.")
         return incidents, record
+
+    async def get_incident_for_integration(self, guild: discord.Guild, incident_id: int) -> dict[str, Any] | None:
+        """Return an isolated incident record for an optional TaakosCogs integration."""
+        record = (await self.config.guild(guild).incidents()).get(str(incident_id))
+        return deepcopy(record) if record else None
+
+    async def create_incident_service(
+        self,
+        guild: discord.Guild,
+        severity: str,
+        title: str,
+        actor_id: int,
+        *,
+        summary: str = "",
+        source_type: str = "integration",
+    ) -> dict[str, Any]:
+        """Create an incident for commands and optional TaakosCogs integrations."""
+        severity = severity.casefold()
+        if severity not in SEVERITIES:
+            raise commands.BadArgument("Severity must be sev1, sev2, sev3, or sev4.")
+        conf = self.config.guild(guild)
+        async with self._lock(guild.id):
+            incident_id = int(await conf.next_incident_id())
+            category_id = await conf.category_id()
+            category = guild.get_channel(category_id) if category_id else None
+            role_id = await conf.response_role_id()
+            role = guild.get_role(role_id) if role_id else None
+            if source_type == "secretsentinel" and role is None:
+                raise commands.BadArgument("A valid OpsRoom response role is required for credential incidents.")
+            overwrites = None
+            if role:
+                overwrites = {
+                    guild.default_role: discord.PermissionOverwrite(view_channel=False),
+                    role: discord.PermissionOverwrite(view_channel=True, send_messages=True, read_message_history=True),
+                    guild.me: discord.PermissionOverwrite(view_channel=True, send_messages=True, manage_channels=True),
+                }
+            channel = await guild.create_text_channel(
+                f"inc-{incident_id:04d}-{self._slug(title)}",
+                category=category if isinstance(category, discord.CategoryChannel) else None,
+                overwrites=overwrites,
+                reason=f"OpsRoom {source_type} incident created for actor {actor_id}",
+                topic=f"INC-{incident_id:04d} | {severity.upper()} | investigating | {title[:200]}",
+            )
+            now = self._now()
+            record = {
+                "incident_id": incident_id,
+                "title": title[:200],
+                "severity": severity,
+                "status": "investigating",
+                "summary": summary[:1500],
+                "channel_id": channel.id,
+                "created_by": actor_id,
+                "commander_id": actor_id,
+                "created_at": now,
+                "updated_at": now,
+                "resolved_at": None,
+                "timeline": [{"at": now, "kind": "opened", "actor_id": actor_id, "text": title[:1500]}],
+                "actions": [],
+                "update_message_ids": [],
+                "source_type": source_type[:50],
+            }
+            incidents = await conf.incidents()
+            incidents[str(incident_id)] = record
+            await conf.incidents.set(incidents)
+            await conf.next_incident_id.set(incident_id + 1)
+        with suppress(discord.HTTPException):
+            await channel.send(content=role.mention if role else None, embed=self._embed(record))
+        return record
+
+    async def set_action_integration_link(
+        self,
+        guild: discord.Guild,
+        incident_id: int,
+        action_id: int,
+        decision_id: int,
+    ) -> None:
+        """Store an optional DecisionLedger backlink on one action."""
+        incidents = await self.config.guild(guild).incidents()
+        record = incidents.get(str(incident_id))
+        action = next((item for item in record.get("actions", []) if item["action_id"] == action_id), None) if record else None
+        if not action:
+            raise commands.BadArgument("Incident action not found.")
+        action["decisionledger_id"] = decision_id
+        incidents[str(incident_id)] = record
+        await self.config.guild(guild).incidents.set(incidents)
 
     async def _save(self, guild: discord.Guild, incidents: dict[str, Any], record: dict[str, Any]) -> None:
         incidents[str(record["incident_id"])] = record
@@ -169,50 +262,9 @@ class OpsRoom(DashboardIntegration, commands.Cog):
         """Create an incident channel: `[p]opsroom create sev2 API unavailable`."""
         if not isinstance(ctx.author, discord.Member) or not await self._is_responder(ctx.author):
             raise commands.CheckFailure("Only configured responders can create incidents.")
-        severity = severity.casefold()
-        if severity not in SEVERITIES:
-            raise commands.BadArgument("Severity must be sev1, sev2, sev3, or sev4.")
-        conf = self.config.guild(ctx.guild)
-        incident_id = await conf.next_incident_id()
-        category_id = await conf.category_id()
-        category = ctx.guild.get_channel(category_id) if category_id else None
-        role_id = await conf.response_role_id()
-        role = ctx.guild.get_role(role_id) if role_id else None
-        overwrites = None
-        if role:
-            overwrites = {
-                ctx.guild.default_role: discord.PermissionOverwrite(view_channel=False),
-                role: discord.PermissionOverwrite(view_channel=True, send_messages=True, read_message_history=True),
-                ctx.guild.me: discord.PermissionOverwrite(view_channel=True, send_messages=True, manage_channels=True),
-            }
-        channel = await ctx.guild.create_text_channel(
-            f"inc-{incident_id:04d}-{self._slug(title)}",
-            category=category if isinstance(category, discord.CategoryChannel) else None,
-            overwrites=overwrites,
-            reason=f"OpsRoom incident created by {ctx.author}",
-            topic=f"INC-{incident_id:04d} | {severity.upper()} | investigating | {title[:200]}",
-        )
-        now = self._now()
-        record = {
-            "incident_id": incident_id,
-            "title": title[:200],
-            "severity": severity,
-            "status": "investigating",
-            "summary": "",
-            "channel_id": channel.id,
-            "created_by": ctx.author.id,
-            "commander_id": ctx.author.id,
-            "created_at": now,
-            "updated_at": now,
-            "resolved_at": None,
-            "timeline": [{"at": now, "kind": "opened", "actor_id": ctx.author.id, "text": title[:1500]}],
-            "actions": [],
-            "update_message_ids": [],
-        }
-        async with conf.incidents() as incidents:
-            incidents[str(incident_id)] = record
-        await conf.next_incident_id.set(incident_id + 1)
-        await channel.send(content=role.mention if role else None, embed=self._embed(record))
+        record = await self.create_incident_service(ctx.guild, severity, title, ctx.author.id, source_type="manual")
+        channel = ctx.guild.get_channel(record["channel_id"])
+        incident_id = record["incident_id"]
         await ctx.send(f"Created {channel.mention} for **INC-{incident_id:04d}**.")
 
     @opsroom.command(name="show")
@@ -268,6 +320,13 @@ class OpsRoom(DashboardIntegration, commands.Cog):
         if summary:
             await self._publish_update(ctx.guild, record, summary)
             await self._save(ctx.guild, incidents, record)
+        if status == "resolved":
+            self.bot.dispatch(
+                "taakoscogs_incident_resolved",
+                ctx.guild.id,
+                record["incident_id"],
+                ctx.author.id,
+            )
         with suppress(discord.HTTPException):
             await ctx.channel.edit(
                 topic=f"INC-{record['incident_id']:04d} | {record['severity'].upper()} | {status} | {record['title']}"
@@ -289,6 +348,7 @@ class OpsRoom(DashboardIntegration, commands.Cog):
                 "created_by": ctx.author.id,
                 "created_at": self._now(),
                 "completed_at": None,
+                "decisionledger_id": None,
             },
         )
         await self._timeline(ctx.guild, incidents, record, "action", ctx.author.id, task)
@@ -305,7 +365,15 @@ class OpsRoom(DashboardIntegration, commands.Cog):
             raise commands.BadArgument("Action item not found.")
         action["completed_at"] = self._now()
         await self._timeline(ctx.guild, incidents, record, "action-complete", ctx.author.id, action["task"])
-        await ctx.send(f"Action **#{action_id}** completed.")
+        self.bot.dispatch(
+            "taakoscogs_incident_action_completed",
+            ctx.guild.id,
+            record["incident_id"],
+            action_id,
+            ctx.author.id,
+        )
+        linked = f" Linked Decision #{action['decisionledger_id']} was notified." if action.get("decisionledger_id") else ""
+        await ctx.send(f"Action **#{action_id}** completed.{linked}")
 
     @opsroom.command(name="archive")
     async def archive(self, ctx: commands.Context) -> None:
@@ -357,7 +425,8 @@ class OpsRoom(DashboardIntegration, commands.Cog):
         lines.extend(["", "## Follow-up actions"])
         for action in record.get("actions", []):
             mark = "x" if action.get("completed_at") else " "
-            lines.append(f"- [{mark}] {action['task']} (owner={action.get('owner_id') or 'unassigned'})")
+            linked = f", decision={action['decisionledger_id']}" if action.get("decisionledger_id") else ""
+            lines.append(f"- [{mark}] {action['task']} (owner={action.get('owner_id') or 'unassigned'}{linked})")
         payload = "\n".join(lines).encode()
         await ctx.send(file=discord.File(io.BytesIO(payload), filename=f"INC-{record['incident_id']:04d}-postmortem.md"))
 

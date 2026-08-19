@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import copy
 import csv
 import io
 import logging
@@ -372,6 +373,8 @@ class SuggestionBox(DashboardIntegration, commands.Cog):
                 value=f"{decision_reason}\nBy: {decision_by}\nWhen: {decision_at}",
                 inline=False,
             )
+        if record.get("decisionledger_id"):
+            embed.add_field(name="DecisionLedger", value=f"Decision #{record['decisionledger_id']}", inline=True)
 
         notes = record.get("staff_notes", [])[-3:]
         if notes:
@@ -643,6 +646,31 @@ class SuggestionBox(DashboardIntegration, commands.Cog):
                 f"No suggestion with ID `{suggestion_id}` was found.",
             )
         return record
+
+    async def get_suggestion_for_integration(
+        self,
+        guild: discord.Guild,
+        suggestion_id: int,
+    ) -> SuggestionRecord | None:
+        """Return an isolated record for an optional TaakosCogs integration."""
+        record = (await self.config.guild(guild).suggestions()).get(self._suggestion_key(suggestion_id))
+        return copy.deepcopy(record) if record else None
+
+    async def set_suggestion_integration_link(
+        self,
+        guild: discord.Guild,
+        suggestion_id: int,
+        decision_id: int,
+    ) -> None:
+        """Store and display an optional DecisionLedger backlink."""
+        suggestions = await self.config.guild(guild).suggestions()
+        record = suggestions.get(self._suggestion_key(suggestion_id))
+        if not record:
+            raise commands.BadArgument("Suggestion not found.")
+        record["decisionledger_id"] = decision_id
+        suggestions[self._suggestion_key(suggestion_id)] = record
+        await self.config.guild(guild).suggestions.set(suggestions)
+        await self._sync_suggestion_message(guild, record)
 
     async def _find_record_by_message(
         self,
@@ -1380,6 +1408,14 @@ class SuggestionBox(DashboardIntegration, commands.Cog):
         if reason:
             notice += f"\nReason: {reason}"
         await self._send_thread_notice(ctx.guild, record, notice)
+        if status in {"approved", "implemented"}:
+            self.bot.dispatch(
+                "taakoscogs_suggestion_decided",
+                ctx.guild.id,
+                suggestion_id,
+                status,
+                ctx.author.id,
+            )
         await ctx.send(
             f"Suggestion #{suggestion_id} marked as {self._status_label(status)}.",
         )

@@ -1,0 +1,17 @@
+{
+    "$schema": "https://raw.githubusercontent.com/Cog-Creators/Red-DiscordBot/V3/develop/schema/red_cog.schema.json",
+    "name": "secretsentinel",
+    "author": ["Taako"],
+    "version": "1.2.0",
+    "description": "Detects likely credentials in messages and small text attachments, optionally deletes the source message, alerts staff without reproducing the value, and tells the author to rotate it.",
+    "install_msg": "SecretSentinel is disabled by default. Run `[p]secretsentinel setup #security-alerts` to configure safe defaults and enable it.",
+    "short": "Privacy-safe detection for accidentally exposed credentials.",
+    "tags": ["security", "secrets", "tokens", "credentials", "moderation", "dashboard"],
+    "requirements": [],
+    "min_bot_version": "3.5.0",
+    "min_python_version": [3, 10, 0],
+    "hidden": false,
+    "disabled": false,
+    "type": "COG",
+    "end_user_data_statement": "This cog stores guild configuration, schema version, channel IDs, role IDs, explicitly monitored bot IDs, disabled detector names, alert cooldown settings, and an OpsRoom integration toggle. It does not persist message content, matched credentials, match excerpts, author IDs, or detection records. Staff alerts contain Discord message, channel, and author IDs supplied directly to Discord, but the cog does not retain those alerts in its own configuration."
+}

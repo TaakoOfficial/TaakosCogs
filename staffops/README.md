@@ -1,5 +1,7 @@
 # StaffOps
 
+DecisionLedger can show an assigned owner's current shift, availability, on-call position, and approved leave. StaffOps remains fully usable without DecisionLedger.
+
 StaffOps coordinates volunteer or staff coverage directly in Discord: clocked shifts, availability, leave review, an ordered on-call rotation, handoffs, and hour reports.
 
 ## Setup

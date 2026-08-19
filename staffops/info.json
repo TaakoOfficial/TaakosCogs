@@ -2,7 +2,7 @@
     "$schema": "https://raw.githubusercontent.com/Cog-Creators/Red-DiscordBot/V3/develop/schema/red_cog.schema.json",
     "name": "staffops",
     "author": ["Taako"],
-    "version": "1.0.0",
+    "version": "1.1.0",
     "description": "Staff and volunteer operations with clock-in shifts, availability, leave requests, on-call rotations, handoffs, coverage visibility, and CSV reports.",
     "install_msg": "StaffOps loaded. Configure it with `[p]staffops staffrole` and `[p]staffops logchannel`.",
     "short": "Staff shifts, availability, leave, on-call rotations, handoffs, and reports.",

@@ -115,6 +115,16 @@ class ForumFlow(DashboardIntegration, commands.Cog):
         records[str(thread.id)] = record
         await self.config.guild(thread.guild).records.set(records)
 
+    async def set_knowledge_integration_link(self, guild: discord.Guild, thread_id: int, entry_id: int) -> None:
+        """Store an optional KnowledgeGarden backlink on a tracked post."""
+        records = await self.config.guild(guild).records()
+        record = records.get(str(thread_id))
+        if not record:
+            raise commands.BadArgument("ForumFlow post not found.")
+        record["knowledgegarden_entry_id"] = entry_id
+        records[str(thread_id)] = record
+        await self.config.guild(guild).records.set(records)
+
     async def _apply_state_tag(self, thread: discord.Thread, state: str) -> None:
         parent = thread.parent
         if not isinstance(parent, discord.ForumChannel):
@@ -279,6 +289,13 @@ class ForumFlow(DashboardIntegration, commands.Cog):
         await self._save_record(ctx.channel, records, record)
         if isinstance(ctx.author, discord.Member):
             await self._set_state(ctx.channel, ctx.author, "solved")
+        self.bot.dispatch(
+            "taakoscogs_forum_solved",
+            ctx.guild.id,
+            ctx.channel.id,
+            message.id,
+            ctx.author.id,
+        )
         await ctx.send(f"Accepted {message.jump_url} as the answer.")
 
     @forumflow.command(name="queue")

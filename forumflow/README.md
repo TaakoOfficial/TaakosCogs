@@ -2,6 +2,10 @@
 
 ForumFlow turns Discord forum channels into managed support or knowledge workflows. New posts receive persistent controls, can be claimed by staff, moved through lifecycle states, marked stale, and closed with an accepted answer.
 
+When KnowledgeGarden is loaded, accepted answers can be captured manually or turned into drafts automatically. Configure that behavior from KnowledgeGarden; ForumFlow does not require it.
+
+Imported answers retain a KnowledgeGarden entry ID on the ForumFlow record so integrations can trace both sides without copying answer content again.
+
 ## Setup
 
 ```text

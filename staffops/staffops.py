@@ -54,6 +54,35 @@ class StaffOps(DashboardIntegration, commands.Cog):
         if not await self._is_staff(member):
             raise commands.CheckFailure("You are not in the configured staff team.")
 
+    async def get_member_context(self, guild: discord.Guild, user_id: int) -> dict[str, object] | None:
+        """Return bounded scheduling context for optional TaakosCogs integrations."""
+        member = guild.get_member(user_id)
+        if member is None or not await self._is_staff(member):
+            return None
+        conf = self.config.guild(guild)
+        active = await conf.active_shifts()
+        availability = await conf.availability()
+        rota = await conf.on_call()
+        leaves = await conf.leave_requests()
+        on_call_position = next(
+            (index for index, record in enumerate(rota, start=1) if record.get("user_id") == user_id),
+            None,
+        )
+        approved_leave = next(
+            (
+                record.get("until")
+                for record in reversed(list(leaves.values()))
+                if record.get("user_id") == user_id and record.get("status") == "approved"
+            ),
+            None,
+        )
+        return {
+            "active_shift": str(user_id) in active,
+            "availability": (availability.get(str(user_id)) or {}).get("text"),
+            "on_call_position": on_call_position,
+            "approved_leave": approved_leave,
+        }
+
     async def _log(self, guild: discord.Guild, title: str, description: str, color: int | None = None) -> None:
         channel_id = await self.config.guild(guild).log_channel_id()
         channel = guild.get_channel(channel_id) if channel_id else None

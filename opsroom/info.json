@@ -2,7 +2,7 @@
     "$schema": "https://raw.githubusercontent.com/Cog-Creators/Red-DiscordBot/V3/develop/schema/red_cog.schema.json",
     "name": "opsroom",
     "author": ["Taako"],
-    "version": "1.0.0",
+    "version": "1.2.0",
     "description": "Discord-native incident response with dedicated channels, severity and status tracking, incident commanders, timestamped timelines, stakeholder updates, action items, and Markdown postmortems.",
     "install_msg": "OpsRoom loaded. Configure an incident category with `[p]opsroom category`, then create one with `[p]opsroom create`.",
     "short": "Incident channels, commanders, timelines, updates, actions, and postmortems.",

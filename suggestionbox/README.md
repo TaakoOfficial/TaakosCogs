@@ -2,6 +2,10 @@
 
 Community suggestions with persistent voting buttons, staff review states, comments, review logs, and CSV exports for Red-DiscordBot.
 
+When DecisionLedger is loaded, approved suggestions can be imported manually or automatically. Configure the handoff from DecisionLedger; SuggestionBox does not require it.
+
+When imported, the suggestion panel displays its linked DecisionLedger record number for two-way traceability.
+
 [Back to the cog catalog](../README.md)
 
 ## Install

@@ -48,7 +48,8 @@ class DashboardIntegration:
             sum(bool(record.get("checked_in_at")) for record in item.get("attendees", {}).values())
             for item in settings["events"].values()
         )
-        source = f"""<section class="ec"><style>{self._ec_css()}</style><h2>EventCheckin</h2><p>Registration and attendance policy for <strong>{html.escape(guild.name)}</strong>.</p><div class="grid"><div class="card"><b>{open_count}</b><br>open events</div><div class="card"><b>{len(settings["events"])}</b><br>events retained</div><div class="card"><b>{checkins}</b><br>recorded check-ins</div></div><form method="POST" class="card">{self._ec_csrf(kwargs)}<div class="grid"><label>Reminder minutes before<input type="number" min="0" max="10080" name="reminder_minutes" value="{settings["reminder_minutes"]}"></label><label>Check-in opens minutes before<input type="number" min="0" max="10080" name="checkin_early_minutes" value="{settings["checkin_early_minutes"]}"></label><label>Check-in closes minutes after<input type="number" min="0" max="10080" name="checkin_late_minutes" value="{settings["checkin_late_minutes"]}"></label><label>Attendance log channel<select name="log_channel_id">{self._ec_options(guild.text_channels, settings["log_channel_id"])}</select></label></div><button class="btn btn-primary">Save EventCheckin Settings</button></form></section>"""
+        series = len({item.get("recurrence_group") for item in settings["events"].values() if item.get("recurrence_group")})
+        source = f"""<section class="ec"><style>{self._ec_css()}</style><h2>EventCheckin</h2><p>Registration and attendance policy for <strong>{html.escape(guild.name)}</strong>.</p><div class="grid"><div class="card"><b>{open_count}</b><br>open events</div><div class="card"><b>{len(settings["events"])}</b><br>events retained</div><div class="card"><b>{checkins}</b><br>recorded check-ins</div><div class="card"><b>{len(settings["templates"])}</b><br>templates</div><div class="card"><b>{series}</b><br>recurrence series</div></div><form method="POST" class="card">{self._ec_csrf(kwargs)}<div class="grid"><label>Reminder minutes before<input type="number" min="0" max="10080" name="reminder_minutes" value="{settings["reminder_minutes"]}"></label><label>Check-in opens minutes before<input type="number" min="0" max="10080" name="checkin_early_minutes" value="{settings["checkin_early_minutes"]}"></label><label>Check-in closes minutes after<input type="number" min="0" max="10080" name="checkin_late_minutes" value="{settings["checkin_late_minutes"]}"></label><label>Calendar timezone<input name="timezone" value="{html.escape(settings["timezone"], quote=True)}" placeholder="America/Chicago"></label><label>Attendance log channel<select name="log_channel_id">{self._ec_options(guild.text_channels, settings["log_channel_id"])}</select></label></div><button class="btn btn-primary">Save EventCheckin Settings</button></form></section>"""
         return {"status": 0, "notifications": notices, "web_content": {"source": source, "expanded": True}}
 
     async def _ec_save(self, guild, form):
@@ -56,6 +57,14 @@ class DashboardIntegration:
         await conf.reminder_minutes.set(self._ec_int(form, "reminder_minutes", 0, 10080))
         await conf.checkin_early_minutes.set(self._ec_int(form, "checkin_early_minutes", 0, 10080))
         await conf.checkin_late_minutes.set(self._ec_int(form, "checkin_late_minutes", 0, 10080))
+        timezone_name = self._ec_value(form, "timezone") or "UTC"
+        from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+        try:
+            ZoneInfo(timezone_name)
+        except ZoneInfoNotFoundError as error:
+            raise commands.BadArgument("Unknown IANA timezone name.") from error
+        await conf.timezone.set(timezone_name)
         raw = self._ec_value(form, "log_channel_id")
         channel_id = int(raw) if raw else None
         if channel_id and guild.get_channel(channel_id) not in guild.text_channels:
