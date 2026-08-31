@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.1 - 2026-08-30
+
+- Added a guild option to hide assigned/not-assigned text in member self-role lists, leaving compact status symbols for mobile layouts.
+
 ## 0.5.0 - 2026-07-16
 
 - Added member-facing self-role lists with assigned/not-assigned indicators, per-role visibility controls, and a private `/rolemanagerroles` command.

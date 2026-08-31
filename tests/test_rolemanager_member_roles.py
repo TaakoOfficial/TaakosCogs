@@ -38,12 +38,34 @@ class FakeRoleConfig:
         return self.data
 
 
+class FakeValue:
+    def __init__(self, value: bool) -> None:
+        self.value = value
+
+    async def __call__(self) -> bool:
+        return self.value
+
+
+class FakeGuildConfig:
+    def __init__(self, status_labels: bool) -> None:
+        self.self_role_status_labels = FakeValue(status_labels)
+
+
 class FakeConfig:
-    def __init__(self, data: dict[FakeRole, dict[str, bool]]) -> None:
+    def __init__(
+        self,
+        data: dict[FakeRole, dict[str, bool]],
+        *,
+        status_labels: bool = True,
+    ) -> None:
         self.data = data
+        self.status_labels = status_labels
 
     def role(self, role: FakeRole) -> FakeRoleConfig:
         return FakeRoleConfig(self.data[role])
+
+    def guild(self, _guild: FakeGuild) -> FakeGuildConfig:
+        return FakeGuildConfig(self.status_labels)
 
 
 def test_member_self_role_list_filters_and_marks_roles() -> None:
@@ -89,3 +111,24 @@ def test_existing_self_roles_default_to_visible() -> None:
     pages = asyncio.run(cog._self_role_status_pages(guild, member))
 
     assert pages == ["❌ not assigned — @Legacy"]
+
+
+def test_member_self_role_list_can_hide_status_labels() -> None:
+    available = FakeRole("Available", 1)
+    assigned = FakeRole("Assigned", 2)
+    locked = FakeRole("Locked", 3)
+    guild = FakeGuild([available, assigned, locked])
+    member = FakeMember([assigned, locked])
+    cog = object.__new__(RoleManager)
+    cog.config = FakeConfig(
+        {
+            available: {"self_assignable": True, "self_removable": True},
+            assigned: {"self_assignable": True, "self_removable": True},
+            locked: {"self_assignable": True, "self_removable": False},
+        },
+        status_labels=False,
+    )
+
+    pages = asyncio.run(cog._self_role_status_pages(guild, member))
+
+    assert pages == ["✅ @Locked\n✅ @Assigned\n❌ @Available"]

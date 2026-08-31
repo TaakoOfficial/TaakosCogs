@@ -263,10 +263,10 @@ class DashboardIntegration:
             return role.id, messages
 
         if action == "save_guild_settings":
-            atomic = await self._dashboard_save_guild_settings(guild, form_data)
+            atomic, status_labels = await self._dashboard_save_guild_settings(guild, form_data)
             messages.append(
                 {
-                    "message": f"Guild atomic assignment set to {atomic}.",
+                    "message": (f"Guild atomic assignment set to {atomic}; self-role status labels set to {status_labels}."),
                     "category": "success",
                 },
             )
@@ -755,18 +755,21 @@ class DashboardIntegration:
         self,
         guild: discord.Guild,
         form_data: typing.Any,
-    ) -> str:
+    ) -> tuple[str, bool]:
+        status_labels = self._dash_bool(form_data, "self_role_status_labels")
         atomic = self._dash_value(form_data, "atomic", "inherit").lower()
         if atomic == "inherit":
             await self.config.guild(guild).atomic.clear()
-            return "the global default"
+            await self.config.guild(guild).self_role_status_labels.set(status_labels)
+            return "the global default", status_labels
         if atomic not in {"true", "false"}:
             raise commands.BadArgument(
                 "Atomic assignment must be inherit, true, or false.",
             )
         enabled = atomic == "true"
         await self.config.guild(guild).atomic.set(enabled)
-        return str(enabled)
+        await self.config.guild(guild).self_role_status_labels.set(status_labels)
+        return str(enabled), status_labels
 
     async def _dashboard_create_role(
         self,
@@ -1916,6 +1919,7 @@ class DashboardIntegration:
         audit_channel_id = await self.config.guild(guild).audit_channel_id()
         audit_history = await self.config.guild(guild).audit_history()
         atomic = await self.config.guild(guild).atomic()
+        self_role_status_labels = await self.config.guild(guild).self_role_status_labels()
         csrf = self._dash_csrf(kwargs)
         active_tab = self._dashboard_active_tab(kwargs)
 
@@ -2008,7 +2012,7 @@ class DashboardIntegration:
             </div>
             <section class="rmdash-tab-panel{self._dashboard_active_class("overview", active_tab)}"
             data-tab-panel="overview" id="rmdash-panel-overview" role="tabpanel" aria-labelledby="rmdash-tab-overview">
-                {self._dashboard_guild_settings_section(guild, atomic, csrf)}
+                {self._dashboard_guild_settings_section(guild, atomic, self_role_status_labels, csrf)}
                 {await self._dashboard_policy_overview_section(guild)}
             </section>
             <section class="rmdash-tab-panel{self._dashboard_active_class("roles", active_tab)}" data-tab-panel="roles"
@@ -2150,6 +2154,7 @@ class DashboardIntegration:
         self,
         guild: discord.Guild,
         atomic: bool | None,
+        self_role_status_labels: bool,
         csrf: str,
     ) -> str:
         selected_atomic = "inherit" if atomic is None else str(bool(atomic)).lower()
@@ -2163,6 +2168,11 @@ class DashboardIntegration:
             ],
             selected_atomic,
         )
+        status_labels_checkbox = self._checkbox(
+            "self_role_status_labels",
+            "Show assigned/not-assigned text in member self-role lists",
+            self_role_status_labels,
+        )
         return f"""
         <div id="guild-settings" class="rmdash-card">
             <h3>Guild Settings & Role Creation</h3>
@@ -2171,6 +2181,7 @@ class DashboardIntegration:
                     {csrf}
                     <input type="hidden" name="action" value="save_guild_settings">
                     {atomic_select}
+                    {status_labels_checkbox}
                     <button class="rmdash-btn" type="submit">Save Guild Settings</button>
                 </form>
                 <form method="POST">
