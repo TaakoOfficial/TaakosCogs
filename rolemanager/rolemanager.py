@@ -92,6 +92,7 @@ class RoleManager(DashboardIntegration, commands.Cog):
         )
         self.config.register_guild(
             atomic=None,
+            self_role_status_labels=True,
             react_roles={},
             auto_roles={
                 "enabled": False,
@@ -1784,6 +1785,22 @@ class RoleManager(DashboardIntegration, commands.Cog):
             allowed_mentions=discord.AllowedMentions.none(),
         )
 
+    @selfrole_settings.command(name="statuslabels", aliases=["labels"])
+    @commands.admin_or_permissions(manage_roles=True)
+    async def selfrole_status_labels(
+        self,
+        ctx: commands.Context,
+        enabled: bool | None = None,
+    ) -> None:
+        """Show or hide assigned/not-assigned text in member role lists."""
+        setting = self.config.guild(ctx.guild).self_role_status_labels
+        if enabled is None:
+            await ctx.send(f"Self-role status labels are `{await setting()}`.")
+            return
+        await setting.set(enabled)
+        state = "shown" if enabled else "hidden"
+        await ctx.send(f"Self-role status labels are now {state}.")
+
     async def _self_role_status_pages(
         self,
         guild: discord.Guild,
@@ -1791,6 +1808,7 @@ class RoleManager(DashboardIntegration, commands.Cog):
     ) -> list[str]:
         """Build member-facing pages of configured self roles and ownership state."""
         lines: list[str] = []
+        show_status_labels = await self.config.guild(guild).self_role_status_labels()
         for role in sorted(guild.roles, key=lambda item: item.position, reverse=True):
             if role.is_default():
                 continue
@@ -1800,6 +1818,9 @@ class RoleManager(DashboardIntegration, commands.Cog):
             if not (assignable or removable) or not config.get("self_listed", True):
                 continue
             assigned = role in member.roles
+            if not show_status_labels:
+                lines.append(f"{'✅' if assigned else '❌'} {role.mention}")
+                continue
             status = "✅ assigned" if assigned else "❌ not assigned"
             if assigned and not removable:
                 status += " (not self-removable)"
