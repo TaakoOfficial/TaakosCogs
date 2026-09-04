@@ -9,12 +9,44 @@ Red 3.5.21 or newer is required because that release moved to discord.py 2.6, wh
 - Red-DiscordBot 3.5.21 or newer.
 - Python 3.10 or newer.
 - `PyYAML>=6.0`; Red's Downloader installs it automatically from the cog metadata.
-- Dashboard features require a configured Red-Web-Dashboard installation.
+- The visual builder works through Red-Web-Dashboard when it is installed, or through MessageStudio's optional built-in WebUI.
 - Message delivery requires the corresponding Discord channel permissions described below.
 
 ## Visual Dashboard Builder
 
-Open the builder with `[p]embed dashboard` (the `[p]cv2` alias also works). Its interface is inspired by [Merlin Fuchs' Embed Generator](https://github.com/merlinfuchs/embed-generator) and runs entirely inside Red-Web-Dashboard.
+Open the builder with `[p]embed dashboard` (the `[p]cv2` alias also works). Its interface is inspired by [Merlin Fuchs' Embed Generator](https://github.com/merlinfuchs/embed-generator). MessageStudio prefers Red-Web-Dashboard when available and otherwise opens its built-in WebUI, which requires Discord login before showing any server or editor data.
+
+### Built-in WebUI fallback
+
+The built-in server is disabled by default so installing a cog never unexpectedly exposes a network port. It uses Discord's OAuth2 authorization-code flow with the `identify` scope. First add this exact redirect in the bot application's **OAuth2 → Redirects** page:
+
+```text
+https://messages.example.com/messagestudio/oauth/callback
+```
+
+Then store the bot application's OAuth2 client ID and client secret through Red's protected shared-token UI. Run `[p]set api`, choose `messagestudio`, and add `client_id` and `client_secret`. The text form is also supported in a DM with the bot:
+
+```text
+[p]set api messagestudio client_id,YOUR_APPLICATION_ID client_secret,YOUR_CLIENT_SECRET
+```
+
+A bot owner can then configure and enable the localhost listener:
+
+```text
+[p]embed webui configure 127.0.0.1 8069
+[p]embed webui enable
+```
+
+For a remotely hosted bot, place the WebUI behind an HTTPS reverse proxy and set the externally reachable origin while keeping the listener on localhost:
+
+```text
+[p]embed webui configure 127.0.0.1 8069 https://messages.example.com
+[p]embed webui enable
+```
+
+The public URL may be a server IP, for example `https://203.0.113.10`, provided the reverse proxy has a browser-trusted certificate for that IP and the exact IP callback is registered with Discord. Plain public HTTP is rejected because it would expose OAuth codes and authenticated sessions; localhost HTTP remains available for local testing.
+
+Opening `/messagestudio/` shows only **Log in with Discord**. The callback validates a short-lived, browser-bound OAuth state value, fetches only the signed-in Discord identity, discards the Discord access token, and creates a one-hour HTTP-only session. The server picker shows only shared servers where the user has Manage Server, Red admin, or bot-owner access. Every editor/API request rechecks live membership and permissions; state-changing requests also require matching origin and CSRF tokens.
 
 The builder provides:
 
