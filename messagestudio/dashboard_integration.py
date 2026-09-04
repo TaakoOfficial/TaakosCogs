@@ -77,7 +77,7 @@ class DashboardIntegration:
         member = guild.get_member(user.id)
         is_owner = user.id in getattr(self.bot, "owner_ids", set())
         is_admin = member is not None and await self.bot.is_admin(member)
-        if not (is_owner or is_admin or (member and member.guild_permissions.manage_guild)):
+        if not await self._can_manage_studio(user, guild):
             return {
                 "status": 1,
                 "error_title": "Insufficient Permissions",
@@ -132,7 +132,7 @@ class DashboardIntegration:
                     delivery_mode = self._dashboard_value(form, "delivery_mode", "bot")
                     if delivery_mode == "webhook":
                         if not isinstance(channel, discord.TextChannel):
-                            raise ComponentsV2Error("Dashboard webhooks require a standard text channel.")
+                            raise ComponentsV2Error("Webhook delivery requires a standard text channel.")
                         if (
                             member is not None
                             and not (is_owner or is_admin)
@@ -169,7 +169,7 @@ class DashboardIntegration:
                         )
                         sent_label = "Message"
                     else:
-                        raise ComponentsV2Error("Choose a valid dashboard delivery method.")
+                        raise ComponentsV2Error("Choose a valid delivery method.")
                     await self._register_message_actions(
                         message,
                         component_actions,
@@ -186,7 +186,7 @@ class DashboardIntegration:
                     {"message": f"Discord rejected the message: {error}", "category": "danger"},
                 )
             except Exception as error:
-                log.exception("MessageStudio dashboard operation failed")
+                log.exception("MessageStudio WebUI operation failed")
                 operation = "save" if action == "store" else "send"
                 notifications.append(
                     {"message": f"Could not {operation} the message: {error}", "category": "danger"},
@@ -219,6 +219,13 @@ class DashboardIntegration:
             "notifications": notifications,
             "web_content": {"source": source, "standalone": True},
         }
+
+    async def _can_manage_studio(self, user: discord.abc.User, guild: discord.Guild) -> bool:
+        """Apply the same live permission gate to Dashboard and built-in WebUI access."""
+        if user.id in getattr(self.bot, "owner_ids", set()):
+            return True
+        member = guild.get_member(user.id)
+        return bool(member and (await self.bot.is_admin(member) or member.guild_permissions.manage_guild))
 
     @staticmethod
     def _dashboard_form(kwargs: dict[str, Any]) -> Any:

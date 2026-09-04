@@ -28,6 +28,7 @@ from .url_safety import (
     fetch_public_bytes,
     public_client_session,
 )
+from .webui import WebUIError, WebUIIntegration
 
 FORMATS = Literal["json", "yaml", "jsonfile", "yamlfile", "pastebin", "message"]
 log = logging.getLogger("red.taakoscogs.messagestudio")
@@ -57,7 +58,7 @@ class StoredName(commands.Converter):
         return argument
 
 
-class MessageStudio(DashboardIntegration, commands.Cog):
+class MessageStudio(DashboardIntegration, WebUIIntegration, commands.Cog):
     """Create, send, store, and edit embeds and Components V2 messages."""
 
     CONFIG_IDENTIFIER = 205192943327321000143939875896557571751
@@ -65,16 +66,25 @@ class MessageStudio(DashboardIntegration, commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.config = Config.get_conf(self, identifier=self.CONFIG_IDENTIFIER, force_registration=True)
-        self.config.register_global(stored_messages={})
+        self.config.register_global(
+            stored_messages={},
+            webui={"enabled": False, "host": "127.0.0.1", "port": 8069, "public_url": ""},
+        )
         self.config.register_guild(stored_messages={}, component_actions={})
         self.session: aiohttp.ClientSession | None = None
+        self._init_webui()
 
     async def cog_load(self) -> None:
         if not hasattr(discord.ui, "LayoutView"):
             raise RuntimeError("MessageStudio requires discord.py 2.6 or newer.")
         self.session = public_client_session()
+        try:
+            await self._start_webui()
+        except Exception:
+            log.exception("The configured MessageStudio WebUI could not be started")
 
     async def cog_unload(self) -> None:
+        await self._stop_webui()
         if self.session is not None:
             await self.session.close()
 
@@ -274,12 +284,89 @@ class MessageStudio(DashboardIntegration, commands.Cog):
     async def dashboard(self, ctx):
         """Open the visual MessageStudio dashboard builder."""
         dashboard_url = getattr(self.bot, "dashboard_url", None)
-        if dashboard_url is None:
-            raise commands.UserFeedbackCheckFailure("Red-Web-Dashboard is not running.")
-        url = f"{dashboard_url[0]}/dashboard/{ctx.guild.id}/third-party/{self.qualified_name}/guild"
+        if dashboard_url is not None:
+            url = f"{dashboard_url[0]}/dashboard/{ctx.guild.id}/third-party/{self.qualified_name}/guild"
+            view = discord.ui.View()
+            view.add_item(discord.ui.Button(label="Open MessageStudio", url=url))
+            await ctx.send("Open the visual message builder:", view=view)
+            return
+
+        try:
+            settings = self._validate_webui_settings(await self.config.webui())
+            if not settings["enabled"] or self._webui_runner is None:
+                raise WebUIError("The built-in WebUI is not enabled. A bot owner can configure it with `embed webui`.")
+            url = f"{settings['public_url']}{self.WEBUI_PATH}/"
+        except WebUIError as error:
+            raise commands.UserFeedbackCheckFailure(str(error)) from error
         view = discord.ui.View()
         view.add_item(discord.ui.Button(label="Open MessageStudio", url=url))
-        await ctx.send("Open the visual message builder:", view=view)
+        await ctx.send("Open MessageStudio and log in with Discord:", view=view, ephemeral=ctx.interaction is not None)
+
+    @commands.is_owner()
+    @embed.group(name="webui", invoke_without_command=True)
+    async def embed_webui(self, ctx):
+        """Show the built-in WebUI configuration."""
+        settings = self._validate_webui_settings(await self.config.webui())
+        state = "running" if self._webui_runner is not None else "stopped"
+        tokens = await self.bot.get_shared_api_tokens("messagestudio")
+        oauth_state = "configured" if tokens.get("client_secret") else "missing client_secret"
+        await ctx.send(
+            f"Built-in WebUI: **{state}**\n"
+            f"Bind: `{settings['host']}:{settings['port']}`\n"
+            f"Public URL: `{settings['public_url']}`\n"
+            f"OAuth: **{oauth_state}**\n"
+            f"Register callback: `{settings['public_url']}{self.WEBUI_PATH}/oauth/callback`\n\n"
+            "Use `embed webui configure <host> <port> [public_url]`, then `embed webui enable`."
+        )
+
+    @commands.is_owner()
+    @embed_webui.command(name="configure")
+    async def embed_webui_configure(self, ctx, host: str, port: int, public_url: str = ""):
+        """Configure the bind address and externally reachable base URL."""
+        current = await self.config.webui()
+        settings = self._validate_webui_settings(
+            {"enabled": current.get("enabled", False), "host": host, "port": port, "public_url": public_url}
+        )
+        was_running = self._webui_runner is not None
+        if was_running:
+            await self._stop_webui()
+        await self.config.webui.set(settings)
+        try:
+            await self._start_webui(settings)
+        except Exception as error:
+            settings["enabled"] = False
+            await self.config.webui.set(settings)
+            raise commands.UserFeedbackCheckFailure(f"The WebUI could not start: {error}") from error
+        await ctx.send(
+            f"MessageStudio WebUI configured for `{settings['host']}:{settings['port']}` with public URL "
+            f"`{settings['public_url']}`. Register "
+            f"`{settings['public_url']}{self.WEBUI_PATH}/oauth/callback` as a Discord OAuth2 redirect."
+        )
+
+    @commands.is_owner()
+    @embed_webui.command(name="enable")
+    async def embed_webui_enable(self, ctx):
+        """Enable and start the built-in WebUI."""
+        settings = self._validate_webui_settings(await self.config.webui())
+        settings["enabled"] = True
+        await self.config.webui.set(settings)
+        try:
+            await self._start_webui(settings)
+        except Exception as error:
+            settings["enabled"] = False
+            await self.config.webui.set(settings)
+            raise commands.UserFeedbackCheckFailure(f"The WebUI could not start: {error}") from error
+        await ctx.send(f"MessageStudio WebUI is running at `{settings['public_url']}{self.WEBUI_PATH}/`.")
+
+    @commands.is_owner()
+    @embed_webui.command(name="disable")
+    async def embed_webui_disable(self, ctx):
+        """Stop and disable the built-in WebUI."""
+        settings = await self.config.webui()
+        settings["enabled"] = False
+        await self.config.webui.set(settings)
+        await self._stop_webui()
+        await ctx.send("MessageStudio's built-in WebUI is disabled.")
 
     @embed.command(name="commands")
     async def embed_commands(self, ctx):

@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.0.0
+
+### Built-in WebUI fallback
+
+- Added an optional `aiohttp` WebUI so the complete visual editor works without Red-Web-Dashboard.
+- Kept Red-Web-Dashboard as the preferred route when it is installed.
+- Added owner-only bind, public URL, enable, disable, and status commands under `[p]embed webui`.
+- Added Discord OAuth2 login with browser-bound state, short-lived HTTP-only sessions, CSRF and origin checks, live guild permission checks, restrictive browser headers, request-size limits, and HTTPS enforcement for non-local hostnames or server IPs.
+- Reused the existing self-contained Embed Generator-inspired editor, including sending, webhook identities, stored messages, persistent actions, and Discord asset tools.
+- Tightened narrow-screen wrapping for the editor header, component actions, and nested cards.
+
 ## 1.9.2 - 2026-08-04
 
 - Restricted Pastebin and GitHub Gist raw-URL rewriting to exact trusted hostnames so attacker-controlled lookalike domains are never rewritten as trusted paste hosts.
