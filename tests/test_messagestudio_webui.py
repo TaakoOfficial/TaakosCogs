@@ -80,9 +80,7 @@ class _Harness(WebUIIntegration):
 
 
 def test_webui_settings_default_to_localhost_url():
-    settings = WebUIIntegration._validate_webui_settings(
-        {"enabled": False, "host": "127.0.0.1", "port": 8069, "public_url": ""}
-    )
+    settings = WebUIIntegration._validate_webui_settings({"enabled": False, "host": "127.0.0.1", "port": 8069, "public_url": ""})
     assert settings["public_url"] == "http://127.0.0.1:8069"
 
 
@@ -125,16 +123,12 @@ def test_webui_discord_oauth_session_permissions_csrf_and_headers():
             assert query["redirect_uri"] == ["http://127.0.0.1:8069/messagestudio/oauth/callback"]
             state = query["state"][0]
 
-            callback = await client.get(
-                f"/messagestudio/oauth/callback?code=valid-code&state={state}", allow_redirects=False
-            )
+            callback = await client.get(f"/messagestudio/oauth/callback?code=valid-code&state={state}", allow_redirects=False)
             assert callback.status == 303
             assert "HttpOnly" in callback.headers.getall("Set-Cookie")[-1]
             assert "SameSite=Strict" in callback.headers.getall("Set-Cookie")[-1]
 
-            replay = await client.get(
-                f"/messagestudio/oauth/callback?code=valid-code&state={state}", allow_redirects=False
-            )
+            replay = await client.get(f"/messagestudio/oauth/callback?code=valid-code&state={state}", allow_redirects=False)
             assert replay.status == 400
 
             server_picker = await client.get("/messagestudio/")
@@ -146,9 +140,7 @@ def test_webui_discord_oauth_session_permissions_csrf_and_headers():
             session = next(iter(harness._webui_sessions.values()))
             assert session.csrf_token in editor_text
 
-            missing_csrf = await client.post(
-                "/messagestudio/guild/100/api", data={}, headers={"Origin": "http://127.0.0.1:8069"}
-            )
+            missing_csrf = await client.post("/messagestudio/guild/100/api", data={}, headers={"Origin": "http://127.0.0.1:8069"})
             assert missing_csrf.status == 400
 
             wrong_origin = await client.post(
