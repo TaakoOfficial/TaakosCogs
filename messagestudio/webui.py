@@ -220,7 +220,10 @@ class WebUIIntegration:
             max_age=self.WEBUI_SESSION_TTL,
             httponly=True,
             secure=settings["public_url"].startswith("https://"),
-            samesite="Strict",
+            # OAuth returns from discord.com. Lax sends the newly-created session on
+            # the callback's safe top-level redirect while POSTs remain protected by
+            # the origin and CSRF checks below.
+            samesite="Lax",
             path=self.WEBUI_PATH,
         )
         raise response

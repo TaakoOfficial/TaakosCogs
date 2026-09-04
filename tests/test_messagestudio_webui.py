@@ -126,7 +126,7 @@ def test_webui_discord_oauth_session_permissions_csrf_and_headers():
             callback = await client.get(f"/messagestudio/oauth/callback?code=valid-code&state={state}", allow_redirects=False)
             assert callback.status == 303
             assert "HttpOnly" in callback.headers.getall("Set-Cookie")[-1]
-            assert "SameSite=Strict" in callback.headers.getall("Set-Cookie")[-1]
+            assert "SameSite=Lax" in callback.headers.getall("Set-Cookie")[-1]
 
             replay = await client.get(f"/messagestudio/oauth/callback?code=valid-code&state={state}", allow_redirects=False)
             assert replay.status == 400
