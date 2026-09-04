@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.0.1
+
+- Fixed Discord OAuth returning to the login page by allowing the new session cookie on the callback's safe top-level redirect.
+
 ## 2.0.0
 
 ### Built-in WebUI fallback
