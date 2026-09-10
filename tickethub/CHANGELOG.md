@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.18.0 - 2026-09-10
+
+- Added independent text/reaction panel, form, and ticket-control settings through commands and the dashboard, preserving the existing defaults.
+- Added private DM questionnaires with required-field validation, choices, defaults, cancellation, timeouts, and one active conversation per member. Text ticket creation now honors profile questions.
+- Added persistent reaction routing for single and multi-profile panels, ticket actions, member management, and close confirmations using the existing permission checks.
+- Added `ticket confirmclose` and `ticket cancelclose` so text workflows can complete without buttons. Reaction panels support 20 options; longer form choice lists use typed replies.
+
 ## 1.17.1 - 2026-07-16
 
 - Added alphanumeric primary names for support-role and AAA3A import commands while retaining the historical hyphenated names as hidden prefix and slash compatibility commands.

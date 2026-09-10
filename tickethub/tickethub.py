@@ -16,6 +16,7 @@ import discord
 from redbot.core import Config, commands
 from redbot.core.utils.chat_formatting import box, pagify
 
+from .alternative_interactions import AlternativeInteractions
 from .dashboard_integration import DashboardIntegration
 
 if TYPE_CHECKING:
@@ -1042,7 +1043,7 @@ class TicketQuestionnaireView(discord.ui.View):
             )
 
 
-class TicketHub(DashboardIntegration, commands.Cog):
+class TicketHub(AlternativeInteractions, DashboardIntegration, commands.Cog):
     """Ticket panels, ticket lifecycle controls, imports, and HTML transcripts."""
 
     CONFIG_IDENTIFIER = 2026051401
@@ -1084,6 +1085,8 @@ class TicketHub(DashboardIntegration, commands.Cog):
             aaa3a_panels={},
         )
         self._locks: dict[int, asyncio.Lock] = {}
+        self._conversation_tasks: dict[int, asyncio.Task] = {}
+        self._reaction_busy: set[tuple[int, int]] = set()
         self._prefix_conflict_mode = False
         self._set_prefix_conflict_mode = False
         self._panel_view = TicketPanelView(self)
@@ -1174,6 +1177,8 @@ class TicketHub(DashboardIntegration, commands.Cog):
         log.info("Restored imported AAA3A Tickets panel handlers after cog unload.")
 
     def cog_unload(self) -> None:
+        for task in self._conversation_tasks.values():
+            task.cancel()
         if self._control_refresh_task is not None:
             self._control_refresh_task.cancel()
             self._control_refresh_task = None
@@ -1293,6 +1298,8 @@ class TicketHub(DashboardIntegration, commands.Cog):
             "panel_channel_id": None,
             "panel_message_id": None,
             "panel_style": "button",
+            "form_mode": "modal",
+            "control_mode": "buttons",
             "ticket_category_id": None,
             "closed_category_id": None,
             "ticket_mode": "channel",
@@ -1657,6 +1664,12 @@ class TicketHub(DashboardIntegration, commands.Cog):
                 profile.get("creating_modal"),
             )
             profile["panel_style"] = TicketHub._panel_style(profile.get("panel_style"))
+            for key, default, allowed in (
+                ("form_mode", "modal", {"modal", "text", "reaction"}),
+                ("control_mode", "buttons", {"buttons", "text", "reaction"}),
+            ):
+                if profile.get(key) not in allowed:
+                    profile[key] = default
             profile["ticket_mode"] = TicketHub._ticket_mode(profile)
             try:
                 next_profile_ticket_id = profile.get("next_profile_ticket_id")
@@ -1694,6 +1707,8 @@ class TicketHub(DashboardIntegration, commands.Cog):
         style = str(value or "button").strip().lower()
         if style in {"dropdown", "menu", "select", "selectmenu", "select-menu"}:
             return "dropdown"
+        if style in {"text", "reaction"}:
+            return style
         return "button"
 
     @classmethod
@@ -1702,6 +1717,8 @@ class TicketHub(DashboardIntegration, commands.Cog):
         aliases = {
             "button": "button",
             "buttons": "button",
+            "text": "text",
+            "reaction": "reaction",
             "dropdown": "dropdown",
             "menu": "dropdown",
             "select": "dropdown",
@@ -1712,10 +1729,12 @@ class TicketHub(DashboardIntegration, commands.Cog):
             return aliases[style]
         except KeyError as exc:
             raise commands.BadArgument(
-                "Panel style must be `button` or `dropdown`.",
+                "Panel style must be `button`, `dropdown`, `text`, or `reaction`.",
             ) from exc
 
-    def _panel_view_for_style(self, style: Any) -> discord.ui.View:
+    def _panel_view_for_style(self, style: Any) -> discord.ui.View | None:
+        if self._panel_style(style) in {"text", "reaction"}:
+            return None
         if self._panel_style(style) == "dropdown":
             return self._panel_select_view
         return self._panel_view
@@ -1799,12 +1818,16 @@ class TicketHub(DashboardIntegration, commands.Cog):
     def _build_multi_panel_view(
         self,
         record: MultiPanelRecord,
-    ) -> TicketMultiPanelView:
+    ) -> TicketMultiPanelView | None:
         cleaned = self._sanitize_multi_panel_record(record)
         if cleaned is None or not cleaned["options"]:
             raise commands.BadArgument(
                 "A multi-panel needs at least one valid profile option.",
             )
+        if cleaned["style"] in {"text", "reaction"}:
+            if cleaned["style"] == "reaction" and len(cleaned["options"]) > 20:
+                raise commands.BadArgument("Reaction panels support at most 20 options.")
+            return None
         try:
             return TicketMultiPanelView(
                 self,
@@ -1835,6 +1858,8 @@ class TicketHub(DashboardIntegration, commands.Cog):
                     continue
                 try:
                     view = self._build_multi_panel_view(record)
+                    if view is None:
+                        continue
                     self.bot.add_view(view, message_id=message_id)
                 except (commands.CommandError, TypeError, ValueError):
                     log.exception(
@@ -1871,6 +1896,8 @@ class TicketHub(DashboardIntegration, commands.Cog):
             raise commands.BadArgument(
                 "A multi-panel needs at least one valid profile option.",
             )
+        if cleaned["style"] == "reaction":
+            self._check_reaction_channel(message.channel)
         view = self._build_multi_panel_view(cleaned)
         panels = await self.config.guild(guild).multi_panels()
         previous_record = self._sanitize_multi_panel_record(
@@ -1882,17 +1909,22 @@ class TicketHub(DashboardIntegration, commands.Cog):
             previous_view.stop()
         try:
             await message.edit(view=view)
+            await self._alternative_panel(message, cleaned["style"], cleaned["options"])
         except discord.HTTPException as exc:
             if previous_record is not None and previous_record["options"]:
                 restored_view = self._build_multi_panel_view(previous_record)
-                self.bot.add_view(restored_view, message_id=message.id)
-                self._multi_panel_views[message.id] = restored_view
+                if restored_view is not None:
+                    self.bot.add_view(restored_view, message_id=message.id)
+                    self._multi_panel_views[message.id] = restored_view
             raise commands.CommandError(
                 "I could not update that multi-panel message.",
             ) from exc
         async with self.config.guild(guild).multi_panels() as panels:
             panels[str(message.id)] = cleaned
-        self._multi_panel_views[message.id] = view
+        if view is not None:
+            self._multi_panel_views[message.id] = view
+        else:
+            self._multi_panel_views.pop(message.id, None)
         return cleaned
 
     async def _clear_multi_panel(
@@ -2591,7 +2623,9 @@ class TicketHub(DashboardIntegration, commands.Cog):
         self,
         profile: ProfileRecord,
         record: TicketRecord,
-    ) -> TicketControlView:
+    ) -> TicketControlView | None:
+        if profile.get("control_mode", "buttons") != "buttons":
+            return None
         claimed = bool(record.get("claimed_by"))
         locked = bool(record.get("locked"))
         closed = record.get("status") == "closed"
@@ -2817,6 +2851,19 @@ class TicketHub(DashboardIntegration, commands.Cog):
             else:
                 profile_name = self._clean_name(profile_name)
                 profile = await self._get_profile(interaction.guild, profile_name)
+            if profile.get("form_mode", "modal") != "modal":
+                await interaction.response.send_message("Check your DMs for any ticket questions.", ephemeral=True)
+                try:
+                    record, channel = await self._open_without_components(
+                        interaction.guild,
+                        interaction.user,
+                        profile_name,
+                        panel_label=panel_label,
+                    )
+                    await interaction.followup.send(f"Ticket #{record['id']} opened: {channel.mention}", ephemeral=True)
+                except commands.CommandError as error:
+                    await interaction.followup.send(str(error), ephemeral=True)
+                return
             modal_fields = profile.get("creating_modal")
             if modal_fields:
                 await self._validate_ticket_open_request(
@@ -2909,6 +2956,22 @@ class TicketHub(DashboardIntegration, commands.Cog):
                     )
             except commands.CommandError as error:
                 await interaction.response.send_message(str(error), ephemeral=True)
+                return
+            profile = await self._get_profile(interaction.guild, record["profile"])
+            if profile.get("form_mode", "modal") != "modal":
+                await interaction.response.send_message("Check your DMs for the optional reason.", ephemeral=True)
+                try:
+                    await self._lifecycle_without_modal(
+                        interaction.guild,
+                        record,
+                        interaction.user,
+                        "reopen" if record.get("status") == "closed" else "close",
+                    )
+                    await interaction.followup.send(
+                        "Ticket updated. Check the ticket for any close confirmation.", ephemeral=True
+                    )
+                except (commands.CommandError, discord.HTTPException, ValueError, asyncio.TimeoutError) as error:
+                    await interaction.followup.send(f"TicketHub: {error}", ephemeral=True)
                 return
             if record.get("status") == "closed":
                 await interaction.response.send_modal(
@@ -3176,12 +3239,16 @@ class TicketHub(DashboardIntegration, commands.Cog):
                     "I created the ticket but could not send the ticket panel.",
                 ) from exc
             record["message_id"] = message.id
+            # The ticket must remain recorded even if Discord cannot seed reactions.
+
             async with self.config.guild(guild).tickets() as tickets:
                 tickets[str(ticket_id)] = record
             profile["next_profile_ticket_id"] = profile_ticket_id + 1
             await self._set_profile(guild, profile_name, profile)
             await self.config.guild(guild).next_ticket_id.set(ticket_id + 1)
 
+        with contextlib.suppress(discord.HTTPException):
+            await self._alternative_controls(message, profile, record)
         ticket_role = guild.get_role(int(profile.get("ticket_role_id") or 0))
         if ticket_role is not None and ticket_role not in owner.roles:
             try:
@@ -3448,6 +3515,7 @@ class TicketHub(DashboardIntegration, commands.Cog):
                 read_message_history=True,
                 manage_channels=True,
                 manage_messages=True,
+                add_reactions=True,
                 attach_files=True,
                 embed_links=True,
             )
@@ -3571,6 +3639,7 @@ class TicketHub(DashboardIntegration, commands.Cog):
                 embed=self._ticket_embed(guild, record, profile),
                 view=self._ticket_control_view(profile, record),
             )
+            await self._alternative_controls(message, profile, record)
         except discord.HTTPException:
             log.exception(
                 "Failed to update TicketHub ticket message in guild %s",
@@ -4064,9 +4133,11 @@ class TicketHub(DashboardIntegration, commands.Cog):
                     expires_at = float(pending["expires_at"])
                 except (KeyError, TypeError, ValueError):
                     continue
-                view = TicketCloseConfirmationView(self, ticket_id)
-                self.bot.add_view(view, message_id=message_id)
-                self._close_confirmation_views[(int(guild_id), ticket_id)] = view
+                profile = (guild_data.get("profiles") or {}).get(record.get("profile"), {})
+                if profile.get("control_mode", "buttons") == "buttons":
+                    view = TicketCloseConfirmationView(self, ticket_id)
+                    self.bot.add_view(view, message_id=message_id)
+                    self._close_confirmation_views[(int(guild_id), ticket_id)] = view
                 self._schedule_close_confirmation(int(guild_id), ticket_id, expires_at)
 
     async def _start_close_confirmation(
@@ -4110,10 +4181,15 @@ class TicketHub(DashboardIntegration, commands.Cog):
         target = owner or requester
         clean_reason = reason.strip()[:1000] or "No reason provided."
         timeout_minutes = self._close_request_timeout_minutes(profile)
-        view = TicketCloseConfirmationView(self, int(record["id"]))
+        mode = profile.get("control_mode", "buttons")
+        view = TicketCloseConfirmationView(self, int(record["id"])) if mode == "buttons" else None
+        root = await self._command_hint(guild)
+        instructions = "" if mode == "buttons" else f"\nUse `{root} confirmclose` or `{root} cancelclose`."
+        if mode == "reaction":
+            instructions += " React ✅ to close or ❌ to cancel."
         try:
             message = await channel.send(
-                f"{target.mention}, is there anything else we can help you with?",
+                f"{target.mention}, is there anything else we can help you with?{instructions}",
                 embed=self._close_confirmation_embed(
                     clean_reason,
                     timeout_minutes=timeout_minutes,
@@ -4147,7 +4223,12 @@ class TicketHub(DashboardIntegration, commands.Cog):
         async with self.config.guild(guild).tickets() as tickets:
             tickets[str(record["id"])] = record
         ticket_id = int(record["id"])
-        self._close_confirmation_views[(guild.id, ticket_id)] = view
+        if view is not None:
+            self._close_confirmation_views[(guild.id, ticket_id)] = view
+        if mode == "reaction":
+            with contextlib.suppress(discord.HTTPException):
+                await message.add_reaction("✅")
+                await message.add_reaction("❌")
         self._schedule_close_confirmation(guild.id, ticket_id, expires_at)
         return message
 
@@ -4191,6 +4272,7 @@ class TicketHub(DashboardIntegration, commands.Cog):
         *,
         confirmed: bool,
         expected_expires_at: float | None = None,
+        permission_checked: bool = False,
     ) -> tuple[TicketRecord, str]:
         async with self._guild_lock(guild.id):
             record = await self._get_ticket_record_by_id(guild, ticket_id)
@@ -4203,6 +4285,13 @@ class TicketHub(DashboardIntegration, commands.Cog):
                 raise commands.CommandError(
                     "This close confirmation has been replaced.",
                 )
+            profile = await self._get_profile(guild, record["profile"])
+            if (
+                not permission_checked
+                and member.id not in {int(record["owner_id"]), int(pending["requested_by"])}
+                and not self._is_support_member(member, profile)
+            ):
+                raise commands.CommandError("Only the ticket opener, close requester, or support staff can use this.")
             reason = str(pending.get("reason") or "No reason provided.")
             if confirmed:
                 await self._close_ticket(
@@ -4332,6 +4421,7 @@ class TicketHub(DashboardIntegration, commands.Cog):
                 actor,
                 confirmed=True,
                 expected_expires_at=expires_at,
+                permission_checked=True,
             )
             if message is not None:
                 with contextlib.suppress(discord.HTTPException):
@@ -5434,6 +5524,66 @@ search.addEventListener('input', () => {{
         """Configure TicketHub profiles, panels, roles, automation, and exports."""
         await ctx.send_help(ctx.command)
 
+    @commands.Cog.listener()
+    async def on_raw_reaction_add(self, payload: discord.RawReactionActionEvent) -> None:
+        key = (payload.message_id, payload.user_id)
+        if key in self._reaction_busy:
+            return
+        self._reaction_busy.add(key)
+        try:
+            await self._route_ticket_reaction(payload)
+        finally:
+            self._reaction_busy.discard(key)
+
+    @tickethub_set.command(name="interactions")
+    @commands.admin_or_permissions(manage_guild=True)
+    async def tickethub_interactions(
+        self,
+        ctx: commands.Context,
+        surface: str,
+        mode: str,
+        profile_name: str = "main",
+    ) -> None:
+        """Set panel (button/dropdown/text/reaction), form (modal/text/reaction), or controls (buttons/text/reaction)."""
+        assert ctx.guild is not None
+        profile_name = self._clean_name(profile_name)
+        profile = await self._ensure_profile(ctx.guild, profile_name)
+        surface = surface.lower()
+        if surface == "panel":
+            mode = self._parse_panel_style(mode)
+            profile["panel_style"] = mode
+        elif surface in {"form", "controls"}:
+            mode = self._parse_interaction_mode(mode, form=surface == "form")
+            profile["form_mode" if surface == "form" else "control_mode"] = mode
+        else:
+            raise commands.BadArgument("Surface must be panel, form, or controls.")
+        if mode == "reaction" and not self.bot.intents.reactions:
+            raise commands.BadArgument("Enable the bot's reactions intent before selecting reaction mode.")
+        await self._set_profile(ctx.guild, profile_name, profile)
+        if surface == "panel":
+            await self._dashboard_refresh_profile_panel(ctx.guild, profile_name, profile)
+        elif surface == "controls":
+            for record in (await self.config.guild(ctx.guild).tickets()).values():
+                if record.get("profile") == profile_name:
+                    await self._update_ticket_message(ctx.guild, record, profile)
+        await ctx.send(f"`{profile_name}` {surface} now uses **{mode}**.")
+
+    @tickethub.command(name="confirmclose")
+    @commands.guild_only()
+    async def tickethub_confirm_close(self, ctx: commands.Context, ticket_id: int | None = None) -> None:
+        """Confirm an active close request without buttons."""
+        _key, record = await self._resolve_ticket_argument(ctx, ticket_id)
+        await self._confirm_without_components(ctx.guild, record, ctx.author, True)
+        await ctx.send("Ticket closed.")
+
+    @tickethub.command(name="cancelclose")
+    @commands.guild_only()
+    async def tickethub_cancel_close(self, ctx: commands.Context, ticket_id: int | None = None) -> None:
+        """Cancel an active close request without buttons."""
+        _key, record = await self._resolve_ticket_argument(ctx, ticket_id)
+        await self._confirm_without_components(ctx.guild, record, ctx.author, False)
+        await ctx.send("Close cancelled.")
+
     @tickethub_set.command(name="walkthrough", aliases=["wizard"])
     @commands.admin_or_permissions(manage_guild=True)
     async def tickethub_walkthrough(
@@ -5712,6 +5862,8 @@ search.addEventListener('input', () => {{
                 f"I need `Send Messages` and `Embed Links` in {channel.mention}.",
             )
         style = self._parse_panel_style(style)
+        if style == "reaction":
+            self._check_reaction_channel(channel)
         embed = self._panel_embed(guild, profile_name, profile)
         try:
             message = await channel.send(
@@ -5720,6 +5872,7 @@ search.addEventListener('input', () => {{
             )
         except discord.HTTPException as exc:
             raise commands.CommandError("I could not post the ticket panel.") from exc
+        await self._alternative_panel(message, style, [{"profile": profile_name, "label": profile_name}])
         profile["panel_channel_id"] = channel.id
         profile["panel_message_id"] = message.id
         profile["panel_style"] = style
@@ -5761,12 +5914,15 @@ search.addEventListener('input', () => {{
                 "That message already has components. Remove them before attaching a TicketHub panel.",
             )
         style = self._parse_panel_style(style)
+        if style == "reaction":
+            self._check_reaction_channel(message.channel)
         try:
             await message.edit(view=self._panel_view_for_style(style))
         except discord.HTTPException as exc:
             raise commands.CommandError(
                 "I could not attach the ticket panel to that message.",
             ) from exc
+        await self._alternative_panel(message, style, [{"profile": profile_name, "label": profile_name}])
         profile["panel_channel_id"] = message.channel.id
         profile["panel_message_id"] = message.id
         profile["panel_style"] = style
@@ -5799,8 +5955,9 @@ search.addEventListener('input', () => {{
         if not isinstance(ctx.author, discord.Member):
             await ctx.send("This command only works in a server.")
             return
+        await ctx.send("Opening your ticket; check your DMs if this profile has questions.")
         try:
-            record, channel = await self._create_ticket(
+            record, channel = await self._open_without_components(
                 ctx.guild,
                 ctx.author,
                 profile_name,
@@ -5844,9 +6001,9 @@ search.addEventListener('input', () => {{
         ctx: commands.Context,
         profile_name: str = "main",
         channel: discord.TextChannel | None = None,
-        style: str = "button",
+        style: str | None = None,
     ) -> None:
-        """Post a button or dropdown ticket panel for a profile."""
+        """Post a button, dropdown, text, or reaction ticket panel for a profile."""
         assert ctx.guild is not None
         if channel is None:
             if not isinstance(ctx.channel, discord.TextChannel):
@@ -5861,7 +6018,7 @@ search.addEventListener('input', () => {{
                 profile_name,
                 profile,
                 channel,
-                style,
+                style or profile.get("panel_style", "button"),
             )
         except commands.CommandError as error:
             await ctx.send(str(error))
@@ -5878,9 +6035,9 @@ search.addEventListener('input', () => {{
         ctx: commands.Context,
         profile_name: str,
         message: discord.Message,
-        style: str = "button",
+        style: str | None = None,
     ) -> None:
-        """Attach a button or dropdown panel to an existing bot-authored message."""
+        """Attach a button, dropdown, text, or reaction panel to an existing bot-authored message."""
         assert ctx.guild is not None
         profile_name = self._clean_name(profile_name)
         profile = await self._ensure_profile(ctx.guild, profile_name)
@@ -5890,7 +6047,7 @@ search.addEventListener('input', () => {{
                 profile_name,
                 profile,
                 message,
-                style,
+                style or profile.get("panel_style", "button"),
             )
         except commands.CommandError as error:
             await ctx.send(str(error))
@@ -5949,9 +6106,9 @@ search.addEventListener('input', () => {{
         await ctx.send(
             "Multi-panel commands:\n"
             f"`{command_root} multipanel add <message> <profile> "
-            "<button|dropdown> <emoji|none> <name> | <description>`\n"
+            "<button|dropdown|text|reaction> <emoji|none> <name> | <description>`\n"
             f"`{command_root} multipanel remove <message> <profile>`\n"
-            f"`{command_root} multipanel style <message> <button|dropdown>`\n"
+            f"`{command_root} multipanel style <message> <button|dropdown|text|reaction>`\n"
             f"`{command_root} multipanel placeholder <message> <text>`\n"
             f"`{command_root} multipanel show <message>`\n"
             f"`{command_root} multipanel clear <message>`",

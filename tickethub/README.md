@@ -48,6 +48,67 @@ standard `[p]ticket` and `[p]ticketset` prefix commands.
 - Imports profile settings from AAA3A's `Tickets` cog with dry-run preview before applying.
 - Provides native commands under `/ticket` and `/ticketset`.
 
+## Text and reaction interfaces
+
+Each profile can choose its panel, form input, and ticket controls independently.
+Existing profiles keep buttons and modals until an administrator changes them.
+The dashboard exposes these choices under Profile Setup and Panels.
+
+For a profile named `main`, use these settings to remove Discord components:
+
+```text
+[p]ticketset interactions panel text main
+[p]ticketset interactions form text main
+[p]ticketset interactions controls text main
+```
+
+Replace `text` with `reaction` for emoji controls. Panel styles also accept
+`button` and `dropdown`; form input accepts `modal`; ticket controls accept
+`buttons`. Changing a profile panel or its controls refreshes tracked messages
+when the bot can edit them. New panels use the saved profile style unless you
+explicitly supply another style. Multi-panels have their own style; set it with
+`[p]ticketset multipanel style <message> reaction` or through the dashboard.
+
+Text panels show the server's actual prefix and the command for each profile.
+Reaction panels use letter emoji, matching the labels on the message. They
+support up to 20 profiles; text and dropdown panels support up to 25.
+Imported AAA3A messages retain their compatibility controls; post a TicketHub
+panel for the imported profile to use the new presentation styles.
+
+Opening through a text command or reaction collects configured questions in
+DMs before creating the ticket. A button or dropdown uses DMs when its profile's
+form input is `text` or `reaction`. Required fields, length limits, choices,
+and defaults still apply. Reply with a choice's name or number, `default` to use
+a configured default, `skip` for an optional question, or `cancel` to stop.
+Each reply has a three-minute timeout. Only one TicketHub DM conversation per
+member can run at once; unfinished conversations end when the cog reloads.
+
+Reaction forms offer letter emoji for choices and yes/no answers. Free-text
+questions and choice lists longer than 20 still require typed replies. Discord
+reactions cannot encode an arbitrary written answer. Members must allow DMs;
+TicketHub does not fall back to collecting private answers in a public channel.
+The ordinary `ticket open` command now honors configured forms too; the staff
+`createfor` command remains a direct creation tool.
+
+Ticket reaction controls cover claim/unclaim, lock/unlock, close/reopen,
+transcripts, deletion, and adding/removing members. Member reactions ask for
+the target's ID or mention in DMs. Reaction controls use a fixed, distinct emoji
+for each action; the existing custom control-emoji settings apply to buttons.
+Close/reopen reactions ask for an optional reason in DMs; type `skip` to omit it.
+The text close/reopen commands accept the reason directly.
+Close requests still require confirmation or wait for the configured timeout:
+use `ticket confirmclose` or `ticket cancelclose` in the ticket, or react on the
+confirmation message. Owner and support permissions apply to every entry point.
+To repeat a reaction, remove your reaction and add it again.
+
+The bot needs the reactions intent, **Add Reactions**, and **Read Message History**
+for reaction interfaces, plus the normal TicketHub channel permissions. Prefix
+commands need Red's message-content intent; DM questionnaires use direct-message
+events. Persistent reaction routing works after a restart without a cached panel
+message. Completed DM answers use the existing ticket answer storage and appear
+in ticket records and transcripts; partial answers stay in memory only. This
+feature adds no dependencies or external services.
+
 ## Dashboard
 
 TicketHub registers a Red-Web-Dashboard third-party page when the AAA3A `Dashboard` cog is loaded. The page appears under the guild dashboard's Third Parties tab for users with Manage Server, Red admin, or bot owner access.

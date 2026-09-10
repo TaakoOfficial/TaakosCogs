@@ -714,6 +714,11 @@ class DashboardIntegration:
         )
         profile = await self._ensure_profile(guild, profile_name)
         old_emojis = dict(profile.get("control_emojis") or {})
+        old_control_mode = profile.get("control_mode", "buttons")
+        profile["form_mode"] = self._parse_interaction_mode(
+            self._dash_value(form_data, "form_mode", profile.get("form_mode", "modal")), form=True
+        )
+        profile["control_mode"] = self._parse_interaction_mode(self._dash_value(form_data, "control_mode", old_control_mode))
 
         profile["enabled"] = self._dash_bool(form_data, "profile_enabled")
         profile["panel_style"] = self._parse_panel_style(
@@ -843,7 +848,7 @@ class DashboardIntegration:
         await self._dashboard_refresh_profile_panel(guild, profile_name, profile)
 
         tickets = await self.config.guild(guild).tickets()
-        if configured != old_emojis:
+        if configured != old_emojis or profile["control_mode"] != old_control_mode:
             for record in tickets.values():
                 if str(record.get("profile") or "main") == profile_name:
                     await self._update_ticket_message(guild, record, profile)
@@ -1373,10 +1378,11 @@ class DashboardIntegration:
                 profile.get("panel_channel_id"),
                 profile.get("panel_message_id"),
             )
-            await message.edit(
+            message = await message.edit(
                 embed=self._panel_embed(guild, profile_name, profile),
                 view=self._panel_view_for_style(profile.get("panel_style")),
             )
+            await self._alternative_panel(message, profile.get("panel_style"), [{"profile": profile_name, "label": profile_name}])
         except (commands.CommandError, discord.HTTPException):
             log.debug(
                 "Could not refresh TicketHub panel for %s in %s.",
@@ -1698,9 +1704,21 @@ class DashboardIntegration:
                     </div>
                 </div>
                 <div class="th-row">
+                    <div class="th-field"><label>Form input</label><select name="form_mode">{
+            self._option("modal", "Modals", profile.get("form_mode", "modal"))
+        }{self._option("text", "DM text", profile.get("form_mode"))}{
+            self._option("reaction", "DM reactions and text", profile.get("form_mode"))
+        }</select></div>
+                    <div class="th-field"><label>Ticket controls</label><select name="control_mode">{
+            self._option("buttons", "Buttons", profile.get("control_mode", "buttons"))
+        }{self._option("text", "Text commands", profile.get("control_mode"))}{
+            self._option("reaction", "Emoji reactions", profile.get("control_mode"))
+        }</select></div>
                     <div class="th-field"><label>Panel Style</label><select name="panel_style">{
             self._option("button", "Button", profile.get("panel_style"))
-        }{self._option("dropdown", "Dropdown", profile.get("panel_style"))}</select></div>
+        }{self._option("dropdown", "Dropdown", profile.get("panel_style"))}{
+            self._option("text", "Text commands", profile.get("panel_style"))
+        }{self._option("reaction", "Emoji reactions", profile.get("panel_style"))}</select></div>
                     <div class="th-field"><label>Ticket Mode</label><select name="ticket_mode">{
             self._option("channel", "Channel", profile.get("ticket_mode"))
         }{self._option("thread", "Thread", profile.get("ticket_mode"))}</select></div>
@@ -1936,7 +1954,9 @@ class DashboardIntegration:
                     {self._channel_select(guild, "post_panel_channel_id", "Post Panel Channel", profile.get("panel_channel_id"))}
                     <div class="th-field"><label>Style</label><select name="post_panel_style">{
             self._option("button", "Button", profile.get("panel_style"))
-        }{self._option("dropdown", "Dropdown", profile.get("panel_style"))}</select></div>
+        }{self._option("dropdown", "Dropdown", profile.get("panel_style"))}{
+            self._option("text", "Text commands", profile.get("panel_style"))
+        }{self._option("reaction", "Emoji reactions", profile.get("panel_style"))}</select></div>
                     <button class="th-btn" type="submit">Post Panel</button>
                 </form>
                 <form method="POST">
@@ -1947,7 +1967,9 @@ class DashboardIntegration:
                     {self._input("attach_panel_message_id", "Message ID", profile.get("panel_message_id") or "")}
                     <div class="th-field"><label>Style</label><select name="attach_panel_style">{
             self._option("button", "Button", profile.get("panel_style"))
-        }{self._option("dropdown", "Dropdown", profile.get("panel_style"))}</select></div>
+        }{self._option("dropdown", "Dropdown", profile.get("panel_style"))}{
+            self._option("text", "Text commands", profile.get("panel_style"))
+        }{self._option("reaction", "Emoji reactions", profile.get("panel_style"))}</select></div>
                     <button class="th-btn" type="submit">Attach Panel</button>
                 </form>
                 <form method="POST">
@@ -1971,7 +1993,9 @@ class DashboardIntegration:
                     {self._input("multi_panel_message_id", "Multi-Panel Message ID", "")}
                     <div class="th-field"><label>Style</label><select name="multi_panel_style">{
             self._option("button", "Button", "button")
-        }{self._option("dropdown", "Dropdown", "button")}</select></div>
+        }{self._option("dropdown", "Dropdown", "button")}{self._option("text", "Text commands", "button")}{
+            self._option("reaction", "Emoji reactions", "button")
+        }</select></div>
                     {self._input("multi_panel_placeholder", "Dropdown Placeholder", "Choose a ticket type...")}
                 </div>
                 {self._textarea("multi_panel_options", "Options: profile | emoji | label | description", "", rows=6)}
