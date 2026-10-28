@@ -3314,7 +3314,17 @@ class TicketHub(AlternativeInteractions, DashboardIntegration, commands.Cog):
             ) from exc
 
         await self._add_cached_support_members_to_thread(guild, thread, profile, owner)
+        await self._purge_thread_join_messages(thread)
         return thread
+
+    @staticmethod
+    async def _purge_thread_join_messages(thread: discord.Thread) -> None:
+        """Remove "X added Y to the thread" system messages; Discord can't suppress them."""
+        with contextlib.suppress(discord.HTTPException):
+            await thread.purge(
+                limit=200,
+                check=lambda message: message.type == discord.MessageType.recipient_add,
+            )
 
     async def _add_cached_support_members_to_thread(
         self,
@@ -3325,12 +3335,11 @@ class TicketHub(AlternativeInteractions, DashboardIntegration, commands.Cog):
     ) -> None:
         members: dict[int, discord.Member] = {}
         owner_id = owner.id if owner is not None else None
-        role_ids = list(profile.get("support_role_ids") or []) + list(
-            profile.get("speak_role_ids") or [],
-        )
-        for role_id in role_ids:
+        # Only support roles are auto-added. Speak roles are often broad
+        # (e.g. a basic member role) and would add the whole server.
+        for role_id in profile.get("support_role_ids") or []:
             role = guild.get_role(int(role_id))
-            if role is None:
+            if role is None or role.is_default():
                 continue
             for member in role.members:
                 if member.id != owner_id and not member.bot:
@@ -3384,6 +3393,7 @@ class TicketHub(AlternativeInteractions, DashboardIntegration, commands.Cog):
                     participant.id,
                     thread.id,
                 )
+        await self._purge_thread_join_messages(thread)
 
     async def _set_ticket_claim_access(
         self,
@@ -3450,7 +3460,9 @@ class TicketHub(AlternativeInteractions, DashboardIntegration, commands.Cog):
         support_members = []
         if claimed_by is None:
             support_members = [
-                member for member in guild.members if not member.bot and self._can_speak_in_ticket(member, profile)
+                member
+                for member in guild.members
+                if not member.bot and self._member_has_any_role(member, profile.get("support_role_ids") or [])
             ]
             allowed_ids.update(member.id for member in support_members)
         required_members = [claimed_by, *administrators, *support_members]
@@ -3488,9 +3500,11 @@ class TicketHub(AlternativeInteractions, DashboardIntegration, commands.Cog):
             for removed_member in removed_members:
                 with contextlib.suppress(discord.HTTPException):
                     await channel.add_user(removed_member)
+            await self._purge_thread_join_messages(channel)
             raise commands.CommandError(
                 "I could not lock the ticket thread for every member.",
             )
+        await self._purge_thread_join_messages(channel)
 
     def _ticket_overwrites(
         self,
