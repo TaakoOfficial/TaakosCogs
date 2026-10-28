@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.18.1 - 2026-10-28
+
+- Fixed thread tickets adding every member of a broad speak role (such as a basic member role) to new threads. Only support-role members are now auto-added, and `@everyone` is skipped.
+- Thread claim locking now keeps only support-role members, instead of everyone who can speak.
+- Removed the "added X to the thread" system messages after the bot adds members, since Discord cannot suppress them. This needs Manage Messages in the thread parent channel.
+
 ## 1.18.0 - 2026-09-10
 
 - Added independent text/reaction panel, form, and ticket-control settings through commands and the dashboard, preserving the existing defaults.
